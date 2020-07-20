@@ -1376,6 +1376,10 @@ UNSAFE_ENTRY(void, Unsafe_PrefetchWrite(JNIEnv* env, jclass ignored, jobject obj
   Prefetch::write(addr, (intx)offset);
 UNSAFE_END
 
+UNSAFE_ENTRY(jboolean, Unsafe_GetUseFastSerializer(JNIEnv *env, jobject unsafe)) {
+  return UseFastSerializer;
+}
+UNSAFE_END
 
 /// JVM_RegisterUnsafeMethods
 
@@ -1462,7 +1466,8 @@ static JNINativeMethod methods_140[] = {
     {CC "allocateInstance",   CC "(" CLS ")" OBJ,             FN_PTR(Unsafe_AllocateInstance)},
     {CC "monitorEnter",       CC "(" OBJ ")V",               FN_PTR(Unsafe_MonitorEnter)},
     {CC "monitorExit",        CC "(" OBJ ")V",               FN_PTR(Unsafe_MonitorExit)},
-    {CC "throwException",     CC "(" THR ")V",               FN_PTR(Unsafe_ThrowException)}
+    {CC "throwException",     CC "(" THR ")V",               FN_PTR(Unsafe_ThrowException)},
+    {CC "getUseFastSerializer",   CC "()Z",              FN_PTR(Unsafe_GetUseFastSerializer)}
 };
 
 // These are the methods prior to the JSR 166 changes in 1.5.0
@@ -1508,8 +1513,8 @@ static JNINativeMethod methods_141[] = {
     {CC "allocateInstance",   CC "(" CLS ")" OBJ,             FN_PTR(Unsafe_AllocateInstance)},
     {CC "monitorEnter",       CC "(" OBJ ")V",               FN_PTR(Unsafe_MonitorEnter)},
     {CC "monitorExit",        CC "(" OBJ ")V",               FN_PTR(Unsafe_MonitorExit)},
-    {CC "throwException",     CC "(" THR ")V",               FN_PTR(Unsafe_ThrowException)}
-
+    {CC "throwException",     CC "(" THR ")V",               FN_PTR(Unsafe_ThrowException)},
+    {CC "getUseFastSerializer",   CC "()Z",              FN_PTR(Unsafe_GetUseFastSerializer)}
 };
 
 // These are the methods prior to the JSR 166 changes in 1.6.0
@@ -1563,7 +1568,8 @@ static JNINativeMethod methods_15[] = {
     {CC "compareAndSwapInt",  CC "(" OBJ "J""I""I"")Z",      FN_PTR(Unsafe_CompareAndSwapInt)},
     {CC "compareAndSwapLong", CC "(" OBJ "J""J""J"")Z",      FN_PTR(Unsafe_CompareAndSwapLong)},
     {CC "park",               CC "(ZJ)V",                  FN_PTR(Unsafe_Park)},
-    {CC "unpark",             CC "(" OBJ ")V",               FN_PTR(Unsafe_Unpark)}
+    {CC "unpark",             CC "(" OBJ ")V",               FN_PTR(Unsafe_Unpark)},
+    {CC "getUseFastSerializer",   CC "()Z",              FN_PTR(Unsafe_GetUseFastSerializer)}
 
 };
 
@@ -1621,7 +1627,8 @@ static JNINativeMethod methods_16[] = {
     {CC "putOrderedInt",      CC "(" OBJ "JI)V",             FN_PTR(Unsafe_SetOrderedInt)},
     {CC "putOrderedLong",     CC "(" OBJ "JJ)V",             FN_PTR(Unsafe_SetOrderedLong)},
     {CC "park",               CC "(ZJ)V",                  FN_PTR(Unsafe_Park)},
-    {CC "unpark",             CC "(" OBJ ")V",               FN_PTR(Unsafe_Unpark)}
+    {CC "unpark",             CC "(" OBJ ")V",               FN_PTR(Unsafe_Unpark)},
+    {CC "getUseFastSerializer",   CC "()Z",              FN_PTR(Unsafe_GetUseFastSerializer)}
 };
 
 // These are the methods for 1.8.0
@@ -1677,7 +1684,8 @@ static JNINativeMethod methods_18[] = {
     {CC "putOrderedInt",      CC "(" OBJ "JI)V",             FN_PTR(Unsafe_SetOrderedInt)},
     {CC "putOrderedLong",     CC "(" OBJ "JJ)V",             FN_PTR(Unsafe_SetOrderedLong)},
     {CC "park",               CC "(ZJ)V",                  FN_PTR(Unsafe_Park)},
-    {CC "unpark",             CC "(" OBJ ")V",               FN_PTR(Unsafe_Unpark)}
+    {CC "unpark",             CC "(" OBJ ")V",               FN_PTR(Unsafe_Unpark)},
+    {CC "getUseFastSerializer",   CC "()Z",              FN_PTR(Unsafe_GetUseFastSerializer)}
 };
 
 JNINativeMethod loadavg_method[] = {
