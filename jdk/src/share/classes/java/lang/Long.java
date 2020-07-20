@@ -804,13 +804,43 @@ public final class Long extends Number implements Comparable<Long> {
     }
 
     private static class LongCache {
+        static final int low;
+        static final int high;
+
         private LongCache(){}
 
-        static final Long cache[] = new Long[-(-128) + 127 + 1];
+        static final Long cache[];
 
         static {
-            for(int i = 0; i < cache.length; i++)
-                cache[i] = new Long(i - 128);
+
+            String longCacheHighPropValue =
+                sun.misc.VM.getSavedProperty("java.lang.Long.LongCache.high");
+            if (longCacheHighPropValue != null) {
+                // high value may be configured by property
+                int h = 0;
+                try {
+                    int i = Integer.parseInt(longCacheHighPropValue);
+                    i = Math.max(i, 128);
+                    // Maximum array size is Integer.MAX_VALUE
+                    h = Math.min(i, Integer.MAX_VALUE/2 -1);
+                } catch( NumberFormatException nfe) {
+                    // If the property cannot be parsed into an int, ignore it.
+                }
+                high = h;
+                low = -h+1;
+                cache = new Long[(high - low) + 1];
+                int j = low;
+                for(int k = 0; k < cache.length; k++)
+                    cache[k] = new Long(j++);
+
+            } else {
+                low = -128;
+                high = 127;
+                cache = new Long[(high - low) + 1];
+                int j = low;
+                for(int k = 0; k < cache.length; k++)
+                    cache[k] = new Long(j++);
+            }
         }
     }
 
@@ -833,10 +863,8 @@ public final class Long extends Number implements Comparable<Long> {
      * @since  1.5
      */
     public static Long valueOf(long l) {
-        final int offset = 128;
-        if (l >= -128 && l <= 127) { // will cache
-            return LongCache.cache[(int)l + offset];
-        }
+        if (l >= LongCache.low && l <= LongCache.high)
+            return LongCache.cache[(int) l + (-LongCache.low)];
         return new Long(l);
     }
 
@@ -1617,4 +1645,5 @@ public final class Long extends Number implements Comparable<Long> {
 
     /** use serialVersionUID from JDK 1.0.2 for interoperability */
     @Native private static final long serialVersionUID = 4290774380558885855L;
+
 }

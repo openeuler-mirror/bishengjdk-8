@@ -2176,6 +2176,24 @@ void Arguments::set_bytecode_flags() {
   }
 }
 
+// set Integer and Long box type cached MAX num flag : -XX:BoxTypeCachedMax=<size>
+void Arguments::set_boxtype_cached_max_flags() {
+  int  size = 1024;
+  char buffer[size];
+  jio_snprintf(buffer, size, "java.lang.Long.LongCache.high=" INTX_FORMAT, BoxTypeCachedMax);
+  add_property(buffer);
+
+  if (AggressiveOpts || !FLAG_IS_DEFAULT(AutoBoxCacheMax)) {
+    if (FLAG_IS_DEFAULT(AutoBoxCacheMax)) {
+      FLAG_SET_DEFAULT(AutoBoxCacheMax, 20000);
+    }
+    jio_snprintf(buffer, size, "java.lang.Integer.IntegerCache.high=" INTX_FORMAT, AutoBoxCacheMax);
+  } else {
+    jio_snprintf(buffer, size, "java.lang.Integer.IntegerCache.high=" INTX_FORMAT, BoxTypeCachedMax);
+  }
+  add_property(buffer);
+}
+
 // Aggressive optimization flags  -XX:+AggressiveOpts
 void Arguments::set_aggressive_opts_flags() {
 #ifdef COMPILER2
@@ -2818,6 +2836,8 @@ bool Arguments::check_vm_args_consistency() {
   assert(min_number_of_compiler_threads <= CI_COMPILER_COUNT, "minimum should be less or equal default number");
   // Check the minimum number of compiler threads
   status &=verify_min_value(CICompilerCount, min_number_of_compiler_threads, "CICompilerCount");
+
+  status &= verify_min_value(BoxTypeCachedMax, 1, "BoxTypeCachedMax");
 
   return status;
 }
@@ -4307,6 +4327,9 @@ jint Arguments::apply_ergo() {
 
   // Set bytecode rewriting flags
   set_bytecode_flags();
+
+  // Set Integer and Long cached max
+  set_boxtype_cached_max_flags();
 
   // Set flags if Aggressive optimization flags (-XX:+AggressiveOpts) enabled.
   set_aggressive_opts_flags();
