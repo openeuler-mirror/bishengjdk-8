@@ -327,6 +327,9 @@ public:
                                const Type* limit_type) const
   { ShouldNotCallThis(); return NULL; }
 
+  // Delayed node rehash if this is an IGVN phase
+  virtual void igvn_rehash_node_delayed(Node* n) {}
+
   virtual PhaseIterGVN *is_IterGVN() { return 0; }
 
 #ifndef PRODUCT
@@ -495,7 +498,11 @@ public:
     _worklist.push(n);
   }
 
-  // Replace ith edge of "n" with "in"
+  void igvn_rehash_node_delayed(Node* n) {
+    rehash_node_delayed(n);
+  }
+
+    // Replace ith edge of "n" with "in"
   void replace_input_of(Node* n, int i, Node* in) {
     rehash_node_delayed(n);
     n->set_req(i, in);
