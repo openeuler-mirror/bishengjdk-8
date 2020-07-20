@@ -31,8 +31,8 @@ include ProfileNames.gmk
 # To be printed by java -version
 
 company_name =
-ifneq ($(COMPANY-NAME),N/A)
-  company_name=($(COMPANY-NAME))
+ifneq ($(COMPANY_NAME),N/A)
+  company_name=$(COMPANY_NAME)
 endif
 
 $(JDK_OUTPUTDIR)/gensrc/sun/misc/Version.java \
