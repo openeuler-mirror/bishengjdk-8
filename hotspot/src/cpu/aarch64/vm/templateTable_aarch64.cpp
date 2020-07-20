@@ -2925,8 +2925,6 @@ void TemplateTable::fast_storefield(TosState state)
   // Must prevent reordering of the following cp cache loads with bytecode load
   __ membar(MacroAssembler::LoadLoad);
 
-  __ membar(MacroAssembler::LoadLoad);
-
   // test for volatile with r3
   __ ldrw(r3, Address(r2, in_bytes(base +
 				   ConstantPoolCacheEntry::flags_offset())));
