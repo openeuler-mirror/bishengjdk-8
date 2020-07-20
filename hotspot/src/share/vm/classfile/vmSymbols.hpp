@@ -122,6 +122,8 @@
   template(sun_misc_Launcher_AppClassLoader,          "sun/misc/Launcher$AppClassLoader")         \
   template(sun_misc_Launcher_ExtClassLoader,          "sun/misc/Launcher$ExtClassLoader")         \
                                                                                                   \
+  template(java_util_Iterator,                        "java/util/Iterator")                       \
+                                                                                                  \
   /* Java runtime version access */                                                               \
   template(sun_misc_Version,                          "sun/misc/Version")                         \
   template(java_runtime_name_name,                    "java_runtime_name")                        \
