@@ -19934,7 +19934,7 @@ fi
   elif  ! [[ $with_company_name =~ ^[[:print:]]*$ ]] ; then
     as_fn_error $? "--with-company-name contains non-printing characters: $with_company_name" "$LINENO" 5
   elif test "x$with_company_name" != x; then
-    COMPANY-NAME="$with_company_name"
+    COMPANY_NAME="$with_company_name"
   fi
 
 

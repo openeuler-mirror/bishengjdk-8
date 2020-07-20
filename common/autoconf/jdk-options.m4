@@ -539,9 +539,9 @@ AC_DEFUN_ONCE([JDKOPT_SETUP_JDK_VERSION_NUMBERS],
   elif [ ! [[ $with_company_name =~ ^[[:print:]]*$ ]] ]; then
     AC_MSG_ERROR([--with-company-name contains non-printing characters: $with_company_name])
   elif test "x$with_company_name" != x; then
-    COMPANY-NAME="$with_company_name"
+    COMPANY_NAME="$with_company_name"
   fi
-  AC_SUBST(COMPANY-NAME)
+  AC_SUBST(COMPANY_NAME)
 
   # The vendor name, if any
   AC_ARG_WITH(vendor-name, [AS_HELP_STRING([--with-vendor-name],
