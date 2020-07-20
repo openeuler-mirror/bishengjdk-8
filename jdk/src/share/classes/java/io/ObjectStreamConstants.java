@@ -39,6 +39,11 @@ public interface ObjectStreamConstants {
     final static short STREAM_MAGIC = (short)0xaced;
 
     /**
+     * Magic number that is written to the stream header when using fastserilizer.
+     */
+    static final short STREAM_MAGIC_FAST = (short)0xdeca;
+
+    /**
      * Version number that is written to the stream header.
      */
     final static short STREAM_VERSION = 5;

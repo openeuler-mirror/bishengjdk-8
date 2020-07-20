@@ -557,6 +557,10 @@ class CommandLineFlags {
           "Enable normal processing of flags relating to experimental "     \
           "features")                                                       \
                                                                             \
+  experimental(bool, UseFastSerializer, false,                              \
+          "Cache-based serialization.It is extremely fast, but it can only" \
+          "be effective in certain scenarios.")                             \
+                                                                            \
   product(bool, JavaMonitorsInStackTrace, true,                             \
           "Print information about Java monitor locks when the stacks are"  \
           "dumped")                                                         \
