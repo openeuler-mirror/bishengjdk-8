@@ -467,6 +467,9 @@
   product(intx, AutoBoxCacheMax, 128,                                       \
           "Sets max value cached by the java.lang.Integer autobox cache")   \
                                                                             \
+  product(intx, BoxTypeCachedMax, 128,                                       \
+          "Sets max value cached by the java.lang.Long and Integer autobox cache")   \
+                                                                            \
   experimental(bool, AggressiveUnboxing, false,                             \
           "Control optimizations for aggressive boxing elimination")        \
                                                                             \

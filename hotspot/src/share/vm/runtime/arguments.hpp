@@ -386,6 +386,9 @@ class Arguments : AllStatic {
   // System properties
   static bool add_property(const char* prop);
 
+  // set Integer and Long box type cached MAX num
+  static void set_boxtype_cached_max_flags();
+
   // Aggressive optimization flags.
   static void set_aggressive_opts_flags();
 
