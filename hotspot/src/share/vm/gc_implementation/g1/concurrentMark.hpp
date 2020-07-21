@@ -679,8 +679,8 @@ public:
   }
 
   // Attempts to steal an object from the task queues of other tasks
-  bool try_stealing(uint worker_id, int* hash_seed, oop& obj) {
-    return _task_queues->steal(worker_id, hash_seed, obj);
+  bool try_stealing(uint worker_id, oop& obj) {
+    return _task_queues->steal(worker_id, obj);
   }
 
   ConcurrentMark(G1CollectedHeap* g1h,
@@ -1004,8 +1004,6 @@ private:
   // it was decreased).
   size_t                      _real_refs_reached_limit;
 
-  // used by the work stealing stuff
-  int                         _hash_seed;
   // if this is true, then the task has aborted for some reason
   bool                        _has_aborted;
   // set when the task aborts because it has met its time quota
