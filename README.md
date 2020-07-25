@@ -10,7 +10,7 @@ Boole JDK 当前同时支持 `Linux/x86_64` 和 `Linux/AArch64` 两种平台。
 
 ## License
 
-Boole JDK 使用 GPLv2 with Classpath Exception协议，请见 [License](https://gitee.com/openeuler/boolejdk-8/LICENSE)。
+Boole JDK 使用 GPLv2 with Classpath Exception协议，请见 [License](https://gitee.com/openeuler/boolejdk-8/blob/master/LICENSE)。
 
 ## 安装指导
 
