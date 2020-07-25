@@ -1,36 +1,21 @@
-# boolejdk-8
+## Boole JDK 8
 
-#### Description
-Boole JDK 8 is a high-performance, production-ready distribution of OpenJDK 8.
+Boole JDK is a high-performance, multiplatform, production-ready distribution of OpenJDK.
 
-#### Software Architecture
-Software architecture description
+The latest binary builds can be downloaded from [releases](https://gitee.com/openeuler/boolejdk-8/releases).
 
-#### Installation
+## Platform
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+Boole JDK currentyly supports `Linux/x86_64` and `Linux/AArch64`.
 
-#### Instructions
+## License
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+Boole JDK is licensed under GPLv2 with Classpath Exception, see [License](https://gitee.com/openeuler/boolejdk-8/LICENSE).
 
-#### Contribution
+## Installation
 
-1.  Fork the repository
-2.  Create Feat_xxx branch
-3.  Commit your code
-4.  Create Pull Request
+See [Installation Guide](https://gitee.com/openeuler/boolejdk-8/wikis/Boole%20JDK%208%20Installation%20Guide?sort_id=2475817).
 
+## How to contribute
 
-#### Gitee Feature
-
-1.  You can use Readme\_XXX.md to support different languages, such as Readme\_en.md, Readme\_zh.md
-2.  Gitee blog [blog.gitee.com](https://blog.gitee.com)
-3.  Explore open source project [https://gitee.com/explore](https://gitee.com/explore)
-4.  The most valuable open source project [GVP](https://gitee.com/gvp)
-5.  The manual of Gitee [https://gitee.com/help](https://gitee.com/help)
-6.  The most popular members  [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
+Contributions are wellcomed, please [send an email to dev](https://openeuler.org/zh/community/mails.html) or [create a new issue](https://gitee.com/openeuler/boolejdk-8/issues) if you find a bug or have new ideaes.

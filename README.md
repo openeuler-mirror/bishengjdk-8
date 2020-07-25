@@ -1,37 +1,21 @@
-# boolejdk-8
+## Boole JDK 8
 
-#### 介绍
-Boole JDK 8 is a high-performance, production-ready distribution of OpenJDK 8.
+Boole JDK 是一个高性能、多平台支持、可用于生产环境的OpenJDK发行版。
 
-#### 软件架构
-软件架构说明
+二进制可以从[这里](https://gitee.com/openeuler/boolejdk-8/releases)下载。
 
+## 平台支持
 
-#### 安装教程
+Boole JDK 当前同时支持 `Linux/x86_64` 和 `Linux/AArch64` 两种平台。
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+## License
 
-#### 使用说明
+Boole JDK 使用 GPLv2 with Classpath Exception协议，请见 [License](https://gitee.com/openeuler/boolejdk-8/LICENSE)。
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+## 安装指导
 
-#### 参与贡献
+请见 [Installation Guide](https://gitee.com/openeuler/boolejdk-8/wikis/Boole%20JDK%208%20安装指南?sort_id=2476266)。
 
-1.  Fork 本仓库
-2.  新建 Feat_xxx 分支
-3.  提交代码
-4.  新建 Pull Request
+## 如何提交贡献
 
-
-#### 码云特技
-
-1.  使用 Readme\_XXX.md 来支持不同的语言，例如 Readme\_en.md, Readme\_zh.md
-2.  码云官方博客 [blog.gitee.com](https://blog.gitee.com)
-3.  你可以 [https://gitee.com/explore](https://gitee.com/explore) 这个地址来了解码云上的优秀开源项目
-4.  [GVP](https://gitee.com/gvp) 全称是码云最有价值开源项目，是码云综合评定出的优秀开源项目
-5.  码云官方提供的使用手册 [https://gitee.com/help](https://gitee.com/help)
-6.  码云封面人物是一档用来展示码云会员风采的栏目 [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
+我们非常欢迎开发者提交贡献, 如果您发现了一个bug或者有一些想法想要交流，欢迎[发邮件到dev列表](https://openeuler.org/zh/community/mails.html) 或者 [提交一个issue](https://gitee.com/openeuler/boolejdk-8/issues) 。
