@@ -820,14 +820,14 @@ public final class Long extends Number implements Comparable<Long> {
                 int h = 0;
                 try {
                     int i = Integer.parseInt(longCacheHighPropValue);
-                    i = Math.max(i, 128);
+                    i = Math.max(i, 127);
                     // Maximum array size is Integer.MAX_VALUE
                     h = Math.min(i, Integer.MAX_VALUE/2 -1);
                 } catch( NumberFormatException nfe) {
                     // If the property cannot be parsed into an int, ignore it.
                 }
                 high = h;
-                low = -h+1;
+                low = -h - 1;
                 cache = new Long[(high - low) + 1];
                 int j = low;
                 for(int k = 0; k < cache.length; k++)
