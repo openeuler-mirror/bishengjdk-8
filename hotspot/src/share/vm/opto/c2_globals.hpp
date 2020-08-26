@@ -467,7 +467,7 @@
   product(intx, AutoBoxCacheMax, 128,                                       \
           "Sets max value cached by the java.lang.Integer autobox cache")   \
                                                                             \
-  product(intx, BoxTypeCachedMax, 128,                                       \
+  product(intx, BoxTypeCachedMax, 127,                                       \
           "Sets max value cached by the java.lang.Long and Integer autobox cache")   \
                                                                             \
   experimental(bool, AggressiveUnboxing, false,                             \

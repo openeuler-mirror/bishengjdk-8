@@ -2178,20 +2178,16 @@ void Arguments::set_bytecode_flags() {
 
 // set Integer and Long box type cached MAX num flag : -XX:BoxTypeCachedMax=<size>
 void Arguments::set_boxtype_cached_max_flags() {
-  int  size = 1024;
-  char buffer[size];
-  jio_snprintf(buffer, size, "java.lang.Long.LongCache.high=" INTX_FORMAT, BoxTypeCachedMax);
-  add_property(buffer);
-
-  if (AggressiveOpts || !FLAG_IS_DEFAULT(AutoBoxCacheMax)) {
-    if (FLAG_IS_DEFAULT(AutoBoxCacheMax)) {
-      FLAG_SET_DEFAULT(AutoBoxCacheMax, 20000);
+  if (!AggressiveOpts) {
+    if (!FLAG_IS_DEFAULT(BoxTypeCachedMax)) {
+       int  size = 1024;
+       char buffer[size];
+       jio_snprintf(buffer, size, "java.lang.Long.LongCache.high=" INTX_FORMAT, BoxTypeCachedMax);
+       add_property(buffer);
+       jio_snprintf(buffer, size, "java.lang.Integer.IntegerCache.high=" INTX_FORMAT, BoxTypeCachedMax);
+       add_property(buffer);
     }
-    jio_snprintf(buffer, size, "java.lang.Integer.IntegerCache.high=" INTX_FORMAT, AutoBoxCacheMax);
-  } else {
-    jio_snprintf(buffer, size, "java.lang.Integer.IntegerCache.high=" INTX_FORMAT, BoxTypeCachedMax);
   }
-  add_property(buffer);
 }
 
 // Aggressive optimization flags  -XX:+AggressiveOpts
