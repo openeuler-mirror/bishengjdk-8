@@ -179,6 +179,8 @@ class Klass : public Metadata {
   jbyte _modified_oops;             // Card Table Equivalent (YC/CMS support)
   jbyte _accumulated_modified_oops; // Mod Union Equivalent (CMS support)
 
+  bool _is_gc_leaf;
+
 private:
   // This is an index into FileMapHeader::_classpath_entry_table[], to
   // associate this class with the JAR file where it's loaded from during
@@ -570,6 +572,9 @@ protected:
                                                     layout_helper_is_typeArray(layout_helper()),
                                                     oop_is_typeArray_slow()); }
   #undef assert_same_query
+
+  void set_oop_is_gc_leaf(bool is_gc_leaf)        { _is_gc_leaf = is_gc_leaf; }
+  inline bool oop_is_gc_leaf()              const { return _is_gc_leaf; }
 
   // Access flags
   AccessFlags access_flags() const         { return _access_flags;  }

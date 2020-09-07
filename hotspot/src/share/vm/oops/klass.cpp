@@ -208,6 +208,8 @@ Klass::Klass() {
   clear_modified_oops();
   clear_accumulated_modified_oops();
   _shared_class_path_index = -1;
+
+  set_oop_is_gc_leaf(false);
 }
 
 jint Klass::array_layout_helper(BasicType etype) {
