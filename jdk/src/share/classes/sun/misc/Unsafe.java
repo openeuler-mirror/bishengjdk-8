@@ -433,8 +433,6 @@ public final class Unsafe {
     /** @see #putByte(long, byte) */
     public native void    putDouble(long address, double x);
 
-    public native boolean getUseFastSerializer();
-
     /**
      * Fetches a native pointer from a given memory address.  If the address is
      * zero, or does not point into a block obtained from {@link
