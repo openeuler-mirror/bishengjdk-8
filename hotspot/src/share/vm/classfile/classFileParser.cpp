@@ -4395,6 +4395,11 @@ void ClassFileParser::fill_oop_maps(instanceKlassHandle k,
   OopMapBlock* this_oop_map = k->start_of_nonstatic_oop_maps();
   const InstanceKlass* const super = k->superklass();
   const unsigned int super_count = super ? super->nonstatic_oop_map_count() : 0;
+
+  const bool super_is_gc_leaf = super ? super->oop_is_gc_leaf() : true;
+  bool this_is_gc_leaf = super_is_gc_leaf && (nonstatic_oop_map_count == 0);
+  k->set_oop_is_gc_leaf(this_is_gc_leaf);
+
   if (super_count > 0) {
     // Copy maps from superklass
     OopMapBlock* super_oop_map = super->start_of_nonstatic_oop_maps();

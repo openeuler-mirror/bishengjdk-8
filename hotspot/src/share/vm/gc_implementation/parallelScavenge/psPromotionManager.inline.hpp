@@ -49,7 +49,12 @@ inline void PSPromotionManager::claim_or_forward_internal_depth(T* p) {
       }
       oopDesc::encode_store_heap_oop_not_null(p, o);
     } else {
-      push_depth(p);
+      // leaf object copy in advanced, reduce cost of push and pop
+      if (!o->klass()->oop_is_gc_leaf()) {
+        push_depth(p);
+      } else {
+        PSScavenge::copy_and_push_safe_barrier<T, false>(this, p);
+      }
     }
   }
 }
@@ -202,7 +207,15 @@ oop PSPromotionManager::copy_to_survivor_space(oop o) {
     Copy::aligned_disjoint_words((HeapWord*)o, (HeapWord*)new_obj, new_obj_size);
 
     // Now we have to CAS in the header.
+#ifdef AARCH64
+    // CAS with memory fence cost a lot within copy_to_survivor_space on aarch64.
+    // To minimize the cost, we use a normal CAS to do object forwarding, plus a
+    // memory fence only upon CAS succeeds. To further reduce the fence insertion,
+    // we can skip the fence insertion for leaf objects (objects don't have reference fields).
+    if (o->relax_cas_forward_to(new_obj, test_mark)) {
+#else
     if (o->cas_forward_to(new_obj, test_mark)) {
+#endif
       // We won any races, we "own" this object.
       assert(new_obj == o->forwardee(), "Sanity");
 
@@ -226,10 +239,13 @@ oop PSPromotionManager::copy_to_survivor_space(oop o) {
         push_depth(masked_o);
         TASKQUEUE_STATS_ONLY(++_arrays_chunked; ++_masked_pushes);
       } else {
-        // we'll just push its contents
-        new_obj->push_contents(this);
+        // leaf object don't have contents, never need push_contents
+        if (!o->klass()->oop_is_gc_leaf()) {
+          // we'll just push its contents
+          new_obj->push_contents(this);
+        }
       }
-    }  else {
+    } else {
       // We lost, someone else "owns" this object
       guarantee(o->is_forwarded(), "Object must be forwarded if the cas failed.");
 

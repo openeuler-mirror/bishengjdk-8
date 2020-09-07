@@ -131,6 +131,14 @@ inline intptr_t Atomic::cmpxchg_ptr(intptr_t exchange_value, volatile intptr_t* 
  return __sync_val_compare_and_swap(dest, compare_value, exchange_value);
 }
 
+inline intptr_t Atomic::relax_cmpxchg_ptr(intptr_t exchange_value, volatile intptr_t* dest, intptr_t compare_value)
+{
+  intptr_t value = compare_value;
+  __atomic_compare_exchange(dest, &value, &exchange_value, /* weak */false,
+                              __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+  return value;
+}
+
 inline void* Atomic::cmpxchg_ptr(void* exchange_value, volatile void* dest, void* compare_value)
 {
   return (void *) cmpxchg_ptr((intptr_t) exchange_value,

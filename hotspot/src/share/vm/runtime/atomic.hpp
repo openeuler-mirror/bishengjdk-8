@@ -94,6 +94,10 @@ class Atomic : AllStatic {
                                      unsigned int compare_value);
 
   inline static intptr_t cmpxchg_ptr(intptr_t exchange_value, volatile intptr_t* dest, intptr_t compare_value);
+#ifdef AARCH64
+  inline static intptr_t relax_cmpxchg_ptr(intptr_t exchange_value, volatile intptr_t* dest, intptr_t compare_value);
+#endif
+
   inline static void*    cmpxchg_ptr(void*    exchange_value, volatile void*     dest, void*    compare_value);
 };
 

@@ -76,6 +76,9 @@ class oopDesc {
 
   void    release_set_mark(markOop m);
   markOop cas_set_mark(markOop new_mark, markOop old_mark);
+#ifdef AARCH64
+  markOop relax_cas_set_mark(markOop new_mark, markOop old_mark);
+#endif
 
   // Used only to re-initialize the mark word (e.g., of promoted
   // objects during a GC) -- requires a valid klass pointer
@@ -316,6 +319,10 @@ class oopDesc {
 
   void forward_to(oop p);
   bool cas_forward_to(oop p, markOop compare);
+
+#ifdef AARCH64
+  bool relax_cas_forward_to(oop p, markOop compare);
+#endif
 
 #if INCLUDE_ALL_GCS
   // Like "forward_to", but inserts the forwarding pointer atomically.

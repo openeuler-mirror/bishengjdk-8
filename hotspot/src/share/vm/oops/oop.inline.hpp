@@ -76,6 +76,12 @@ inline markOop oopDesc::cas_set_mark(markOop new_mark, markOop old_mark) {
   return (markOop) Atomic::cmpxchg_ptr(new_mark, &_mark, old_mark);
 }
 
+#ifdef AARCH64
+inline markOop oopDesc::relax_cas_set_mark(markOop new_mark, markOop old_mark) {
+  return (markOop)Atomic::relax_cmpxchg_ptr((intptr_t)new_mark, (volatile intptr_t*)&_mark, (intptr_t)old_mark);
+}
+#endif
+
 inline Klass* oopDesc::klass() const {
   if (UseCompressedClassPointers) {
     return Klass::decode_klass_not_null(_metadata._compressed_klass);
@@ -714,6 +720,30 @@ inline bool oopDesc::cas_forward_to(oop p, markOop compare) {
   assert(m->decode_pointer() == p, "encoding must be reversable");
   return cas_set_mark(m, compare) == compare;
 }
+
+#ifdef AARCH64
+inline bool oopDesc::relax_cas_forward_to(oop p, markOop compare) {
+  assert(check_obj_alignment(p),
+         "forwarding to something not aligned");
+  assert(Universe::heap()->is_in_reserved(p),
+         "forwarding to something not in heap");
+  markOop m = markOopDesc::encode_pointer_as_mark(p);
+  assert(m->decode_pointer() == p, "encoding must be reversable");
+  markOop old_markoop = relax_cas_set_mark(m, compare);
+  // If CAS succeeded, we must ensure the copy visible to threads reading the forwardee.
+  // (We might delay the fence insertion till pushing contents to task stack as other threads
+  // only need to touch the copied object after stolen the task.)
+  if (old_markoop == compare) {
+    // Once the CAS succeeds, leaf object never needs to be visible to other threads (finished
+    // collection by current thread), so we can save the fence.
+    if (!p->klass()->oop_is_gc_leaf()) {
+      OrderAccess::fence();
+    }
+    return true;
+  }
+  return false;
+}
+#endif
 
 // Note that the forwardee is not the same thing as the displaced_mark.
 // The forwardee is used when copying during scavenge and mark-sweep.
