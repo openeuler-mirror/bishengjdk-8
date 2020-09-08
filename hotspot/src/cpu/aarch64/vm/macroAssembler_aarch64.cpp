@@ -2854,6 +2854,124 @@ void MacroAssembler::update_word_crc32(Register crc, Register v, Register tmp,
 }
 
 /**
+ * Multiply and summation of 1 double-precision floating number pairs(sparse)
+ */
+void MacroAssembler::f2j_ddot_s1(Register dx, Register incx,
+                                 Register dy, Register incy) {
+  const FloatRegister tmpx = v2;
+  const FloatRegister tmpy = v3;
+
+  ld1_d(tmpx, 0, Address(dx, incx));
+  ld1_d(tmpy, 0, Address(dy, incy));
+  fmaddd(v0, tmpx, tmpy, v0);
+}
+
+/**
+ * Multiply and summation of 1 double-precision floating number pairs(dense)
+ */
+void MacroAssembler::f2j_ddot_d1(Register dx, Register dy, int size) {
+  const FloatRegister tmpx = v2;
+  const FloatRegister tmpy = v3;
+
+  ldrd(tmpx, post(dx, size));
+  ldrd(tmpy, post(dy, size));
+  fmaddd(v0, tmpx, tmpy, v0);
+}
+
+/**
+ * Multiply and summation of 4 double-precision floating numbers
+ */
+void MacroAssembler::f2j_ddot_d4(Register dx, Register dy) {
+  ld1(v2, v3, T2D, post(dx, 32));
+  ld1(v4, v5, T2D, post(dy, 32));
+  fmul(v2, T2D, v2, v4);
+  fmul(v3, T2D, v3, v5);
+  fadd(v0, T2D, v0, v2);
+  fadd(v6, T2D, v6, v3);
+}
+
+/**
+ * @param n         register containing the number of doubles in array
+ * @param dx        register pointing to input array
+ * @param incx      register containing step len for dx
+ * @param dy        register pointing to another input array
+ * @param incy      register containing step len for dy
+ * @param temp_reg  register containing loop variable
+ */
+void MacroAssembler::f2j_ddot(Register n, Register dx, Register incx,
+                              Register dy, Register incy, Register temp_reg) {
+  Label Ldot_EXIT, Ldot_S_BEGIN, Ldot_S1, Ldot_S10, Ldot_S4, Ldot_D_BEGIN,
+        Ldot_D1, Ldot_D10, Ldot_D4;
+
+  const int SZ = 8;
+
+    enter();
+    fmovd(v0, zr);
+    fmovd(v6, v0);
+
+    cmp(n, zr);
+    br(Assembler::LE, Ldot_EXIT);
+
+    cmp(incx, 1);
+    br(Assembler::NE, Ldot_S_BEGIN);
+    cmp(incy, 1);
+    br(Assembler::NE, Ldot_S_BEGIN);
+
+  BIND(Ldot_D_BEGIN);
+    asr(temp_reg, n, 2);
+    cmp(temp_reg, zr);
+    br(Assembler::LE, Ldot_D1);
+
+  BIND(Ldot_D4);
+    f2j_ddot_d4(dx, dy);
+    subs(temp_reg, temp_reg, 1);
+    br(Assembler::NE, Ldot_D4);
+
+    fadd(v0, T2D, v0, v6);
+    faddp_d(v0, v0);
+
+  BIND(Ldot_D1);
+    ands(temp_reg, n, 3);
+    br(Assembler::LE, Ldot_EXIT);
+
+  BIND(Ldot_D10);
+    f2j_ddot_d1(dx, dy, SZ);
+    subs(temp_reg, temp_reg, 1);
+    br(Assembler::NE, Ldot_D10);
+    leave();
+    ret(lr);
+
+  BIND(Ldot_S_BEGIN);
+    lsl(incx, incx, 3);
+    lsl(incy, incy, 3);
+
+    asr(temp_reg, n, 2);
+    cmp(temp_reg, zr);
+    br(Assembler::LE, Ldot_S1);
+
+  BIND(Ldot_S4);
+    f2j_ddot_s1(dx, incx, dy, incy);
+    f2j_ddot_s1(dx, incx, dy, incy);
+    f2j_ddot_s1(dx, incx, dy, incy);
+    f2j_ddot_s1(dx, incx, dy, incy);
+    subs(temp_reg, temp_reg, 1);
+    br(Assembler::NE, Ldot_S4);
+
+  BIND(Ldot_S1);
+    ands(temp_reg, n, 3);
+    br(Assembler::LE, Ldot_EXIT);
+
+  BIND(Ldot_S10);
+    f2j_ddot_s1(dx, incx, dy, incy);
+    subs(temp_reg, temp_reg, 1);
+    br(Assembler::NE, Ldot_S10);
+
+  BIND(Ldot_EXIT);
+    leave();
+    ret(lr);
+}
+
+/**
  * @param crc   register containing existing CRC (32-bit)
  * @param buf   register pointing to input byte buffer (byte*)
  * @param len   register containing number of bytes

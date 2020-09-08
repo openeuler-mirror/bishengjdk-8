@@ -1281,7 +1281,9 @@ vmSymbols::SID Method::klass_id_for_intrinsics(Klass* holder) {
   // which does not use the class default class loader so we check for its loader here
   InstanceKlass* ik = InstanceKlass::cast(holder);
   if ((ik->class_loader() != NULL) && !SystemDictionary::is_ext_class_loader(ik->class_loader())) {
-    return vmSymbols::NO_SID;   // regardless of name, no intrinsics here
+    if (!EnableIntrinsicExternal) {
+      return vmSymbols::NO_SID;   // regardless of name, no intrinsics here
+    }
   }
 
   // see if the klass name is well-known:

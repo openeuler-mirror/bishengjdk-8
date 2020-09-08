@@ -45,6 +45,7 @@
 
 #include "stubRoutines_aarch64.hpp"
 
+
 #ifdef COMPILER2
 #include "opto/runtime.hpp"
 #endif
@@ -3223,6 +3224,39 @@ class StubGenerator: public StubCodeGenerator {
   /**
    *  Arguments:
    *
+   * Inputs:
+   *   c_rarg0   - int n
+   *   c_rarg1   - double[] dx
+   *   c_rarg2   - int incx
+   *   c_rarg3   - double[] dy
+   *   c_rarg4   - int incy
+   *
+   * Output:
+   *       d0   - ddot result
+   *
+   */
+  address generate_ddotF2jBLAS() {
+    __ align(CodeEntryAlignment);
+    StubCodeMark mark(this, "StubRoutines", "f2jblas_ddot");
+
+    address start = __ pc();
+
+    const Register n    = c_rarg0;
+    const Register dx   = c_rarg1;
+    const Register incx = c_rarg2;
+    const Register dy   = c_rarg3;
+    const Register incy = c_rarg4;
+
+    BLOCK_COMMENT("Entry:");
+
+    __ f2j_ddot(n, dx, incx, dy, incy, rscratch2);
+
+    return start;
+  }
+
+  /**
+   *  Arguments:
+   *
    *  Input:
    *    c_rarg0   - x address
    *    c_rarg1   - x length
@@ -4260,6 +4294,10 @@ class StubGenerator: public StubCodeGenerator {
       // We use generate_multiply() rather than generate_square()
       // because it's faster for the sizes of modulus we care about.
       StubRoutines::_montgomerySquare = g.generate_multiply();
+    }
+
+    if (UseF2jBLASIntrinsics) {
+      StubRoutines::_ddotF2jBLAS = generate_ddotF2jBLAS();
     }
 
     if (UseAESIntrinsics) {
