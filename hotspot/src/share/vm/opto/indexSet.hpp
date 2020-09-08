@@ -189,13 +189,16 @@ class IndexSet : public ResourceObj {
   // The number of elements in the set
   uint      _count;
 
+  // The current upper limit of blocks that has been allocated and might be in use
+  uint      _current_block_limit;
+
+  // The number of top level array entries in use
+  uint       _max_blocks;
+
   // Our top level array of bitvector segments
   BitBlock **_blocks;
 
   BitBlock  *_preallocated_block_list[preallocated_block_list_size];
-
-  // The number of top level array entries in use
-  uint       _max_blocks;
 
   // Our assertions need to know the maximum number allowed in the set
 #ifdef ASSERT
@@ -263,12 +266,13 @@ class IndexSet : public ResourceObj {
       check_watch("clear");
 #endif
     _count = 0;
-    for (uint i = 0; i < _max_blocks; i++) {
+    for (uint i = 0; i < _current_block_limit; i++) {
       BitBlock *block = _blocks[i];
       if (block != &_empty_block) {
         free_block(i);
       }
     }
+    _current_block_limit = 0;
   }
 
   uint count() const { return _count; }
@@ -419,17 +423,17 @@ class IndexSetIterator VALUE_OBJ_CLASS_SPEC {
   // The index of the next word we will inspect
   uint                  _next_word;
 
+ // The index of the next block we will inspect
+ uint                  _next_block;
+
+ // The number of blocks in the set
+ uint                  _max_blocks;
+
   // A pointer to the contents of the current block
   uint32               *_words;
 
-  // The index of the next block we will inspect
-  uint                  _next_block;
-
   // A pointer to the blocks in our set
   IndexSet::BitBlock **_blocks;
-
-  // The number of blocks in the set
-  uint                  _max_blocks;
 
   // If the iterator was created from a non-const set, we replace
   // non-canonical empty blocks with the _empty_block pointer.  If
@@ -448,20 +452,26 @@ class IndexSetIterator VALUE_OBJ_CLASS_SPEC {
   IndexSetIterator(IndexSet *set);
   IndexSetIterator(const IndexSet *set);
 
+  // Return the next element of the set.
+  uint next_value() {
+    uint current = _current;
+    uint value = _value;
+    while (mask_bits(current,window_mask) == 0) {
+      current >>= window_size;
+      value += window_size;
+    }
+
+    uint advance = _second_bit[mask_bits(current,window_mask)];
+    _current = current >> advance;
+    _value = value + advance;
+    return value + _first_bit[mask_bits(current,window_mask)];
+  }
+
   // Return the next element of the set.  Return 0 when done.
   uint next() {
     uint current = _current;
     if (current != 0) {
-      uint value = _value;
-      while (mask_bits(current,window_mask) == 0) {
-        current >>= window_size;
-        value += window_size;
-      }
-
-      uint advance = _second_bit[mask_bits(current,window_mask)];
-      _current = current >> advance;
-      _value = value + advance;
-      return value + _first_bit[mask_bits(current,window_mask)];
+      return next_value();
     } else {
       return advance_and_next();
     }
