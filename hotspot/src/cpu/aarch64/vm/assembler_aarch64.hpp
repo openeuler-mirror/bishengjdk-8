@@ -2061,6 +2061,14 @@ public:
     ld_st(Vt, T, a, op1, op2);						\
   }
 
+  void ld1_d(FloatRegister Vt, int index, const Address &a) {
+    starti;
+    assert(index == 0 || index == 1, "Index must be 0 or 1 for Vx.2D");
+    f(0, 31), f(index & 1, 30);
+    f(0b001101110, 29, 21), rf(a.index(), 16), f(0b1000, 15, 12);
+    f(0b01, 11, 10), rf(a.base(), 5), rf(Vt, 0);
+  }
+
   INSN1(ld1,  0b001100010, 0b0111);
   INSN2(ld1,  0b001100010, 0b1010);
   INSN3(ld1,  0b001100010, 0b0110);
@@ -2185,6 +2193,13 @@ public:
   INSN(fsub, 0, 1, 0b110101);
 
 #undef INSN
+
+  void faddp_d(FloatRegister Vd, FloatRegister Vn) {
+    starti;
+    f(0b01, 31, 30), f(0b1111100, 29, 23), f(0b1, 22), f(0b11000, 21, 17);
+    f(0b0110110, 16, 10);
+    rf(Vn, 5), rf(Vd, 0);
+  }
 
 #define INSN(NAME, opc)                                                                 \
   void NAME(FloatRegister Vd, SIMD_Arrangement T, FloatRegister Vn, FloatRegister Vm) { \

@@ -739,6 +739,12 @@ class CommandLineFlags {
   product(bool, UseCRC32Intrinsics, false,                                  \
           "use intrinsics for java.util.zip.CRC32")                         \
                                                                             \
+  experimental(bool, UseF2jBLASIntrinsics, false,                           \
+          "use intrinsics for com.github.fommil.netlib.F2jBLAS on aarch64") \
+                                                                            \
+  experimental(bool, EnableIntrinsicExternal, false,                        \
+          "enable intrinsics for methods of external packages")             \
+                                                                            \
   develop(bool, TraceCallFixup, false,                                      \
           "Trace all call fixups")                                          \
                                                                             \

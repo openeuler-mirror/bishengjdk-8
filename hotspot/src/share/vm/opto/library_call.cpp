@@ -335,6 +335,7 @@ class LibraryCallKit : public GraphKit {
   bool inline_mulAdd();
   bool inline_montgomeryMultiply();
   bool inline_montgomerySquare();
+  bool inline_ddotF2jBLAS();
 
   bool inline_profileBoolean();
 };
@@ -585,6 +586,10 @@ CallGenerator* Compile::make_vm_intrinsic(ciMethod* m, bool is_virtual) {
   case vmIntrinsics::_updateBytesCRC32:
   case vmIntrinsics::_updateByteBufferCRC32:
     if (!UseCRC32Intrinsics) return NULL;
+    break;
+
+  case vmIntrinsics::_f2jblas_ddot:
+    if (!UseF2jBLASIntrinsics) return NULL;
     break;
 
   case vmIntrinsics::_incrementExactI:
@@ -983,6 +988,8 @@ bool LibraryCallKit::try_to_inline(int predicate) {
 
   case vmIntrinsics::_profileBoolean:
     return inline_profileBoolean();
+  case vmIntrinsics::_f2jblas_ddot:
+    return inline_ddotF2jBLAS();
 
   default:
     // If you get here, it may be that someone has added a new intrinsic
@@ -6298,6 +6305,49 @@ bool LibraryCallKit::inline_updateBytesCRC32() {
                              stubAddr, stubName, TypePtr::BOTTOM,
                              crc, src_start, length);
   }
+  Node* result = _gvn.transform(new (C) ProjNode(call, TypeFunc::Parms));
+  set_result(result);
+  return true;
+}
+
+/**
+ * double com.github.fommil.netlib.F2jBLAS.ddot(int n, double[] dx, int incx, double[] dy, int incy)
+ */
+bool LibraryCallKit::inline_ddotF2jBLAS() {
+  assert(callee()->signature()->size() == 5, "update has 5 parameters");
+  Node* n    = argument(1);       // type: int
+  Node* dx   = argument(2);       // type: double[]
+  Node* incx = argument(3);       // type: int
+  Node* dy   = argument(4);       // type: double[]
+  Node* incy = argument(5);       // type: int
+
+  const Type* dx_type = dx->Value(&_gvn);
+  const Type* dy_type = dy->Value(&_gvn);
+  const TypeAryPtr* dx_top_src = dx_type->isa_aryptr();
+  const TypeAryPtr* dy_top_src = dy_type->isa_aryptr();
+  if (dx_top_src == NULL || dx_top_src->klass() == NULL ||
+      dy_top_src == NULL || dy_top_src->klass() == NULL) {
+    // failed array check
+    return false;
+  }
+
+  // Figure out the size and type of the elements we will be copying.
+  BasicType dx_elem = dx_type->isa_aryptr()->klass()->as_array_klass()->element_type()->basic_type();
+  BasicType dy_elem = dy_type->isa_aryptr()->klass()->as_array_klass()->element_type()->basic_type();
+  if (dx_elem != T_DOUBLE || dy_elem != T_DOUBLE) {
+    return false;
+  }
+
+  // 'dx_start' points to dx array + scaled offset
+  Node* dx_start = array_element_address(dx, intcon(0), dx_elem);
+  Node* dy_start = array_element_address(dy, intcon(0), dy_elem);
+
+  address stubAddr = StubRoutines::ddotF2jBLAS();
+  const char *stubName = "f2jblas_ddot";
+  Node* call;
+  call = make_runtime_call(RC_LEAF, OptoRuntime::ddotF2jBLAS_Type(),
+                           stubAddr, stubName, TypePtr::BOTTOM,
+                           n, dx_start, incx, dy_start, incy);
   Node* result = _gvn.transform(new (C) ProjNode(call, TypeFunc::Parms));
   set_result(result);
   return true;

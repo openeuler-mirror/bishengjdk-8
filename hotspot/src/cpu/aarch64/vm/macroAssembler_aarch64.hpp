@@ -1180,6 +1180,9 @@ public:
         Register table0, Register table1, Register table2, Register table3,
         bool upper = false);
 
+  void f2j_ddot(Register n, Register dx, Register incx,
+                  Register dy, Register incy, Register temp_reg);
+
   void string_compare(Register str1, Register str2,
 		      Register cnt1, Register cnt2, Register result,
 		      Register tmp1);
@@ -1235,6 +1238,11 @@ private:
   // Returns an address on the stack which is reachable with a ldr/str of size
   // Uses rscratch2 if the address is not directly reachable
   Address spill_address(int size, int offset, Register tmp=rscratch2);
+
+private:
+  void f2j_ddot_s1(Register dx, Register incx, Register dy, Register incy);
+  void f2j_ddot_d1(Register dx, Register dy, int size);
+  void f2j_ddot_d4(Register dx, Register dy);
 
 public:
   void spill(Register Rx, bool is64, int offset) {

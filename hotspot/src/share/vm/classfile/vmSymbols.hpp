@@ -852,6 +852,12 @@
    do_name(     implCompress_name,                                 "implCompress0")                                     \
    do_signature(implCompress_signature,                            "([BI)V")                                            \
                                                                                                                         \
+  /* support for com.github.fommil.netlib.F2jBLAS */                                                                    \
+  do_class(com_github_fommil_netlib_f2jblas,                       "com/github/fommil/netlib/F2jBLAS")                  \
+  do_intrinsic(_f2jblas_ddot, com_github_fommil_netlib_f2jblas, ddot_name, ddot_signature, F_R)                         \
+   do_name(     ddot_name,                                         "ddot")                                              \
+   do_signature(ddot_signature,                                    "(I[DI[DI)D")                                        \
+                                                                                                                        \
   /* support for sun.security.provider.SHA2 */                                                                          \
   do_class(sun_security_provider_sha2,                             "sun/security/provider/SHA2")                        \
   do_intrinsic(_sha2_implCompress, sun_security_provider_sha2, implCompress_name, implCompress_signature, F_R)          \
