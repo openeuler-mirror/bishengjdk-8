@@ -94,11 +94,13 @@ void PhaseIFG::SquareUp() {
   assert( !_is_square, "only on triangular" );
 
   // Simple transpose
-  for( uint i = 0; i < _maxlrg; i++ ) {
-    IndexSetIterator elements(&_adjs[i]);
-    uint datum;
-    while ((datum = elements.next()) != 0) {
-      _adjs[datum].insert( i );
+  for (uint i = 0; i < _maxlrg; i++) {
+    if (!_adjs[i].is_empty()) {
+      IndexSetIterator elements(&_adjs[i]);
+      uint datum;
+      while ((datum = elements.next()) != 0) {
+        _adjs[datum].insert(i);
+      }
     }
   }
   _is_square = true;
@@ -122,43 +124,51 @@ int PhaseIFG::test_edge_sq( uint a, uint b ) const {
 }
 
 // Union edges of B into A
-void PhaseIFG::Union( uint a, uint b ) {
+void PhaseIFG::Union(uint a, uint b) {
   assert( _is_square, "only on square" );
   IndexSet *A = &_adjs[a];
-  IndexSetIterator b_elements(&_adjs[b]);
-  uint datum;
-  while ((datum = b_elements.next()) != 0) {
-    if(A->insert(datum)) {
-      _adjs[datum].insert(a);
-      lrgs(a).invalid_degree();
-      lrgs(datum).invalid_degree();
+  if (!_adjs[b].is_empty()) {
+    IndexSetIterator b_elements(&_adjs[b]);
+    uint datum;
+    while ((datum = b_elements.next()) != 0) {
+      if (A->insert(datum)) {
+        _adjs[datum].insert(a);
+        lrgs(a).invalid_degree();
+        lrgs(datum).invalid_degree();
+      }
     }
   }
 }
 
 // Yank a Node and all connected edges from the IFG.  Return a
 // list of neighbors (edges) yanked.
-IndexSet *PhaseIFG::remove_node( uint a ) {
+IndexSet *PhaseIFG::remove_node(uint a) {
   assert( _is_square, "only on square" );
   assert( !_yanked->test(a), "" );
   _yanked->set(a);
 
   // I remove the LRG from all neighbors.
-  IndexSetIterator elements(&_adjs[a]);
   LRG &lrg_a = lrgs(a);
-  uint datum;
-  while ((datum = elements.next()) != 0) {
-    _adjs[datum].remove(a);
-    lrgs(datum).inc_degree( -lrg_a.compute_degree(lrgs(datum)) );
+  if (!_adjs[a].is_empty()) {
+    IndexSetIterator elements(&_adjs[a]);
+    uint datum;
+    while ((datum = elements.next()) != 0) {
+      _adjs[datum].remove(a);
+      lrgs(datum).inc_degree(-lrg_a.compute_degree(lrgs(datum)));
+    }
   }
   return neighbors(a);
 }
 
 // Re-insert a yanked Node.
-void PhaseIFG::re_insert( uint a ) {
+void PhaseIFG::re_insert(uint a) {
   assert( _is_square, "only on square" );
   assert( _yanked->test(a), "" );
   (*_yanked) >>= a;
+
+  if (_adjs[a].is_empty()) {
+    return;
+  }
 
   IndexSetIterator elements(&_adjs[a]);
   uint datum;
@@ -173,7 +183,7 @@ void PhaseIFG::re_insert( uint a ) {
 // mis-aligned (or for Fat-Projections, not-adjacent) then we have to
 // MULTIPLY the sizes.  Inspect Brigg's thesis on register pairs to see why
 // this is so.
-int LRG::compute_degree( LRG &l ) const {
+int LRG::compute_degree(LRG &l) const {
   int tmp;
   int num_regs = _num_regs;
   int nregs = l.num_regs();
@@ -188,14 +198,18 @@ int LRG::compute_degree( LRG &l ) const {
 // mis-aligned (or for Fat-Projections, not-adjacent) then we have to
 // MULTIPLY the sizes.  Inspect Brigg's thesis on register pairs to see why
 // this is so.
-int PhaseIFG::effective_degree( uint lidx ) const {
+int PhaseIFG::effective_degree(uint lidx) const {
+  IndexSet *s = neighbors(lidx);
+  if (s->is_empty()) {
+    return 0;
+  }
+
   int eff = 0;
   int num_regs = lrgs(lidx).num_regs();
   int fat_proj = lrgs(lidx)._fat_proj;
-  IndexSet *s = neighbors(lidx);
   IndexSetIterator elements(s);
   uint nidx;
-  while((nidx = elements.next()) != 0) {
+  while ((nidx = elements.next()) != 0) {
     LRG &lrgn = lrgs(nidx);
     int nregs = lrgn.num_regs();
     eff += (fat_proj || lrgn._fat_proj) // either is a fat-proj?
@@ -210,14 +224,16 @@ int PhaseIFG::effective_degree( uint lidx ) const {
 void PhaseIFG::dump() const {
   tty->print_cr("-- Interference Graph --%s--",
                 _is_square ? "square" : "triangular" );
-  if( _is_square ) {
-    for( uint i = 0; i < _maxlrg; i++ ) {
+  if (_is_square) {
+    for (uint i = 0; i < _maxlrg; i++) {
       tty->print( (*_yanked)[i] ? "XX " : "  ");
       tty->print("L%d: { ",i);
-      IndexSetIterator elements(&_adjs[i]);
-      uint datum;
-      while ((datum = elements.next()) != 0) {
-        tty->print("L%d ", datum);
+      if (!_adjs[i].is_empty()) {
+        IndexSetIterator elements(&_adjs[i]);
+        uint datum;
+        while ((datum = elements.next()) != 0) {
+          tty->print("L%d ", datum);
+        }
       }
       tty->print_cr("}");
 
@@ -235,10 +251,12 @@ void PhaseIFG::dump() const {
         tty->print("L%d ",j - 1);
       }
     tty->print("| ");
-    IndexSetIterator elements(&_adjs[i]);
-    uint datum;
-    while ((datum = elements.next()) != 0) {
-      tty->print("L%d ", datum);
+    if (!_adjs[i].is_empty()) {
+      IndexSetIterator elements(&_adjs[i]);
+      uint datum;
+      while ((datum = elements.next()) != 0) {
+        tty->print("L%d ", datum);
+      }
     }
     tty->print("}\n");
   }
@@ -265,16 +283,18 @@ void PhaseIFG::verify( const PhaseChaitin *pc ) const {
   for( uint i = 0; i < _maxlrg; i++ ) {
     assert(!((*_yanked)[i]) || !neighbor_cnt(i), "Is removed completely" );
     IndexSet *set = &_adjs[i];
-    IndexSetIterator elements(set);
-    uint idx;
-    uint last = 0;
-    while ((idx = elements.next()) != 0) {
-      assert(idx != i, "Must have empty diagonal");
-      assert(pc->_lrg_map.find_const(idx) == idx, "Must not need Find");
-      assert(_adjs[idx].member(i), "IFG not square");
-      assert(!(*_yanked)[idx], "No yanked neighbors");
-      assert(last < idx, "not sorted increasing");
-      last = idx;
+    if (!set->is_empty()) {
+      IndexSetIterator elements(set);
+      uint idx;
+      uint last = 0;
+      while ((idx = elements.next()) != 0) {
+        assert(idx != i, "Must have empty diagonal");
+        assert(pc->_lrg_map.find_const(idx) == idx, "Must not need Find");
+        assert(_adjs[idx].member(i), "IFG not square");
+        assert(!(*_yanked)[idx], "No yanked neighbors");
+        assert(last < idx, "not sorted increasing");
+        last = idx;
+      }
     }
     assert(!lrgs(i)._degree_valid || effective_degree(i) == lrgs(i).degree(), "degree is valid but wrong");
   }
@@ -284,17 +304,21 @@ void PhaseIFG::verify( const PhaseChaitin *pc ) const {
 // Interfere this register with everything currently live.  Use the RegMasks
 // to trim the set of possible interferences. Return a count of register-only
 // interferences as an estimate of register pressure.
-void PhaseChaitin::interfere_with_live( uint r, IndexSet *liveout ) {
-  uint retval = 0;
-  // Interfere with everything live.
-  const RegMask &rm = lrgs(r).mask();
-  // Check for interference by checking overlap of regmasks.
-  // Only interfere if acceptable register masks overlap.
-  IndexSetIterator elements(liveout);
-  uint l;
-  while( (l = elements.next()) != 0 )
-    if( rm.overlap( lrgs(l).mask() ) )
-      _ifg->add_edge( r, l );
+void PhaseChaitin::interfere_with_live(uint r, IndexSet *liveout) {
+  if (!liveout->is_empty()) {
+    uint retval = 0;
+    // Interfere with everything live.
+    const RegMask &rm = lrgs(r).mask();
+    // Check for interference by checking overlap of regmasks.
+    // Only interfere if acceptable register masks overlap.
+    IndexSetIterator elements(liveout);
+    uint l;
+    while ((l = elements.next()) != 0) {
+      if (rm.overlap(lrgs(l).mask())) {
+        _ifg->add_edge(r, l);
+      }
+    }
+  }
 }
 
 // Actually build the interference graph.  Uses virtual registers only, no
@@ -390,6 +414,9 @@ void PhaseChaitin::build_ifg_virtual( ) {
 }
 
 uint PhaseChaitin::count_int_pressure( IndexSet *liveout ) {
+  if (liveout->is_empty()) {
+    return 0;
+  }
   IndexSetIterator elements(liveout);
   uint lidx;
   uint cnt = 0;
@@ -405,6 +432,9 @@ uint PhaseChaitin::count_int_pressure( IndexSet *liveout ) {
 }
 
 uint PhaseChaitin::count_float_pressure( IndexSet *liveout ) {
+  if (liveout->is_empty()) {
+    return 0;
+  }
   IndexSetIterator elements(liveout);
   uint lidx;
   uint cnt = 0;
@@ -489,23 +519,25 @@ uint PhaseChaitin::build_ifg_physical( ResourceArea *a ) {
     int inst_count = last_inst - first_inst;
     double cost = (inst_count <= 0) ? 0.0 : block->_freq * double(inst_count);
     assert(!(cost < 0.0), "negative spill cost" );
-    IndexSetIterator elements(&liveout);
-    uint lidx;
-    while ((lidx = elements.next()) != 0) {
-      LRG &lrg = lrgs(lidx);
-      lrg._area += cost;
-      // Compute initial register pressure
-      if (lrg.mask().is_UP() && lrg.mask_size()) {
-        if (lrg._is_float || lrg._is_vector) {   // Count float pressure
-          pressure[1] += lrg.reg_pressure();
-          if (pressure[1] > block->_freg_pressure) {
-            block->_freg_pressure = pressure[1];
-          }
-          // Count int pressure, but do not count the SP, flags
-        } else if(lrgs(lidx).mask().overlap(*Matcher::idealreg2regmask[Op_RegI])) {
-          pressure[0] += lrg.reg_pressure();
-          if (pressure[0] > block->_reg_pressure) {
-            block->_reg_pressure = pressure[0];
+    if (!liveout.is_empty()) {
+      IndexSetIterator elements(&liveout);
+      uint lidx;
+      while ((lidx = elements.next()) != 0) {
+        LRG &lrg = lrgs(lidx);
+        lrg._area += cost;
+        // Compute initial register pressure
+        if (lrg.mask().is_UP() && lrg.mask_size()) {
+          if (lrg._is_float || lrg._is_vector) {   // Count float pressure
+            pressure[1] += lrg.reg_pressure();
+            if (pressure[1] > block->_freg_pressure) {
+              block->_freg_pressure = pressure[1];
+            }
+            // Count int pressure, but do not count the SP, flags
+          } else if (lrgs(lidx).mask().overlap(*Matcher::idealreg2regmask[Op_RegI])) {
+            pressure[0] += lrg.reg_pressure();
+            if (pressure[0] > block->_reg_pressure) {
+              block->_reg_pressure = pressure[0];
+            }
           }
         }
       }
