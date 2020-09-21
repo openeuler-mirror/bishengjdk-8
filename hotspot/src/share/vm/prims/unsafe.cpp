@@ -1058,6 +1058,11 @@ Unsafe_DefineAnonymousClass_impl(JNIEnv *env,
                                  HeapWord* *temp_alloc,
                                  TRAPS) {
 
+  if (DumpSharedSpaces) {
+    tty->print_cr("failed: must not create anonymous classes when dumping.");
+    JVM_Exit(0);
+  }
+
   if (UsePerfData) {
     ClassLoader::unsafe_defineClassCallCounter()->inc();
   }
