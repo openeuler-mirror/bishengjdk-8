@@ -10,7 +10,7 @@
 
 ## License
 
-毕昇JDK 使用 GPLv2 with Classpath Exception协议，请见 [License](https://gitee.com/openeuler/bishengjdk-8/blob/master/LICENSE)。
+毕昇JDK 使用 GPLv2 with Classpath Exception协议，请见 [License](https://mirrors.huaweicloud.com/kunpeng/archive/compiler/bisheng_jdk/bisheng-jdk-8u262-linux-aarch64.tar.gz)。
 
 ## 安装指导
 
