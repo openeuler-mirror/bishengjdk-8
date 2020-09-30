@@ -18,4 +18,4 @@ See [Installation Guide](https://gitee.com/openeuler/bishengjdk-8/wikis/Bisheng%
 
 ## How to contribute
 
-Contributions are wellcomed, please [send an email to dev](https://openeuler.org/zh/community/mailing-list) or [create a new issue](https://gitee.com/openeuler/bishengjdk-8/issues) if you find a bug or have new ideaes.
+Contributions are welcomed, please [send an email to dev](https://openeuler.org/zh/community/mailing-list) or [create a new issue](https://gitee.com/openeuler/bishengjdk-8/issues) if you find a bug or have new ideaes.
