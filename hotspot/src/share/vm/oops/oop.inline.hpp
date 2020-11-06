@@ -91,6 +91,7 @@ inline Klass* oopDesc::klass() const {
 }
 
 inline Klass* oopDesc::klass_or_null() const volatile {
+  // can be NULL in CMS
   if (UseCompressedClassPointers) {
     return Klass::decode_klass(_metadata._compressed_klass);
   } else {
@@ -101,17 +102,6 @@ inline Klass* oopDesc::klass_or_null() const volatile {
 inline int oopDesc::klass_gap_offset_in_bytes() {
   assert(UseCompressedClassPointers, "only applicable to compressed klass pointers");
   return oopDesc::klass_offset_in_bytes() + sizeof(narrowKlass);
-}
-
-Klass* oopDesc::klass_or_null_acquire() const volatile {
-  if (UseCompressedClassPointers) {
-    // Workaround for non-const load_acquire parameter.
-    const volatile narrowKlass* addr = &_metadata._compressed_klass;
-    volatile narrowKlass* xaddr = const_cast<volatile narrowKlass*>(addr);
-    return Klass::decode_klass(OrderAccess::load_acquire(xaddr));
-  } else {
-    return (Klass*)OrderAccess::load_ptr_acquire(&_metadata._klass);
-  }
 }
 
 inline Klass** oopDesc::klass_addr() {
@@ -126,32 +116,16 @@ inline narrowKlass* oopDesc::compressed_klass_addr() {
   return &_metadata._compressed_klass;
 }
 
-#define CHECK_SET_KLASS(k)                                                \
-  do {                                                                    \
-    assert(Universe::is_bootstrapping() || k != NULL, "NULL Klass");      \
-    assert(Universe::is_bootstrapping() || k->is_klass(), "not a Klass"); \
-  } while (0)
-
 inline void oopDesc::set_klass(Klass* k) {
-  CHECK_SET_KLASS(k);
+  // since klasses are promoted no store check is needed
+  assert(Universe::is_bootstrapping() || k != NULL, "must be a real Klass*");
+  assert(Universe::is_bootstrapping() || k->is_klass(), "not a Klass*");
   if (UseCompressedClassPointers) {
     *compressed_klass_addr() = Klass::encode_klass_not_null(k);
   } else {
     *klass_addr() = k;
   }
 }
-
-void oopDesc::release_set_klass(Klass* k) {
-  CHECK_SET_KLASS(k);
-  if (UseCompressedClassPointers) {
-    OrderAccess::release_store(compressed_klass_addr(),
-                               Klass::encode_klass_not_null(k));
-  } else {
-    OrderAccess::release_store_ptr(klass_addr(), k);
-  }
-}
-
-#undef CHECK_SET_KLASS
 
 inline int oopDesc::klass_gap() const {
   return *(int*)(((intptr_t)this) + klass_gap_offset_in_bytes());
@@ -547,18 +521,14 @@ inline int oopDesc::size_given_klass(Klass* klass)  {
     }
   }
 
-  assert(s % MinObjAlignment == 0, "Oop size is not properly aligned");
-  assert(s > 0, "Oop size must be greater than zero");
+  assert(s % MinObjAlignment == 0, "alignment check");
+  assert(s > 0, "Bad size calculated");
   return s;
 }
 
 
 inline int oopDesc::size()  {
   return size_given_klass(klass());
-}
-
-inline int oopDesc::acquire_size()  {
-  return size_given_klass(klass_or_null_acquire());
 }
 
 inline void update_barrier_set(void* p, oop v, bool release = false) {

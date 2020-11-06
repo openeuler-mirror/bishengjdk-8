@@ -422,8 +422,6 @@ class HeapRegion: public G1OffsetTableContigSpace {
 
   bool is_old() const { return _type.is_old(); }
 
-  bool is_old_or_humongous() const { return _type.is_old_or_humongous(); }
-
   // For a humongous region, region in which it starts.
   HeapRegion* humongous_start_region() const {
     return _humongous_start_region;
@@ -720,18 +718,16 @@ class HeapRegion: public G1OffsetTableContigSpace {
   HeapWord*
   object_iterate_mem_careful(MemRegion mr, ObjectClosure* cl);
 
-  // Iterate over the objects overlapping part of a card, applying cl
-  // to all references in the region.  This is a helper for
-  // G1RemSet::refine_card, and is tightly coupled with it.
-  // mr: the memory region covered by the card, trimmed to the
-  // allocated space for this region.  Must not be empty.
-  // This region must be old or humongous.
-  // Returns true if the designated objects were successfully
-  // processed, false if an unparsable part of the heap was
-  // encountered; that only happens when invoked concurrently with the
-  // mutator.
-  bool oops_on_card_seq_iterate_careful(MemRegion mr,
-                                        FilterOutOfRegionClosure* cl);
+  // filter_young: if true and the region is a young region then we
+  // skip the iteration.
+  // card_ptr: if not NULL, and we decide that the card is not young
+  // and we iterate over it, we'll clean the card before we start the
+  // iteration.
+  HeapWord*
+  oops_on_card_seq_iterate_careful(MemRegion mr,
+                                   FilterOutOfRegionClosure* cl,
+                                   bool filter_young,
+                                   jbyte* card_ptr);
 
   size_t recorded_rs_length() const        { return _recorded_rs_length; }
   double predicted_elapsed_time_ms() const { return _predicted_elapsed_time_ms; }

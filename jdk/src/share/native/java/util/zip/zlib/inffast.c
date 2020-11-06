@@ -81,6 +81,9 @@ unsigned start;         /* inflate()'s starting value for strm->avail_out */
     unsigned char FAR *out;     /* local strm->next_out */
     unsigned char FAR *beg;     /* inflate()'s initial strm->next_out */
     unsigned char FAR *end;     /* while out < end, enough space available */
+#if defined(INFLATE_CHUNK_SIMD_NEON)
+    unsigned char FAR *limit;   /* safety limit for chunky copies */
+#endif
 #ifdef INFLATE_STRICT
     unsigned dmax;              /* maximum distance from zlib header */
 #endif
@@ -113,7 +116,12 @@ unsigned start;         /* inflate()'s starting value for strm->avail_out */
 #endif
     wsize = state->wsize;
     whave = state->whave;
+#if defined(INFLATE_CHUNK_SIMD_NEON)    
+    limit = out + strm->avail_out;
+    wnext = (state->wnext == 0 && whave >= wsize) ? wsize : state->wnext;
+#else
     wnext = state->wnext;
+#endif
     window = state->window;
     hold = state->hold;
     bits = state->bits;
@@ -221,6 +229,45 @@ unsigned start;         /* inflate()'s starting value for strm->avail_out */
 #endif
                     }
                     from = window;
+#if defined(INFLATE_CHUNK_SIMD_NEON)
+                    if (wnext >= op) {          /* contiguous in window */
+                        from += wnext - op;
+                    }
+                    else {                      /* wrap around window */
+                        op -= wnext;
+                        from += wsize - op;
+                        if (op < len) {         /* some from end of window */
+                            len -= op;
+                            out = chunkcopy_safe(out, from, op, limit);
+                            from = window;      /* more from start of window */
+                            op = wnext;
+                            /* This (rare) case can create a situation where
+                               the first chunkcopy below must be checked.
+                             */
+                        }
+                    }
+                    if (op < len) {             /* still need some from output */
+                        out = chunkcopy_safe(out, from, op, limit);
+                        len -= op;
+                        /* When dist is small the amount of data that can be
+                           copied from the window is also small, and progress
+                           towards the dangerous end of the output buffer is
+                           also small.  This means that for trivial memsets and
+                           for chunkunroll_relaxed() a safety check is
+                           unnecessary.  However, these conditions may not be
+                           entered at all, and in that case it's possible that
+                           the main copy is near the end.
+                          */
+                        out = chunkunroll_relaxed(out, &dist, &len);
+                        out = chunkcopy_safe(out, out - dist, len, limit);
+                    }
+                    else {
+                        /* from points to window, so there is no risk of
+                           overlapping pointers requiring memset-like behaviour
+                         */
+                        out = chunkcopy_safe(out, from, len, limit);
+                    }
+#else
                     if (wnext == 0) {           /* very common case */
                         from += wsize - op;
                         if (op < len) {         /* some from window */
@@ -271,8 +318,18 @@ unsigned start;         /* inflate()'s starting value for strm->avail_out */
                         if (len > 1)
                             *out++ = *from++;
                     }
+#endif
                 }
-                else {
+                else { 
+#if defined(INFLATE_CHUNK_SIMD_NEON)
+                    /* Whole reference is in range of current output.  No
+                       range checks are necessary because we start with room
+                       for at least 258 bytes of output, so unroll and roundoff
+                       operations can write beyond `out+len` so long as they
+                       stay within 258 bytes of `out`.
+                     */
+                    out = chunkcopy_lapped_relaxed(out, dist, len);
+#else
                     from = out - dist;          /* copy direct from output */
                     do {                        /* minimum length is three */
                         *out++ = *from++;
@@ -284,7 +341,8 @@ unsigned start;         /* inflate()'s starting value for strm->avail_out */
                         *out++ = *from++;
                         if (len > 1)
                             *out++ = *from++;
-                    }
+                    }                   
+#endif
                 }
             }
             else if ((op & 64) == 0) {          /* 2nd level distance code */

@@ -45,6 +45,7 @@ abstract public class Metadata extends VMObject {
   }
 
   private static VirtualBaseConstructor<Metadata> metadataConstructor;
+  private static Map map = new HashMap();
 
   private static synchronized void initialize(TypeDataBase db) throws WrongTypeException {
     metadataConstructor = new VirtualBaseConstructor<Metadata>(db, db.lookupType("Metadata"), null, null);
@@ -65,7 +66,14 @@ abstract public class Metadata extends VMObject {
   }
 
   public static Metadata instantiateWrapperFor(Address addr) {
-    return metadataConstructor.instantiateWrapperFor(addr);
+    Metadata metadata;
+    if (!map.containsKey(addr)) {
+      metadata = metadataConstructor.instantiateWrapperFor(addr);
+      map.put(addr, metadata);
+    } else {
+      metadata = (Metadata)map.get(addr);
+    }
+    return metadata;
   }
 
   public void iterate(MetadataVisitor visitor) {

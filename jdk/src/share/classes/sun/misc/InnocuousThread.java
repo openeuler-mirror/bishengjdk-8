@@ -70,6 +70,7 @@ public final class InnocuousThread extends Thread {
     public InnocuousThread(Runnable target) {
         super(INNOCUOUSTHREADGROUP, target, newName());
         UNSAFE.putOrderedObject(this, INHERITEDACCESSCONTROLCONTEXT, ACC);
+        UNSAFE.putOrderedObject(this, CONTEXTCLASSLOADER, ClassLoader.getSystemClassLoader());
         eraseThreadLocals();
     }
 
@@ -78,12 +79,6 @@ public final class InnocuousThread extends Thread {
         UNSAFE.putOrderedObject(this, INHERITEDACCESSCONTROLCONTEXT, ACC);
         UNSAFE.putOrderedObject(this, CONTEXTCLASSLOADER, tccl);
         eraseThreadLocals();
-    }
-
-    @Override
-    public ClassLoader getContextClassLoader() {
-        // always report system class loader
-        return ClassLoader.getSystemClassLoader();
     }
 
     @Override

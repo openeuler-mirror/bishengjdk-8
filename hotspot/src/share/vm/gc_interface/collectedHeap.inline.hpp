@@ -39,22 +39,14 @@
 // Inline allocation implementations.
 
 void CollectedHeap::post_allocation_setup_common(KlassHandle klass,
-                                                 HeapWord* obj_ptr) {
-  post_allocation_setup_no_klass_install(klass, obj_ptr);
-  oop obj = (oop)obj_ptr;
-#if ! INCLUDE_ALL_GCS
-  obj->set_klass(klass());
-#else
-  // Need a release store to ensure array/class length, mark word, and
-  // object zeroing are visible before setting the klass non-NULL, for
-  // concurrent collectors.
-  obj->release_set_klass(klass());
-#endif
+                                                 HeapWord* obj) {
+  post_allocation_setup_no_klass_install(klass, obj);
+  post_allocation_install_obj_klass(klass, oop(obj));
 }
 
 void CollectedHeap::post_allocation_setup_no_klass_install(KlassHandle klass,
-                                                           HeapWord* obj_ptr) {
-  oop obj = (oop)obj_ptr;
+                                                           HeapWord* objPtr) {
+  oop obj = (oop)objPtr;
 
   assert(obj != NULL, "NULL object pointer");
   if (UseBiasedLocking && (klass() != NULL)) {
@@ -63,6 +55,18 @@ void CollectedHeap::post_allocation_setup_no_klass_install(KlassHandle klass,
     // May be bootstrapping
     obj->set_mark(markOopDesc::prototype());
   }
+}
+
+void CollectedHeap::post_allocation_install_obj_klass(KlassHandle klass,
+                                                   oop obj) {
+  // These asserts are kind of complicated because of klassKlass
+  // and the beginning of the world.
+  assert(klass() != NULL || !Universe::is_fully_initialized(), "NULL klass");
+  assert(klass() == NULL || klass()->is_klass(), "not a klass");
+  assert(obj != NULL, "NULL object pointer");
+  obj->set_klass(klass());
+  assert(!Universe::is_fully_initialized() || obj->klass() != NULL,
+         "missing klass");
 }
 
 // Support for jvmti and dtrace
@@ -92,15 +96,15 @@ void CollectedHeap::post_allocation_setup_obj(KlassHandle klass,
 }
 
 void CollectedHeap::post_allocation_setup_array(KlassHandle klass,
-                                                HeapWord* obj_ptr,
+                                                HeapWord* obj,
                                                 int length) {
-  // Set array length before setting the _klass field because a
-  // non-NULL klass field indicates that the object is parsable by
-  // concurrent GC.
+  // Set array length before setting the _klass field
+  // in post_allocation_setup_common() because the klass field
+  // indicates that the object is parsable by concurrent GC.
   assert(length >= 0, "length should be non-negative");
-  ((arrayOop)obj_ptr)->set_length(length);
-  post_allocation_setup_common(klass, obj_ptr);
-  oop new_obj = (oop)obj_ptr;
+  ((arrayOop)obj)->set_length(length);
+  post_allocation_setup_common(klass, obj);
+  oop new_obj = (oop)obj;
   assert(new_obj->is_array(), "must be an array");
   // notify jvmti and dtrace (must be after length is set for dtrace)
   post_allocation_notify(klass, new_obj, new_obj->size());
@@ -198,16 +202,6 @@ oop CollectedHeap::obj_allocate(KlassHandle klass, int size, TRAPS) {
   assert(size >= 0, "int won't convert to size_t");
   HeapWord* obj = common_mem_allocate_init(klass, size, CHECK_NULL);
   post_allocation_setup_obj(klass, obj, size);
-  NOT_PRODUCT(Universe::heap()->check_for_bad_heap_word_value(obj, size));
-  return (oop)obj;
-}
-
-oop CollectedHeap::class_allocate(KlassHandle klass, int size, TRAPS) {
-  debug_only(check_for_valid_allocation_state());
-  assert(!Universe::heap()->is_gc_active(), "Allocation during gc not allowed");
-  assert(size >= 0, "int won't convert to size_t");
-  HeapWord* obj = common_mem_allocate_init(klass, size, CHECK_NULL);
-  post_allocation_setup_class(klass, obj, size); // set oop_size
   NOT_PRODUCT(Universe::heap()->check_for_bad_heap_word_value(obj, size));
   return (oop)obj;
 }

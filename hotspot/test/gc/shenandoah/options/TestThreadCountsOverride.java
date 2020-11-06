@@ -35,6 +35,7 @@ public class TestThreadCountsOverride {
     public static void main(String[] args) throws Exception {
         {
             ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(
+                "-Xmx128m",
                 "-XX:+UnlockDiagnosticVMOptions",
                 "-XX:+UnlockExperimentalVMOptions",
                 "-XX:+UseShenandoahGC",
@@ -49,6 +50,7 @@ public class TestThreadCountsOverride {
 
         {
             ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(
+                "-Xmx128m",
                 "-XX:+UnlockDiagnosticVMOptions",
                 "-XX:+UnlockExperimentalVMOptions",
                 "-XX:+UseShenandoahGC",

@@ -203,6 +203,7 @@ class Compile : public Phase {
 
     BasicType type()      const    { return _type; }
 
+    jint    get_jint()    const    { return _v._value.i; }
     jlong   get_jlong()   const    { return _v._value.j; }
     jfloat  get_jfloat()  const    { return _v._value.f; }
     jdouble get_jdouble() const    { return _v._value.d; }
@@ -259,6 +260,14 @@ class Compile : public Phase {
     Constant add(MachConstantNode* n, BasicType type, jvalue value);
     Constant add(Metadata* metadata);
     Constant add(MachConstantNode* n, MachOper* oper);
+    Constant add(MachConstantNode* n, jint i) {
+      jvalue value; value.i = i;
+      return add(n, T_INT, value);
+    }
+    Constant add(MachConstantNode* n, jlong j) {
+      jvalue value; value.j = j;
+      return add(n, T_LONG, value);
+    }
     Constant add(MachConstantNode* n, jfloat f) {
       jvalue value; value.f = f;
       return add(n, T_FLOAT, value);
@@ -975,6 +984,7 @@ class Compile : public Phase {
   void inline_incrementally(PhaseIterGVN& igvn);
   void inline_string_calls(bool parse_time);
   void inline_boxing_calls(PhaseIterGVN& igvn);
+  void remove_root_to_sfpts_edges();
 
   // Matching, CFG layout, allocation, code generation
   PhaseCFG*         cfg()                       { return _cfg; }
@@ -1239,6 +1249,9 @@ class Compile : public Phase {
 
   // Auxiliary method for randomized fuzzing/stressing
   static bool randomized_select(int count);
+#ifdef ASSERT
+  bool _type_verify_symmetry;
+#endif
 
   void shenandoah_eliminate_g1_wb_pre(Node* call, PhaseIterGVN* igvn);
 };

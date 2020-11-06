@@ -125,7 +125,7 @@ template <int N> static void get_header_version(char (&header_version) [N]) {
   } else {
     // Get the hash value.  Use a static seed because the hash needs to return the same
     // value over multiple jvm invocations.
-    unsigned int hash = AltHashing::murmur3_32(8191, (const jbyte*)vm_version, version_len);
+    uint32_t hash = AltHashing::halfsiphash_32(8191, (const uint8_t*)vm_version, version_len);
 
     // Truncate the ident, saving room for the 8 hex character hash value.
     strncpy(header_version, vm_version, JVM_IDENT_MAX-9);
@@ -344,12 +344,12 @@ bool FileMapInfo::init_from_file(int fd) {
 
 // Read the FileMapInfo information from the file.
 bool FileMapInfo::open_for_read() {
-  _full_path = Arguments::GetSharedArchivePath();
+  _full_path = make_log_name(Arguments::GetSharedArchivePath(), NULL);
   int fd = open(_full_path, O_RDONLY | O_BINARY, 0);
   if (fd < 0) {
     if (errno == ENOENT) {
       // Not locating the shared archive is ok.
-      fail_continue("Specified shared archive not found.");
+      fail_continue("Specified shared archive not found. archive file path:%s", _full_path);
     } else {
       fail_continue("Failed to open shared archive file (%s).",
                     strerror(errno));
@@ -366,7 +366,7 @@ bool FileMapInfo::open_for_read() {
 // Write the FileMapInfo information to the file.
 
 void FileMapInfo::open_for_write() {
- _full_path = Arguments::GetSharedArchivePath();
+ _full_path = make_log_name(Arguments::GetSharedArchivePath(), NULL);
   if (PrintSharedSpaces) {
     tty->print_cr("Dumping shared data to file: ");
     tty->print_cr("   %s", _full_path);

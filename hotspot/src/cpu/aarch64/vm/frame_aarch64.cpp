@@ -85,6 +85,7 @@ bool frame::safe_for_sender(JavaThread *thread) {
   // that unextended sp >= sp
 
   bool unextended_sp_safe = (unextended_sp < thread->stack_base());
+
   if (!unextended_sp_safe) {
     return false;
   }

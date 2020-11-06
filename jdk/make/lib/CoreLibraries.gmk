@@ -154,6 +154,10 @@ else ifeq ($(OPENJDK_TARGET_OS), macosx)
   LIBJAVA_SRC_DIRS += $(JDK_TOPDIR)/src/macosx/native/sun/util/locale/provider
 endif
 
+ifeq ($(OPENJDK_TARGET_OS), linux)
+  LIBJAVA_SRC_DIRS += $(JDK_TOPDIR)/src/linux/native/jdk/internal/platform/cgroupv1
+endif
+
 ifeq ($(OPENJDK_TARGET_OS), windows)
   LIBJAVA_SRC_DIRS += $(JDK_TOPDIR)/src/$(OPENJDK_TARGET_OS_API_DIR)/native/sun/security/provider \
       $(JDK_TOPDIR)/src/$(OPENJDK_TARGET_OS_API_DIR)/native/sun/io
@@ -257,6 +261,9 @@ ifeq ($(USE_EXTERNAL_LIBZ), true)
   LIBZIP_EXCLUDES += zlib
 else
   ZLIB_CPPFLAGS := -I$(JDK_TOPDIR)/src/share/native/java/util/zip/zlib
+  ifeq ($(OPENJDK_TARGET_CPU), aarch64)
+    ZLIB_CPPFLAGS += -DCRC32_ARMV8_CRC32 -DHASH_ARMV8_CRC32 -march=armv8-a+crc -DUNALIGNED_OK -DADLER32_SIMD_NEON -DSLIDE_HASH_NEON -DINFLATE_CHUNK_SIMD_NEON -O3
+  endif
 endif
 
 BUILD_LIBZIP_REORDER :=
@@ -274,7 +281,7 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBZIP, \
     LIBRARY := zip, \
     OUTPUT_DIR := $(INSTALL_LIBRARIES_HERE), \
     LANG := C, \
-    OPTIMIZATION := LOW, \
+    OPTIMIZATION := HIGHEST, \
     SRC := $(JDK_TOPDIR)/src/share/native/java/util/zip, \
     EXCLUDES := $(LIBZIP_EXCLUDES), \
     CFLAGS := $(CFLAGS_JDKLIB) \

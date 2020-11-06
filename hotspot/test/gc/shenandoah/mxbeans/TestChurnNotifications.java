@@ -40,21 +40,40 @@
 /*
  * @test TestChurnNotifications
  * @summary Check that MX notifications are reported for all cycles
+ * @key gc
  *
  * @run main/othervm -Xmx128m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=aggressive
  *      -Dprecise=false
  *      TestChurnNotifications
+ */
+
+/*
+ * @test TestChurnNotifications
+ * @summary Check that MX notifications are reported for all cycles
+ * @key gc
  *
  * @run main/othervm -Xmx128m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=adaptive
  *      -Dprecise=false
  *      TestChurnNotifications
+ */
+
+/*
+ * @test TestChurnNotifications
+ * @summary Check that MX notifications are reported for all cycles
+ * @key gc
  *
  * @run main/othervm -Xmx128m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=static
  *      -Dprecise=false
  *      TestChurnNotifications
+ */
+
+/*
+ * @test TestChurnNotifications
+ * @summary Check that MX notifications are reported for all cycles
+ * @key gc
  *
  * @run main/othervm -Xmx128m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=compact
@@ -65,6 +84,7 @@
 /*
  * @test TestChurnNotifications
  * @summary Check that MX notifications are reported for all cycles
+ * @key gc
  *
  * @run main/othervm -Xmx128m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=iu -XX:ShenandoahGCHeuristics=aggressive
@@ -88,7 +108,7 @@ import com.sun.management.GarbageCollectionNotificationInfo;
 public class TestChurnNotifications {
 
     static final long HEAP_MB = 128;                           // adjust for test configuration above
-    static final long TARGET_MB = Long.getLong("target", 8_000); // 8 Gb allocation
+    static final long TARGET_MB = Long.getLong("target", 2_000); // 2 Gb allocation
 
     // Should we track the churn precisely?
     // Precise tracking is only reliable when GC is fully stop-the-world. Otherwise,
@@ -146,7 +166,7 @@ public class TestChurnNotifications {
         long maxExpected = mem + HEAP_MB * 1024 * 1024;
 
         String msg = "Expected = [" + minExpected / M + "; " + maxExpected / M + "] (" + mem / M + "), actual = " + actual / M;
-        if (minExpected < actual && actual < maxExpected) {
+        if (minExpected <= actual && actual <= maxExpected) {
             System.out.println(msg);
         } else {
             throw new IllegalStateException(msg);

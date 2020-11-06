@@ -37,9 +37,10 @@ import com.oracle.java.testlibrary.*;
 public class TestClassUnloadingArguments {
 
     public static void testWith(String msg, boolean cu, boolean cuConc, String... args) throws Exception {
-        String[] cmds = Arrays.copyOf(args, args.length + 2);
-        cmds[args.length] = "-XX:+PrintFlagsFinal";
-        cmds[args.length + 1] = "-version";
+        String[] cmds = Arrays.copyOf(args, args.length + 3);
+        cmds[args.length] = "-Xmx128m";
+        cmds[args.length + 1] = "-XX:+PrintFlagsFinal";
+        cmds[args.length + 2] = "-version";
         ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(cmds);
         OutputAnalyzer output = new OutputAnalyzer(pb.start());
         output.shouldHaveExitValue(0);
@@ -81,7 +82,7 @@ public class TestClassUnloadingArguments {
 
     public static void testShenandoah() throws Exception {
         testWith("Shenandoah GC should have class unloading enabled",
-                true, false,
+                true, true,
                 "-XX:+UnlockExperimentalVMOptions",
                 "-XX:+UseShenandoahGC");
 

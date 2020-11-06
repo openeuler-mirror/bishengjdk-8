@@ -86,12 +86,10 @@ class oopDesc {
 
   Klass* klass() const;
   Klass* klass_or_null() const volatile;
-  inline Klass* klass_or_null_acquire() const volatile;
   Klass** klass_addr();
   narrowKlass* compressed_klass_addr();
 
   void set_klass(Klass* k);
-  inline void release_set_klass(Klass* k);
 
   // For klass field compression
   int klass_gap() const;
@@ -108,7 +106,6 @@ class oopDesc {
 
   // Returns the actual oop size of the object
   int size();
-  int acquire_size();
 
   // Sometimes (for complicated concurrency-related reasons), it is useful
   // to be able to figure out the size of an object knowing its klass.

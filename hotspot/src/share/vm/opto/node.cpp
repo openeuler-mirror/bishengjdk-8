@@ -947,6 +947,17 @@ Node* Node::uncast() const {
     return (Node*) this;
 }
 
+// Find out of current node that matches opcode.
+Node* Node::find_out_with(int opcode) {
+  for (DUIterator_Fast imax, i = fast_outs(imax); i < imax; i++) {
+    Node* use = fast_out(i);
+    if (use->Opcode() == opcode) {
+      return use;
+    }
+  }
+  return NULL;
+}
+
 //---------------------------uncast_helper-------------------------------------
 Node* Node::uncast_helper(const Node* p) {
 #ifdef ASSERT
@@ -974,17 +985,6 @@ Node* Node::uncast_helper(const Node* p) {
     }
   }
   return (Node*) p;
-}
-
-// Find out of current node that matches opcode.
-Node* Node::find_out_with(int opcode) {
-  for (DUIterator_Fast imax, i = fast_outs(imax); i < imax; i++) {
-    Node* use = fast_out(i);
-    if (use->Opcode() == opcode) {
-      return use;
-    }
-  }
-  return NULL;
 }
 
 // Return true if the current node has an out that matches opcode.
@@ -1344,6 +1344,9 @@ static void kill_dead_code( Node *dead, PhaseIterGVN *igvn ) {
 
   while (nstack.size() > 0) {
     dead = nstack.pop();
+    if (dead->Opcode() == Op_SafePoint) {
+      dead->as_SafePoint()->disconnect_from_root(igvn);
+    }
     if (dead->outcnt() > 0) {
       // Keep dead node on stack until all uses are processed.
       nstack.push(dead);

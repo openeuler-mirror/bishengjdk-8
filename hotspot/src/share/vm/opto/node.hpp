@@ -456,10 +456,11 @@ protected:
   bool eqv_uncast(const Node* n) const {
     return (this->uncast() == n->uncast());
   }
-  // Find out of current node that matches opcode.
-  Node* find_out_with(int opcode);
   // Return true if the current node has an out that matches opcode.
   bool has_out_with(int opcode);
+
+  // Find out of current node that matches opcode.
+  Node* find_out_with(int opcode);
 
 private:
   static Node* uncast_helper(const Node* n);

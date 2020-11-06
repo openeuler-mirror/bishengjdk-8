@@ -87,13 +87,10 @@ ShenandoahGCPauseMark::ShenandoahGCPauseMark(SvcGCMarker::reason_type type) :
           /* recordGCEndTime = */         true,
           /* countCollection = */         true
   );
-
-  _heap->heuristics()->record_gc_start();
 }
 
 ShenandoahGCPauseMark::~ShenandoahGCPauseMark() {
   _heap->gc_timer()->register_gc_phase_end(Ticks::now());
-  _heap->heuristics()->record_gc_end();
 }
 
 ShenandoahGCPhase::ShenandoahGCPhase(const ShenandoahPhaseTimings::Phase phase) :
@@ -144,4 +141,14 @@ ShenandoahWorkerSession::~ShenandoahWorkerSession() {
   assert(thr->worker_id() != INVALID_WORKER_ID, "Must be set");
   thr->set_worker_id(INVALID_WORKER_ID);
 #endif
+}
+
+size_t ShenandoahUtils::round_up_power_of_2(size_t value) {
+  assert(value != 0, "Invalid value");
+
+  if (is_power_of_2(value)) {
+    return value;
+  }
+
+  return (size_t)1 << (log2_intptr(value) + 1);
 }

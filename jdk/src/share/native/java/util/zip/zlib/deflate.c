@@ -184,8 +184,16 @@ local const config configuration_table[10] = {
  *    characters, so that a running hash key can be computed from the previous
  *    key instead of complete recalculation each time.
  */
-#define UPDATE_HASH(s,h,c) (h = (((h)<<s->hash_shift) ^ (c)) & s->hash_mask)
+#if defined(HASH_ARMV8_CRC32)
+#include <arm_acle.h>
+#define UPDATE_HASH_CRC_INTERNAL(s, h, c) \
+	(h = __crc32w(0, (c) & 0xFFFFFF) & ((deflate_state *)s)->hash_mask)
 
+#define UPDATE_HASH(s, h, c) \
+    UPDATE_HASH_CRC_INTERNAL(s, h, *(unsigned *)((uintptr_t)(&c) - (MIN_MATCH-1)))
+#else
+#define UPDATE_HASH(s,h,c) (h = (((h)<<s->hash_shift) ^ (c)) & s->hash_mask)
+#endif
 
 /* ===========================================================================
  * Insert string str in the dictionary and set match_head to the previous head
@@ -222,6 +230,46 @@ local const config configuration_table[10] = {
  * bit values at the expense of memory usage). We slide even when level == 0 to
  * keep the hash table consistent if we switch back to level > 0 later.
  */
+
+#if defined(SLIDE_HASH_NEON)
+#include <arm_neon.h>
+static inline void slide_hash_chain(Pos *table, unsigned int entries, uint16_t window_size) {
+    register uint16x8_t v, *p;
+    register size_t n;
+
+    size_t size = entries * sizeof(table[0]); /* the size of hash table */
+    Assert((size % (sizeof(uint16x8_t) * 8) == 0), "hash table size err"); /* if it's not 0, size err occurs */
+
+    Assert(sizeof(Pos) == 2, "Wrong Pos size"); /* if size of Pos is not 2, release wrong size error */
+    v = vdupq_n_u16(window_size);
+
+    p = (uint16x8_t *)table;
+    n = size / (sizeof(uint16x8_t) * 8);
+    do {
+        p[0] = vqsubq_u16(p[0], v);
+        p[1] = vqsubq_u16(p[1], v);
+        p[2] = vqsubq_u16(p[2], v);
+        p[3] = vqsubq_u16(p[3], v);
+        p[4] = vqsubq_u16(p[4], v);
+        p[5] = vqsubq_u16(p[5], v);
+        p[6] = vqsubq_u16(p[6], v);
+        p[7] = vqsubq_u16(p[7], v);
+        p += 8;
+    } while (--n);
+}
+
+local void slide_hash(s)
+    deflate_state *s;
+{
+    const size_t size = s->hash_size * sizeof(s->head[0]);
+    Assert(sizeof(Pos) == 2, "Wrong Pos size."); /* if size of Pos is not 2, release wrong size error */
+    Assert((size % (sizeof(uint16x8_t)*2)) == 0, "Hash table size error."); /* if it's not 0, size err occurs */
+    slide_hash_chain(s->head, s->hash_size, s->w_size);
+#ifndef FASTEST
+    slide_hash_chain(s->prev, s->w_size, s->w_size);
+#endif
+}
+#else
 local void slide_hash(s)
     deflate_state *s;
 {
@@ -247,6 +295,7 @@ local void slide_hash(s)
     } while (--n);
 #endif
 }
+#endif
 
 /* ========================================================================= */
 int ZEXPORT deflateInit_(strm, level, version, stream_size)
@@ -1198,14 +1247,15 @@ local unsigned read_buf(strm, buf, size)
     strm->avail_in  -= len;
 
     zmemcpy(buf, strm->next_in, len);
+#ifdef GZIP
+    if (strm->state->wrap == 2) { /* use crc32 algo */
+        strm->adler = crc32(strm->adler, buf, len);
+    } else 
+#endif
     if (strm->state->wrap == 1) {
         strm->adler = adler32(strm->adler, buf, len);
     }
-#ifdef GZIP
-    else if (strm->state->wrap == 2) {
-        strm->adler = crc32(strm->adler, buf, len);
-    }
-#endif
+
     strm->next_in  += len;
     strm->total_in += len;
 

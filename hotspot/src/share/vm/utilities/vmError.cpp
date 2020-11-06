@@ -399,7 +399,7 @@ void VMError::report(outputStream* st) {
 
   STEP(15, "(printing type of error)")
 
-     switch(_id) {
+     switch(static_cast<unsigned int>(_id)) {
        case OOM_MALLOC_ERROR:
        case OOM_MMAP_ERROR:
          if (_size) {

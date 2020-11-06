@@ -418,8 +418,8 @@
   template(getFileURL_signature,                      "(Ljava/io/File;)Ljava/net/URL;")           \
   template(definePackageInternal_name,                "definePackageInternal")                    \
   template(definePackageInternal_signature,           "(Ljava/lang/String;Ljava/util/jar/Manifest;Ljava/net/URL;)V") \
-  template(getProtectionDomain_name,                  "getProtectionDomain")                      \
-  template(getProtectionDomain_signature,             "(Ljava/security/CodeSource;)Ljava/security/ProtectionDomain;") \
+  template(getProtectionDomainInternal_name,          "getProtectionDomainInternal")              \
+  template(getProtectionDomainInternal_signature,     "(Ljava/lang/String;)Ljava/security/ProtectionDomain;") \
   template(url_code_signer_array_void_signature,      "(Ljava/net/URL;[Ljava/security/CodeSigner;)V") \
   template(resolved_references_name,                  "<resolved_references>")                    \
   template(referencequeue_null_name,                  "NULL")                                     \

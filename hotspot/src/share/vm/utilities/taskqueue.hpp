@@ -351,7 +351,8 @@ void GenericTaskQueue<E, F, N>::oops_do(OopClosure* f) {
     //            index, &_elems[index], _elems[index]);
     E* t = (E*)&_elems[index];      // cast away volatility
     oop* p = (oop*)t;
-    assert((*t)->is_oop_or_null(), "Not an oop or null");
+    // G1 does its own checking
+    assert(UseG1GC || (*t)->is_oop_or_null(), "Not an oop or null");
     f->do_oop(p);
   }
   // tty->print_cr("END OopTaskQueue::oops_do");
@@ -541,8 +542,6 @@ class TaskQueueSetSuper {
 public:
   // Returns "true" if some TaskQueue in the set contains a task.
   virtual bool peek() = 0;
-  // Tasks in queue
-  virtual uint tasks() const = 0;
   virtual size_t tasks() = 0;
 };
 
@@ -576,7 +575,6 @@ public:
   // Returns if stealing succeeds, and sets "t" to the stolen task.
   bool steal(uint queue_num, E& t);
   bool peek();
-  uint tasks() const;
   size_t tasks();
 
   uint size() const { return _n; }
@@ -669,15 +667,6 @@ bool GenericTaskQueueSet<T, F>::peek() {
 template<class T, MEMFLAGS F>
 size_t GenericTaskQueueSet<T, F>::tasks() {
   size_t n = 0;
-  for (uint j = 0; j < _n; j++) {
-    n += _queues[j]->size();
-  }
-  return n;
-}
-
-template<class T, MEMFLAGS F>
-uint GenericTaskQueueSet<T, F>::tasks() const {
-  uint n = 0;
   for (uint j = 0; j < _n; j++) {
     n += _queues[j]->size();
   }

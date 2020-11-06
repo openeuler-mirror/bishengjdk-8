@@ -360,7 +360,14 @@ class ConstantPoolCacheEntry VALUE_OBJ_CLASS_SPEC {
   bool is_double() const                         { return flag_state() == dtos; }
   TosState flag_state() const                    { assert((uint)number_of_states <= (uint)tos_state_mask+1, "");
                                                    return (TosState)((_flags >> tos_state_shift) & tos_state_mask); }
-
+  bool is_initial_resolved_ref_index() const {
+    if (_flags == 0 && _f1 == NULL && bytecode_1() == Bytecodes::_nop && bytecode_2() == Bytecodes::_nop) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+  
   // Code generation support
   static WordSize size()                         { return in_WordSize(sizeof(ConstantPoolCacheEntry) / HeapWordSize); }
   static ByteSize size_in_bytes()                { return in_ByteSize(sizeof(ConstantPoolCacheEntry)); }
@@ -480,6 +487,8 @@ class ConstantPoolCache: public MetaspaceObj {
   void dump_cache();
 #endif // INCLUDE_JVMTI
 
+  void reset();
+  
   // Deallocate - no fields to deallocate
   DEBUG_ONLY(bool on_stack() { return false; })
   void deallocate_contents(ClassLoaderData* data) {}

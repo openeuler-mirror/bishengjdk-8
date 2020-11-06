@@ -26,6 +26,7 @@
 #include "gc_implementation/shenandoah/shenandoahFreeSet.hpp"
 #include "gc_implementation/shenandoah/shenandoahHeap.inline.hpp"
 #include "gc_implementation/shenandoah/shenandoahPacer.hpp"
+#include "gc_implementation/shenandoah/shenandoahPhaseTimings.hpp"
 #include "runtime/mutexLocker.hpp"
 
 /*
@@ -173,12 +174,12 @@ void ShenandoahPacer::setup_for_reset() {
 size_t ShenandoahPacer::update_and_get_progress_history() {
   if (_progress == -1) {
     // First initialization, report some prior
-    Atomic::store((intptr_t)PACING_PROGRESS_ZERO, &_progress);
+    Atomic::store_ptr((intptr_t)PACING_PROGRESS_ZERO, &_progress);
     return (size_t) (_heap->max_capacity() * 0.1);
   } else {
     // Record history, and reply historical data
     _progress_history->add(_progress);
-    Atomic::store((intptr_t)PACING_PROGRESS_ZERO, &_progress);
+    Atomic::store_ptr((intptr_t)PACING_PROGRESS_ZERO, &_progress);
     return (size_t) (_progress_history->avg() * HeapWordSize);
   }
 }
@@ -190,7 +191,7 @@ void ShenandoahPacer::restart_with(jlong non_taxable_bytes, jdouble tax_rate) {
     intptr_t cur;
     do {
       cur = OrderAccess::load_acquire(&_budget);
-    } while (Atomic::cmpxchg(initial, &_budget, cur) != cur);
+    } while (Atomic::cmpxchg_ptr(initial, &_budget, cur) != cur);
   }
 
   OrderAccess::release_store(&_tax_rate, tax_rate);
@@ -200,8 +201,11 @@ void ShenandoahPacer::restart_with(jlong non_taxable_bytes, jdouble tax_rate) {
     do {
       cur = OrderAccess::load_acquire(&_epoch);
       val = cur + 1;
-    } while (Atomic::cmpxchg(val, &_epoch, cur) != cur);
+    } while (Atomic::cmpxchg_ptr(val, &_epoch, cur) != cur);
   }
+
+  // Shake up stalled waiters after budget update.
+  _need_notify_waiters.try_set();
 }
 
 bool ShenandoahPacer::claim_for_alloc(size_t words, bool force) {
@@ -213,12 +217,12 @@ bool ShenandoahPacer::claim_for_alloc(size_t words, bool force) {
   intptr_t new_val = 0;
   do {
     cur = OrderAccess::load_acquire(&_budget);
-    if (cur < tax) {
+    if (cur < tax && !force) {
       // Progress depleted, alas.
       return false;
     }
     new_val = cur - tax;
-  } while (Atomic::cmpxchg(new_val, &_budget, cur) != cur);
+  } while (Atomic::cmpxchg_ptr(new_val, &_budget, cur) != cur);
   return true;
 }
 
@@ -230,8 +234,8 @@ void ShenandoahPacer::unpace_for_alloc(intptr_t epoch, size_t words) {
     return;
   }
 
-  intptr_t tax = MAX2<intptr_t>(1, (intptr_t)(words * OrderAccess::load_acquire(&_tax_rate)));
-  Atomic::add(tax, &_budget);
+  size_t tax = MAX2<size_t>(1, words * OrderAccess::load_acquire(&_tax_rate));
+  add_budget(tax);
 }
 
 intptr_t ShenandoahPacer::epoch() {
@@ -242,56 +246,45 @@ void ShenandoahPacer::pace_for_alloc(size_t words) {
   assert(ShenandoahPacing, "Only be here when pacing is enabled");
 
   // Fast path: try to allocate right away
-  if (claim_for_alloc(words, false)) {
+  bool claimed = claim_for_alloc(words, false);
+  if (claimed) {
     return;
   }
+
+  // Forcefully claim the budget: it may go negative at this point, and
+  // GC should replenish for this and subsequent allocations. After this claim,
+  // we would wait a bit until our claim is matched by additional progress,
+  // or the time budget depletes.
+  claimed = claim_for_alloc(words, true);
+  assert(claimed, "Should always succeed");
 
   // Threads that are attaching should not block at all: they are not
   // fully initialized yet. Blocking them would be awkward.
   // This is probably the path that allocates the thread oop itself.
-  // Forcefully claim without waiting.
   if (JavaThread::current()->is_attaching_via_jni()) {
-    claim_for_alloc(words, true);
     return;
   }
 
-  size_t max = ShenandoahPacingMaxDelay;
   double start = os::elapsedTime();
 
-  size_t total = 0;
-  size_t cur = 0;
+  size_t max_ms = ShenandoahPacingMaxDelay;
+  size_t total_ms = 0;
 
   while (true) {
     // We could instead assist GC, but this would suffice for now.
-    // This code should also participate in safepointing.
-    // Perform the exponential backoff, limited by max.
-
-    cur = cur * 2;
-    if (total + cur > max) {
-      cur = (max > total) ? (max - total) : 0;
-    }
-    cur = MAX2<size_t>(1, cur);
-
-    wait(cur);
+    size_t cur_ms = (max_ms > total_ms) ? (max_ms - total_ms) : 1;
+    wait(cur_ms);
 
     double end = os::elapsedTime();
-    total = (size_t)((end - start) * 1000);
+    total_ms = (size_t)((end - start) * 1000);
 
-    if (total > max) {
-      // Spent local time budget to wait for enough GC progress.
-      // Breaking out and allocating anyway, which may mean we outpace GC,
-      // and start Degenerated GC cycle.
-      _delays.add(total);
-
-      // Forcefully claim the budget: it may go negative at this point, and
-      // GC should replenish for this and subsequent allocations
-      claim_for_alloc(words, true);
-      break;
-    }
-
-    if (claim_for_alloc(words, false)) {
-      // Acquired enough permit, nice. Can allocate now.
-      _delays.add(total);
+    if (total_ms > max_ms || OrderAccess::load_ptr_acquire(&_budget) >= 0) {
+      // Exiting if either:
+      //  a) Spent local time budget to wait for enough GC progress.
+      //     Breaking out and allocating anyway, which may mean we outpace GC,
+      //     and start Degenerated GC cycle.
+      //  b) The budget had been replenished, which means our claim is satisfied.
+      JavaThread::current()->add_paced_time(end - start);
       break;
     }
   }
@@ -307,45 +300,56 @@ void ShenandoahPacer::wait(size_t time_ms) {
 }
 
 void ShenandoahPacer::notify_waiters() {
-  MonitorLockerEx locker(_wait_monitor);
-  _wait_monitor->notify_all();
+  if (_need_notify_waiters.try_unset()) {
+    MonitorLockerEx locker(_wait_monitor);
+    _wait_monitor->notify_all();
+  }
 }
 
-void ShenandoahPacer::print_on(outputStream* out) const {
-  out->print_cr("ALLOCATION PACING:");
-  out->cr();
+void ShenandoahPacer::flush_stats_to_cycle() {
+  MutexLocker lock(Threads_lock);
 
-  out->print_cr("Max pacing delay is set for " UINTX_FORMAT " ms.", ShenandoahPacingMaxDelay);
-  out->cr();
-
-  out->print_cr("Higher delay would prevent application outpacing the GC, but it will hide the GC latencies");
-  out->print_cr("from the STW pause times. Pacing affects the individual threads, and so it would also be");
-  out->print_cr("invisible to the usual profiling tools, but would add up to end-to-end application latency.");
-  out->print_cr("Raise max pacing delay with care.");
-  out->cr();
-
-  out->print_cr("Actual pacing delays histogram:");
-  out->cr();
-
-  out->print_cr("%10s - %10s  %12s%12s", "From", "To", "Count", "Sum");
-
-  size_t total_count = 0;
-  size_t total_sum = 0;
-  for (int c = _delays.min_level(); c <= _delays.max_level(); c++) {
-    int l = (c == 0) ? 0 : 1 << (c - 1);
-    int r = 1 << c;
-    size_t count = _delays.level(c);
-    size_t sum   = count * (r - l) / 2;
-    total_count += count;
-    total_sum   += sum;
-
-    out->print_cr("%7d ms - %7d ms: " SIZE_FORMAT_W(12) SIZE_FORMAT_W(12) " ms", l, r, count, sum);
+  double sum = 0;
+  for (JavaThread* t = Threads::first(); t != NULL; t = t->next()) {
+    sum += t->paced_time();
   }
-  out->print_cr("%23s: " SIZE_FORMAT_W(12) SIZE_FORMAT_W(12) " ms", "Total", total_count, total_sum);
+  ShenandoahHeap::heap()->phase_timings()->record_phase_time(ShenandoahPhaseTimings::pacing, sum);
+}
+
+void ShenandoahPacer::print_cycle_on(outputStream* out) {
+  MutexLocker lock(Threads_lock);
+
+  double now = os::elapsedTime();
+  double total = now - _last_time;
+  _last_time = now;
+
   out->cr();
-  out->print_cr("Pacing delays are measured from entering the pacing code till exiting it. Therefore,");
-  out->print_cr("observed pacing delays may be higher than the threshold when paced thread spent more");
-  out->print_cr("time in the pacing code. It usually happens when thread is de-scheduled while paced,");
-  out->print_cr("OS takes longer to unblock the thread, or JVM experiences an STW pause.");
+  out->print_cr("Allocation pacing accrued:");
+
+  size_t threads_total = 0;
+  size_t threads_nz = 0;
+  double sum = 0;
+  for (JavaThread* t = Threads::first(); t != NULL; t = t->next()) {
+    double d = t->paced_time();
+    if (d > 0) {
+      threads_nz++;
+      sum += d;
+      out->print_cr("  %5.0f of %5.0f ms (%5.1f%%): %s",
+              d * 1000, total * 1000, d/total*100, t->name());
+    }
+    threads_total++;
+    t->reset_paced_time();
+  }
+  out->print_cr("  %5.0f of %5.0f ms (%5.1f%%): <total>",
+          sum * 1000, total * 1000, sum/total*100);
+
+  if (threads_total > 0) {
+    out->print_cr("  %5.0f of %5.0f ms (%5.1f%%): <average total>",
+            sum / threads_total * 1000, total * 1000, sum / threads_total / total * 100);
+  }
+  if (threads_nz > 0) {
+    out->print_cr("  %5.0f of %5.0f ms (%5.1f%%): <average non-zero>",
+            sum / threads_nz * 1000, total * 1000, sum / threads_nz / total * 100);
+  }
   out->cr();
 }

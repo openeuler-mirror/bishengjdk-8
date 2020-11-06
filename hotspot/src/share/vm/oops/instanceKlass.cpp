@@ -2452,6 +2452,22 @@ void InstanceKlass::remove_unshareable_info() {
     m->remove_unshareable_info();
   }
 
+  if (UseAppCDS) {
+    if (_oop_map_cache != NULL) {
+      delete _oop_map_cache;
+      _oop_map_cache = NULL;
+    }
+    
+    JNIid::deallocate(jni_ids());
+    set_jni_ids(NULL);
+    
+    jmethodID* jmeths = methods_jmethod_ids_acquire();
+    if (jmeths != (jmethodID*)NULL) {
+      release_set_methods_jmethod_ids(NULL);
+      FreeHeap(jmeths);
+    }
+  }
+
   // do array classes also.
   array_klasses_do(remove_unshareable_in_class);
 }

@@ -25,7 +25,6 @@
  * @test
  * @bug 8151788
  * @summary NullPointerException from ntlm.Client.type3
- * @modules java.base/com.sun.security.ntlm
  * @run main NULLTargetInfoTest
  */
 import com.sun.security.ntlm.Client;

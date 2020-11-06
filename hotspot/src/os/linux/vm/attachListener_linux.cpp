@@ -485,13 +485,25 @@ bool AttachListener::init_at_startup() {
 // If the file .attach_pid<pid> exists in the working directory
 // or /tmp then this is the trigger to start the attach mechanism
 bool AttachListener::is_init_trigger() {
-  if (init_at_startup() || is_initialized()) {
-    return false;               // initialized at startup or already initialized
+  if (init_at_startup()) {
+    return false;               // initialized at startup
   }
-  char fn[PATH_MAX+1];
-  sprintf(fn, ".attach_pid%d", os::current_process_id());
+
+  char fn[PATH_MAX + 1];
   int ret;
   struct stat64 st;
+
+  // check initialized
+  if (is_initialized()) {
+    // check .java_pid file exists
+    RESTARTABLE(::stat64(LinuxAttachListener::path(), &st), ret);
+    if (ret == -1) {
+      ::shutdown(LinuxAttachListener::listener(), SHUT_RDWR);
+    }
+    return false;
+  }
+
+  sprintf(fn, ".attach_pid%d", os::current_process_id());
   RESTARTABLE(::stat64(fn, &st), ret);
   if (ret == -1) {
     snprintf(fn, sizeof(fn), "%s/.attach_pid%d",
