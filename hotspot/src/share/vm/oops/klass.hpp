@@ -188,6 +188,10 @@ private:
   // -1.
   jshort _shared_class_path_index;
 
+  // This is used only during AppCDS to mark classes that have non-null class loader
+  static  ClassLoaderData* _fake_loader_data_App;
+  static  ClassLoaderData* _fake_loader_data_Ext;
+
   friend class SharedClassUtil;
 protected:
 
@@ -202,6 +206,10 @@ protected:
   enum StaticLookupMode   { find_static,   skip_static };
   enum PrivateLookupMode  { find_private,  skip_private };
 
+  bool has_fake_loader_data_App() { return class_loader_data() == _fake_loader_data_App; }
+  bool has_fake_loader_data_Ext()  { return class_loader_data() == _fake_loader_data_Ext; }
+  bool has_fake_loader_data() { return (has_fake_loader_data_App() || has_fake_loader_data_Ext()); }
+  
   bool is_klass() const volatile { return true; }
 
   // super

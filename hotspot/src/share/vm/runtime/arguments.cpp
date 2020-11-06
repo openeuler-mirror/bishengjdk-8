@@ -1861,13 +1861,7 @@ void Arguments::set_shenandoah_gc_flags() {
   }
 
   // If class unloading is disabled, no unloading for concurrent cycles as well.
-  // If class unloading is enabled, users should opt-in for unloading during
-  // concurrent cycles.
-  if (!ClassUnloading || !FLAG_IS_CMDLINE(ClassUnloadingWithConcurrentMark)) {
-    if (PrintGC) {
-      tty->print_cr("Consider -XX:+ClassUnloadingWithConcurrentMark if large pause times "
-                    "are observed on class-unloading sensitive workloads");
-    }
+  if (!ClassUnloading) {
     FLAG_SET_DEFAULT(ClassUnloadingWithConcurrentMark, false);
   }
 
@@ -3019,6 +3013,23 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args,
                                        Flag::Flags origin) {
   // Remaining part of option string
   const char* tail;
+
+  // Special handling for UseAppCDS flag - it has to enable
+  // SharedArviveFile flag no matter where it's located in the
+  // argument list (and in order to enable UseAppCDS)
+  for (int index = 0; index < args->nOptions; index++) {
+    const JavaVMOption* option = args->options + index;
+    if (match_option(option, "-XX:+UseAppCDS", &tail)) {
+      if (!process_argument("+UseAppCDS", args->ignoreUnrecognized, origin)) {
+        return JNI_EINVAL;
+      } else {
+        const char* n = "SharedArchiveFile";
+        Flag* shared_archive_flag = Flag::find_flag(n, strlen(n), true, true);
+        shared_archive_flag->unlock_diagnostic();
+        FLAG_SET_CMDLINE(bool, UseAppCDS, true);
+      }
+    }
+  }
 
   // iterate over arguments
   for (int index = 0; index < args->nOptions; index++) {

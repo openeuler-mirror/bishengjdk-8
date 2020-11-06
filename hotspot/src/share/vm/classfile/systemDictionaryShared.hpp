@@ -35,13 +35,25 @@ public:
   static instanceKlassHandle find_or_load_shared_class(Symbol* class_name,
                                                        Handle class_loader,
                                                        TRAPS) {
+    if (UseAppCDS) {
+      instanceKlassHandle ik = load_shared_class(class_name, class_loader, CHECK_NULL);
+      if (!ik.is_null()) {
+        instanceKlassHandle nh = instanceKlassHandle(); // null Handle
+        ik = find_or_define_instance_class(class_name, class_loader, ik, CHECK_(nh));
+      }
+      return ik;
+    }
     return instanceKlassHandle();
   }
   static void roots_oops_do(OopClosure* blk) {}
   static void oops_do(OopClosure* f) {}
+  
   static bool is_sharing_possible(ClassLoaderData* loader_data) {
     oop class_loader = loader_data->class_loader();
-    return (class_loader == NULL);
+    return (class_loader == NULL ||
+            (UseAppCDS && (SystemDictionary::is_app_class_loader(class_loader) ||
+                           SystemDictionary::is_ext_class_loader(class_loader)))
+            );
   }
 
   static size_t dictionary_entry_size() {

@@ -270,6 +270,7 @@ protected:
   ThreadLocalAllocBuffer _gclab;                // Thread-local allocation buffer for GC (e.g. evacuation)
   uint _worker_id;                              // Worker ID
   bool _force_satb_flush;                       // Force SATB flush
+  double _paced_time;                           // Accumulated paced time
 
   jlong _allocated_bytes;                       // Cumulative number of bytes allocated on
                                                 // the Java heap
@@ -481,6 +482,10 @@ protected:
 
   void set_force_satb_flush(bool value) { _force_satb_flush = value; }
   bool is_force_satb_flush()            { return _force_satb_flush; }
+
+  void add_paced_time(double v)         { _paced_time += v; }
+  double paced_time()                   { return _paced_time; }
+  void reset_paced_time()               { _paced_time = 0; }
 
   jlong allocated_bytes()               { return _allocated_bytes; }
   void set_allocated_bytes(jlong value) { _allocated_bytes = value; }

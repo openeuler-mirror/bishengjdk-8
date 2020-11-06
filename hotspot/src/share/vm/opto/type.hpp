@@ -165,6 +165,7 @@ private:
 #endif
 
   const Type *meet_helper(const Type *t, bool include_speculative) const;
+  void check_symmetrical(const Type *t, const Type *mt) const;
 
 protected:
   // Each class of type is also identified by its base.
@@ -430,6 +431,8 @@ public:
   virtual bool would_improve_type(ciKlass* exact_kls, int inline_depth) const {
     return exact_kls != NULL;
   }
+
+  virtual bool is_known_instance() const { return false; }
 
 private:
   // support arrays
@@ -1331,6 +1334,11 @@ public:
   const TypePtr *get_ptrtype() const {
     return _ptrtype;
   }
+
+  bool is_known_instance() const {
+    return _ptrtype->is_known_instance();
+  }
+
 
 #ifndef PRODUCT
   virtual void dump2( Dict &d, uint depth, outputStream *st ) const;

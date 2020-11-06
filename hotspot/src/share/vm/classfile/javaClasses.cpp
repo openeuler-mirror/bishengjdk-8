@@ -654,13 +654,10 @@ void java_lang_Class::create_mirror(KlassHandle k, Handle class_loader,
 
 int  java_lang_Class::oop_size(oop java_class) {
   assert(_oop_size_offset != 0, "must be set");
-  int size = java_class->int_field(_oop_size_offset);
-  assert(size > 0, "Oop size must be greater than zero");
-  return size;
+  return java_class->int_field(_oop_size_offset);
 }
 void java_lang_Class::set_oop_size(oop java_class, int size) {
   assert(_oop_size_offset != 0, "must be set");
-  assert(size > 0, "Oop size must be greater than zero");
   java_class->int_field_put(_oop_size_offset, size);
 }
 int  java_lang_Class::static_oop_field_count(oop java_class) {
@@ -1251,6 +1248,16 @@ oop java_lang_Throwable::message(Handle throwable) {
   return throwable->obj_field(detailMessage_offset);
 }
 
+
+// Return Symbol for detailed_message or NULL
+Symbol* java_lang_Throwable::detail_message(oop throwable) {
+  PRESERVE_EXCEPTION_MARK;  // Keep original exception
+  oop detailed_message = java_lang_Throwable::message(throwable);
+  if (detailed_message != NULL) {
+    return java_lang_String::as_symbol(detailed_message, THREAD);
+  }
+  return NULL;
+}
 
 void java_lang_Throwable::set_message(oop throwable, oop value) {
   throwable->obj_field_put(detailMessage_offset, value);

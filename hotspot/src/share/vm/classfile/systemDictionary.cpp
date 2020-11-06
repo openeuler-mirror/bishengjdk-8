@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -175,6 +175,16 @@ bool SystemDictionary::is_ext_class_loader(Handle class_loader) {
   return (class_loader->klass()->name() == vmSymbols::sun_misc_Launcher_ExtClassLoader());
 }
 
+/**
+ * Returns true if the passed class loader is the application class loader.
+ */
+bool SystemDictionary::is_app_class_loader(Handle class_loader) {
+  if (class_loader.is_null()) {
+    return false;
+  }
+  return (class_loader->klass()->name() == vmSymbols::sun_misc_Launcher_AppClassLoader());
+}
+
 // ----------------------------------------------------------------------------
 // Resolving of classes
 
@@ -185,12 +195,14 @@ Klass* SystemDictionary::resolve_or_fail(Symbol* class_name, Handle class_loader
   if (HAS_PENDING_EXCEPTION || klass == NULL) {
     KlassHandle k_h(THREAD, klass);
     // can return a null klass
-    klass = handle_resolution_exception(class_name, class_loader, protection_domain, throw_error, k_h, THREAD);
+    klass = handle_resolution_exception(class_name, throw_error, k_h, THREAD);
   }
   return klass;
 }
 
-Klass* SystemDictionary::handle_resolution_exception(Symbol* class_name, Handle class_loader, Handle protection_domain, bool throw_error, KlassHandle klass_h, TRAPS) {
+Klass* SystemDictionary::handle_resolution_exception(Symbol* class_name,
+                                                     bool throw_error,
+                                                     KlassHandle klass_h, TRAPS) {
   if (HAS_PENDING_EXCEPTION) {
     // If we have a pending exception we forward it to the caller, unless throw_error is true,
     // in which case we have to check whether the pending exception is a ClassNotFoundException,
@@ -336,7 +348,8 @@ Klass* SystemDictionary::resolve_super_or_fail(Symbol* child_name,
   // Bugs 4643874, 4715493
   // compute_hash can have a safepoint
 
-  ClassLoaderData* loader_data = class_loader_data(class_loader);
+  // class loader may be not registered yet, so use register_loader, which will return a valid classloaderData anyway.
+  ClassLoaderData* loader_data = register_loader(class_loader, CHECK_NULL);
   unsigned int d_hash = dictionary()->compute_hash(child_name, loader_data);
   int d_index = dictionary()->hash_to_index(d_hash);
   unsigned int p_hash = placeholders()->compute_hash(child_name, loader_data);
@@ -398,7 +411,7 @@ Klass* SystemDictionary::resolve_super_or_fail(Symbol* child_name,
   }
   if (HAS_PENDING_EXCEPTION || superk_h() == NULL) {
     // can null superk
-    superk_h = KlassHandle(THREAD, handle_resolution_exception(class_name, class_loader, protection_domain, true, superk_h, THREAD));
+    superk_h = KlassHandle(THREAD, handle_resolution_exception(class_name, true, superk_h, THREAD));
   }
 
   return superk_h();
@@ -526,7 +539,8 @@ instanceKlassHandle SystemDictionary::handle_parallel_super_load(
     Handle protection_domain, Handle lockObject, TRAPS) {
 
   instanceKlassHandle nh = instanceKlassHandle(); // null Handle
-  ClassLoaderData* loader_data = class_loader_data(class_loader);
+  // class loader may be not registered yet, so use register_loader, which will return a valid classloaderData anyway.
+  ClassLoaderData* loader_data = register_loader(class_loader, CHECK_NULL);
   unsigned int d_hash = dictionary()->compute_hash(name, loader_data);
   int d_index = dictionary()->hash_to_index(d_hash);
   unsigned int p_hash = placeholders()->compute_hash(name, loader_data);
@@ -1072,6 +1086,31 @@ Klass* SystemDictionary::parse_stream(Symbol* class_name,
   return k();
 }
 
+static char* convert_into_package_name(char* name) {
+  char* index = strrchr(name, '/');
+  if (index == NULL) {
+    return NULL;
+  } else {
+    *index = '\0'; // chop to just the package name
+    while ((index = strchr(name, '/')) != NULL) {
+      *index = '.'; // replace '/' with '.' in package name
+    }
+    return name;
+  }
+}
+
+static bool is_prohibited_package_slow(Symbol* class_name) {
+  // Caller has ResourceMark
+  int length;
+  jchar* unicode = class_name->as_unicode(length);
+  return (length >= 5 &&
+          unicode[0] == 'j' &&
+          unicode[1] == 'a' &&
+          unicode[2] == 'v' &&
+          unicode[3] == 'a' &&
+          unicode[4] == '/');
+}
+
 // Add a klass to the system from a stream (called by jni_DefineClass and
 // JVM_DefineClass).
 // Note: class_name can be NULL. In that case we do not know the name of
@@ -1119,24 +1158,30 @@ Klass* SystemDictionary::resolve_from_stream(Symbol* class_name,
   if (!HAS_PENDING_EXCEPTION &&
       !class_loader.is_null() &&
       parsed_name != NULL &&
-      parsed_name->utf8_length() >= (int)pkglen &&
-      !strncmp((const char*)parsed_name->bytes(), pkg, pkglen)) {
-    // It is illegal to define classes in the "java." package from
-    // JVM_DefineClass or jni_DefineClass unless you're the bootclassloader
+      parsed_name->utf8_length() >= (int)pkglen) {
     ResourceMark rm(THREAD);
-    char* name = parsed_name->as_C_string();
-    char* index = strrchr(name, '/');
-    assert(index != NULL, "must be");
-    *index = '\0'; // chop to just the package name
-    while ((index = strchr(name, '/')) != NULL) {
-      *index = '.'; // replace '/' with '.' in package name
+    bool prohibited;
+    const jbyte* base = parsed_name->base();
+    if ((base[0] | base[1] | base[2] | base[3] | base[4]) & 0x80) {
+      prohibited = is_prohibited_package_slow(parsed_name);
+    } else {
+      char* name = parsed_name->as_C_string();
+      prohibited = (strncmp(name, pkg, pkglen) == 0);
     }
-    const char* fmt = "Prohibited package name: %s";
-    size_t len = strlen(fmt) + strlen(name);
-    char* message = NEW_RESOURCE_ARRAY(char, len);
-    jio_snprintf(message, len, fmt, name);
-    Exceptions::_throw_msg(THREAD_AND_LOCATION,
-      vmSymbols::java_lang_SecurityException(), message);
+    if (prohibited) {
+      // It is illegal to define classes in the "java." package from
+      // JVM_DefineClass or jni_DefineClass unless you're the bootclassloader
+      char* name = parsed_name->as_C_string();
+      name = convert_into_package_name(name);
+      assert(name != NULL, "must be");
+
+      const char* fmt = "Prohibited package name: %s";
+      size_t len = strlen(fmt) + strlen(name);
+      char* message = NEW_RESOURCE_ARRAY(char, len);
+      jio_snprintf(message, len, fmt, name);
+      Exceptions::_throw_msg(THREAD_AND_LOCATION,
+        vmSymbols::java_lang_SecurityException(), message);
+    }
   }
 
   if (!HAS_PENDING_EXCEPTION) {
@@ -1217,12 +1262,62 @@ Klass* SystemDictionary::find_shared_class(Symbol* class_name) {
 
 instanceKlassHandle SystemDictionary::load_shared_class(
                  Symbol* class_name, Handle class_loader, TRAPS) {
-  instanceKlassHandle ik (THREAD, find_shared_class(class_name));
-  // Make sure we only return the boot class for the NULL classloader.
-  if (ik.not_null() &&
-      SharedClassUtil::is_shared_boot_class(ik()) && class_loader.is_null()) {
-    Handle protection_domain;
-    return load_shared_class(ik, class_loader, protection_domain, THREAD);
+  if (!(class_loader.is_null() ||  SystemDictionary::is_app_class_loader(class_loader) ||
+                                  SystemDictionary::is_ext_class_loader(class_loader))) {
+    return instanceKlassHandle();
+  }
+
+  instanceKlassHandle ik (THREAD, find_shared_class(class_name)); // InstanceKlass is find with null class loader.
+  if (ik.not_null()) {
+    if (!UseAppCDS) {
+      // CDS logic
+      if (SharedClassUtil::is_shared_boot_class(ik()) && class_loader.is_null()) {
+        // CDS record boot class load index.
+        Handle protection_domain;
+        return load_shared_class(ik, class_loader, protection_domain, THREAD);
+      }
+    } else {
+      // AppCDS logic. Only use null loader only to load classes that
+      // have been dumped by null loader. For non-null class loaders,
+      // either the class loader data is not initialized (but also not
+      // null) or the same class loader is used to load previously
+      // defined class
+      bool bFound = false;
+        if (class_loader.is_null()) {
+          // condition1: Bootstrap class loader loaded
+          bFound = (ik()->class_loader_data() == NULL || ik()->class_loader_data()->is_the_null_class_loader_data());
+        } else if (ik()->class_loader_data() != NULL) {
+          // condition2: App Class Loader
+          // condition3: ExtClass Loader
+          // Condition4: not fake class Loader, real one
+          bFound = ((ik->has_fake_loader_data_App() && SystemDictionary::is_app_class_loader(class_loader)) ||
+                    (ik->has_fake_loader_data_Ext() && SystemDictionary::is_ext_class_loader(class_loader)) ||
+                    (!ik->has_fake_loader_data() && ik()->class_loader() == class_loader()));
+          }
+          if (!bFound) {
+            return instanceKlassHandle();
+          }
+
+          // get protection domain for this class if not loaded by null class loader
+          if (class_loader.not_null()) {
+            ResourceMark rm(THREAD);
+            char* name = ik->name()->as_C_string();
+            Handle klass_name = java_lang_String::create_from_str(name, CHECK_0);
+            JavaValue result(T_OBJECT);
+
+            // ClassLoaderData* loader_data = ClassLoaderData::class_loader_data(class_loader());
+            JavaCalls::call_virtual(&result,
+                                    class_loader,
+                                    KlassHandle(THREAD, SystemDictionary::URLClassLoader_klass()),
+                                    vmSymbols::getProtectionDomainInternal_name(),
+                                    vmSymbols::getProtectionDomainInternal_signature(),
+                                    klass_name,
+                                    THREAD);
+            return load_shared_class(ik, class_loader, Handle(THREAD, (oop) result.get_jobject()), THREAD);
+          } else {
+            return load_shared_class(ik, class_loader, Handle(), THREAD);
+          }
+      }
   }
   return instanceKlassHandle();
 }
@@ -1298,6 +1393,7 @@ instanceKlassHandle SystemDictionary::load_shared_class(instanceKlassHandle ik,
 
     if (DumpLoadedClassList != NULL && classlist_file->is_open()) {
       // Only dump the classes that can be stored into CDS archive
+      // unless AppCDS is enabled
       if (SystemDictionaryShared::is_sharing_possible(loader_data)) {
         ResourceMark rm(THREAD);
         classlist_file->print_cr("%s", ik->name()->as_C_string());
@@ -1308,6 +1404,32 @@ instanceKlassHandle SystemDictionary::load_shared_class(instanceKlassHandle ik,
     // notify a class loaded from shared object
     ClassLoadingService::notify_class_loaded(InstanceKlass::cast(ik()),
                                              true /* shared class */);
+
+     // register package for this class, if necessary
+    if (UseAppCDS && class_loader.not_null()) {
+
+      ResourceMark rm(THREAD);
+      char* name = ik->name()->as_C_string();
+      name = convert_into_package_name(name);
+      if (name != NULL) {
+        // not a default package
+        Handle package_name = java_lang_String::create_from_str(name, CHECK_0);
+        // The digital 4 is used only once, indicating the parameter number of
+        // the method invoked in JavaCalls::call_virtual
+        JavaCallArguments args(4);
+        args.push_oop(class_loader);
+        args.push_oop(package_name);
+        args.push_oop(Handle());
+        args.push_oop(Handle());
+        JavaValue result(T_VOID);
+        JavaCalls::call_virtual(&result,
+                                KlassHandle(THREAD, SystemDictionary::URLClassLoader_klass()),
+                                vmSymbols::definePackageInternal_name(),
+                                vmSymbols::definePackageInternal_signature(),
+                                &args,
+                                CHECK_0);
+      }
+    }
   }
   return ik;
 }
@@ -2167,7 +2289,6 @@ void SystemDictionary::update_dictionary(int d_index, unsigned int d_hash,
 // yet and these will be ignored.
 Klass* SystemDictionary::find_constrained_instance_or_array_klass(
                     Symbol* class_name, Handle class_loader, TRAPS) {
-
   // First see if it has been loaded directly.
   // Force the protection domain to be null.  (This removes protection checks.)
   Handle no_protection_domain;
@@ -2246,12 +2367,13 @@ bool SystemDictionary::add_loader_constraint(Symbol* class_name,
 
 // Add entry to resolution error table to record the error when the first
 // attempt to resolve a reference to a class has failed.
-void SystemDictionary::add_resolution_error(constantPoolHandle pool, int which, Symbol* error) {
+void SystemDictionary::add_resolution_error(constantPoolHandle pool, int which,
+                                            Symbol* error, Symbol* message) {
   unsigned int hash = resolution_errors()->compute_hash(pool, which);
   int index = resolution_errors()->hash_to_index(hash);
   {
     MutexLocker ml(SystemDictionary_lock, Thread::current());
-    resolution_errors()->add_entry(index, hash, pool, which, error);
+    resolution_errors()->add_entry(index, hash, pool, which, error, message);
   }
 }
 
@@ -2261,13 +2383,19 @@ void SystemDictionary::delete_resolution_error(ConstantPool* pool) {
 }
 
 // Lookup resolution error table. Returns error if found, otherwise NULL.
-Symbol* SystemDictionary::find_resolution_error(constantPoolHandle pool, int which) {
+Symbol* SystemDictionary::find_resolution_error(constantPoolHandle pool, int which,
+                                                Symbol** message) {
   unsigned int hash = resolution_errors()->compute_hash(pool, which);
   int index = resolution_errors()->hash_to_index(hash);
   {
     MutexLocker ml(SystemDictionary_lock, Thread::current());
     ResolutionErrorEntry* entry = resolution_errors()->find_entry(index, hash, pool, which);
-    return (entry != NULL) ? entry->error() : (Symbol*)NULL;
+    if (entry != NULL) {
+      *message = entry->message();
+      return entry->error();
+    } else {
+      return NULL;
+    }
   }
 }
 

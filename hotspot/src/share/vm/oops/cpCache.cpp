@@ -673,3 +673,16 @@ void ConstantPoolCache::verify_on(outputStream* st) {
   // print constant pool cache entries
   for (int i = 0; i < length(); i++) entry_at(i)->verify(st);
 }
+
+void ConstantPoolCache::reset() {
+  for (int i = 0; i < length(); i++) {
+    ConstantPoolCacheEntry* entry = entry_at(i);
+    int cp_index = entry->constant_pool_index();
+    if (!entry->is_initial_resolved_ref_index()) {
+      // constant pool cache after initialization contains
+      // placeholders fr handling invokedynamic and invokehandle -
+      // these need to be preserved and all other entries reset
+      entry->initialize_entry(cp_index);
+    }
+  }
+}

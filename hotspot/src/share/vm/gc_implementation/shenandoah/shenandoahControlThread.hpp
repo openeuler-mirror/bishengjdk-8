@@ -53,6 +53,13 @@ public:
   virtual void task();
 };
 
+// Periodic task to notify blocked paced waiters.
+class ShenandoahPeriodicPacerNotify : public PeriodicTask {
+public:
+  ShenandoahPeriodicPacerNotify() : PeriodicTask(PeriodicTask::min_interval) {}
+  virtual void task();
+};
+
 class ShenandoahControlThread: public ConcurrentGCThread {
   friend class VMStructs;
 
@@ -71,6 +78,7 @@ private:
   Monitor _gc_waiters_lock;
   ShenandoahPeriodicTask _periodic_task;
   ShenandoahPeriodicSATBFlushTask _periodic_satb_flush_task;
+  ShenandoahPeriodicPacerNotify _periodic_pacer_notify_task;
 
  private:
   static SurrogateLockerThread* _slt;

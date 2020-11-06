@@ -425,6 +425,7 @@ static void attach_listener_thread_entry(JavaThread* thread, TRAPS) {
   for (;;) {
     AttachOperation* op = AttachListener::dequeue();
     if (op == NULL) {
+      AttachListener::set_initialized(false);
       return;   // dequeue failed or shutdown
     }
 

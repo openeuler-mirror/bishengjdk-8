@@ -76,14 +76,32 @@
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=adaptive
  *      -XX:+ShenandoahVerify
  *      TestAllocHumongousFragment
+ */
+
+/*
+ * @test TestAllocHumongousFragment
+ * @summary Make sure Shenandoah can recover from humongous allocation fragmentation
+ * @key gc
  *
  * @run main/othervm -Xmx1g -Xms1g -verbose:gc -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -XX:ShenandoahTargetNumRegions=2048
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=adaptive
  *      TestAllocHumongousFragment
+ */
+
+/*
+ * @test TestAllocHumongousFragment
+ * @summary Make sure Shenandoah can recover from humongous allocation fragmentation
+ * @key gc
  *
  * @run main/othervm -Xmx1g -Xms1g -verbose:gc -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -XX:ShenandoahTargetNumRegions=2048
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=static
  *      TestAllocHumongousFragment
+ */
+
+/*
+ * @test TestAllocHumongousFragment
+ * @summary Make sure Shenandoah can recover from humongous allocation fragmentation
+ * @key gc
  *
  * @run main/othervm -Xmx1g -Xms1g -verbose:gc -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -XX:ShenandoahTargetNumRegions=2048
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=compact
@@ -119,6 +137,12 @@
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=iu
  *      -XX:+ShenandoahVerify
  *      TestAllocHumongousFragment
+ */
+
+/*
+ * @test TestAllocHumongousFragment
+ * @summary Make sure Shenandoah can recover from humongous allocation fragmentation
+ * @key gc
  *
  * @run main/othervm -verbose:gc -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -Xmx1g -Xms1g -XX:ShenandoahTargetNumRegions=2048
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=iu

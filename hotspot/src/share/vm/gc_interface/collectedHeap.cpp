@@ -305,22 +305,6 @@ HeapWord* CollectedHeap::allocate_from_tlab_slow(KlassHandle klass, Thread* thre
   return obj;
 }
 
-void CollectedHeap::post_allocation_setup_class(KlassHandle klass,
-                                                HeapWord* obj_ptr,
-                                                int size) {
-  // Set oop_size field before setting the _klass field because a
-  // non-NULL _klass field indicates that the object is parsable by
-  // concurrent GC.
-  oop new_cls = (oop)obj_ptr;
-  assert(size > 0, "oop_size must be positive.");
-  java_lang_Class::set_oop_size(new_cls, size);
-  post_allocation_setup_common(klass, obj_ptr);
-  assert(Universe::is_bootstrapping() ||
-         !new_cls->is_array(), "must not be an array");
-  // notify jvmti and dtrace
-  post_allocation_notify(klass, new_cls, size);
-}
-
 void CollectedHeap::flush_deferred_store_barrier(JavaThread* thread) {
   MemRegion deferred = thread->deferred_card_mark();
   if (!deferred.is_empty()) {

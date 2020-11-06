@@ -38,6 +38,7 @@ import java.security.Permission;
 import java.security.PermissionCollection;
 import java.security.PrivilegedAction;
 import java.security.PrivilegedExceptionAction;
+import java.security.ProtectionDomain;
 import java.security.SecureClassLoader;
 import java.util.Enumeration;
 import java.util.List;
@@ -343,6 +344,25 @@ public class URLClassLoader extends SecureClassLoader implements Closeable {
         return ucp.getURLs();
     }
 
+    /*
+     * Retrieve protection domain using the specified class name.
+     * Called from the VM to support AppCDS
+     */
+    protected ProtectionDomain getProtectionDomainInternal(String name) {
+        String path = name.replace('.', '/').concat(".class");
+        Resource res = ucp.getResource(path, false);
+
+        if(res == null)
+        {
+            // Should never happen
+            throw new AssertionError("Cannot find resource fpr path  " + path);
+        }
+        URL url = res.getCodeSourceURL();
+        CodeSigner[] signers = res.getCodeSigners();
+        CodeSource cs = new CodeSource(url, signers);
+        return getProtectionDomain(cs);
+    }
+    
     /**
      * Finds and loads the class with the specified name from the URL search
      * path. Any URLs referring to JAR files are loaded and opened as needed

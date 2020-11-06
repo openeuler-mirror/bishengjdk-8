@@ -3320,7 +3320,6 @@ bool PhaseIdealLoop::is_canonical_main_loop_entry(CountedLoopNode* cl) {
   if (cmpzm == NULL || !cmpzm->is_Cmp()) {
     return false;
   }
-  // get the compare node, if null or not return false
   Node* opqzm = cmpzm->in(2);
   if (opqzm == NULL || opqzm->Opcode() != Op_Opaque1) {
     return false;

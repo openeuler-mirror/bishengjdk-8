@@ -677,14 +677,9 @@ void MetaspaceShared::link_and_cleanup_shared_classes(TRAPS) {
       SystemDictionary::classes_do(check_one_shared_class);
     } while (_check_classes_made_progress);
 
-    if (IgnoreUnverifiableClassesDuringDump) {
-      // This is useful when running JCK or SQE tests. You should not
-      // enable this when running real apps.
-      SystemDictionary::remove_classes_in_error_state();
-    } else {
-      tty->print_cr("Please remove the unverifiable classes from your class list and try again");
-      exit(1);
-    }
+    // record error message, remove error state, and continue to dump jsa file
+    tty->print_cr("Please remove the unverifiable classes from your class list and try again");
+    SystemDictionary::remove_classes_in_error_state();
   }
 
   // Copy the dependencies from C_HEAP-alloced GrowableArrays to RO-alloced
@@ -723,12 +718,15 @@ void MetaspaceShared::preload_and_dump(TRAPS) {
     int class_list_path_len = (int)strlen(class_list_path_str);
     if (class_list_path_len >= 3) {
       if (strcmp(class_list_path_str + class_list_path_len - 3, "lib") != 0) {
-        strcat(class_list_path_str, os::file_separator());
-        strcat(class_list_path_str, "lib");
+        jio_snprintf(class_list_path_str + class_list_path_len,
+                     sizeof(class_list_path_str) - class_list_path_len,
+                     "%slib", os::file_separator());
+        class_list_path_len += 4;
       }
     }
-    strcat(class_list_path_str, os::file_separator());
-    strcat(class_list_path_str, "classlist");
+    jio_snprintf(class_list_path_str + class_list_path_len,
+                 sizeof(class_list_path_str) - class_list_path_len,
+                 "%sclasslist", os::file_separator());
     class_list_path = class_list_path_str;
   } else {
     class_list_path = SharedClassListFile;
@@ -803,8 +801,12 @@ int MetaspaceShared::preload_and_dump(const char * class_list_path,
       // Got a class name - load it.
       TempNewSymbol class_name_symbol = SymbolTable::new_permanent_symbol(class_name, THREAD);
       guarantee(!HAS_PENDING_EXCEPTION, "Exception creating a symbol.");
+
+      Handle loader = UseAppCDS ? SystemDictionary::java_system_loader() : Handle();
       Klass* klass = SystemDictionary::resolve_or_null(class_name_symbol,
-                                                         THREAD);
+                                                       loader,
+                                                       Handle(),
+                                                       THREAD);
       CLEAR_PENDING_EXCEPTION;
       if (klass != NULL) {
         if (PrintSharedSpaces && Verbose && WizardMode) {
@@ -824,8 +826,8 @@ int MetaspaceShared::preload_and_dump(const char * class_list_path,
         guarantee(!HAS_PENDING_EXCEPTION, "exception in link_class");
 
         class_count++;
-      } else {
-        //tty->print_cr("Preload failed: %s", class_name);
+      } else if (UseAppCDS) {
+        tty->print_cr("Preload failed: %s", class_name);
       }
     }
     fclose(file);

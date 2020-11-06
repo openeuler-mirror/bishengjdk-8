@@ -84,7 +84,7 @@
           "regardless. Set to zero to disable reference processing "        \
           "completely.")                                                    \
                                                                             \
-  experimental(uintx, ShenandoahUnloadClassesFrequency, 5,                  \
+  experimental(uintx, ShenandoahUnloadClassesFrequency, 100,                \
           "Unload the classes every Nth cycle. Normally affects concurrent "\
           "GC cycles, as degenerated and full GCs would try to unload "     \
           "classes regardless. Set to zero to disable class unloading.")    \
@@ -178,9 +178,6 @@
           "The time period for one step in control loop interval "          \
           "adjustment. Lower values make adjustments faster, at the "       \
           "expense of higher perf overhead. Time is in milliseconds.")      \
-                                                                            \
-  experimental(bool, ShenandoahCriticalControlThreadPriority, false,        \
-          "Run control thread runs at critical scheduling priority.")       \
                                                                             \
   diagnostic(bool, ShenandoahVerify, false,                                 \
           "Enable internal verification. This would catch many GC bugs, "   \

@@ -145,7 +145,13 @@ const int jintAsStringSize = 12;
 #ifdef _LP64
 const int SerializePageShiftCount = 4;
 #else
+#if INCLUDE_JFR && INCLUDE_ALL_GCS
+// JavaThread already has quite a few Shenandoah fields. Adding many JFR fields
+// trips sizeof(JavaThread) > 1024. Need to adjust it here.
+const int SerializePageShiftCount = 4;
+#else
 const int SerializePageShiftCount = 3;
+#endif
 #endif
 
 // An opaque struct of heap-word width, so that HeapWord* can be a generic
@@ -1066,6 +1072,7 @@ const jint     badInt           = -3;                       // generic "bad int"
 const intptr_t badAddressVal    = -2;                       // generic "bad address" value
 const intptr_t badOopVal        = -1;                       // generic "bad oop" value
 const intptr_t badHeapOopVal    = (intptr_t) CONST64(0x2BAD4B0BBAADBABE); // value used to zap heap after GC
+const int      badStackSegVal   = 0xCA;                     // value used to zap stack segments
 const int      badHandleValue   = 0xBC;                     // value used to zap vm handle area
 const int      badResourceValue = 0xAB;                     // value used to zap resource area
 const int      freeBlockPad     = 0xBA;                     // value used to pad freed blocks.

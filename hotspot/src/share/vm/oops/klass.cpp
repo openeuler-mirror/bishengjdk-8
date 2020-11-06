@@ -63,6 +63,9 @@ void Klass::set_is_cloneable() {
   }
 }
 
+ClassLoaderData *Klass::_fake_loader_data_App = reinterpret_cast<ClassLoaderData *>(0xFDFDFDFA);
+ClassLoaderData *Klass::_fake_loader_data_Ext = reinterpret_cast<ClassLoaderData *>(0xFDFDFDFB);
+
 void Klass::set_name(Symbol* n) {
   _name = n;
   if (_name != NULL) _name->increment_refcount();
@@ -536,8 +539,21 @@ void Klass::remove_unshareable_info() {
   set_java_mirror(NULL);
   set_next_link(NULL);
 
-  // Null out class_loader_data because we don't share that yet.
-  set_class_loader_data(NULL);
+  if (!UseAppCDS) {
+    // CDS logic
+    set_class_loader_data(NULL);
+  } else if (class_loader_data() != NULL) {
+    // AppCDS logic
+    if (class_loader() == NULL) {
+      // Null out class loader data for classes loaded by bootstrap (null) loader
+      set_class_loader_data(NULL);
+    } else if(SystemDictionary::is_ext_class_loader(class_loader())) {
+      // Mark class loaded by system class loader
+      set_class_loader_data(_fake_loader_data_Ext);
+    } else {
+      set_class_loader_data(_fake_loader_data_App);
+    }
+  }
 }
 
 void Klass::restore_unshareable_info(ClassLoaderData* loader_data, Handle protection_domain, TRAPS) {
@@ -545,7 +561,10 @@ void Klass::restore_unshareable_info(ClassLoaderData* loader_data, Handle protec
   // If an exception happened during CDS restore, some of these fields may already be
   // set.  We leave the class on the CLD list, even if incomplete so that we don't
   // modify the CLD list outside a safepoint.
-  if (class_loader_data() == NULL) {
+  if (class_loader_data() == NULL || has_fake_loader_data()) {
+    // CDS should not set fake loader data
+    assert(!has_fake_loader_data() || (has_fake_loader_data() && UseAppCDS),
+        "setting fake loader data possible only with AppCDS enabled");
     // Restore class_loader_data
     set_class_loader_data(loader_data);
 

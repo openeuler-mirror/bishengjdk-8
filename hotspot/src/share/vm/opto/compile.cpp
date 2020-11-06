@@ -1181,6 +1181,9 @@ void Compile::Init(int aliaslevel) {
   _range_check_casts = new(comp_arena()) GrowableArray<Node*>(comp_arena(), 8,  0, NULL);
   _shenandoah_barriers = new(comp_arena()) GrowableArray<ShenandoahLoadReferenceBarrierNode*>(comp_arena(), 8,  0, NULL);
   register_library_intrinsics();
+#ifdef ASSERT
+  _type_verify_symmetry = true;
+#endif
 }
 
 //---------------------------init_start----------------------------------------
@@ -2094,6 +2097,23 @@ void Compile::inline_incrementally(PhaseIterGVN& igvn) {
 }
 
 
+// Remove edges from "root" to each SafePoint at a backward branch.
+// They were inserted during parsing (see add_safepoint()) to make
+// infinite loops without calls or exceptions visible to root, i.e.,
+// useful.
+void Compile::remove_root_to_sfpts_edges() {
+  Node *r = root();
+  if (r != NULL) {
+    for (uint i = r->req(); i < r->len(); ++i) {
+      Node *n = r->in(i);
+      if (n != NULL && n->is_SafePoint()) {
+        r->rm_prec(i);
+        --i;
+      }
+    }
+  }
+}
+
 //------------------------------Optimize---------------------------------------
 // Given a graph, optimize it.
 void Compile::Optimize() {
@@ -2148,6 +2168,10 @@ void Compile::Optimize() {
 
     if (failing())  return;
   }
+
+  // Now that all inlining is over, cut edge from root to loop
+  // safepoints
+  remove_root_to_sfpts_edges();
 
   // Remove the speculative part of types and clean up the graph from
   // the extra CastPP nodes whose only purpose is to carry them. Do
@@ -3098,8 +3122,10 @@ void Compile::final_graph_reshaping_impl( Node *n, Final_Reshape_Counts &frc) {
             break;
           }
         }
-        assert(proj != NULL, "must be found");
-        p->subsume_by(proj, this);
+        assert(proj != NULL || p->_con == TypeFunc::I_O, "io may be dropped at an infinite loop");
+        if (proj != NULL) {
+          p->subsume_by(proj, this);
+        }
       }
     }
     break;
@@ -3739,6 +3765,7 @@ bool Compile::Constant::operator==(const Constant& other) {
   if (can_be_reused() != other.can_be_reused())  return false;
   // For floating point values we compare the bit pattern.
   switch (type()) {
+  case T_INT:
   case T_FLOAT:   return (_v._value.i == other._v._value.i);
   case T_LONG:
   case T_DOUBLE:  return (_v._value.j == other._v._value.j);
@@ -3753,6 +3780,7 @@ bool Compile::Constant::operator==(const Constant& other) {
 
 static int type_to_size_in_bytes(BasicType t) {
   switch (t) {
+  case T_INT:     return sizeof(jint   );
   case T_LONG:    return sizeof(jlong  );
   case T_FLOAT:   return sizeof(jfloat );
   case T_DOUBLE:  return sizeof(jdouble);
@@ -3821,6 +3849,7 @@ void Compile::ConstantTable::emit(CodeBuffer& cb) {
     Constant con = _constants.at(i);
     address constant_addr = NULL;
     switch (con.type()) {
+    case T_INT:    constant_addr = _masm.int_constant(   con.get_jint()   ); break;
     case T_LONG:   constant_addr = _masm.long_constant(  con.get_jlong()  ); break;
     case T_FLOAT:  constant_addr = _masm.float_constant( con.get_jfloat() ); break;
     case T_DOUBLE: constant_addr = _masm.double_constant(con.get_jdouble()); break;

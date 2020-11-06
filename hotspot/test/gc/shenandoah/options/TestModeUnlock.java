@@ -49,6 +49,7 @@ public class TestModeUnlock {
     private static void testWith(String h, Mode mode) throws Exception {
         if (false) { // When ShenandoahGC is experimental flag, this makes no sense to test
             ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(
+                    "-Xmx128m",
                     "-XX:-UnlockDiagnosticVMOptions",
                     "-XX:-UnlockExperimentalVMOptions",
                     "-XX:+UseShenandoahGC",
@@ -69,6 +70,7 @@ public class TestModeUnlock {
 
         if (false) { // When ShenandoahGC is experimental flag, this makes no sense to test
             ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(
+                    "-Xmx128m",
                     "-XX:+UnlockDiagnosticVMOptions",
                     "-XX:-UnlockExperimentalVMOptions",
                     "-XX:+UseShenandoahGC",
@@ -89,6 +91,7 @@ public class TestModeUnlock {
 
         {
             ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(
+                    "-Xmx128m",
                     "-XX:-UnlockDiagnosticVMOptions",
                     "-XX:+UnlockExperimentalVMOptions",
                     "-XX:+UseShenandoahGC",

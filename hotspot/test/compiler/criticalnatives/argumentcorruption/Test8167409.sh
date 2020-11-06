@@ -61,13 +61,17 @@ case "$OS" in
     exit 0;
     ;;
 esac
+${TESTJAVA}${FS}bin${FS}java -XshowSettings 2>&1 | grep sun.arch.data.model | grep 32
+if [ 0 -eq $? ] ; then
+    M32="-m32"
+fi
 
 THIS_DIR=.
 
 cp ${TESTSRC}${FS}*.java ${THIS_DIR}
 ${TESTJAVA}${FS}bin${FS}javac *.java
 
-$cc_cmd -fPIC -shared -o libCNCheckLongArgs.so \
+$cc_cmd ${M32} -fPIC -shared -o libCNCheckLongArgs.so \
     -I${TESTJAVA}${FS}include -I${TESTJAVA}${FS}include${FS}linux \
     ${TESTSRC}${FS}libCNCheckLongArgs.c
 

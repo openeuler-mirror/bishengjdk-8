@@ -1204,7 +1204,7 @@ void MacroAssembler::check_klass_subtype_slow_path(Register sub_klass,
 
   push(pushed_registers, sp);
 
-  // Get super_klass value into r0 (even if it was in r5 or r2)
+  // Get super_klass value into r0 (even if it was in r5 or r2).
   if (super_klass != r0) {
     mov(r0, super_klass);
   }

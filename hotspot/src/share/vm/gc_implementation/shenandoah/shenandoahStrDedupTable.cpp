@@ -241,7 +241,7 @@ unsigned int ShenandoahStrDedupTable::alt_hash_code(typeArrayOop value) {
   assert(hash_seed() != 0, "Must have hash seed");
   int length = value->length();
   const jchar* data = (jchar*)value->base(T_CHAR);
-  return AltHashing::murmur3_32(hash_seed(), data, length);
+  return AltHashing::halfsiphash_32(hash_seed(), (const uint16_t*)data, length);
 }
 
 void ShenandoahStrDedupTable::print_statistics(outputStream* out) const {

@@ -42,7 +42,7 @@ private:
 
   void vappend(const char* format, va_list ap)  ATTRIBUTE_PRINTF(2, 0) {
     int res = os::vsnprintf(&_buffer[_cur], BUFFER_LEN - _cur, format, ap);
-    if (res > BUFFER_LEN) {
+    if (_cur + res > BUFFER_LEN) {
       DEBUG_ONLY(warning("buffer too small in LineBuffer");)
       _buffer[BUFFER_LEN -1] = 0;
       _cur = BUFFER_LEN; // vsnprintf above should not add to _buffer if we are called again

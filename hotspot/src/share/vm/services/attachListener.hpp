@@ -71,7 +71,7 @@ class AttachListener: AllStatic {
 
  public:
   static bool is_initialized()                  { return _initialized; }
-  static void set_initialized()                 { _initialized = true; }
+  static void set_initialized(bool init = true) { _initialized = init; }
 
   // indicates if this VM supports attach-on-demand
   static bool is_attach_supported()             { return !DisableAttachMechanism; }

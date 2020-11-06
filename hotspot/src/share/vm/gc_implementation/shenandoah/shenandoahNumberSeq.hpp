@@ -69,6 +69,7 @@ public:
   size_t sum() const;
   int min_level() const;
   int max_level() const;
+  void clear();
 };
 
 #endif // SHARE_VM_GC_SHENANDOAH_SHENANDOAHNUMBERSEQ_HPP

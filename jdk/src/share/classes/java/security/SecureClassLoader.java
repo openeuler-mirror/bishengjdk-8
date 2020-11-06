@@ -195,7 +195,7 @@ public class SecureClassLoader extends ClassLoader {
     /*
      * Returned cached ProtectionDomain for the specified CodeSource.
      */
-    private ProtectionDomain getProtectionDomain(CodeSource cs) {
+    protected ProtectionDomain getProtectionDomain(CodeSource cs) {
         if (cs == null)
             return null;
 
@@ -214,6 +214,7 @@ public class SecureClassLoader extends ClassLoader {
         }
         return pd;
     }
+
 
     /*
      * Check to make sure the class loader has been initialized.

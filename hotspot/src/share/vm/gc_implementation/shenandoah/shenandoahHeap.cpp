@@ -64,20 +64,6 @@
 #include "services/mallocTracker.hpp"
 
 ShenandoahHeap* ShenandoahHeap::_heap = NULL;
-#ifdef ASSERT
-
-template <class T>
-void ShenandoahAssertToSpaceClosure::do_oop_nv(T* p) {
-  T o = oopDesc::load_heap_oop(p);
-  if (! oopDesc::is_null(o)) {
-    oop obj = oopDesc::decode_heap_oop_not_null(o);
-    shenandoah_assert_not_forwarded(p, obj);
-  }
-}
-
-void ShenandoahAssertToSpaceClosure::do_oop(narrowOop* p) { do_oop_nv(p); }
-void ShenandoahAssertToSpaceClosure::do_oop(oop* p)       { do_oop_nv(p); }
-#endif
 
 class ShenandoahPretouchHeapTask : public AbstractGangTask {
 private:
@@ -276,9 +262,35 @@ jint ShenandoahHeap::initialize() {
                               "Cannot commit region memory");
   }
 
+  // Try to fit the collection set bitmap at lower addresses. This optimizes code generation for cset checks.
+  // Go up until a sensible limit (subject to encoding constraints) and try to reserve the space there.
+  // If not successful, bite a bullet and allocate at whatever address.
+  {
+    size_t cset_align = MAX2<size_t>(os::vm_page_size(), os::vm_allocation_granularity());
+    size_t cset_size = align_size_up(((size_t) sh_rs.base() + sh_rs.size()) >> ShenandoahHeapRegion::region_size_bytes_shift(), cset_align);
+
+    uintptr_t min = ShenandoahUtils::round_up_power_of_2(cset_align);
+    uintptr_t max = (1u << 30u);
+
+    for (uintptr_t addr = min; addr <= max; addr <<= 1u) {
+      char* req_addr = (char*)addr;
+      assert(is_ptr_aligned(req_addr, cset_align), "Should be aligned");
+      ReservedSpace cset_rs(cset_size, cset_align, false, req_addr);
+      if (cset_rs.is_reserved()) {
+        assert(cset_rs.base() == req_addr, err_msg("Allocated where requested: " PTR_FORMAT ", " PTR_FORMAT, p2i(cset_rs.base()), addr));
+        _collection_set = new ShenandoahCollectionSet(this, cset_rs, sh_rs.base());
+        break;
+      }
+    }
+
+    if (_collection_set == NULL) {
+      ReservedSpace cset_rs(cset_size, cset_align, false);
+      _collection_set = new ShenandoahCollectionSet(this, cset_rs, sh_rs.base());
+    }
+  }
+
   _regions = NEW_C_HEAP_ARRAY(ShenandoahHeapRegion*, _num_regions, mtGC);
   _free_set = new ShenandoahFreeSet(this, _num_regions);
-  _collection_set = new ShenandoahCollectionSet(this, sh_rs.base(), sh_rs.size());
 
   {
     ShenandoahHeapLocker locker(lock());
@@ -1111,13 +1123,6 @@ void ShenandoahHeap::print_tracing_info() const {
     out->cr();
 
     shenandoah_policy()->print_gc_stats(out);
-
-    out->cr();
-    out->cr();
-
-    if (ShenandoahPacing) {
-      pacer()->print_on(out);
-    }
 
     out->cr();
     out->cr();

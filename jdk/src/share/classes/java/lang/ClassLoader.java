@@ -2182,6 +2182,10 @@ public abstract class ClassLoader {
 
     // Retrieves the assertion directives from the VM.
     private static native AssertionStatusDirectives retrieveDirectives();
+
+    protected ProtectionDomain getProtectionDomainInternal(String name) {
+        return null;
+    }
 }
 
 
