@@ -111,6 +111,9 @@ public:
 
   bool is_old() const { return get() == OldTag; }
 
+  bool is_old_or_humongous() const { return (get() & (OldTag | HumMask)) != 0; }
+
+
   // Setters
 
   void set_free() { set(FreeTag); }
