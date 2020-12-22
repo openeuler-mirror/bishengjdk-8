@@ -34,6 +34,9 @@
 #include "utilities/ostream.hpp"
 #include "utilities/top.hpp"
 #include "utilities/xmlstream.hpp"
+
+# include <sys/file.h>
+
 #ifdef TARGET_OS_FAMILY_linux
 # include "os_linux.inline.hpp"
 #endif
@@ -376,7 +379,7 @@ stringStream::~stringStream() {}
 xmlStream*   xtty;
 outputStream* tty;
 outputStream* gclog_or_tty;
-CDS_ONLY(fileStream* classlist_file;) // Only dump the classes that can be stored into the CDS archive
+CDS_ONLY(jsaFileStream* classlist_file;) // Only dump the classes that can be stored into the CDS archive
 extern Mutex* tty_lock;
 
 #define EXTRACHARLEN   32
@@ -758,6 +761,36 @@ fileStream::~fileStream() {
 
 void fileStream::flush() {
   fflush(_file);
+}
+
+jsaFileStream::jsaFileStream(const char* file_name) : fileStream(file_name, "a") {
+  if (_file != NULL) {
+    if (flock(fileno(_file), LOCK_EX | LOCK_NB) != 0) {
+      if (errno == EWOULDBLOCK) {
+        warning("file %s is locked by another process\n", file_name);
+      } else {
+        warning("Cannot lock file %s due to %s\n", file_name, strerror(errno));
+      }
+      fclose(_file);
+      _file = NULL;
+      _need_close = false;
+    } else {
+      if (::ftruncate(fileno(_file), 0) != 0) {
+          warning("Fail to ftruncate file %s due to %s\n", file_name, strerror(errno));
+      }
+      ::rewind(_file);
+    }
+  }
+}
+
+jsaFileStream::~jsaFileStream() {
+  // flock is released automatically when _file is closed
+  // Ensure the following sequnce in fclose
+  // 1. fflush. 2. flock(unlock); 3. close
+  if (_file != NULL) {
+    if (_need_close) fclose(_file);
+    _file      = NULL;
+  }
 }
 
 fdStream::fdStream(const char* file_name) {
@@ -1362,7 +1395,7 @@ void ostream_init_log() {
   if (DumpLoadedClassList != NULL) {
     const char* list_name = make_log_name(DumpLoadedClassList, NULL);
     classlist_file = new(ResourceObj::C_HEAP, mtInternal)
-                         fileStream(list_name);
+                         jsaFileStream(list_name);
     FREE_C_HEAP_ARRAY(char, list_name, mtInternal);
   }
 #endif

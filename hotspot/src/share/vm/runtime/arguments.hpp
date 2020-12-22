@@ -473,6 +473,7 @@ class Arguments : AllStatic {
   static bool   CheckCompileOnly;
 
   static char*  SharedArchivePath;
+  static char*  AppCDSLockPath;
 
  public:
   // Parses the arguments, first phase

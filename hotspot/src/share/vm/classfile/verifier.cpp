@@ -561,7 +561,8 @@ void ClassVerifier::verify_class(TRAPS) {
 
   for (int index = 0; index < num_methods; index++) {
     // Check for recursive re-verification before each method.
-    if (was_recursively_verified())  return;
+    // in CDS Sharing state we still verify the code.
+    if (!UseAppCDS && was_recursively_verified())  return;
 
     Method* m = methods->at(index);
     if (m->is_native() || m->is_abstract() || m->is_overpass()) {

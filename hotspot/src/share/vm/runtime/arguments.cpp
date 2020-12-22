@@ -36,6 +36,7 @@
 #include "prims/jvmtiExport.hpp"
 #include "runtime/arguments.hpp"
 #include "runtime/arguments_ext.hpp"
+#include "runtime/globals.hpp"
 #include "runtime/globals_extension.hpp"
 #include "runtime/java.hpp"
 #include "services/management.hpp"
@@ -1493,7 +1494,6 @@ void Arguments::set_use_compressed_oops() {
   // the only value that can override MaxHeapSize if we are
   // to use UseCompressedOops is InitialHeapSize.
   size_t max_heap_size = MAX2(MaxHeapSize, InitialHeapSize);
-
   if (max_heap_size <= max_heap_for_compressed_oops()) {
 #if !defined(COMPILER1) || defined(TIERED)
     if (FLAG_IS_DEFAULT(UseCompressedOops)) {
@@ -3023,9 +3023,6 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args,
       if (!process_argument("+UseAppCDS", args->ignoreUnrecognized, origin)) {
         return JNI_EINVAL;
       } else {
-        const char* n = "SharedArchiveFile";
-        Flag* shared_archive_flag = Flag::find_flag(n, strlen(n), true, true);
-        shared_archive_flag->unlock_diagnostic();
         FLAG_SET_CMDLINE(bool, UseAppCDS, true);
       }
     }
@@ -3382,6 +3379,9 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args,
     } else if (match_option(option, "-Xshare:off", &tail)) {
       FLAG_SET_CMDLINE(bool, UseSharedSpaces, false);
       FLAG_SET_CMDLINE(bool, RequireSharedSpaces, false);
+    // -Xtypecheck
+    } else if (match_option(option, "-Xtypecheck:on", &tail)) {
+      FLAG_SET_CMDLINE(bool, EnableSplitVerifierForAppCDS, true);
     // -Xverify
     } else if (match_option(option, "-Xverify", &tail)) {
       if (strcmp(tail, ":all") == 0 || strcmp(tail, "") == 0) {
@@ -3632,7 +3632,10 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args,
     FLAG_SET_CMDLINE(bool, RequireSharedSpaces, true);
     FLAG_SET_CMDLINE(bool, TraceClassPaths, true);
   }
-
+  if (DumpSharedSpaces && !UseAppCDS && AppCDSLockFile != NULL) {
+    jio_fprintf(defaultStream::error_stream(), "AppCDSLockFile is only used when AppCDS is enabled.");
+    return JNI_ERR;
+  }
   // Change the default value for flags  which have different default values
   // when working with older JDKs.
 #ifdef LINUX
@@ -4057,6 +4060,7 @@ static char* get_shared_archive_path() {
   return shared_archive_path;
 }
 
+
 #ifndef PRODUCT
 // Determine whether LogVMOutput should be implicitly turned on.
 static bool use_vm_log() {
@@ -4198,6 +4202,7 @@ jint Arguments::parse(const JavaVMInitArgs* args) {
   if (SharedArchivePath == NULL) {
     return JNI_ENOMEM;
   }
+
 
   // Set up VerifySharedSpaces
   if (FLAG_IS_DEFAULT(VerifySharedSpaces) && SharedArchiveFile != NULL) {
