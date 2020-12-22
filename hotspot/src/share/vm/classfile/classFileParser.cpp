@@ -4022,8 +4022,12 @@ instanceKlassHandle ClassFileParser::parseClassFile(Symbol* name,
       if (_host_klass == NULL && SystemDictionaryShared::is_sharing_possible(loader_data)) {
         if (name != NULL) {
           ResourceMark rm(THREAD);
-          classlist_file->print_cr("%s", name->as_C_string());
-          classlist_file->flush();
+          char *class_name = name->as_C_string();
+          // TODO Skip JFR-related classes in classlist file to avoid conflicts between appcds and jfr.
+          if ((class_name != NULL) && (strstr(class_name, "jfr") == NULL)) {
+            classlist_file->print_cr("%s", class_name);
+            classlist_file->flush();
+          }
         }
       }
     }

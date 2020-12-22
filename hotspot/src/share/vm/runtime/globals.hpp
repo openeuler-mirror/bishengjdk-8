@@ -4007,14 +4007,20 @@ class CommandLineFlags {
   product(ccstr, SharedClassListFile, NULL,                                 \
           "Override the default CDS class list")                            \
                                                                             \
-  diagnostic(ccstr, SharedArchiveFile, NULL,                                \
+  product(ccstr, SharedArchiveFile, NULL,                                   \
           "Override the default location of the CDS archive file")          \
+                                                                            \
+  product(ccstr, AppCDSLockFile, NULL,                                      \
+          "Override the default location of the AppCDS lock file")          \
                                                                             \
   product(ccstr, ExtraSharedClassListFile, NULL,                            \
           "Extra classlist for building the CDS archive file")              \
                                                                             \
   product(bool, UseAppCDS, false,                                           \
           "Enable Application Class Data Sharing (AppCDS)")                 \
+                                                                            \
+  product(bool, EnableSplitVerifierForAppCDS, false,                        \
+          "Enable Type Check (AppCDS)")                                     \
                                                                             \
   experimental(uintx, ArrayAllocatorMallocLimit,                            \
           SOLARIS_ONLY(64*K) NOT_SOLARIS(max_uintx),                        \

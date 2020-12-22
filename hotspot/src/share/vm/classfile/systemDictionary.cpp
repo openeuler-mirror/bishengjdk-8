@@ -1283,41 +1283,43 @@ instanceKlassHandle SystemDictionary::load_shared_class(
       // null) or the same class loader is used to load previously
       // defined class
       bool bFound = false;
-        if (class_loader.is_null()) {
-          // condition1: Bootstrap class loader loaded
-          bFound = (ik()->class_loader_data() == NULL || ik()->class_loader_data()->is_the_null_class_loader_data());
-        } else if (ik()->class_loader_data() != NULL) {
-          // condition2: App Class Loader
-          // condition3: ExtClass Loader
-          // Condition4: not fake class Loader, real one
-          bFound = ((ik->has_fake_loader_data_App() && SystemDictionary::is_app_class_loader(class_loader)) ||
-                    (ik->has_fake_loader_data_Ext() && SystemDictionary::is_ext_class_loader(class_loader)) ||
-                    (!ik->has_fake_loader_data() && ik()->class_loader() == class_loader()));
-          }
-          if (!bFound) {
-            return instanceKlassHandle();
-          }
-
-          // get protection domain for this class if not loaded by null class loader
-          if (class_loader.not_null()) {
-            ResourceMark rm(THREAD);
-            char* name = ik->name()->as_C_string();
-            Handle klass_name = java_lang_String::create_from_str(name, CHECK_0);
-            JavaValue result(T_OBJECT);
-
-            // ClassLoaderData* loader_data = ClassLoaderData::class_loader_data(class_loader());
-            JavaCalls::call_virtual(&result,
-                                    class_loader,
-                                    KlassHandle(THREAD, SystemDictionary::URLClassLoader_klass()),
-                                    vmSymbols::getProtectionDomainInternal_name(),
-                                    vmSymbols::getProtectionDomainInternal_signature(),
-                                    klass_name,
-                                    THREAD);
-            return load_shared_class(ik, class_loader, Handle(THREAD, (oop) result.get_jobject()), THREAD);
-          } else {
-            return load_shared_class(ik, class_loader, Handle(), THREAD);
-          }
+      if (class_loader.is_null()) {
+        // condition1: Bootstrap class loader loaded
+        bFound = (ik()->class_loader_data() == NULL || ik()->class_loader_data()->is_the_null_class_loader_data());
+      } else if (ik()->class_loader_data() != NULL) {
+        // condition2: App Class Loader
+        // condition3: ExtClass Loader
+        // condition4: not fake class Loader, real one
+        bFound = ((ik->has_fake_loader_data_App() && SystemDictionary::is_app_class_loader(class_loader)) ||
+                  (ik->has_fake_loader_data_Ext() && SystemDictionary::is_ext_class_loader(class_loader)) ||
+                  (!ik->has_fake_loader_data() && ik()->class_loader() == class_loader()));
       }
+      if (!bFound) {
+        return instanceKlassHandle();
+      }
+
+      // get protection domain for this class if not loaded by null class loader
+      if (class_loader.not_null()) {
+        ResourceMark rm(THREAD);
+        char* name = ik->name()->as_C_string();
+        Handle klass_name = java_lang_String::create_from_str(name, CHECK_0);
+        JavaValue result(T_OBJECT);
+
+	// load_shared_class need protected domain to handle non-bootstrap loaded class,
+        // so here call_virtual to call getProtectionDomainInternal function of URLClassLoader.java,
+        // to get protected domain and save into result.
+        JavaCalls::call_virtual(&result,
+                                class_loader,
+                                KlassHandle(THREAD, SystemDictionary::URLClassLoader_klass()),
+                                vmSymbols::getProtectionDomainInternal_name(),
+                                vmSymbols::getProtectionDomainInternal_signature(),
+                                klass_name,
+                                THREAD);
+        return load_shared_class(ik, class_loader, Handle(THREAD, (oop) result.get_jobject()), THREAD);
+      } else {
+        return load_shared_class(ik, class_loader, Handle(), THREAD);
+      }
+    }
   }
   return instanceKlassHandle();
 }
@@ -1396,8 +1398,12 @@ instanceKlassHandle SystemDictionary::load_shared_class(instanceKlassHandle ik,
       // unless AppCDS is enabled
       if (SystemDictionaryShared::is_sharing_possible(loader_data)) {
         ResourceMark rm(THREAD);
-        classlist_file->print_cr("%s", ik->name()->as_C_string());
-        classlist_file->flush();
+        char *class_name = ik->name()->as_C_string();
+        // TODO Skip JFR-related classes in classlist file to avoid conflicts between appcds and jfr.
+        if ((class_name != NULL) && (strstr(class_name, "jfr") == NULL)) {
+          classlist_file->print_cr("%s", class_name);
+          classlist_file->flush();
+        }
       }
     }
 
@@ -1472,8 +1478,10 @@ instanceKlassHandle SystemDictionary::load_instance_class(Symbol* class_name, Ha
       // the call stack. Bootstrap classloader is parallel-capable,
       // so no concurrency issues are expected.
       CLEAR_PENDING_EXCEPTION;
-      k = JfrUpcalls::load_event_handler_proxy_class(THREAD);
-      assert(!k.is_null(), "invariant");
+      if (!DumpSharedSpaces) {
+        k = JfrUpcalls::load_event_handler_proxy_class(THREAD);
+        assert(!k.is_null(), "invariant");
+      }
     }
 #endif
 

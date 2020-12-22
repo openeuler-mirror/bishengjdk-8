@@ -28,6 +28,7 @@
 
 #include "classfile/dictionary.hpp"
 #include "classfile/systemDictionary.hpp"
+#include "verifier.hpp"
 
 class SystemDictionaryShared: public SystemDictionary {
 public:
@@ -70,7 +71,16 @@ public:
   static void finalize_verification_dependencies() {}
   static bool check_verification_dependencies(Klass* k, Handle class_loader,
                                               Handle protection_domain,
-                                              char** message_buffer, TRAPS) {return true;}
+                                              char** message_buffer, TRAPS) {
+    if (EnableSplitVerifierForAppCDS) {
+      ClassVerifier split_verifier(k, THREAD);
+      split_verifier.verify_class(THREAD);
+      if (HAS_PENDING_EXCEPTION) {
+        return false; // use the existing exception
+      }
+    }
+    return true;
+  }
 };
 
 #endif // SHARE_VM_CLASSFILE_SYSTEMDICTIONARYSHARED_HPP

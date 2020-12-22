@@ -143,6 +143,7 @@ public:
   FileMapHeader * _header;
 
   const char* _full_path;
+  const char* _appcds_file_lock_path;
   char* _paths_misc_info;
 
   static FileMapInfo* _current_info;

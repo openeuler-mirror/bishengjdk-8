@@ -22,6 +22,7 @@
  *
  */
 
+#include "jvm.h"
 #include "precompiled.hpp"
 #include "classfile/classLoader.hpp"
 #include "classfile/sharedClassUtil.hpp"
@@ -33,10 +34,13 @@
 #include "memory/oopFactory.hpp"
 #include "oops/objArrayOop.hpp"
 #include "runtime/arguments.hpp"
+#include "runtime/globals.hpp"
 #include "runtime/java.hpp"
 #include "runtime/os.hpp"
 #include "services/memTracker.hpp"
+#include "utilities/debug.hpp"
 #include "utilities/defaultStream.hpp"
+#include "utilities/ostream.hpp"
 
 # include <sys/stat.h>
 # include <errno.h>
@@ -362,11 +366,33 @@ bool FileMapInfo::open_for_read() {
   return true;
 }
 
-
 // Write the FileMapInfo information to the file.
-
 void FileMapInfo::open_for_write() {
- _full_path = make_log_name(Arguments::GetSharedArchivePath(), NULL);
+  if (UseAppCDS && AppCDSLockFile != NULL) {
+    char* pos = strrchr(const_cast<char*>(AppCDSLockFile), '/');
+    if (pos != NULL && pos != AppCDSLockFile) { // No directory path specified
+      char buf[PATH_MAX + 1] = "\0";
+      char filePath[PATH_MAX] = "\0";
+      int length = pos - AppCDSLockFile + 1;
+      strncpy(filePath, AppCDSLockFile, length);
+      if (realpath(filePath, buf) == NULL) {
+        fail_stop("A risky filePath:%s, buf:%s, length:%d", filePath, buf, length);
+      }
+      _appcds_file_lock_path = os::strdup(AppCDSLockFile, mtInternal);
+      if (_appcds_file_lock_path == NULL) {
+        fail_stop("Failed to create appcds file lock.");
+      }
+      int lock_fd = open(_appcds_file_lock_path, O_CREAT | O_WRONLY | O_EXCL, S_IRUSR | S_IWUSR);
+      if (lock_fd < 0) {
+        tty->print_cr("The lock path is: %s", _appcds_file_lock_path);
+        tty->print_cr("Failed to create jsa file !\n Please check: \n 1. The directory exists.\n "
+		      "2. You have the permission.\n 3. Make sure no other process using the same lock file.\n");
+        JVM_Exit(0);
+      }
+      tty->print_cr("You are using file lock %s in concurrent mode", AppCDSLockFile);
+    }
+  }
+  _full_path = make_log_name(Arguments::GetSharedArchivePath(), NULL);
   if (PrintSharedSpaces) {
     tty->print_cr("Dumping shared data to file: ");
     tty->print_cr("   %s", _full_path);
@@ -452,6 +478,7 @@ void FileMapInfo::write_bytes(const void* buffer, int nbytes) {
       // close and remove the file. See bug 6372906.
       close();
       remove(_full_path);
+      remove(_appcds_file_lock_path);
       fail_stop("Unable to write to shared archive file.", NULL);
     }
   }
@@ -492,6 +519,10 @@ void FileMapInfo::write_bytes_aligned(const void* buffer, int nbytes) {
 // Close the shared archive file.  This does NOT unmap mapped regions.
 
 void FileMapInfo::close() {
+  if (UseAppCDS && AppCDSLockFile != NULL) {
+    // delete appcds.lock
+    remove(_appcds_file_lock_path);
+  }
   if (_file_open) {
     if (::close(_fd) < 0) {
       fail_stop("Unable to close the shared archive file.");
