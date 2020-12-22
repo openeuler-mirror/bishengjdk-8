@@ -4312,6 +4312,10 @@ bool os::is_thread_cpu_time_supported() {
   }
 }
 
+double os::get_process_load() {
+  return -1.0;
+}
+
 // Windows does't provide a loadavg primitive so this is stubbed out for now.
 // It does have primitives (PDH API) to get CPU usage and run queue length.
 // "\\Processor(_Total)\\% Processor Time", "\\System\\Processor Queue Length"

@@ -53,10 +53,23 @@ void HeapRegionManager::initialize(G1RegionToSpaceMapper* heap_storage,
 
   _available_map.resize(_regions.length(), false);
   _available_map.clear();
+  _uncommit_list_filled = false;
 }
 
 bool HeapRegionManager::is_available(uint region) const {
+  HeapRegion* hr = _regions.get_by_index(region);
+  if (hr != NULL && hr->in_uncommit_list()) {
+    return false;
+  }
   return _available_map.at(region);
+}
+
+bool HeapRegionManager::can_expand(uint region) const {
+  HeapRegion* hr = _regions.get_by_index(region);
+  if (hr != NULL && hr->in_uncommit_list()) {
+    return false;
+  }
+  return !_available_map.at(region);
 }
 
 #ifdef ASSERT
@@ -77,7 +90,7 @@ void HeapRegionManager::commit_regions(uint index, size_t num_regions) {
   guarantee(num_regions > 0, "Must commit more than zero regions");
   guarantee(_num_committed + num_regions <= max_length(), "Cannot commit more than the maximum amount of regions");
 
-  _num_committed += (uint)num_regions;
+  Atomic::add((int)num_regions, (volatile int*)&_num_committed);
 
   _heap_mapper->commit_regions(index, num_regions);
 
@@ -103,9 +116,9 @@ void HeapRegionManager::uncommit_regions(uint start, size_t num_regions) {
     }
   }
 
-  _num_committed -= (uint)num_regions;
-
+  Atomic::add(-num_regions, (volatile int*)&_num_committed);
   _available_map.par_clear_range(start, start + num_regions, BitMap::unknown_range);
+
   _heap_mapper->uncommit_regions(start, num_regions);
 
   // Also uncommit auxiliary data
@@ -198,7 +211,7 @@ uint HeapRegionManager::find_contiguous(size_t num, bool empty_only) {
 
   while (length_found < num && cur < max_length()) {
     HeapRegion* hr = _regions.get_by_index(cur);
-    if ((!empty_only && !is_available(cur)) || (is_available(cur) && hr != NULL && hr->is_empty())) {
+    if ((!empty_only && can_expand(cur)) || (is_available(cur) && hr != NULL && hr->is_empty())) {
       // This region is a potential candidate for allocation into.
       length_found++;
     } else {
@@ -213,7 +226,7 @@ uint HeapRegionManager::find_contiguous(size_t num, bool empty_only) {
     for (uint i = found; i < (found + num); i++) {
       HeapRegion* hr = _regions.get_by_index(i);
       // sanity check
-      guarantee((!empty_only && !is_available(i)) || (is_available(i) && hr != NULL && hr->is_empty()),
+      guarantee((!empty_only && can_expand(i)) || (is_available(i) && hr != NULL && hr->is_empty()),
                 err_msg("Found region sequence starting at " UINT32_FORMAT ", length " SIZE_FORMAT
                         " that is not empty at " UINT32_FORMAT ". Hr is " PTR_FORMAT, found, num, i, p2i(hr)));
     }
@@ -239,7 +252,8 @@ void HeapRegionManager::iterate(HeapRegionClosure* blk) const {
   uint len = max_length();
 
   for (uint i = 0; i < len; i++) {
-    if (!is_available(i)) {
+    HeapRegion* r = _regions.get_by_index(i);
+    if (r != NULL && r->in_uncommit_list() || !_available_map.at(i)) {
       continue;
     }
     guarantee(at(i) != NULL, err_msg("Tried to access region %u that has a NULL HeapRegion*", i));
@@ -265,15 +279,15 @@ uint HeapRegionManager::find_unavailable_from_idx(uint start_idx, uint* res_idx)
     return num_regions;
   }
   *res_idx = cur;
-  while (cur < max_length() && !is_available(cur)) {
+  while (cur < max_length() && can_expand(cur)) {
     cur++;
   }
   num_regions = cur - *res_idx;
 #ifdef ASSERT
   for (uint i = *res_idx; i < (*res_idx + num_regions); i++) {
-    assert(!is_available(i), "just checking");
+    assert(can_expand(i), "just checking");
   }
-  assert(cur == max_length() || num_regions == 0 || is_available(cur),
+  assert(cur == max_length() || num_regions == 0 || (!G1Uncommit && is_available(cur)) || G1Uncommit,
          err_msg("The region at the current position %u must be available or at the end of the heap.", cur));
 #endif
   return num_regions;
@@ -294,10 +308,10 @@ void HeapRegionManager::par_iterate(HeapRegionClosure* blk, uint worker_id, uint
     const uint index = (start_index + count) % _allocated_heapregions_length;
     assert(0 <= index && index < _allocated_heapregions_length, "sanity");
     // Skip over unavailable regions
-    if (!is_available(index)) {
+    HeapRegion* r = _regions.get_by_index(index);
+    if (r != NULL && r->in_uncommit_list() || !_available_map.at(index)) {
       continue;
     }
-    HeapRegion* r = _regions.get_by_index(index);
     // We'll ignore "continues humongous" regions (we'll process them
     // when we come across their corresponding "start humongous"
     // region) and regions already claimed.
@@ -425,12 +439,12 @@ void HeapRegionManager::verify() {
   uint num_committed = 0;
   HeapWord* prev_end = heap_bottom();
   for (uint i = 0; i < _allocated_heapregions_length; i++) {
-    if (!is_available(i)) {
+    HeapRegion* hr = _regions.get_by_index(i);
+    if (hr != NULL && hr->in_uncommit_list() || !_available_map.at(i)) {
       prev_committed = false;
       continue;
     }
     num_committed++;
-    HeapRegion* hr = _regions.get_by_index(i);
     guarantee(hr != NULL, err_msg("invariant: i: %u", i));
     guarantee(!prev_committed || hr->bottom() == prev_end,
               err_msg("invariant i: %u " HR_FORMAT " prev_end: " PTR_FORMAT,
@@ -454,8 +468,36 @@ void HeapRegionManager::verify() {
     guarantee(_regions.get_by_index(i) == NULL, err_msg("invariant i: %u", i));
   }
 
-  guarantee(num_committed == _num_committed, err_msg("Found %u committed regions, but should be %u", num_committed, _num_committed));
+  guarantee((!G1Uncommit && num_committed == _num_committed) || G1Uncommit, err_msg("Found %u committed regions, but should be %u", num_committed, _num_committed));
   _free_list.verify();
+}
+
+void HeapRegionManager::free_uncommit_list_memory() {
+  if (_uncommit_list_filled) {
+    _uncommit_list.remove_all(true);
+    OrderAccess::storestore();
+    _uncommit_list_filled = false;
+  }
+}
+
+uint HeapRegionManager::extract_uncommit_list()
+{
+  assert_at_safepoint(true /* should_be_vm_thread */);
+  if (!_uncommit_list_filled) {
+    G1CollectedHeap* g1h = G1CollectedHeap::heap();
+    uint dest = ((G1CollectorPolicy*)g1h->collector_policy())->predict_heap_size_seq();
+
+    if (dest < _num_committed) {
+      uint num_regions_to_remove = (_num_committed - dest) * G1UncommitPercent;
+      if (num_regions_to_remove >= 1 && num_regions_to_remove < _free_list.length()) {
+        int count = _free_list.move_regions_to(&_uncommit_list, num_regions_to_remove);
+        OrderAccess::storestore();
+        _uncommit_list_filled = true;
+        return count;
+      }
+    }
+  }
+  return 0;
 }
 
 #ifndef PRODUCT

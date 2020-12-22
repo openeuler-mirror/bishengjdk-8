@@ -227,6 +227,9 @@ class HeapRegion: public G1OffsetTableContigSpace {
   // For the start region of a humongous sequence, it's original end().
   HeapWord* _orig_end;
 
+  // True iff the region is in current uncommit_list.
+  bool _in_uncommit_list;
+
   // True iff the region is in current collection_set.
   bool _in_collection_set;
 
@@ -429,6 +432,8 @@ class HeapRegion: public G1OffsetTableContigSpace {
     return _humongous_start_region;
   }
 
+  void set_uncommit_list(bool in) { _in_uncommit_list = in; }
+  bool in_uncommit_list() { return _in_uncommit_list; }
   // Return the number of distinct regions that are covered by this region:
   // 1 if the region is not humongous, >= 1 if the region is humongous.
   uint region_num() const {

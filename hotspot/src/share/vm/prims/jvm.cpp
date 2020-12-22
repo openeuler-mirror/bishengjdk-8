@@ -3286,6 +3286,23 @@ JVM_ENTRY(void, JVM_SetThreadPriority(JNIEnv* env, jobject jthread, jint prio))
   }
 JVM_END
 
+JVM_ENTRY(void, JVM_AdaptiveHeapSetG1PeriodicGCInterval(JNIEnv *env, jclass klass, jint interval))
+  JVMWrapper("JVM_AdaptiveHeapSetG1PeriodicGCInterval");
+  G1PeriodicGCInterval = interval;
+JVM_END
+JVM_ENTRY(jint, JVM_AdaptiveHeapGetG1PeriodicGCInterval(JNIEnv *env, jclass klass))
+  JVMWrapper("JVM_AdaptiveHeapGetG1PeriodicGCInterval");
+  return G1PeriodicGCInterval;
+JVM_END
+
+JVM_ENTRY(void, JVM_AdaptiveHeapSetG1PeriodicGCLoadThreshold(JNIEnv *env, jclass clazz, jint loadThreshold))
+  JVMWrapper("JVM_AdaptiveHeapSetG1PeriodicGCLoadThreshold");
+  G1PeriodicGCLoadThreshold = loadThreshold;
+JVM_END
+JVM_ENTRY(jint, JVM_AdaptiveHeapGetG1PeriodicGCLoadThreshold(JNIEnv *env, jclass clazz))
+  JVMWrapper("JVM_AdaptiveHeapgetG1PeriodicGCLoadThreshold");
+  return G1PeriodicGCLoadThreshold;
+JVM_END
 
 JVM_ENTRY(void, JVM_Yield(JNIEnv *env, jclass threadClass))
   JVMWrapper("JVM_Yield");

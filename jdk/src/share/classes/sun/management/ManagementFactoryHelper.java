@@ -48,6 +48,9 @@ import java.util.List;
 import com.sun.management.DiagnosticCommandMBean;
 import com.sun.management.HotSpotDiagnosticMXBean;
 
+import com.huawei.management.AdaptiveHeapMXBean;
+import com.huawei.jvm.gc.AdaptiveHeapMXBeanImpl;
+
 import static java.lang.management.ManagementFactory.*;
 
 /**
@@ -65,6 +68,7 @@ public class ManagementFactoryHelper {
     private static RuntimeImpl         runtimeMBean = null;
     private static CompilationImpl     compileMBean = null;
     private static OperatingSystemImpl osMBean = null;
+    private static AdaptiveHeapMXBeanImpl adaptiveHeapMXBean = null;
 
     public static synchronized ClassLoadingMXBean getClassLoadingMXBean() {
         if (classMBean == null) {
@@ -106,6 +110,13 @@ public class ManagementFactoryHelper {
             osMBean = new OperatingSystemImpl(jvm);
         }
         return osMBean;
+    }
+
+    public static synchronized AdaptiveHeapMXBean getAdaptiveHeapMXBean() {
+        if (adaptiveHeapMXBean == null) {
+            adaptiveHeapMXBean = new AdaptiveHeapMXBeanImpl();
+        }
+        return adaptiveHeapMXBean;
     }
 
     public static List<MemoryPoolMXBean> getMemoryPoolMXBeans() {

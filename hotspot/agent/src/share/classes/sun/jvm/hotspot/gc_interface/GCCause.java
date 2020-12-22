@@ -54,6 +54,7 @@ public enum GCCause {
 
   _g1_inc_collection_pause ("G1 Evacuation Pause"),
   _g1_humongous_allocation ("G1 Humongous Allocation"),
+  _g1_periodic_gc ("G1 Periodic GC"),
 
   _shenandoah_allocation_failure_evac ("Allocation Failure During Evacuation"),
   _shenandoah_stop_vm ("Stopping VM"),

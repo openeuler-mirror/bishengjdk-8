@@ -1873,6 +1873,7 @@ G1CollectedHeap::G1CollectedHeap(G1CollectorPolicy* policy_) :
   _dirty_cards_region_list(NULL),
   _worker_cset_start_region(NULL),
   _worker_cset_start_region_time_stamp(NULL),
+  _uncommit_thread(NULL),
   _gc_timer_stw(new (ResourceObj::C_HEAP, mtGC) STWGCTimer()),
   _gc_timer_cm(new (ResourceObj::C_HEAP, mtGC) ConcurrentGCTimer()),
   _gc_tracer_stw(new (ResourceObj::C_HEAP, mtGC) G1NewTracer()),
@@ -1952,6 +1953,16 @@ jint G1CollectedHeap::initialize() {
   size_t max_byte_size = collector_policy()->max_heap_byte_size();
   size_t heap_alignment = collector_policy()->heap_alignment();
 
+  if (G1Uncommit) {
+    if (G1PeriodicGCInterval == 0) {
+      vm_exit_during_initialization(err_msg("G1Uncommit requires G1PeriodicGCInterval > 0"));
+      return JNI_EINVAL;
+    }
+    if (G1PeriodicGCLoadThreshold < 0 || G1PeriodicGCLoadThreshold > 100) {
+      vm_exit_during_initialization(err_msg("G1Uncommit requires G1PeriodicGCLoadThreshold >= 0 and <= 100"));
+      return JNI_EINVAL;
+    }
+  }
   // Ensure that the sizes are properly aligned.
   Universe::check_alignment(init_byte_size, HeapRegion::GrainBytes, "g1 heap");
   Universe::check_alignment(max_byte_size, HeapRegion::GrainBytes, "g1 heap");
@@ -2148,6 +2159,30 @@ void G1CollectedHeap::stop() {
   if (G1StringDedup::is_enabled()) {
     G1StringDedup::stop();
   }
+  if (G1Uncommit && _uncommit_thread != NULL) {
+    _uncommit_thread->stop();
+    PeriodicGC::stop();
+  }
+}
+
+void G1CollectedHeap::check_trigger_periodic_gc() {
+  if (g1_policy()->should_trigger_periodic_gc()) {
+    collect(GCCause::_g1_periodic_collection);
+  }
+}
+
+void G1CollectedHeap::init_periodic_gc_thread() {
+  if (_uncommit_thread == NULL && G1Uncommit) {
+    PeriodicGC::start();
+    _uncommit_thread = new G1UncommitThread();
+  }
+}
+
+void G1CollectedHeap::extract_uncommit_list() {
+  if (g1_policy()->can_extract_uncommit_list()) {
+    uint count = _hrm.extract_uncommit_list();
+    g1_policy()->record_extract_uncommit_list(count);
+  }
 }
 
 size_t G1CollectedHeap::conservative_max_heap_alignment() {
@@ -2335,6 +2370,7 @@ bool G1CollectedHeap::should_do_concurrent_full_gc(GCCause::Cause cause) {
     case GCCause::_g1_humongous_allocation: return true;
     case GCCause::_update_allocation_context_stats_inc: return true;
     case GCCause::_wb_conc_mark:            return true;
+    case GCCause::_g1_periodic_collection:  return true;
     default:                                return false;
   }
 }
@@ -2528,6 +2564,7 @@ void G1CollectedHeap::collect(GCCause::Cause cause) {
       return;
     } else {
       if (cause == GCCause::_gc_locker || cause == GCCause::_wb_young_gc
+          || cause == GCCause::_g1_periodic_collection
           DEBUG_ONLY(|| cause == GCCause::_scavenge_alot)) {
 
         // Schedule a standard evacuation pause. We're setting word_size
@@ -2925,7 +2962,14 @@ size_t G1CollectedHeap::max_capacity() const {
 
 jlong G1CollectedHeap::millis_since_last_gc() {
   // assert(false, "NYI");
-  return 0;
+  jlong ret_val = (os::javaTimeNanos() / NANOSECS_PER_MILLISEC) -
+    _g1_policy->collection_pause_end_millis();
+  if (ret_val < 0) {
+    gclog_or_tty->print_cr("millis_since_last_gc() would return : " JLONG_FORMAT
+      ". returning zero instead.", ret_val);
+    return 0;
+  }
+  return ret_val;
 }
 
 void G1CollectedHeap::prepare_for_verify() {
@@ -4033,6 +4077,7 @@ G1CollectedHeap::do_collection_pause_at_safepoint(double target_pause_time_ms) {
 
 
     double pause_start_sec = os::elapsedTime();
+    g1_policy()->record_gc_start(pause_start_sec);
     g1_policy()->phase_times()->note_gc_start(active_workers, mark_in_progress());
     log_gc_header();
 

@@ -1430,6 +1430,21 @@ JNIEXPORT jintArray JNICALL
 JVM_GetResourceLookupCache(JNIEnv *env, jobject loader, const char *resource_name);
 
 
+/*
+ *com.huawei.management.AdaptiveHeapMXBeanImpl
+ */
+JNIEXPORT void JNICALL
+JVM_AdaptiveHeapSetG1PeriodicGCInterval(JNIEnv *env, jclass klass, jint interval);
+JNIEXPORT jint JNICALL
+JVM_AdaptiveHeapGetG1PeriodicGCInterval(JNIEnv *env, jclass klass);
+
+
+JNIEXPORT void JNICALL
+JVM_AdaptiveHeapSetG1PeriodicGCLoadThreshold(JNIEnv *env, jclass clazz, jint loadThreshold);
+JNIEXPORT jint JNICALL
+JVM_AdaptiveHeapGetG1PeriodicGCLoadThreshold(JNIEnv *env, jclass clazz);
+
+
 /* =========================================================================
  * The following defines a private JVM interface that the JDK can query
  * for the JVM version and capabilities.  sun.misc.Version defines

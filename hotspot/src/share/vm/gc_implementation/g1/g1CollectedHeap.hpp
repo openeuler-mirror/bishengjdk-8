@@ -35,6 +35,7 @@
 #include "gc_implementation/g1/g1InCSetState.hpp"
 #include "gc_implementation/g1/g1MonitoringSupport.hpp"
 #include "gc_implementation/g1/g1SATBCardTableModRefBS.hpp"
+#include "gc_implementation/g1/g1UncommitThread.hpp"
 #include "gc_implementation/g1/g1YCTypes.hpp"
 #include "gc_implementation/g1/heapRegionManager.hpp"
 #include "gc_implementation/g1/heapRegionSet.hpp"
@@ -74,8 +75,10 @@ class GenerationCounters;
 class STWGCTimer;
 class G1NewTracer;
 class G1OldTracer;
+class G1UncommitThread;
 class EvacuationFailedInfo;
 class nmethod;
+class ScanRSClosure;
 
 typedef OverflowTaskQueue<StarTask, mtGC>         RefToScanQueue;
 typedef GenericTaskQueueSet<RefToScanQueue, mtGC> RefToScanQueueSet;
@@ -186,8 +189,12 @@ class G1CollectedHeap : public SharedHeap {
   friend class SurvivorGCAllocRegion;
   friend class OldGCAllocRegion;
   friend class G1Allocator;
+  friend class G1CollectorPolicy;
   friend class G1DefaultAllocator;
   friend class G1ResManAllocator;
+  friend class ScanRSClosure;
+  friend class G1UncommitThread;
+  friend class ConcurrentG1RefineThread;
 
   // Closures used in implementation.
   template <G1Barrier barrier, G1Mark do_mark_object>
@@ -210,6 +217,7 @@ class G1CollectedHeap : public SharedHeap {
   friend class G1ParCleanupCTTask;
 
   friend class G1FreeHumongousRegionClosure;
+  friend class FreeRegionList;
   // Other related classes.
   friend class G1MarkSweep;
 
@@ -265,6 +273,8 @@ private:
 
   // Class that handles the different kinds of allocations.
   G1Allocator* _allocator;
+
+  G1UncommitThread* _uncommit_thread;
 
   // Statistics for each allocation context
   AllocationContextStats _allocation_context_stats;
@@ -1001,6 +1011,10 @@ protected:
 public:
 
   void set_refine_cte_cl_concurrency(bool concurrent);
+
+  void check_trigger_periodic_gc();
+  void init_periodic_gc_thread();
+  void extract_uncommit_list();
 
   RefToScanQueue *task_queue(int i) const;
 

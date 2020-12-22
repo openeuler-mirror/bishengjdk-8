@@ -5709,6 +5709,10 @@ bool os::is_thread_cpu_time_supported() {
   }
 }
 
+double os::get_process_load() {
+  return -1.0;
+}
+
 // System loadavg support.  Returns -1 if load average cannot be obtained.
 // Return the load average for our processor set if the primitive exists
 // (Solaris 9 and later).  Otherwise just return system wide loadavg.

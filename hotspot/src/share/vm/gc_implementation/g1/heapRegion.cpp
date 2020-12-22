@@ -310,7 +310,8 @@ HeapRegion::HeapRegion(uint hrm_index,
 #ifdef ASSERT
     _containing_set(NULL),
 #endif // ASSERT
-     _young_index_in_cset(-1), _surv_rate_group(NULL), _age_index(-1),
+    _in_uncommit_list(false),
+    _young_index_in_cset(-1), _surv_rate_group(NULL), _age_index(-1),
     _rem_set(NULL), _recorded_rs_length(0), _predicted_elapsed_time_ms(0),
     _predicted_bytes_to_copy(0)
 {
