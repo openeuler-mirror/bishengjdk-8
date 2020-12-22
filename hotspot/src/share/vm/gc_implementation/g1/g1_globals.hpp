@@ -328,7 +328,37 @@
           "Verify the code root lists attached to each heap region.")       \
                                                                             \
   develop(bool, G1VerifyBitmaps, false,                                     \
-          "Verifies the consistency of the marking bitmaps")
+          "Verifies the consistency of the marking bitmaps")                \
+                                                                            \
+  product(bool, G1Uncommit, false,                                          \
+          "Allow G1 to uncommit unused memory.")                            \
+                                                                            \
+  product(bool, G1UncommitLog, false,                                       \
+          "Enable G1 uncommit logs.")                                       \
+                                                                            \
+  manageable(uintx, G1PeriodicGCInterval, 15000,                            \
+          "Number of milliseconds after a previous GC to wait before "      \
+          "triggering a periodic gc. A value of zero disables periodically "\
+          "enforced gc cycles.")                                            \
+                                                                            \
+  manageable(uintx, G1PeriodicGCLoadThreshold, 10,                          \
+          "Percentage of process load or system load."                      \
+          "Above this value cancels a given periodic GC."                   \
+          "A value of zero disables load check.")                           \
+                                                                            \
+  experimental(bool, G1PeriodicGCProcessLoad, true,                         \
+          "if true, use process load, else use system load. which is"       \
+          "the 1m value of getloadavg() / CPU core number.")                \
+                                                                            \
+  experimental(bool, G1UncommitThreadPriority, false,                       \
+          "G1 uncommit thread runs at critical scheduling priority.")       \
+                                                                            \
+  experimental(double, G1UncommitPercent, 0.1,                              \
+          "Percent of free regions to uncommit for one uncommit cycle.")    \
+                                                                            \
+  experimental(uintx, G1UncommitDelay, 50,                                  \
+          "Starup delay in seconds for periodic uncommit.")                 \
+                                                                            \
 
 G1_FLAGS(DECLARE_DEVELOPER_FLAG, DECLARE_PD_DEVELOPER_FLAG, DECLARE_PRODUCT_FLAG, DECLARE_PD_PRODUCT_FLAG, DECLARE_DIAGNOSTIC_FLAG, DECLARE_EXPERIMENTAL_FLAG, DECLARE_NOTPRODUCT_FLAG, DECLARE_MANAGEABLE_FLAG, DECLARE_PRODUCT_RW_FLAG)
 

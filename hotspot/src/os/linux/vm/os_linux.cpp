@@ -38,6 +38,7 @@
 #include "oops/oop.inline.hpp"
 #include "os_share_linux.hpp"
 #include "osContainer_linux.hpp"
+#include "process_load.hpp"
 #include "prims/jniFastGetField.hpp"
 #include "prims/jvm.h"
 #include "prims/jvm_misc.hpp"
@@ -5887,6 +5888,15 @@ bool os::is_thread_cpu_time_supported() {
 // so just return the system wide load average.
 int os::loadavg(double loadavg[], int nelem) {
   return ::getloadavg(loadavg, nelem);
+}
+
+double os::get_process_load() {
+    double u, s;
+    u = get_cpuload_internal(-1, &s, CPU_LOAD_VM_ONLY);
+    if (u < 0) {
+        return -1.0;
+    }
+    return u + s;
 }
 
 void os::pause() {

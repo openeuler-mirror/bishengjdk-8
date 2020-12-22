@@ -4293,6 +4293,10 @@ bool os::is_thread_cpu_time_supported() {
 #endif
 }
 
+double os::get_process_load() {
+  return -1.0;
+}
+
 // System loadavg support.  Returns -1 if load average cannot be obtained.
 // Bsd doesn't yet have a (official) notion of processor sets,
 // so just return the system wide load average.

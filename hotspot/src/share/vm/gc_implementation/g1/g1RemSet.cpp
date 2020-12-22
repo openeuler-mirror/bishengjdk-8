@@ -206,6 +206,9 @@ public:
 #endif
 
       HeapRegion* card_region = _g1h->heap_region_containing(card_start);
+      if (!_g1h->_hrm.is_available(card_region->hrm_index())) {
+        continue;
+      }
       _cards++;
 
       if (!card_region->is_on_dirty_cards_region_list()) {

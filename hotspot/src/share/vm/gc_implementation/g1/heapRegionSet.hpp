@@ -249,12 +249,14 @@ public:
   void add_ordered(FreeRegionList* from_list);
 
   // It empties the list by removing all regions from it.
-  void remove_all();
+  void remove_all(bool uncommit = false);
 
   // Remove all (contiguous) regions from first to first + num_regions -1 from
   // this list.
   // Num_regions must be > 1.
   void remove_starting_at(HeapRegion* first, uint num_regions);
+
+  uint move_regions_to(FreeRegionList* dest, uint num_regions);
 
   virtual void verify();
 

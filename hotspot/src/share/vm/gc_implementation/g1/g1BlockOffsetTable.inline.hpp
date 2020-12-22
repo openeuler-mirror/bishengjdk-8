@@ -47,15 +47,15 @@ G1BlockOffsetTable::block_start_const(const void* addr) const {
   }
 }
 
-#define check_index(index, msg)                                                \
-  assert((index) < (_reserved.word_size() >> LogN_words),                      \
-         err_msg("%s - index: "SIZE_FORMAT", _vs.committed_size: "SIZE_FORMAT, \
-                 msg, (index), (_reserved.word_size() >> LogN_words)));        \
-  assert(G1CollectedHeap::heap()->is_in_exact(address_for_index_raw(index)),   \
-         err_msg("Index "SIZE_FORMAT" corresponding to "PTR_FORMAT             \
-                 " (%u) is not in committed area.",                            \
-                 (index),                                                      \
-                 p2i(address_for_index_raw(index)),                            \
+#define check_index(index, msg)                                                                             \
+  assert((index) < (_reserved.word_size() >> LogN_words),                                                   \
+         err_msg("%s - index: "SIZE_FORMAT", _vs.committed_size: "SIZE_FORMAT,                              \
+                 msg, (index), (_reserved.word_size() >> LogN_words)));                                     \
+  assert(!G1Uncommit && G1CollectedHeap::heap()->is_in_exact(address_for_index_raw(index)) || G1Uncommit,   \
+         err_msg("Index "SIZE_FORMAT" corresponding to "PTR_FORMAT                                          \
+                 " (%u) is not in committed area.",                                                         \
+                 (index),                                                                                   \
+                 p2i(address_for_index_raw(index)),                                                         \
                  G1CollectedHeap::heap()->addr_to_region(address_for_index_raw(index))));
 
 u_char G1BlockOffsetSharedArray::offset_array(size_t index) const {

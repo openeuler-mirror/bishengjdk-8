@@ -823,6 +823,9 @@ class os: AllStatic {
   // System loadavg support.  Returns -1 if load average cannot be obtained.
   static int loadavg(double loadavg[], int nelem);
 
+  // Process loadavg support.  Returns -1 if load average cannot be obtained.
+  static double get_process_load();
+
   // Hook for os specific jvm options that we don't want to abort on seeing
   static bool obsolete_option(const JavaVMOption *option);
 

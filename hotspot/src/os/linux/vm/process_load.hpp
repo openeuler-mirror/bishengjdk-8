@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2011, 2015, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,6 +23,9 @@
  * questions.
  */
 
+#ifndef OS_LINUX_VM_PROCESS_LOAD_HPP
+#define OS_LINUX_VM_PROCESS_LOAD_HPP
+
 #include <stdio.h>
 #include <stdint.h>
 #include <stdarg.h>
@@ -35,7 +38,6 @@
 #include <stdlib.h>
 #include <dlfcn.h>
 #include <pthread.h>
-#include "sun_management_OperatingSystemImpl.h"
 
 struct ticks {
     uint64_t  used;
@@ -57,8 +59,6 @@ static struct perfbuf {
     ticks *cpus;
 } counters;
 
-#define DEC_64 "%lud"
-
 static void next_line(FILE *f) {
     while (fgetc(f) != '\n');
 }
@@ -75,16 +75,16 @@ static void next_line(FILE *f) {
  */
 static int get_totalticks(int which, ticks *pticks) {
     FILE         *fh;
-    uint64_t        userTicks, niceTicks, systemTicks, idleTicks;
-    uint64_t        iowTicks = 0, irqTicks = 0, sirqTicks= 0;
-    int             n;
+    uint64_t     userTicks, niceTicks, systemTicks, idleTicks;
+    uint64_t     iowTicks = 0, irqTicks = 0, sirqTicks= 0;
+    int          n;
 
     if((fh = fopen("/proc/stat", "r")) == NULL) {
         return -1;
     }
 
-    n = fscanf(fh, "cpu " DEC_64 " " DEC_64 " " DEC_64 " " DEC_64 " " DEC_64 " "
-                   DEC_64 " " DEC_64,
+    n = fscanf(fh, "cpu " UINT64_FORMAT " " UINT64_FORMAT " " UINT64_FORMAT " " UINT64_FORMAT " " UINT64_FORMAT " "
+                   UINT64_FORMAT " " UINT64_FORMAT,
            &userTicks, &niceTicks, &systemTicks, &idleTicks,
            &iowTicks, &irqTicks, &sirqTicks);
 
@@ -95,8 +95,8 @@ static int get_totalticks(int which, ticks *pticks) {
     if (which != -1) {
         int i;
         for (i = 0; i < which; i++) {
-            if (fscanf(fh, "cpu%*d " DEC_64 " " DEC_64 " " DEC_64 " " DEC_64 " "
-                            DEC_64 " " DEC_64 " " DEC_64,
+            if (fscanf(fh, "cpu%*d " UINT64_FORMAT " " UINT64_FORMAT " " UINT64_FORMAT " " UINT64_FORMAT " "
+                            UINT64_FORMAT " " UINT64_FORMAT " " UINT64_FORMAT,
                    &userTicks, &niceTicks, &systemTicks, &idleTicks,
                    &iowTicks, &irqTicks, &sirqTicks) < 4) {
                 fclose(fh);
@@ -104,8 +104,8 @@ static int get_totalticks(int which, ticks *pticks) {
             }
             next_line(fh);
         }
-        n = fscanf(fh, "cpu%*d " DEC_64 " " DEC_64 " " DEC_64 " " DEC_64 " "
-                       DEC_64 " " DEC_64 " " DEC_64 "\n",
+        n = fscanf(fh, "cpu%*d " UINT64_FORMAT " " UINT64_FORMAT " " UINT64_FORMAT " " UINT64_FORMAT " "
+                       UINT64_FORMAT " " UINT64_FORMAT " " UINT64_FORMAT "\n",
            &userTicks, &niceTicks, &systemTicks, &idleTicks,
            &iowTicks, &irqTicks, &sirqTicks);
     }
@@ -126,26 +126,26 @@ static int get_totalticks(int which, ticks *pticks) {
 static int vread_statdata(const char *procfile, const char *fmt, va_list args) {
     FILE    *f;
     int     n;
-    char     buf[2048];
+    char    buf[2048];
 
     if ((f = fopen(procfile, "r")) == NULL) {
         return -1;
     }
 
     if ((n = fread(buf, 1, sizeof(buf), f)) != -1) {
-    char *tmp;
+        char *tmp;
 
-    buf[n-1] = '\0';
-    /** skip through pid and exec name. the exec name _could be wacky_ (renamed) and
-     *  make scanf go mupp.
-     */
-    if ((tmp = strrchr(buf, ')')) != NULL) {
-        // skip the ')' and the following space but check that the buffer is long enough
-        tmp += 2;
-        if (tmp < buf + n) {
-        n = vsscanf(tmp, fmt, args);
+        buf[n-1] = '\0';
+        /** skip through pid and exec name. the exec name _could be wacky_ (renamed) and
+         *  make scanf go mupp.
+         */
+        if ((tmp = strrchr(buf, ')')) != NULL) {
+            // skip the ')' and the following space but check that the buffer is long enough
+            tmp += 2;
+            if (tmp < buf + n) {
+                n = vsscanf(tmp, fmt, args);
+            }
         }
-    }
     }
 
     fclose(f);
@@ -165,7 +165,7 @@ static int read_statdata(const char *procfile, const char *fmt, ...) {
 
 /** read user and system ticks from a named procfile, assumed to be in 'stat' format then. */
 static int read_ticks(const char *procfile, uint64_t *userTicks, uint64_t *systemTicks) {
-    return read_statdata(procfile, "%*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u "DEC_64" "DEC_64,
+    return read_statdata(procfile, "%*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u "UINT64_FORMAT" "UINT64_FORMAT,
              userTicks, systemTicks
              );
 }
@@ -197,20 +197,17 @@ static int get_jvmticks(ticks *pticks) {
  * This method must be called first, before any data can be gathererd.
  */
 int perfInit() {
-    static int initialized = 0;
+    static int initialized=1;
 
     if (!initialized) {
         int  i;
 
-        // We need to allocate counters for all CPUs, including ones that
-        // are currently offline as they could be turned online later.
-        int n = sysconf(_SC_NPROCESSORS_CONF);
+        int n = sysconf(_SC_NPROCESSORS_ONLN);
         if (n <= 0) {
             n = 1;
         }
 
-        counters.cpus = calloc(n,sizeof(ticks));
-        counters.nProcs = n;
+        counters.cpus = (ticks*)calloc(n,sizeof(ticks));
         if (counters.cpus != NULL)  {
             // For the CPU load
             get_totalticks(-1, &counters.cpuTicks);
@@ -226,9 +223,6 @@ int perfInit() {
 
     return initialized ? 0 : -1;
 }
-
-#define MAX(a,b) (a>b?a:b)
-#define MIN(a,b) (a<b?a:b)
 
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -302,65 +296,4 @@ static double get_cpuload_internal(int which, double *pkernelLoad, CpuLoadTarget
     return user_load;
 }
 
-double get_cpu_load(int which) {
-    double u, s;
-    u = get_cpuload_internal(which, &s, CPU_LOAD_GLOBAL);
-    if (u < 0) {
-        return -1.0;
-    }
-    // Cap total systemload to 1.0
-    return MIN((u + s), 1.0);
-}
-
-double get_process_load() {
-    double u, s;
-    u = get_cpuload_internal(-1, &s, CPU_LOAD_VM_ONLY);
-    if (u < 0) {
-        return -1.0;
-    }
-    return u + s;
-}
-
-JNIEXPORT jdouble JNICALL
-Java_sun_management_OperatingSystemImpl_getSystemCpuLoad0
-(JNIEnv *env, jobject dummy)
-{
-    if (perfInit() == 0) {
-        return get_cpu_load(-1);
-    } else {
-        return -1.0;
-    }
-}
-
-JNIEXPORT jdouble JNICALL
-Java_sun_management_OperatingSystemImpl_getProcessCpuLoad
-(JNIEnv *env, jobject dummy)
-{
-    if (perfInit() == 0) {
-        return get_process_load();
-    } else {
-        return -1.0;
-    }
-}
-
-JNIEXPORT jdouble JNICALL
-Java_sun_management_OperatingSystemImpl_getSingleCpuLoad0
-(JNIEnv *env, jobject mbean, jint cpu_number)
-{
-    if (perfInit() == 0 && cpu_number >= 0 && cpu_number < counters.nProcs) {
-        return get_cpu_load(cpu_number);
-    } else {
-        return -1.0;
-    }
-}
-
-JNIEXPORT jint JNICALL
-Java_sun_management_OperatingSystemImpl_getHostConfiguredCpuCount0
-(JNIEnv *env, jobject mbean)
-{
-    if (perfInit() == 0) {
-        return counters.nProcs;
-    } else {
-       return -1;
-    }
-}
+#endif

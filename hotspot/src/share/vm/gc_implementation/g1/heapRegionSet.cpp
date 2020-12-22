@@ -109,10 +109,11 @@ void FreeRegionList::fill_in_ext_msg_extra(hrs_ext_msg* msg) {
   msg->append(" hd: " PTR_FORMAT " tl: " PTR_FORMAT, _head, _tail);
 }
 
-void FreeRegionList::remove_all() {
+void FreeRegionList::remove_all(bool uncommit) {
   check_mt_safety();
   verify_optional();
 
+  G1CollectedHeap* g1h = G1CollectedHeap::heap();
   HeapRegion* curr = _head;
   while (curr != NULL) {
     verify_region(curr);
@@ -121,6 +122,11 @@ void FreeRegionList::remove_all() {
     curr->set_next(NULL);
     curr->set_prev(NULL);
     curr->set_containing_set(NULL);
+    if (uncommit) {
+      g1h->_hrm.uncommit_regions(curr->hrm_index(), 1);
+      OrderAccess::storestore();
+      curr->set_uncommit_list(false);
+    }
     curr = next;
   }
   clear();
@@ -326,6 +332,48 @@ void FreeRegionList::verify_list() {
   guarantee(length() == count, err_msg("%s count mismatch. Expected %u, actual %u.", name(), length(), count));
   guarantee(total_capacity_bytes() == capacity, err_msg("%s capacity mismatch. Expected " SIZE_FORMAT ", actual " SIZE_FORMAT,
       name(), total_capacity_bytes(), capacity));
+}
+
+uint FreeRegionList::move_regions_to(FreeRegionList* dest, uint num_regions) {
+  check_mt_safety();
+  assert(num_regions >= 1, hrs_ext_msg(this, "pre-condition"));
+  assert(num_regions < length(), hrs_ext_msg(this, "pre-condition"));
+  assert(dest != NULL && dest->is_empty(), hrs_ext_msg(dest, "pre-condition"));
+
+  verify_optional();
+  DEBUG_ONLY(uint old_length = length();)
+  HeapRegion* curr = _tail;
+  uint count = 0;
+  size_t capacity = 0;
+
+  while (count < num_regions) {
+    if (curr->hrm_index() <= InitialHeapSize / HeapRegion::GrainBytes) {
+      break;
+    }
+    if (_last == curr) {
+      _last = NULL;
+    }
+    curr->set_containing_set(NULL);
+    curr->set_containing_set(dest);
+    curr->set_uncommit_list(true);
+    count++;
+    capacity += curr->capacity();
+    curr = curr->prev();
+    assert(curr != NULL, hrs_ext_msg(this, "invariant"));
+  }
+  if (count != 0) {
+    dest->_tail = _tail;
+    dest->_head = curr->next();
+    dest->_head->set_prev(NULL);
+    dest->_count.increment(count, capacity);
+    dest->verify_optional();
+
+    _count.decrement(count, capacity);
+    _tail = curr;
+    _tail->set_next(NULL);
+    verify_optional();
+  }
+  return count;
 }
 
 // Note on the check_mt_safety() methods below:

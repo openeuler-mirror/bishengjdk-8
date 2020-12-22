@@ -67,6 +67,7 @@ class G1HeapRegionTable : public G1BiasedMappedArray<HeapRegion*> {
 
 class HeapRegionManager: public CHeapObj<mtGC> {
   friend class VMStructs;
+  friend class FreeRegionList;
 
   G1HeapRegionTable _regions;
 
@@ -78,6 +79,8 @@ class HeapRegionManager: public CHeapObj<mtGC> {
   G1RegionToSpaceMapper* _card_counts_mapper;
 
   FreeRegionList _free_list;
+  FreeRegionList _uncommit_list;
+  bool _uncommit_list_filled;
 
   // Each bit in this bitmap indicates that the corresponding region is available
   // for allocation.
@@ -123,16 +126,22 @@ class HeapRegionManager: public CHeapObj<mtGC> {
 public:
   bool is_free(HeapRegion* hr) const;
 #endif
-  // Returns whether the given region is available for allocation.
-  bool is_available(uint region) const;
+
+  // Returns whether the given region is not available and can be expanded.
+  bool can_expand(uint region) const;
 
  public:
   // Empty constructor, we'll initialize it with the initialize() method.
   HeapRegionManager() : _regions(), _heap_mapper(NULL), _num_committed(0),
                     _next_bitmap_mapper(NULL), _prev_bitmap_mapper(NULL), _bot_mapper(NULL),
                     _allocated_heapregions_length(0), _available_map(),
-                    _free_list("Free list", new MasterFreeRegionListMtSafeChecker())
+                    _free_list("Free list", new MasterFreeRegionListMtSafeChecker()),
+                    _uncommit_list("Uncommit list", NULL)
   { }
+
+  // Returns whether the given region is available for allocation.
+  // !is_available is not allowed
+  bool is_available(uint region) const;
 
   void initialize(G1RegionToSpaceMapper* heap_storage,
                   G1RegionToSpaceMapper* prev_bitmap,
@@ -140,6 +149,9 @@ public:
                   G1RegionToSpaceMapper* bot,
                   G1RegionToSpaceMapper* cardtable,
                   G1RegionToSpaceMapper* card_counts);
+
+  uint extract_uncommit_list();
+  void free_uncommit_list_memory();
 
   // Return the "dummy" region used for G1AllocRegion. This is currently a hardwired
   // new HeapRegion that owns HeapRegion at index 0. Since at the moment we commit

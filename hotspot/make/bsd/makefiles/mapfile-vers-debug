@@ -230,6 +230,10 @@
                 _JVM_SetPrimitiveArrayElement
                 _JVM_SetSockOpt
                 _JVM_SetThreadPriority
+                _JVM_AdaptiveHeapSetG1PeriodicGCInterval
+                _JVM_AdaptiveHeapGetG1PeriodicGCInterval
+                _JVM_AdaptiveHeapSetG1PeriodicGCLoadThreshold
+                _JVM_AdaptiveHeapGetG1PeriodicGCLoadThreshold
                 _JVM_Sleep
                 _JVM_Socket
                 _JVM_SocketAvailable

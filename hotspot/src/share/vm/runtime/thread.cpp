@@ -99,6 +99,7 @@
 #include "gc_implementation/shenandoah/shenandoahControlThread.hpp"
 #include "gc_implementation/concurrentMarkSweep/concurrentMarkSweepThread.hpp"
 #include "gc_implementation/g1/concurrentMarkThread.inline.hpp"
+#include "gc_implementation/g1/g1CollectedHeap.hpp"
 #include "gc_implementation/parallelScavenge/pcTasks.hpp"
 #endif // INCLUDE_ALL_GCS
 #ifdef COMPILER1
@@ -3690,6 +3691,7 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
       ShenandoahControlThread::makeSurrogateLockerThread(THREAD);
     } else {
       ConcurrentMarkThread::makeSurrogateLockerThread(THREAD);
+      G1CollectedHeap::heap()->init_periodic_gc_thread();
     }
     if (HAS_PENDING_EXCEPTION) {
       vm_exit_during_initialization(Handle(THREAD, PENDING_EXCEPTION));

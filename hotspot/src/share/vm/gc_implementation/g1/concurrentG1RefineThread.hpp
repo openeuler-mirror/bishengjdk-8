@@ -42,6 +42,8 @@ class ConcurrentG1RefineThread: public ConcurrentGCThread {
   uint _worker_id;
   uint _worker_id_offset;
 
+  double _last_periodic_gc_attempt_s;
+
   // The refinement threads collection is linked list. A predecessor can activate a successor
   // when the number of the rset update buffer crosses a certain threshold. A successor
   // would self-deactivate when the number of the buffers falls below the threshold.
@@ -67,6 +69,9 @@ class ConcurrentG1RefineThread: public ConcurrentGCThread {
   bool is_active();
   void activate();
   void deactivate();
+
+  void check_for_periodic_gc();
+  bool should_start_periodic_gc();
 
 public:
   virtual void run();

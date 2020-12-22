@@ -37,6 +37,7 @@ import javax.management.ObjectName;
 
 import com.sun.management.HotSpotDiagnosticMXBean;
 import com.sun.management.UnixOperatingSystemMXBean;
+import com.huawei.management.AdaptiveHeapMXBean;
 
 import sun.management.ManagementFactoryHelper;
 import sun.management.Util;
@@ -270,8 +271,19 @@ enum PlatformComponent {
             public List<HotSpotDiagnosticMXBean> getMXBeans() {
                 return Collections.singletonList(ManagementFactoryHelper.getDiagnosticMXBean());
             }
+        }),
+    /**
+     * ADAPTIVE Heap.
+     */
+    ADAPTIVE_HEAP(
+        "com.huawei.management.AdaptiveHeapMXBean",
+        "com.huawei.management", "AdaptiveHeap", defaultKeyProperties(),
+        true,
+        new MXBeanFetcher<AdaptiveHeapMXBean>() {
+            public List<AdaptiveHeapMXBean> getMXBeans() {
+                return Collections.singletonList(ManagementFactoryHelper.getAdaptiveHeapMXBean());
+            }
         });
-
 
     /**
      * A task that returns the MXBeans for a component.

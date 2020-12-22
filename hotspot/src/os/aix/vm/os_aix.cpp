@@ -4476,6 +4476,10 @@ bool os::is_thread_cpu_time_supported() {
   return true;
 }
 
+double os::get_process_load() {
+  return -1.0;
+}
+
 // System loadavg support. Returns -1 if load average cannot be obtained.
 // For now just return the system wide load average (no processor sets).
 int os::loadavg(double values[], int nelem) {
