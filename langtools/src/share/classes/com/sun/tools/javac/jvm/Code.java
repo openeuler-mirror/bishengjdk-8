@@ -2135,14 +2135,16 @@ public class Code {
                 // same location; updating one is enough.
                 // Use -666 as a marker that the exception_index was already updated.
                 if (p.type_index != -666) {
-                    p.exception_index = findExceptionIndex(p.type_index);
+                    p.exception_index = findExceptionIndex(p);
                     p.type_index = -666;
                 }
             }
         }
     }
 
-    private int findExceptionIndex(int catchType) {
+    private int findExceptionIndex(TypeAnnotationPosition p) {
+        final int catchType = p.getCatchType();
+        final int startPos = p.getStartPos();
         if (catchType == Integer.MIN_VALUE) {
             // We didn't set the catch type index correctly.
             // This shouldn't happen.
@@ -2154,8 +2156,9 @@ public class Code {
         for (int i = 0; i < len; ++i) {
             char[] catchEntry = iter.head;
             iter = iter.tail;
-            char ct = catchEntry[3];
-            if (catchType == ct) {
+            int ct = catchEntry[3];
+            int sp = catchEntry[0];
+            if (catchType == ct && sp == startPos) {
                 return i;
             }
         }
