@@ -297,6 +297,29 @@ public class TypeAnnotationPosition {
         isValidOffset = true;
     }
 
+    public boolean hasCatchType() {
+        return exception_index < 0 && exception_index != Integer.MIN_VALUE;
+    }
+
+    public int getCatchType() {
+        Assert.check(hasCatchType(),
+            "exception_index does not contain valid catch info");
+        return ((-this.exception_index) - 1) & 0xff ;
+    }
+
+    public int getStartPos() {
+        Assert.check(hasCatchType(),
+            "exception_index does not contain valid catch info");
+        return ((-this.exception_index) - 1) >> 8;
+    }
+
+    public void setCatchInfo(final int catchType, final int startPos) {
+        Assert.check(this.exception_index < 0,
+            "exception_index already contains a bytecode index");
+        Assert.check(catchType >= 0, "Expected a valid catch type");
+        this.exception_index = -((catchType | startPos << 8) + 1);
+    }
+
     /**
      * Decode the binary representation for a type path and set
      * the {@code location} field.
