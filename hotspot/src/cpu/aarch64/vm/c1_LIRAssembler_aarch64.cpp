@@ -207,6 +207,7 @@ Address LIR_Assembler::as_Address(LIR_Address* addr, Register tmp) {
       return Address(base, tmp, Address::lsl(addr->scale()));
     }
   }
+  return Address();
 }
 
 Address LIR_Assembler::as_Address_hi(LIR_Address* addr) {

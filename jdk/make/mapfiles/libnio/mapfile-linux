@@ -203,7 +203,6 @@ SUNWprivate_1.1 {
 		Java_sun_nio_fs_UnixNativeDispatcher_getpwnam0;
 		Java_sun_nio_fs_UnixNativeDispatcher_getgrnam0;
 		Java_sun_nio_fs_UnixCopyFile_transfer;
-        Java_sun_nio_fs_UnixConstants_init;
 		handleSocketError;
 
 	local:

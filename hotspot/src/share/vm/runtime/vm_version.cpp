@@ -142,7 +142,7 @@ const char* Abstract_VM_Version::vm_name() {
 
 
 const char* Abstract_VM_Version::vm_vendor() {
-  return "openEuler Community";
+  return "Huawei Technologies Co., Ltd";
 }
 
 

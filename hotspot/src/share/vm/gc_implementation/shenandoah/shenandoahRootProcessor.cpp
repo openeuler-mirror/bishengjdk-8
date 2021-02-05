@@ -304,7 +304,7 @@ void ShenandoahRootUpdater::roots_do(uint worker_id, BoolObjectClosure* is_alive
 
   _serial_roots.oops_do(keep_alive, worker_id);
   _dict_roots.oops_do(keep_alive, worker_id);
-  _thread_roots.oops_do(keep_alive, &clds, &update_blobs, worker_id);
+  _thread_roots.oops_do(keep_alive, &clds, _update_code_cache ? NULL : &update_blobs, worker_id);
   _cld_roots.cld_do(&clds, worker_id);
 
   if(_update_code_cache) {
