@@ -450,7 +450,9 @@ HeapRegion::object_iterate_mem_careful(MemRegion mr,
 }
 
 bool HeapRegion::oops_on_card_seq_iterate_careful(MemRegion mr,
-                                                  FilterOutOfRegionClosure* cl) {
+                                                  FilterOutOfRegionClosure* cl,
+                                                  jbyte* card_ptr) {
+  assert(card_ptr != NULL, "pre-condition");
   assert(MemRegion(bottom(), end()).contains(mr), "Card region not in heap region");
   G1CollectedHeap* g1h = G1CollectedHeap::heap();
 
@@ -460,10 +462,11 @@ bool HeapRegion::oops_on_card_seq_iterate_careful(MemRegion mr,
   }
   assert(is_old(), "precondition");
 
-  // Because mr has been trimmed to what's been allocated in this
-  // region, the parts of the heap that are examined here are always
-  // parsable; there's no need to use klass_or_null to detect
-  // in-progress allocation.
+  // We can only clean the card here, after we make the decision that
+  // the card is not young.
+  *card_ptr = CardTableModRefBS::clean_card_val();
+  // We must complete this write before we do any of the reads below.
+  OrderAccess::storeload();
 
   // Cache the boundaries of the memory region in some const locals
   HeapWord* const start = mr.start();
@@ -473,22 +476,21 @@ bool HeapRegion::oops_on_card_seq_iterate_careful(MemRegion mr,
   // Update BOT as needed while finding start of (possibly dead)
   // object containing the start of the region.
   HeapWord* cur = block_start(start);
-
 #ifdef ASSERT
   {
     assert(cur <= start,
-           "cur: " PTR_FORMAT ", start: " PTR_FORMAT);
+           err_msg("cur: " PTR_FORMAT ", start: " PTR_FORMAT, p2i(cur), p2i(start)));
     HeapWord* next = cur + block_size(cur);
     assert(start < next,
-           "start: " PTR_FORMAT ", next: " PTR_FORMAT);
+           err_msg("start: " PTR_FORMAT ", next: " PTR_FORMAT, p2i(start), p2i(next)));
   }
 #endif
 
   do {
     oop obj = oop(cur);
-    assert(obj->is_oop(true), "Not an oop at " PTR_FORMAT);
+    assert(obj->is_oop(true), err_msg("Not an oop at " PTR_FORMAT, p2i(obj)));
     assert(obj->klass_or_null() != NULL,
-           "Unparsable heap at " PTR_FORMAT);
+           err_msg("Unparsable heap at " PTR_FORMAT, p2i(obj)));
 
     if (g1h->is_obj_dead(obj, this)) {
       // Carefully step over dead object.
@@ -500,6 +502,7 @@ bool HeapRegion::oops_on_card_seq_iterate_careful(MemRegion mr,
       // start, in which case we need to iterate over them in full.
       // objArrays are precisely marked, but can still be iterated
       // over in full if completely covered.
+
       if (!obj->is_objArray() || (((HeapWord*)obj) >= start && cur <= end)) {
         obj->oop_iterate(cl);
       } else {

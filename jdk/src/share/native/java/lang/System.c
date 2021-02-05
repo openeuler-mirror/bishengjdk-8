@@ -110,13 +110,13 @@ Java_java_lang_System_identityHashCode(JNIEnv *env, jobject this, jobject x)
 
 /* Third party may overwrite these values. */
 #ifndef VENDOR
-#define VENDOR "openEuler Community"
+#define VENDOR "Huawei Technologies Co., Ltd"
 #endif
 #ifndef VENDOR_URL
-#define VENDOR_URL "https://gitee.com/src-openeuler/openjdk-1.8.0/"
+#define VENDOR_URL "http://jdk.rnd.huawei.com/"
 #endif
 #ifndef VENDOR_URL_BUG
-#define VENDOR_URL_BUG "https://gitee.com/src-openeuler/openjdk-1.8.0/issues"
+#define VENDOR_URL_BUG "http://jdk.rnd.huawei.com/"
 #endif
 
 #define JAVA_MAX_SUPPORTED_VERSION 52

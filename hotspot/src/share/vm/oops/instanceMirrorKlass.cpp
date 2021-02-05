@@ -363,13 +363,12 @@ instanceOop InstanceMirrorKlass::allocate_instance(KlassHandle k, TRAPS) {
   // Query before forming handle.
   int size = instance_size(k);
   KlassHandle h_k(THREAD, this);
-  instanceOop i = (instanceOop)CollectedHeap::obj_allocate(h_k, size, CHECK_NULL);
+
+  assert(size > 0, "total object size must be positive");
 
   // Since mirrors can be variable sized because of the static fields, store
   // the size in the mirror itself.
-  java_lang_Class::set_oop_size(i, size);
-
-  return i;
+  return (instanceOop)CollectedHeap::class_allocate(h_k, size, CHECK_NULL);
 }
 
 int InstanceMirrorKlass::oop_size(oop obj) const {

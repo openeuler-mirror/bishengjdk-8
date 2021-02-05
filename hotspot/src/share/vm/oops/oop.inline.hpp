@@ -547,14 +547,18 @@ inline int oopDesc::size_given_klass(Klass* klass)  {
     }
   }
 
-  assert(s % MinObjAlignment == 0, "alignment check");
-  assert(s > 0, "Bad size calculated");
+  assert(s % MinObjAlignment == 0, "Oop size is not properly aligned");
+  assert(s > 0, "Oop size must be greater than zero");
   return s;
 }
 
 
 inline int oopDesc::size()  {
   return size_given_klass(klass());
+}
+
+inline int oopDesc::acquire_size()  {
+  return size_given_klass(klass_or_null_acquire());
 }
 
 inline void update_barrier_set(void* p, oop v, bool release = false) {

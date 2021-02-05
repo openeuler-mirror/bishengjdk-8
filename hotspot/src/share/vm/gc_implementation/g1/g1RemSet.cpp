@@ -609,15 +609,29 @@ bool G1RemSet::refine_card(jbyte* card_ptr, uint worker_i,
                                 (OopClosure*)&mux :
                                 (OopClosure*)&update_rs_oop_cl));
 
+  // The region for the current card may be a young region. The
+  // current card may have been a card that was evicted from the
+  // card cache. When the card was inserted into the cache, we had
+  // determined that its region was non-young. While in the cache,
+  // the region may have been freed during a cleanup pause, reallocated
+  // and tagged as young.
+  //
+  // We wish to filter out cards for such a region but the current
+  // thread, if we're running concurrently, may "see" the young type
+  // change at any time (so an earlier "is_young" check may pass or
+  // fail arbitrarily). We tell the iteration code to perform this
+  // filtering when it has been determined that there has been an actual
+  // allocation in this region and making it safe to check the young type.
+
   bool card_processed =
     r->oops_on_card_seq_iterate_careful(dirty_region,
-                                        &filter_then_update_rs_oop_cl);
+                                        &filter_then_update_rs_oop_cl,
+                                        card_ptr);
 
   // If unable to process the card then we encountered an unparsable
-  // part of the heap (e.g. a partially allocated object) while
-  // processing a stale card.  Despite the card being stale, redirty
-  // and re-enqueue, because we've already cleaned the card.  Without
-  // this we could incorrectly discard a non-stale card.
+  // part of the heap (e.g. a partially allocated object).  Redirty
+  // and re-enqueue: if we put off the card until a GC pause, then the
+  // allocation will have completed.
   if (!card_processed) {
     assert(!_g1->is_gc_active(), "Unparsable heap during GC");
     // The card might have gotten re-dirtied and re-enqueued while we

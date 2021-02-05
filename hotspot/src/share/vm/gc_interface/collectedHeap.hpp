@@ -157,6 +157,8 @@ class CollectedHeap : public CHeapObj<mtInternal> {
   inline static void post_allocation_setup_array(KlassHandle klass,
                                                  HeapWord* obj, int length);
 
+  static void post_allocation_setup_class(KlassHandle klass, HeapWord* obj, int size);
+
   // Clears an allocated object.
   inline static void init_obj(HeapWord* obj, size_t size);
 
@@ -321,6 +323,7 @@ class CollectedHeap : public CHeapObj<mtInternal> {
   inline static oop obj_allocate(KlassHandle klass, int size, TRAPS);
   inline static oop array_allocate(KlassHandle klass, int size, int length, TRAPS);
   inline static oop array_allocate_nozero(KlassHandle klass, int size, int length, TRAPS);
+  inline static oop class_allocate(KlassHandle klass, int size, TRAPS);
 
   // Raw memory allocation facilities
   // The obj and array allocate methods are covers for these methods.

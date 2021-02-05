@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001, 2014, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2001, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -286,8 +286,6 @@ HeapWord* CollectedHeap::allocate_from_tlab_slow(KlassHandle klass, Thread* thre
     return NULL;
   }
 
-  AllocTracer::send_allocation_in_new_tlab_event(klass, obj, new_tlab_size * HeapWordSize, size * HeapWordSize, Thread::current());
-
   if (ZeroTLAB) {
     // ..and clear it.
     Copy::zero_to_words(obj, new_tlab_size);
@@ -303,6 +301,22 @@ HeapWord* CollectedHeap::allocate_from_tlab_slow(KlassHandle klass, Thread* thre
   }
   thread->tlab().fill(obj, obj + size, new_tlab_size);
   return obj;
+}
+
+void CollectedHeap::post_allocation_setup_class(KlassHandle klass,
+                                                HeapWord* obj_ptr,
+                                                int size) {
+  // Set oop_size field before setting the _klass field because a
+  // non-NULL _klass field indicates that the object is parsable by
+  // concurrent GC.
+  oop new_cls = (oop)obj_ptr;
+  assert(size > 0, "oop_size must be positive.");
+  java_lang_Class::set_oop_size(new_cls, size);
+  post_allocation_setup_common(klass, obj_ptr);
+  assert(Universe::is_bootstrapping() ||
+         !new_cls->is_array(), "must not be an array");
+  // notify jvmti and dtrace
+  post_allocation_notify(klass, new_cls, size);
 }
 
 void CollectedHeap::flush_deferred_store_barrier(JavaThread* thread) {

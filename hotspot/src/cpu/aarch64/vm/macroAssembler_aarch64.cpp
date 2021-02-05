@@ -1209,6 +1209,11 @@ void MacroAssembler::check_klass_subtype_slow_path(Register sub_klass,
     mov(r0, super_klass);
   }
 
+  // Get super_klass value into r0 (even if it was in r5 or r2)
+  if (super_klass != r0) {
+    mov(r0, super_klass);
+  }
+
 #ifndef PRODUCT
   mov(rscratch2, (address)&SharedRuntime::_partial_subtype_ctr);
   Address pst_counter_addr(rscratch2);

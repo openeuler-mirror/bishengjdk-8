@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001, 2016, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2001, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -113,9 +113,6 @@ protected:
   // Internal type for indexing the queue; also used for the tag.
   typedef NOT_LP64(uint16_t) LP64_ONLY(uint32_t) idx_t;
 
-  // The first free element after the last one pushed (mod N).
-  volatile uint _bottom;
-
   enum { MOD_N_MASK = N - 1 };
 
   class Age {
@@ -155,6 +152,10 @@ protected:
     };
   };
 
+  // The first free element after the last one pushed (mod N).
+  volatile uint _bottom;
+  // Add paddings to reduce false-sharing cache contention between _bottom and _age
+  DEFINE_PAD_MINUS_SIZE(0, DEFAULT_CACHE_LINE_SIZE, sizeof(uint));
   volatile Age _age;
 
   // These both operate mod N.
@@ -606,10 +607,10 @@ GenericTaskQueueSet<T, F>::steal(uint queue_num, E& t) {
 template<class T, MEMFLAGS F> bool
 GenericTaskQueueSet<T, F>::steal_best_of_2(uint queue_num, E& t) {
   if (_n > 2) {
-    T* const local_queue = _queues[queue_num];
+	T* const local_queue = _queues[queue_num];
     uint k1 = queue_num;
 
-    if (local_queue->is_last_stolen_queue_id_valid()) {
+	if (local_queue->is_last_stolen_queue_id_valid()) {
       k1 = local_queue->last_stolen_queue_id();
       assert(k1 != queue_num, "Should not be the same");
     } else {
@@ -619,14 +620,14 @@ GenericTaskQueueSet<T, F>::steal_best_of_2(uint queue_num, E& t) {
     }
 
     uint k2 = queue_num;
-    while (k2 == queue_num || k2 == k1) {
-      k2 = local_queue->next_random_queue_id() % _n;
-    }
+	while (k2 == queue_num || k2 == k1) {
+	  k2 = local_queue->next_random_queue_id() % _n;
+	}
     // Sample both and try the larger.
     uint sz1 = _queues[k1]->size();
     uint sz2 = _queues[k2]->size();
 
-    uint sel_k = 0;
+	uint sel_k = 0;
     bool suc = false;
 
     if (sz2 > sz1) {
@@ -689,7 +690,7 @@ protected:
   int _n_threads;
   TaskQueueSetSuper* _queue_set;
   char _pad_before[DEFAULT_CACHE_LINE_SIZE];
-  int _offered_termination;
+  volatile int _offered_termination;
   char _pad_after[DEFAULT_CACHE_LINE_SIZE];
 
 #ifdef TRACESPINNING
@@ -703,11 +704,19 @@ protected:
   virtual void yield();
   void sleep(uint millis);
 
+  // Called when exiting termination is requested.
+  // When the request is made, terminator may have already terminated
+  // (e.g. all threads are arrived and offered termination). In this case,
+  // it should ignore the request and complete the termination.
+  // Return true if termination is completed. Otherwise, return false.
+  bool complete_or_exit_termination();
+
 public:
 
   // "n_threads" is the number of threads to be terminated.  "queue_set" is a
   // queue sets of work queues of other threads.
   ParallelTaskTerminator(int n_threads, TaskQueueSetSuper* queue_set);
+  virtual ~ParallelTaskTerminator();
 
   // The current thread has no work, and is ready to terminate if everyone
   // else is.  If returns "true", all threads are terminated.  If returns

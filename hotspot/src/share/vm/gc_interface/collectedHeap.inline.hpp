@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001, 2014, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2001, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -65,8 +65,22 @@ void CollectedHeap::post_allocation_setup_no_klass_install(KlassHandle klass,
   }
 }
 
-// Support for jvmti and dtrace
+inline void send_jfr_allocation_event(KlassHandle klass, HeapWord* obj, size_t size) {
+  Thread* t = Thread::current();
+  ThreadLocalAllocBuffer& tlab = t->tlab();
+  if (obj == tlab.start()) {
+    // allocate in new TLAB
+    size_t new_tlab_size = tlab.hard_size_bytes();
+    AllocTracer::send_allocation_in_new_tlab_event(klass, obj, new_tlab_size, size * HeapWordSize, t);
+  } else if (!tlab.in_used(obj)) {
+    // allocate outside TLAB
+    AllocTracer::send_allocation_outside_tlab_event(klass, obj, size * HeapWordSize, t);
+  }
+}
+
+// Support for jvmti, dtrace and jfr
 inline void post_allocation_notify(KlassHandle klass, oop obj, int size) {
+  send_jfr_allocation_event(klass, (HeapWord*)obj, size);
   // support low memory notifications (no-op if not enabled)
   LowMemoryDetector::detect_low_memory_for_collected_pools();
 
@@ -137,8 +151,6 @@ HeapWord* CollectedHeap::common_mem_allocate_noinit(KlassHandle klass, size_t si
            "Unexpected exception, will result in uninitialized storage");
     THREAD->incr_allocated_bytes(size * HeapWordSize);
 
-    AllocTracer::send_allocation_outside_tlab_event(klass, result, size * HeapWordSize, Thread::current());
-
     return result;
   }
 
@@ -199,6 +211,18 @@ oop CollectedHeap::obj_allocate(KlassHandle klass, int size, TRAPS) {
   assert(size >= 0, "int won't convert to size_t");
   HeapWord* obj = common_mem_allocate_init(klass, size, CHECK_NULL);
   post_allocation_setup_obj(klass, obj, size);
+  NOT_PRODUCT(Universe::heap()->check_for_bad_heap_word_value(obj, size));
+  return (oop)obj;
+}
+
+// Instances of j.l.Class have an oop_size field that must be set before the 
+// the header is set in order to parse the instances's size correctly.
+oop CollectedHeap::class_allocate(KlassHandle klass, int size, TRAPS) {
+  debug_only(check_for_valid_allocation_state());
+  assert(!Universe::heap()->is_gc_active(), "Allocation during gc not allowed");
+  assert(size >= 0, "int won't convert to size_t");
+  HeapWord* obj = common_mem_allocate_init(klass, size, CHECK_NULL);
+  post_allocation_setup_class(klass, obj, size); // set oop_size
   NOT_PRODUCT(Universe::heap()->check_for_bad_heap_word_value(obj, size));
   return (oop)obj;
 }
