@@ -845,6 +845,7 @@ JDK_MINOR_VERSION
 JDK_MAJOR_VERSION
 USER_RELEASE_SUFFIX
 ENABLE_JFR
+ENABLE_KAE
 COMPRESS_JARS
 UNLIMITED_CRYPTO
 CACERTS_FILE
@@ -1060,6 +1061,7 @@ enable_hotspot_test_in_build
 with_cacerts_file
 enable_unlimited_crypto
 enable_jfr
+enable_kae
 with_milestone
 with_update_version
 with_user_release_suffix
@@ -1847,6 +1849,7 @@ Optional Features:
   --enable-unlimited-crypto
                           Enable unlimited crypto policy [disabled]
   --disable-jfr           Disable Java Flight Recorder support [enabled]
+  --disable-kae           Disable KAE support on aarch64 [enabled]
   --disable-debug-symbols disable generation of debug symbols [enabled]
   --disable-zip-debug-info
                           disable zipping of debug-info files [enabled]
@@ -19843,6 +19846,31 @@ fi
 $as_echo "$ENABLE_JFR" >&6; }
 
 
+  ###############################################################################
+  #
+  # Enable or disable KAE
+  #
+  # Check whether --enable-kae was given.
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to build KAE" >&5
+$as_echo_n "checking whether to build KAE... " >&6; }
+if test "${enable_kae+set}" = set; then :
+  enableval=$enable_kae; enable_kae="${enableval}"
+else
+  #default enable on aarch64
+  if test "x$OPENJDK_TARGET_CPU" = xaarch64; then
+    enable_kae="yes"
+  else
+    enable_kae="no"
+  fi
+fi
+
+  if test "x$enable_kae" = "xyes"; then
+    ENABLE_KAE=true
+  elif test "x$enable_kae" = "xno"; then
+    ENABLE_KAE=false
+  fi
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ENABLE_KAE" >&5
+$as_echo "$ENABLE_KAE" >&6; }
 
   # Source the version numbers
   . $AUTOCONF_DIR/version-numbers

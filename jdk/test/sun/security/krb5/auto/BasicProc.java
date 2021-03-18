@@ -297,7 +297,9 @@ public class BasicProc {
         Proc p = Proc.create("BasicProc")
                 .prop("java.security.manager", "")
                 .prop("sun.net.spi.nameservice.provider.1", "ns,mock")
-                .perm(new javax.security.auth.AuthPermission("doAs"));
+                .perm(new javax.security.auth.AuthPermission("doAs"))
+                .perm(new java.util.PropertyPermission(
+                            "kae.disableKaeDispose", "read"));
         if (lib != null) {
             p.env("KRB5_CONFIG", CONF)
                     .env("KRB5_TRACE", "/dev/stderr")

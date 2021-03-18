@@ -168,6 +168,7 @@ RT_JAR_EXCLUDES += \
     META-INF/services/com.sun.tools.attach.spi.AttachProvider \
     META-INF/services/com.sun.tools.xjc.Plugin \
     META-INF/services/sun.net.spi.nameservice.NameServiceDescriptor \
+    org/openeuler/security \
     org/relaxng/datatype \
     sun/awt/HKSCS.class \
     sun/awt/motif/X11GB2312.class \

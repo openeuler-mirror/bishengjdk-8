@@ -34,6 +34,7 @@ grant {
     //permission "java.io.FilePermission" "/tmp/-", "read,write";
     permission "java.lang.RuntimePermission" "modifyThread";
     permission "java.lang.RuntimePermission" "setFactory";
+    permission "java.util.PropertyPermission" "kae.disableKaeDispose", "read";
 };
 
 grant codeBase "file:${{java.ext.dirs}}/*" {

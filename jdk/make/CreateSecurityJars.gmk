@@ -371,6 +371,35 @@ ifeq ($(OPENJDK_TARGET_OS), solaris)
 
   endif
 endif
+##########################################################################################
+
+ifeq ($(ENABLE_KAE), true)
+  ifeq ($(OPENJDK_TARGET_CPU_ARCH), aarch64)
+    KAE_JAR_DST := $(JDK_OUTPUTDIR)/lib/ext/kae_openssl.jar
+    KAE_JAR_UNSIGNED := $(JDK_OUTPUTDIR)/jce/unsigned/kae_openssl.jar
+
+  $(eval $(call SetupArchive,BUILD_OPENSSL_JAR, , \
+        SRCS := $(JDK_OUTPUTDIR)/classes_kae, \
+        SUFFIXES := .class, \
+        INCLUDES := org/openeuler/security/openssl, \
+        JAR := $(KAE_JAR_UNSIGNED), \
+        MANIFEST := $(JCE_MANIFEST), \
+        SKIP_METAINF := true))
+  $(KAE_JAR_UNSIGNED): $(JCE_MANIFEST)
+  ifndef OPENJDK
+    KAE_JAR_SRC := $(JDK_TOPDIR)/make/closed/tools/crypto/openssl/kae_openssl.jar
+    $(KAE_JAR_DST): $(KAE_JAR_SRC)
+	@$(ECHO) $(LOG_INFO) Copying prebuilt $(@F)
+	$(install-file)
+  else
+    $(KAE_JAR_DST): $(KAE_JAR_UNSIGNED)
+	$(install-file)
+  endif
+
+  TARGETS += $(KAE_JAR_UNSIGNED) $(KAE_JAR_DST)
+
+  endif
+endif
 
 all: $(TARGETS)
 
