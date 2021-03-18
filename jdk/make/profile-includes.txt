@@ -195,6 +195,12 @@ PROFILE_1_JRE_LIB_FILES += \
     security/trusted.libraries \
     tzdb.dat
 
+ifeq ($(ENABLE_KAE), true)
+  ifeq ($(OPENJDK_TARGET_CPU_ARCH), aarch64)
+      PROFILE_1_JRE_LIB_FILES += ext/kae_openssl.jar
+  endif
+endif
+
 ifeq ($(OPENJDK_TARGET_OS), windows)
     PROFILE_1_JRE_LIB_FILES += tzmappings
 else
@@ -224,6 +230,12 @@ PROFILE_1_JRE_JAR_FILES := \
     security/policy/unlimited/US_export_policy.jar \
     security/policy/limited/local_policy.jar \
     security/policy/unlimited/local_policy.jar
+
+ifeq ($(ENABLE_KAE), true)
+  ifeq ($(OPENJDK_TARGET_CPU_ARCH), aarch64)
+      PROFILE_1_JRE_JAR_FILES += ext/kae_openssl.jar
+  endif
+endif
 
 
 PROFILE_2_JRE_BIN_FILES := \

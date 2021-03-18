@@ -461,6 +461,20 @@ AC_DEFUN_ONCE([JDKOPT_SETUP_JDK_OPTIONS],
   fi
   AC_MSG_RESULT([$ENABLE_JFR])
   AC_SUBST(ENABLE_JFR)
+
+  ###############################################################################
+  #
+  # Enable or disable kae
+  #
+  AC_ARG_ENABLE(kae, [AS_HELP_STRING([--disable-kae],
+      [disable KAE @<:@disabled@:>@])],,
+      [enable_kae=no])
+  if test "x$enable_kae" = "xyes"; then
+    ENABLE_KAE=true
+  else
+    ENABLE_KAE=false
+  fi
+  AC_SUBST(ENABLE_KAE)
 ])
 
 ###############################################################################
