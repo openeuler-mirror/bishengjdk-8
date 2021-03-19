@@ -192,6 +192,8 @@ public:
 
   void gc_threads_do(ThreadClosure* tcl) const;
 
+  virtual void run_task(AbstractGangTask* task);
+
 // ---------- Heap regions handling machinery
 //
 private:

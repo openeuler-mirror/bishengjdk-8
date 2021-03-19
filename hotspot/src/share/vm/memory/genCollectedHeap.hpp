@@ -120,6 +120,7 @@ public:
 
   // Returns JNI_OK on success
   virtual jint initialize();
+
   char* allocate(size_t alignment,
                  size_t* _total_reserved, int* _n_covered_regions,
                  ReservedSpace* heap_rs);
@@ -229,7 +230,7 @@ public:
   // may not pack objects densely; a chunk may either be an object or a
   // non-object.
   virtual HeapWord* block_start(const void* addr) const;
-
+  virtual void run_task(AbstractGangTask* task);
   // Requires "addr" to be the start of a chunk, and returns its size.
   // "addr + size" is required to be the start of a new chunk, or the end
   // of the active area of the heap. Assumes (and verifies in non-product
