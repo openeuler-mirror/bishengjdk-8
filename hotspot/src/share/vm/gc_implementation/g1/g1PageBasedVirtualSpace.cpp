@@ -211,12 +211,12 @@ bool G1PageBasedVirtualSpace::commit(size_t start_page, size_t size_in_pages) {
     // Check for dirty pages and update zero_filled if any found.
     if (_dirty.get_next_one_offset(start_page, end_page) < end_page) {
       zero_filled = false;
-      _dirty.clear_range(start_page, end_page);
+      _dirty.par_clear_range(start_page, end_page, BitMap::unknown_range);
     }
   } else {
     commit_internal(start_page, end_page);
   }
-  _committed.set_range(start_page, end_page);
+  _committed.par_set_range(start_page, end_page, BitMap::unknown_range);
 
   if (AlwaysPreTouch) {
     pretouch_internal(start_page, end_page);
@@ -239,12 +239,12 @@ void G1PageBasedVirtualSpace::uncommit(size_t start_page, size_t size_in_pages) 
   if (_special) {
     // Mark that memory is dirty. If committed again the memory might
     // need to be cleared explicitly.
-    _dirty.set_range(start_page, end_page);
+    _dirty.par_set_range(start_page, end_page, BitMap::unknown_range);
   } else {
     uncommit_internal(start_page, end_page);
   }
 
-  _committed.clear_range(start_page, end_page);
+  _committed.par_clear_range(start_page, end_page, BitMap::unknown_range);
 }
 
 bool G1PageBasedVirtualSpace::contains(const void* p) const {

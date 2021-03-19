@@ -31,9 +31,10 @@ package java.io;
  * way. An application uses a data output stream to write data that
  * can later be read by a data input stream.
  * <p>
- * DataInputStream is not necessarily safe for multithreaded access.
- * Thread safety is optional and is the responsibility of users of
- * methods in this class.
+ * A DataInputStream is not safe for use by multiple concurrent
+ * threads. If a DataInputStream is to be used by more than one
+ * thread then access to the data input stream should be controlled
+ * by appropriate synchronization.
  *
  * @author  Arthur van Hoff
  * @see     java.io.DataOutputStream

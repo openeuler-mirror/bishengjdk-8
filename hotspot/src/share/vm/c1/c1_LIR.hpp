@@ -200,14 +200,14 @@ class LIR_Const: public LIR_OprPtr {
 class LIR_OprDesc: public CompilationResourceObj {
  public:
   // value structure:
-  //     data       opr-type opr-kind
-  // +--------------+-------+-------+
-  // [max...........|7 6 5 4|3 2 1 0]
-  //                             ^
-  //                    is_pointer bit
+  //     data      opr-type  opr-kind
+  // +-----------+----------+-------+
+  // [max........|6  5  4  3|2  1  0]
+  //                               ^
+  //                   is_pointer bit
   //
   // lowest bit cleared, means it is a structure pointer
-  // we need  4 bits to represent types
+  // we need 4 bits to represent types
 
  private:
   friend class LIR_OprFact;

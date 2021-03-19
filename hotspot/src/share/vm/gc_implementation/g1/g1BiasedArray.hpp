@@ -109,6 +109,11 @@ public:
     return this->base()[index];
   }
 
+  T* get_address_by_index(idx_t index) const {
+    verify_index(index);
+    return this->base() + index;
+  }
+
   // Set the element of the given array at the given index to the
   // given value. Assume the index is valid. This is a convenience
   // method that does sanity checking on the index.

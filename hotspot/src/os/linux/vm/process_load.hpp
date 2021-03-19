@@ -197,7 +197,7 @@ static int get_jvmticks(ticks *pticks) {
  * This method must be called first, before any data can be gathererd.
  */
 int perfInit() {
-    static int initialized=1;
+    static int initialized = 0;
 
     if (!initialized) {
         int  i;
