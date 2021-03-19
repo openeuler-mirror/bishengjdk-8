@@ -26,6 +26,8 @@
 #include "gc_implementation/g1/g1BiasedArray.hpp"
 #include "gc_implementation/g1/g1RegionToSpaceMapper.hpp"
 #include "memory/allocation.inline.hpp"
+#include "runtime/mutex.hpp"
+#include "runtime/mutexLocker.hpp"
 #include "runtime/virtualspace.hpp"
 #include "services/memTracker.hpp"
 #include "utilities/bitMap.inline.hpp"
@@ -68,13 +70,13 @@ class G1RegionsLargerThanCommitSizeMapper : public G1RegionToSpaceMapper {
 
   virtual void commit_regions(uint start_idx, size_t num_regions) {
     bool zero_filled = _storage.commit((size_t)start_idx * _pages_per_region, num_regions * _pages_per_region);
-    _commit_map.set_range(start_idx, start_idx + num_regions);
+    _commit_map.par_set_range(start_idx, start_idx + num_regions, BitMap::unknown_range);
     fire_on_commit(start_idx, num_regions, zero_filled);
   }
 
   virtual void uncommit_regions(uint start_idx, size_t num_regions) {
     _storage.uncommit((size_t)start_idx * _pages_per_region, num_regions * _pages_per_region);
-    _commit_map.clear_range(start_idx, start_idx + num_regions);
+    _commit_map.par_clear_range(start_idx, start_idx + num_regions, BitMap::unknown_range);
   }
 };
 
@@ -89,7 +91,7 @@ class G1RegionsSmallerThanCommitSizeMapper : public G1RegionToSpaceMapper {
   };
 
   size_t _regions_per_page;
-
+  Mutex _par_lock;
   CommitRefcountArray _refcounts;
 
   uintptr_t region_idx_to_page_idx(uint region) const {
@@ -104,6 +106,7 @@ class G1RegionsSmallerThanCommitSizeMapper : public G1RegionToSpaceMapper {
                                        size_t commit_factor,
                                        MemoryType type) :
     G1RegionToSpaceMapper(rs, actual_size, page_size, alloc_granularity, type),
+    _par_lock(Mutex::leaf, "G1RegionsSmallerThanCommitSizeMapper par lock"),
     _regions_per_page((page_size * commit_factor) / alloc_granularity), _refcounts() {
 
     guarantee((page_size * commit_factor) >= alloc_granularity, "allocation granularity smaller than commit granularity");
@@ -113,6 +116,7 @@ class G1RegionsSmallerThanCommitSizeMapper : public G1RegionToSpaceMapper {
 
   virtual void commit_regions(uint start_idx, size_t num_regions) {
     for (uint i = start_idx; i < start_idx + num_regions; i++) {
+      MutexLockerEx x(&_par_lock);
       assert(!_commit_map.at(i), err_msg("Trying to commit storage at region %u that is already committed", i));
       size_t idx = region_idx_to_page_idx(i);
       uint old_refcount = _refcounts.get_by_index(idx);
@@ -128,6 +132,7 @@ class G1RegionsSmallerThanCommitSizeMapper : public G1RegionToSpaceMapper {
 
   virtual void uncommit_regions(uint start_idx, size_t num_regions) {
     for (uint i = start_idx; i < start_idx + num_regions; i++) {
+      MutexLockerEx x(&_par_lock);
       assert(_commit_map.at(i), err_msg("Trying to uncommit storage at region %u that is not committed", i));
       size_t idx = region_idx_to_page_idx(i);
       uint old_refcount = _refcounts.get_by_index(idx);

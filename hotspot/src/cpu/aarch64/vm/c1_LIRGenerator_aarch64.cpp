@@ -965,7 +965,6 @@ void LIRGenerator::do_update_CRC32(Intrinsic* x) {
   assert(UseCRC32Intrinsics, "why are we here?");
   // Make all state_for calls early since they can emit code
   LIR_Opr result = rlock_result(x);
-  int flags = 0;
   switch (x->id()) {
     case vmIntrinsics::_updateCRC32: {
       LIRItem crc(x->argument_at(0), this);
@@ -992,7 +991,7 @@ void LIRGenerator::do_update_CRC32(Intrinsic* x) {
       int offset = is_updateBytes ? arrayOopDesc::base_offset_in_bytes(T_BYTE) : 0;
       if(off.result()->is_constant()) {
         index = LIR_OprFact::illegalOpr;
-       offset += off.result()->as_jint();
+        offset += off.result()->as_jint();
       }
       LIR_Opr base_op = buf.result();
 

@@ -921,8 +921,12 @@ void G1CollectorPolicy::record_concurrent_pause() {
   }
 }
 
+bool G1CollectorPolicy::about_to_start_mixed_phase() const {
+  return _g1->concurrent_mark()->cmThread()->during_cycle() || _last_young_gc;
+}
+
 bool G1CollectorPolicy::need_to_start_conc_mark(const char* source, size_t alloc_word_size) {
-  if (_g1->concurrent_mark()->cmThread()->during_cycle()) {
+  if (about_to_start_mixed_phase()) {
     return false;
   }
 
@@ -1068,16 +1072,10 @@ void G1CollectorPolicy::record_collection_pause_end(double pause_time_ms, Evacua
   if (_last_young_gc) {
     // This is supposed to to be the "last young GC" before we start
     // doing mixed GCs. Here we decide whether to start mixed GCs or not.
-
-    if (!last_pause_included_initial_mark) {
-      if (next_gc_should_be_mixed("start mixed GCs",
+    assert(!last_pause_included_initial_mark, "The last young GC is not allowed to be an initial mark GC");
+    if (next_gc_should_be_mixed("start mixed GCs",
                                   "do not start mixed GCs")) {
-        set_gcs_are_young(false);
-      }
-    } else {
-      ergo_verbose0(ErgoMixedGCs,
-                    "do not start mixed GCs",
-                    ergo_format_reason("concurrent cycle is about to start"));
+      set_gcs_are_young(false);
     }
     _last_young_gc = false;
   }
@@ -1488,6 +1486,9 @@ void G1CollectorPolicy::update_survivors_policy(GCTracer &tracer) {
 
 bool G1CollectorPolicy::force_initial_mark_if_outside_cycle(
                                                      GCCause::Cause gc_cause) {
+  // We actually check whether we are marking here and not if we are in a
+  // reclamation phase. This means that we will schedule a concurrent mark
+  // even while we are still in the process of reclaiming memory.
   bool during_cycle = _g1->concurrent_mark()->cmThread()->during_cycle();
   if (!during_cycle) {
     ergo_verbose1(ErgoConcCycles,
@@ -1523,20 +1524,10 @@ G1CollectorPolicy::decide_on_conc_mark_initiation() {
     // gone over the initiating threshold and we should start a
     // concurrent marking cycle. So we might initiate one.
 
-    bool during_cycle = _g1->concurrent_mark()->cmThread()->during_cycle();
-    if (!during_cycle) {
-      // The concurrent marking thread is not "during a cycle", i.e.,
-      // it has completed the last one. So we can go ahead and
-      // initiate a new cycle.
-
+    if (!about_to_start_mixed_phase() && gcs_are_young()) {
+      // Initiate a new initial mark only if there is no marking or reclamation going
+      // on.
       set_during_initial_mark_pause();
-      // We do not allow mixed GCs during marking.
-      if (!gcs_are_young()) {
-        set_gcs_are_young(true);
-        ergo_verbose0(ErgoMixedGCs,
-                      "end mixed GCs",
-                      ergo_format_reason("concurrent cycle is about to start"));
-      }
 
       // And we can now clear initiate_conc_mark_if_possible() as
       // we've already acted on it.

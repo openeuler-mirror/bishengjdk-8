@@ -2564,7 +2564,6 @@ void G1CollectedHeap::collect(GCCause::Cause cause) {
       return;
     } else {
       if (cause == GCCause::_gc_locker || cause == GCCause::_wb_young_gc
-          || cause == GCCause::_g1_periodic_collection
           DEBUG_ONLY(|| cause == GCCause::_scavenge_alot)) {
 
         // Schedule a standard evacuation pause. We're setting word_size

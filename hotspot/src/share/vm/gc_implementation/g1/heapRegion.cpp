@@ -322,6 +322,29 @@ HeapRegion::HeapRegion(uint hrm_index,
 }
 
 void HeapRegion::initialize(MemRegion mr, bool clear_space, bool mangle_space) {
+  _humongous_start_region = NULL;
+  _in_collection_set = false;
+  _next_in_special_set = NULL;
+  _orig_end = NULL;
+  _claimed = InitialClaimValue;
+  _evacuation_failed = false;
+  _prev_marked_bytes = 0;
+  _next_marked_bytes = 0;
+  _gc_efficiency = 0.0;
+  _next_young_region = NULL;
+  _next_dirty_cards_region = NULL;
+  _next = NULL;
+  _prev = NULL;
+#ifdef ASSERT
+  _containing_set = NULL;
+#endif // ASSERT
+  _in_uncommit_list = false;
+  _young_index_in_cset = -1;
+  _surv_rate_group = NULL;
+  _age_index = -1;
+  _recorded_rs_length = 0;
+  _predicted_elapsed_time_ms = 0;
+  _predicted_bytes_to_copy = 0;
   assert(_rem_set->is_empty(), "Remembered set must be empty");
 
   G1OffsetTableContigSpace::initialize(mr, clear_space, mangle_space);
@@ -1164,6 +1187,7 @@ G1OffsetTableContigSpace(G1BlockOffsetSharedArray* sharedOffsetArray,
 
 void G1OffsetTableContigSpace::initialize(MemRegion mr, bool clear_space, bool mangle_space) {
   CompactibleSpace::initialize(mr, clear_space, mangle_space);
+  _gc_time_stamp = 0;
   _top = bottom();
   _scan_top = bottom();
   set_saved_mark_word(NULL);
