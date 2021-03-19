@@ -1112,6 +1112,9 @@ void ShenandoahHeap::gc_threads_do(ThreadClosure* tcl) const {
     ShenandoahStringDedup::threads_do(tcl);
   }
 }
+void ShenandoahHeap::run_task(AbstractGangTask* task) {
+    workers()->run_task(task);
+}
 
 void ShenandoahHeap::print_tracing_info() const {
   if (PrintGC || TraceGen0Time || TraceGen1Time) {

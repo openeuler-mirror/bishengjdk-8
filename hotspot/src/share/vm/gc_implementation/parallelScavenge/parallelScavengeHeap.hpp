@@ -41,6 +41,7 @@ class GCHeapSummary;
 class GCTaskManager;
 class PSAdaptiveSizePolicy;
 class PSHeapSummary;
+class HeapBlockClaimer;
 
 class ParallelScavengeHeap : public CollectedHeap {
   friend class VMStructs;
@@ -55,7 +56,7 @@ class ParallelScavengeHeap : public CollectedHeap {
   static ParallelScavengeHeap* _psh;
 
   GenerationSizer* _collector_policy;
-
+  FlexibleWorkGang* _workers;
   // Collection of generations that are adjacent in the
   // space reserved for the heap.
   AdjoiningGenerations* _gens;
@@ -208,7 +209,9 @@ class ParallelScavengeHeap : public CollectedHeap {
   void oop_iterate(ExtendedOopClosure* cl);
   void object_iterate(ObjectClosure* cl);
   void safe_object_iterate(ObjectClosure* cl) { object_iterate(cl); }
-
+  void object_iterate_parallel(ObjectClosure* cl, HeapBlockClaimer* claimer);
+  virtual ParallelObjectIterator* parallel_object_iterator(uint thread_num);
+  virtual FlexibleWorkGang* get_safepoint_workers() { return _workers; }
   HeapWord* block_start(const void* addr) const;
   size_t block_size(const HeapWord* addr) const;
   bool block_is_obj(const HeapWord* addr) const;
@@ -222,7 +225,7 @@ class ParallelScavengeHeap : public CollectedHeap {
   virtual void print_gc_threads_on(outputStream* st) const;
   virtual void gc_threads_do(ThreadClosure* tc) const;
   virtual void print_tracing_info() const;
-
+  virtual void run_task(AbstractGangTask* task);
   void verify(bool silent, VerifyOption option /* ignored */);
 
   void print_heap_change(size_t prev_used);

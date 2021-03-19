@@ -59,6 +59,7 @@
 #include "gc_implementation/shared/gcTraceTime.hpp"
 #include "gc_implementation/shared/isGCActiveMark.hpp"
 #include "memory/allocation.hpp"
+#include "memory/heapInspection.hpp"
 #include "memory/gcLocker.inline.hpp"
 #include "memory/generationSpec.hpp"
 #include "memory/iterator.hpp"
@@ -379,6 +380,11 @@ void G1RegionMappingChangedListener::on_commit(uint start_idx, size_t num_region
   // The from card cache is not the memory that is actually committed. So we cannot
   // take advantage of the zero_filled parameter.
   reset_from_card_cache(start_idx, num_regions);
+}
+
+void G1CollectedHeap::run_task(AbstractGangTask* task) {
+    workers()->run_task(task);
+    reset_heap_region_claim_values();
 }
 
 void G1CollectedHeap::push_dirty_cards_region(HeapRegion* hr)
@@ -2646,6 +2652,30 @@ void G1CollectedHeap::object_iterate(ObjectClosure* cl) {
   IterateObjectClosureRegionClosure blk(cl);
   heap_region_iterate(&blk);
 }
+
+class G1ParallelObjectIterator : public ParallelObjectIterator {
+private:
+    G1CollectedHeap*  _heap;
+    uint _num_threads;
+
+public:
+    G1ParallelObjectIterator(uint thread_num) :
+        _heap(G1CollectedHeap::heap()),_num_threads(thread_num) {}
+
+    virtual void object_iterate(ObjectClosure* cl, uint worker_id) {
+        _heap->object_iterate_parallel(cl, worker_id,_num_threads);
+    }
+};
+
+ParallelObjectIterator* G1CollectedHeap::parallel_object_iterator(uint thread_num) {
+    return new G1ParallelObjectIterator(thread_num);
+}
+
+void G1CollectedHeap::object_iterate_parallel(ObjectClosure* cl, uint worker_id, uint num_workers) {
+    IterateObjectClosureRegionClosure blk(cl);
+    heap_region_par_iterate_chunked(&blk, worker_id, num_workers, HeapRegion::ParInspectClaimValue);
+}
+
 
 // Calls a SpaceClosure on a HeapRegion.
 

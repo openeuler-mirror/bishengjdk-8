@@ -1414,3 +1414,7 @@ void GenCollectedHeap::stop() {
   }
 #endif
 }
+
+void GenCollectedHeap::run_task(AbstractGangTask *task) {
+
+}

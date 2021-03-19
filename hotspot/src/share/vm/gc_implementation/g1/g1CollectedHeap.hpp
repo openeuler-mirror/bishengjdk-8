@@ -646,6 +646,8 @@ public:
   G1Allocator* allocator() {
     return _allocator;
   }
+  // Runs the given AbstractGangTask with the current active workers.
+  virtual void run_task(AbstractGangTask* task);
 
   G1MonitoringSupport* g1mm() {
     assert(_g1mm != NULL, "should have been initialized");
@@ -1292,6 +1294,7 @@ public:
   void cleanUpCardTable();
 
   // Iteration functions.
+  void object_iterate_parallel(ObjectClosure* cl, uint worker_id, uint num_workers);
 
   // Iterate over all the ref-containing fields of all objects, calling
   // "cl.do_oop" on each.
@@ -1299,7 +1302,7 @@ public:
 
   // Iterate over all objects, calling "cl.do_object" on each.
   virtual void object_iterate(ObjectClosure* cl);
-
+  virtual ParallelObjectIterator* parallel_object_iterator(uint thread_num);
   virtual void safe_object_iterate(ObjectClosure* cl) {
     object_iterate(cl);
   }
@@ -1607,7 +1610,7 @@ public:
 
   // Perform any cleanup actions necessary before allowing a verification.
   virtual void prepare_for_verify();
-
+  virtual FlexibleWorkGang* get_safepoint_workers() { return _workers; }
   // Perform verification.
 
   // vo == UsePrevMarking  -> use "prev" marking information,

@@ -42,8 +42,15 @@
 startApplication()
 {
   appOutput="${TESTCLASSES}/Application.out"
-
-  ${JAVA} -XX:+UsePerfData -classpath "${TESTCLASSPATH:-${TESTCLASSES}}" "$@" > "$appOutput" 2>&1 &
+  if [ $# -gt 2 ]; then
+    if [ $3 = "defineGC" ]; then
+      ${JAVA} -XX:+UsePerfData -XX:+$4 -classpath "${TESTCLASSPATH:-${TESTCLASSES}}" "$@" > "$appOutput" 2>&1 &
+    else
+      ${JAVA} -XX:+UsePerfData -classpath "${TESTCLASSPATH:-${TESTCLASSES}}" "$@" > "$appOutput" 2>&1 &
+    fi
+  else
+    ${JAVA} -XX:+UsePerfData -classpath "${TESTCLASSPATH:-${TESTCLASSES}}" "$@" > "$appOutput" 2>&1 &
+  fi
   appJavaPid="$!"
   appOtherPid=
   appPidList="$appJavaPid"
@@ -119,7 +126,6 @@ startApplication()
   echo "INFO: $1 is process $appJavaPid"
   echo "INFO: $1 output is in $appOutput"
 }
-
 
 # Stops a simple application by invoking ShutdownSimpleApplication
 # class with a specific port-file, usage:

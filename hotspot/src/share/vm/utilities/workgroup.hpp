@@ -163,6 +163,7 @@ public:
   virtual uint active_workers() const {
     return _total_workers;
   }
+
   bool terminate() const {
     return _terminate;
   }
@@ -325,6 +326,10 @@ class FlexibleWorkGang: public WorkGang {
     _active_workers(UseDynamicNumberOfGCThreads ? 1U : ParallelGCThreads) {}
   // Accessors for fields
   virtual uint active_workers() const { return _active_workers; }
+  uint update_active_workers(uint v) {
+      _active_workers = MIN2(v, _active_workers);
+      return _active_workers;
+  }
   void set_active_workers(uint v) {
     assert(v <= _total_workers,
            "Trying to set more workers active than there are");
@@ -339,7 +344,21 @@ class FlexibleWorkGang: public WorkGang {
     return _started_workers < _active_workers;
   }
 };
-
+class WithUpdatedActiveWorkers : public StackObj {
+private:
+    FlexibleWorkGang* const _gang;
+    const uint              _old_active_workers;
+public:
+    WithUpdatedActiveWorkers(FlexibleWorkGang* gang, uint requested_num_workers) :
+            _gang(gang),
+            _old_active_workers(gang->active_workers()) {
+        uint capped_num_workers = MIN2(requested_num_workers, gang->active_workers());
+        gang->update_active_workers(capped_num_workers);
+    }
+    ~WithUpdatedActiveWorkers() {
+        _gang->set_active_workers(_old_active_workers);
+    }
+};
 // Work gangs in garbage collectors: 2009-06-10
 //
 // SharedHeap - work gang for stop-the-world parallel collection.

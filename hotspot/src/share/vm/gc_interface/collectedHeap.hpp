@@ -25,6 +25,7 @@
 #ifndef SHARE_VM_GC_INTERFACE_COLLECTEDHEAP_HPP
 #define SHARE_VM_GC_INTERFACE_COLLECTEDHEAP_HPP
 
+#include "utilities/workgroup.hpp"
 #include "gc_interface/gcCause.hpp"
 #include "gc_implementation/shared/gcWhen.hpp"
 #include "memory/allocation.hpp"
@@ -38,7 +39,7 @@
 // is an abstract class: there may be many different kinds of heaps.  This
 // class defines the functions that a heap must implement, and contains
 // infrastructure common to all heaps.
-
+class AbstractGangTask;
 class AdaptiveSizePolicy;
 class BarrierSet;
 class CollectorPolicy;
@@ -73,6 +74,12 @@ class GCHeapLog : public EventLogBase<GCMessage> {
     log_heap(false);
   }
 };
+
+class ParallelObjectIterator : public CHeapObj<mtGC> {
+public:
+    virtual void object_iterate(ObjectClosure* cl, uint worker_id) = 0;
+};
+
 
 //
 // CollectedHeap
@@ -461,7 +468,7 @@ class CollectedHeap : public CHeapObj<mtInternal> {
 
   // Does this heap support heap inspection (+PrintClassHistogram?)
   virtual bool supports_heap_inspection() const = 0;
-
+  virtual FlexibleWorkGang* get_safepoint_workers() { return NULL; }
   // Perform a collection of the heap; intended for use in implementing
   // "System.gc".  This probably implies as full a collection as the
   // "CollectedHeap" supports.
@@ -514,7 +521,10 @@ class CollectedHeap : public CHeapObj<mtInternal> {
   // Iterate over all objects, calling "cl.do_object" on each.
   virtual void object_iterate(ObjectClosure* cl) = 0;
 
-  // Similar to object_iterate() except iterates only
+  virtual ParallelObjectIterator* parallel_object_iterator(uint thread_num) {
+      return NULL;
+  }
+
   // over live objects.
   virtual void safe_object_iterate(ObjectClosure* cl) = 0;
 
@@ -592,6 +602,9 @@ class CollectedHeap : public CHeapObj<mtInternal> {
   }
   // Iterator for all GC threads (other than VM thread)
   virtual void gc_threads_do(ThreadClosure* tc) const = 0;
+
+  // Run given task. Possibly in parallel if the GC supports it.
+  virtual void run_task(AbstractGangTask* task) = 0;
 
   // Print any relevant tracing info that flags imply.
   // Default implementation does nothing.
