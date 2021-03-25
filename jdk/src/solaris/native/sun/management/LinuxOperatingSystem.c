@@ -57,7 +57,7 @@ static struct perfbuf {
     ticks *cpus;
 } counters;
 
-#define DEC_64 "%lud"
+#define DEC_64 "%lld"
 
 static void next_line(FILE *f) {
     while (fgetc(f) != '\n');
