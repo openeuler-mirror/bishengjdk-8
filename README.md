@@ -4,6 +4,8 @@
 
 二进制可以从[这里](https://mirrors.huaweicloud.com/kunpeng/archive/compiler/bisheng_jdk/)下载。
 
+用户指南和新特性, 请见[wiki](https://gitee.com/openeuler/bishengjdk-8/wikis/Home?sort_id=2879418)
+
 ## 平台支持
 
 毕昇JDK 当前支持 `Linux/AArch64` 平台。

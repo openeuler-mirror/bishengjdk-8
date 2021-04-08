@@ -4,6 +4,8 @@ Bisheng JDK is a high-performance, production-ready downstream distribution of O
 
 The latest binary builds can be downloaded from [releases](https://mirrors.huaweicloud.com/kunpeng/archive/compiler/bisheng_jdk/).
 
+User Guide && Installation Guide, see [wiki](https://gitee.com/openeuler/bishengjdk-8/wikis/Home?sort_id=2879418)
+
 ## Platform
 
 Bisheng JDK currentyly supports `Linux/AArch64`.
