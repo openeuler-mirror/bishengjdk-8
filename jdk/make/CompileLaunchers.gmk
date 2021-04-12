@@ -490,9 +490,9 @@ UNPACKEXE_DEBUG_SYMBOLS := true
 # It's also linked incrementally, producing a .ilk file that needs to
 # be kept away.
 ifeq ($(OPENJDK_TARGET_OS), windows)
-  BUILD_UNPACKEXE_LDEXE := $(CC)
+  BUILD_UNPACKEXE_LDEXE := $(LD)
   EXE_OUT_OPTION_save := $(EXE_OUT_OPTION)
-  EXE_OUT_OPTION := -Fe
+  EXE_OUT_OPTION := -out:
   # With the current way unpack200 is built, debug symbols aren't supported
   # anyway.
   UNPACKEXE_DEBUG_SYMBOLS :=
@@ -512,6 +512,7 @@ $(eval $(call SetupNativeCompilation,BUILD_UNPACKEXE, \
     EXCLUDE_FILES := jni.cpp, \
     LANG := $(UNPACKEXE_LANG), \
     OPTIMIZATION := LOW, \
+    EXTRA_FILES := $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp, \
     CFLAGS := $(UNPACKEXE_CFLAGS) $(CXXFLAGS_JDKEXE) \
         -DFULL, \
     CFLAGS_release := -DPRODUCT, \
@@ -520,7 +521,7 @@ $(eval $(call SetupNativeCompilation,BUILD_UNPACKEXE, \
     CFLAGS_macosx := -fPIC, \
     MAPFILE := $(UNPACK_MAPFILE),\
     LDFLAGS := $(UNPACKEXE_ZIPOBJS), \
-    LDFLAGS_windows := $(CXXFLAGS_JDKEXE), \
+    LDFLAGS_windows := -incremental, \
     LDFLAGS_posix := $(LDFLAGS_JDKEXE) $(LDFLAGS_CXX_JDK) \
         $(call SET_SHARED_LIBRARY_NAME,$(LIBRARY_PREFIX)unpack$(SHARED_LIBRARY_SUFFIX)) \
         $(call SET_SHARED_LIBRARY_ORIGIN), \

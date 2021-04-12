@@ -1097,7 +1097,7 @@ static char* convert_into_package_name(char* name) {
   char* index = strrchr(name, '/');
   if (index == NULL) {
     return NULL;
-  } else {
+  } else {  
     *index = '\0'; // chop to just the package name
     while ((index = strchr(name, '/')) != NULL) {
       *index = '.'; // replace '/' with '.' in package name
@@ -1170,29 +1170,31 @@ Klass* SystemDictionary::resolve_from_stream(Symbol* class_name,
       !class_loader.is_null() &&
       parsed_name != NULL &&
       parsed_name->utf8_length() >= (int)pkglen) {
-    ResourceMark rm(THREAD);
-    bool prohibited;
-    const jbyte* base = parsed_name->base();
-    if ((base[0] | base[1] | base[2] | base[3] | base[4]) & 0x80) {
-      prohibited = is_prohibited_package_slow(parsed_name);
-    } else {
-      char* name = parsed_name->as_C_string();
-      prohibited = (strncmp(name, pkg, pkglen) == 0);
-    }
-    if (prohibited) {
-      // It is illegal to define classes in the "java." package from
-      // JVM_DefineClass or jni_DefineClass unless you're the bootclassloader
-      char* name = parsed_name->as_C_string();
-      name = convert_into_package_name(name);
-      assert(name != NULL, "must be");
-
-      const char* fmt = "Prohibited package name: %s";
-      size_t len = strlen(fmt) + strlen(name);
-      char* message = NEW_RESOURCE_ARRAY(char, len);
-      jio_snprintf(message, len, fmt, name);
-      Exceptions::_throw_msg(THREAD_AND_LOCATION,
-        vmSymbols::java_lang_SecurityException(), message);
-    }
+      bool prohibited;
+      const jbyte* base = parsed_name->base();
+      if ((base[0] | base[1] | base[2] | base[3] | base[4]) & 0x80) {
+        prohibited = is_prohibited_package_slow(parsed_name);
+      } else {
+        char* name = parsed_name->as_C_string();
+        prohibited = (strncmp(name, pkg, pkglen) == 0);
+      }
+      if (prohibited) {
+        // It is illegal to define classes in the "java." package from
+        // JVM_DefineClass or jni_DefineClass unless you're the bootclassloader
+        char* name = parsed_name->as_C_string();
+        char* index = strrchr(name, '/');
+        assert(index != NULL, "must be");
+        *index = '\0'; // chop to just the package name
+        while ((index = strchr(name, '/')) != NULL) {
+          *index = '.'; // replace '/' with '.' in package name
+        }
+        const char* fmt = "Prohibited package name: %s";
+        size_t len = strlen(fmt) + strlen(name);
+        char* message = NEW_RESOURCE_ARRAY(char, len);
+        jio_snprintf(message, len, fmt, name);
+        Exceptions::_throw_msg(THREAD_AND_LOCATION,
+          vmSymbols::java_lang_SecurityException(), message);
+      }
   }
 
   if (!HAS_PENDING_EXCEPTION) {
@@ -1315,7 +1317,7 @@ instanceKlassHandle SystemDictionary::load_shared_class(
         char* name = ik->name()->as_C_string();
         Handle klass_name = java_lang_String::create_from_str(name, CHECK_0);
         JavaValue result(T_OBJECT);
-
+        
 	// load_shared_class need protected domain to handle non-bootstrap loaded class,
         // so here call_virtual to call getProtectionDomainInternal function of URLClassLoader.java,
         // to get protected domain and save into result.

@@ -1480,7 +1480,9 @@ void SuperWord::output() {
 #endif
     }
   }
-  C->set_max_vector_size(max_vlen_in_bytes);
+  if (max_vlen_in_bytes > C->max_vector_size()) {
+    C->set_max_vector_size(max_vlen_in_bytes);
+  }
 }
 
 //------------------------------vector_opd---------------------------

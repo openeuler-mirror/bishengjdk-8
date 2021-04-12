@@ -236,6 +236,11 @@ void VM_Version::initialize() {
     FLAG_SET_DEFAULT(UseSHA, false);
   }
 
+  if (UseF2jBLASIntrinsics) {
+    warning("F2jBLAS instructions are not available on this CPU");
+    FLAG_SET_DEFAULT(UseF2jBLASIntrinsics, false);
+  }
+
   if (FLAG_IS_DEFAULT(UseMontgomeryMultiplyIntrinsic)) {
     UseMontgomeryMultiplyIntrinsic = true;
   }

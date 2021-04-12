@@ -691,9 +691,6 @@ OUTER:  for (int i = 0; i < n; i += m) {
         throws FileNotFoundException, IOException {
         BufferedReader in = new BufferedReader(new FileReader(theTemplateFileName));
         PrintWriter out = new PrintWriter(new BufferedWriter(new FileWriter(theOutputFileName)));
-        out.println(commentStart +
-            " This file was generated AUTOMATICALLY from a template file " +
-            new java.util.Date() + commentEnd);
         int marklen = commandMarker.length();
         LOOP: while(true) {
             try {

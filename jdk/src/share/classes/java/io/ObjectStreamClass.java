@@ -290,7 +290,7 @@ public class ObjectStreamClass implements Serializable {
      *
      * @return the flags for this class described by this descriptor
      */
-    public byte getFlags(Object serialStream) {
+    byte getFlags(Object serialStream) {
         byte flags = 0;
         if (externalizable) {
             flags |= ObjectStreamConstants.SC_EXTERNALIZABLE;

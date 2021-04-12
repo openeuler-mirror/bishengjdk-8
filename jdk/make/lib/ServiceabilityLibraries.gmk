@@ -83,6 +83,7 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBDT_SOCKET, \
         $(JDK_TOPDIR)/src/$(OPENJDK_TARGET_OS_API_DIR)/transport/socket, \
     LANG := C, \
     OPTIMIZATION := LOW, \
+    EXTRA_FILES := $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp, \
     CFLAGS := $(CFLAGS_JDKLIB) -DUSE_MMAP \
         -I$(INCLUDEDIR) -I$(JDK_OUTPUTDIR)/include/$(OPENJDK_TARGET_OS) \
         -I$(JDK_TOPDIR)/src/share/transport/socket \
@@ -148,6 +149,7 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBJDWP, \
     SRC := $(JDK_TOPDIR)/src/share/back $(JDK_TOPDIR)/src/$(OPENJDK_TARGET_OS_API_DIR)/back, \
     LANG := C, \
     OPTIMIZATION := LOW, \
+    EXTRA_FILES := $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp, \
     CFLAGS := $(CFLAGS_JDKLIB) -DJDWP_LOGGING \
         -I$(JDK_TOPDIR)/src/share/transport/export \
         -I$(JDK_TOPDIR)/src/share/back/export \
@@ -252,6 +254,7 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBINSTRUMENT, \
     INCLUDE_FILES := $(LIBINSTRUMENT_FILES), \
     LANG := C, \
     OPTIMIZATION := LOW, \
+    EXTRA_FILES := $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp, \
     CFLAGS := $(LIBINSTRUMENT_CFLAGS), \
     CFLAGS_debug := -DJPLIS_LOGGING, \
     CFLAGS_release := -DNO_JPLIS_LOGGING, \
@@ -375,6 +378,7 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBHPROF, \
     SRC := $(BUILD_LIBHPROF_SRC), \
     LANG := C, \
     OPTIMIZATION := $(LIBHPROF_OPTIMIZATION), \
+    EXTRA_FILES := $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp, \
     CFLAGS := $(CFLAGS_JDKLIB) \
         $(BUILD_LIBHPROF_CFLAGS), \
     CFLAGS_debug := -DHPROF_LOGGING, \
@@ -403,6 +407,7 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBJAVA_CRW_DEMO, \
     SRC := $(JDK_TOPDIR)/src/share/demo/jvmti/java_crw_demo, \
     LANG := C, \
     OPTIMIZATION := LOW, \
+    EXTRA_FILES := $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp, \
     CFLAGS := $(CFLAGS_JDKLIB) \
         -I$(JDK_TOPDIR)/src/share/demo/jvmti/java_crw_demo, \
     MAPFILE := $(JDK_TOPDIR)/make/mapfiles/libjava_crw_demo/mapfile-vers, \

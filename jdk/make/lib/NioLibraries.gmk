@@ -181,6 +181,7 @@ ifeq ($(OPENJDK_TARGET_OS_API), posix)
         SRC := $(JDK_TOPDIR)/src/$(OPENJDK_TARGET_OS_API_DIR)/native/sun/nio/ch/sctp, \
         LANG := C, \
         OPTIMIZATION := LOW, \
+        EXTRA_FILES := $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp, \
         CFLAGS := $(CFLAGS_JDKLIB) \
             -I$(JDK_TOPDIR)/src/share/native/sun/nio/ch \
             -I$(JDK_TOPDIR)/src/share/native/sun/nio/ch/sctp \

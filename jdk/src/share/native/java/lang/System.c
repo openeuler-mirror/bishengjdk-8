@@ -110,13 +110,13 @@ Java_java_lang_System_identityHashCode(JNIEnv *env, jobject this, jobject x)
 
 /* Third party may overwrite these values. */
 #ifndef VENDOR
-#define VENDOR "Huawei Technologies Co., Ltd"
+#define VENDOR "Oracle Corporation"
 #endif
 #ifndef VENDOR_URL
-#define VENDOR_URL "http://jdk.rnd.huawei.com/"
+#define VENDOR_URL "http://java.oracle.com/"
 #endif
 #ifndef VENDOR_URL_BUG
-#define VENDOR_URL_BUG "http://jdk.rnd.huawei.com/"
+#define VENDOR_URL_BUG "http://bugreport.sun.com/bugreport/"
 #endif
 
 #define JAVA_MAX_SUPPORTED_VERSION 52

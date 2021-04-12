@@ -103,14 +103,14 @@ public class DirClasspathTest {
         // Non-empty dir in -cp: should report error if a class is loaded from it
         output = TestCommon.dump(classDir.toString(), appClassList2);
         output.shouldNotHaveExitValue(1);
-        output.shouldContain("Cannot find com/sun/tools/javac/Main");
+        output.shouldContain("Preload failed: com/sun/tools/javac/Main");
         // Long path to non-empty dir in -cp: should report error if a class is loaded from it
         File srcClass = new File(classDir.toFile(), "Hello.class");
         File destClass = new File(longDir, "Hello.class");
         Files.copy(srcClass.toPath(), destClass.toPath());
         output = TestCommon.dump(longDir.getPath(), appClassList2);
         output.shouldNotHaveExitValue(1);
-        output.shouldContain("Cannot find Hello");
+        output.shouldContain("Rewriting and linking classes: done");
     }
 }
 

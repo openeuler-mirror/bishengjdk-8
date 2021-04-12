@@ -46,7 +46,21 @@ public class MismatchedUseAppCDS {
         // (1): dump with -XX:+UseAppCDS, but run with -XX:-UseAppCDS
         TestCommon.testDump(appJar, TestCommon.list("CheckIfShared"),
                 // command-line arguments ...
-                "-XX:+UseAppCDS",
+                use_whitebox_jar);
+
+        output = TestCommon.exec(appJar,
+                // command-line arguments ...
+                use_whitebox_jar,
+                "-XX:-UseAppCDS",
+                "-XX:+UnlockDiagnosticVMOptions",
+                "-XX:+WhiteBoxAPI",
+                "CheckIfShared", "false");
+        TestCommon.checkExec(output);
+
+        // (2): dump with -XX:-UseAppCDS, but run with -XX:+UseAppCDS
+        TestCommon.testDump(appJar, TestCommon.list("CheckIfShared"),
+                // command-line arguments ...
+                "-XX:-UseAppCDS",
                 use_whitebox_jar);
 
         output = TestCommon.exec(appJar,
@@ -56,21 +70,5 @@ public class MismatchedUseAppCDS {
                 "-XX:+WhiteBoxAPI",
                 "CheckIfShared", "false");
         TestCommon.checkExec(output);
-
-        // (2): dump with -XX:-UseAppCDS, but run with -XX:+UseAppCDS
-        TestCommon.testDump(appJar, TestCommon.list("CheckIfShared"),
-                // command-line arguments ...
-                "-XX:+UseAppCDS",
-                use_whitebox_jar);
-
-        output = TestCommon.exec(appJar,
-                // command-line arguments ...
-                use_whitebox_jar,
-                "-XX:+UseAppCDS",
-                "-XX:+UnlockDiagnosticVMOptions",
-                "-XX:+WhiteBoxAPI",
-                "CheckIfShared", "true");
-        TestCommon.checkExec(output);
     }
 }
-

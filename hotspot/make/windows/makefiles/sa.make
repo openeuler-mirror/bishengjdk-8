@@ -143,7 +143,7 @@ SA_LFLAGS = $(SA_LFLAGS) -map -debug
 SA_LFLAGS = /SAFESEH $(SA_LFLAGS)
 !endif
 
-SA_CFLAGS = $(SA_CFLAGS) $(MP_FLAG)
+SA_CFLAGS = $(SA_CFLAGS) $(MP_FLAG) /GS
 
 # Note that we do not keep sawindbj.obj around as it would then
 # get included in the dumpbin command in build_vm_def.sh
