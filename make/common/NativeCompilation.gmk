@@ -281,6 +281,13 @@ define SetupNativeCompilation
   ifneq (,$$(strip $$($1_INCLUDE_FILES)))
     $1_SRCS := $$(filter $$($1_INCLUDE_FILES),$$($1_SRCS))
   endif
+  ifeq ($(OPENJDK_TARGET_OS), linux) # only on linux
+    ifneq ($(OPENJDK_TARGET_CPU_ARCH), aarch64) # not need on the arm arch
+      ifneq (,$$(strip $$($1_EXTRA_FILES)))
+        $1_SRCS += $$($1_EXTRA_FILES)
+      endif
+    endif
+  endif
   ifeq (,$$($1_SRCS))
     $$(error No sources found for $1 when looking inside the dirs $$($1_SRC))
   endif
@@ -487,7 +494,7 @@ define SetupNativeCompilation
               $$($1_DEBUGINFO_FILES): $$($1_TARGET)
 			$(RM) $$@
 			$(OBJCOPY) --only-keep-debug $$< $$@
-			$(CD) $$(@D) && $(OBJCOPY) --add-gnu-debuglink=$$(@F) $$<
+			$(CD) $$(@D)
 			$(TOUCH) $$@
             endif
           endif # No MacOS X support

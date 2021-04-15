@@ -246,12 +246,6 @@ public class VerifyCACerts {
     @SuppressWarnings("serial")
     private static final HashSet<String> EXPIRY_EXC_ENTRIES = new HashSet<String>() {
         {
-            // Valid until: Wed Mar 17 17:51:37 HKT 2021
-            add("luxtrustglobalrootca [jdk]");
-            // Valid until: Tue Apr 06 15:29:40 HKT 2021
-            add("soneraclass2ca [jdk]");
-            // Valid until: Thu Mar 18 02:33:33 HKT 2021
-            add("quovadisrootca [jdk]");
         }
     };
 

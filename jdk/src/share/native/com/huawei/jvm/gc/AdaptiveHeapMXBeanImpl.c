@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, Huawei Technologies Co., LTD. All rights reserved.
+ * Copyright (c) 2020 Huawei Group Holding Limited. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it

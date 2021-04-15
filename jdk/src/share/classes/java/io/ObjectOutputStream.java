@@ -251,6 +251,11 @@ public class ObjectOutputStream
                     "printFastSerializer")).booleanValue();
 
     /**
+     * Magic number that is written to the stream header when using fastserilizer.
+     */
+    private static final short STREAM_MAGIC_FAST = (short)0xdeca;
+
+    /**
      * Creates an ObjectOutputStream that writes to the specified OutputStream.
      * This constructor writes the serialization stream header to the
      * underlying stream; callers may wish to flush the stream immediately to

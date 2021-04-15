@@ -1129,7 +1129,6 @@ public class Util extends com.sun.tools.corba.se.idl.Util
         Util.getMessage ("Version.product", Util.getMessage ("Version.number"))));
     // <d48911> Do not introduce invalid escape characters into comment! <daz>
     //stream.println ("* " + Util.getMessage ("toJavaProlog2", Compile.compiler.arguments.file));
-    stream.println ("* " + Util.getMessage ("toJavaProlog2", Compile.compiler.arguments.file.replace (File.separatorChar, '/')));
 
     ///////////////
     // This SHOULD work, but there's a bug in the JDK.
@@ -1145,8 +1144,6 @@ public class Util extends com.sun.tools.corba.se.idl.Util
       formatter.setTimeZone (java.util.TimeZone.getTimeZone ("JST"));
     else
       formatter.setTimeZone (java.util.TimeZone.getDefault ());
-
-    stream.println ("* " + formatter.format (new Date ()));
 
     // <daz>
     ///////////////

@@ -628,6 +628,11 @@ void VM_Version::get_processor_features() {
     FLAG_SET_DEFAULT(UseSHA512Intrinsics, false);
   }
 
+  if (UseF2jBLASIntrinsics) {
+    warning("F2jBLAS instructions are not available on this CPU");
+    FLAG_SET_DEFAULT(UseF2jBLASIntrinsics, false);
+  }
+
   // Adjust RTM (Restricted Transactional Memory) flags
   if (!supports_rtm() && UseRTMLocking) {
     // Can't continue because UseRTMLocking affects UseBiasedLocking flag

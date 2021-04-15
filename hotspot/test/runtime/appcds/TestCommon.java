@@ -131,6 +131,7 @@ public class TestCommon extends CDSTestUtils {
         }
 
         cmd.add("-Xshare:dump");
+        cmd.add("-XX:+UseAppCDS");
 //        cmd.add("-Xlog:cds,cds+hashtables"); comment out because it will be run by jdk1.8
         cmd.add("-XX:ExtraSharedClassListFile=" + classList.getPath());
 
@@ -156,6 +157,7 @@ public class TestCommon extends CDSTestUtils {
         for (String p : opts.prefix) cmd.add(p);
 
         cmd.add("-Xshare:" + opts.xShareMode);
+        cmd.add("-XX:+UseAppCDS");
         cmd.add("-showversion");
         cmd.add("-XX:SharedArchiveFile=" + getCurrentArchiveName());
         cmd.add("-Dtest.timeout.factor=" + timeoutFactor);

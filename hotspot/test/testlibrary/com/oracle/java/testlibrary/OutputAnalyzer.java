@@ -163,7 +163,7 @@ public final class OutputAnalyzer {
     }
     return this;
   }
-
+  
   /**
    * Verify the exit value of the process
    * backport from jdk11u

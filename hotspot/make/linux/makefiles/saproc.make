@@ -46,6 +46,11 @@ SASRCFILES = $(SASRCDIR)/salibelf.c                   \
              $(SASRCDIR)/LinuxDebuggerLocal.c         \
              $(AGENT_DIR)/src/share/native/sadis.c
 
+# wrap memcpy
+ifeq ($(OPENJDK_TARGET_CPU_ARCH), x86)
+  SASRCFILES += $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp
+endif
+
 -include $(HS_ALT_MAKE)/linux/makefiles/saproc.make
 
 SAMAPFILE = $(SASRCDIR)/mapfile
@@ -107,7 +112,6 @@ $(LIBSAPROC): $(SASRCFILES) $(SAMAPFILE)
 ifeq ($(ENABLE_FULL_DEBUG_SYMBOLS),1)
   ifneq ($(STRIP_POLICY),no_strip)
 	$(QUIETLY) $(OBJCOPY) --only-keep-debug $@ $(LIBSAPROC_DEBUGINFO)
-	$(QUIETLY) $(OBJCOPY) --add-gnu-debuglink=$(LIBSAPROC_DEBUGINFO) $@
   endif
   ifeq ($(STRIP_POLICY),all_strip)
 	$(QUIETLY) $(STRIP) $@

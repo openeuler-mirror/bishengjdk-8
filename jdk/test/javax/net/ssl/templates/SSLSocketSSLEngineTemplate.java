@@ -157,8 +157,11 @@ public class SSLSocketSSLEngineTemplate {
             new SSLSocketSSLEngineTemplate(protocol);
         log("-------------------------------------");
         log("Testing " + protocol + " for direct buffers ...");
-        test.runTest(true);
-
+        
+	test.runTest(true);
+        // invalid session
+        
+	test.invalidSession();
         log("---------------------------------------");
         log("Testing " + protocol + " for indirect buffers ...");
         test.runTest(false);
@@ -529,4 +532,14 @@ public class SSLSocketSSLEngineTemplate {
             }
         }
     }
+
+    /*
+     * invalid session
+     */
+    private void invalidSession() {
+        if (sslSocket != null && sslSocket.getSession() != null) {
+            sslSocket.getSession().invalidate();
+        }
+    }
 }
+

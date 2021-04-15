@@ -32,9 +32,9 @@ COMMONSRC=$(WorkSpace)\src
 ALTSRC=$(WorkSpace)\src\closed
 
 !ifdef RELEASE
-CXX_FLAGS=$(CXX_FLAGS) /D "PRODUCT"
+CXX_FLAGS=$(CXX_FLAGS) /D "PRODUCT" /GS
 !else
-CXX_FLAGS=$(CXX_FLAGS) /D "ASSERT"
+CXX_FLAGS=$(CXX_FLAGS) /D "ASSERT" /GS
 !endif
 
 !if "$(Variant)" == "compiler1"

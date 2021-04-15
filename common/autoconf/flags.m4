@@ -170,7 +170,7 @@ AC_DEFUN_ONCE([FLAGS_SETUP_COMPILER_FLAGS_FOR_LIBS],
     else
       # Default works for linux, might work on other platforms as well.
       SHARED_LIBRARY_FLAGS='-shared'
-      SET_EXECUTABLE_ORIGIN='-Xlinker -rpath -Xlinker \$$$$ORIGIN[$]1'
+      SET_EXECUTABLE_ORIGIN='-Xlinker -rpath -Xlinker \$$$$ORIGIN[$]1 -Xlinker --disable-new-dtags'
       SET_SHARED_LIBRARY_ORIGIN="-Xlinker -z -Xlinker origin $SET_EXECUTABLE_ORIGIN"
       SET_SHARED_LIBRARY_NAME='-Xlinker -soname=[$]1'
       SET_SHARED_LIBRARY_MAPFILE='-Xlinker -version-script=[$]1'
@@ -686,7 +686,7 @@ AC_DEFUN_ONCE([FLAGS_SETUP_COMPILER_FLAGS_FOR_JDK],
       LDFLAGS_JDK="$LDFLAGS_JDK -safeseh"
     fi
     # TODO: make -debug optional "--disable-full-debug-symbols"
-    LDFLAGS_JDK="$LDFLAGS_JDK -debug"
+    LDFLAGS_JDK="$LDFLAGS_JDK"
     LDFLAGS_JDKLIB="${LDFLAGS_JDK} -dll -libpath:${JDK_OUTPUTDIR}/lib"
     LDFLAGS_JDKLIB_SUFFIX=""
     if test "x$OPENJDK_TARGET_CPU_BITS" = "x64"; then
@@ -706,7 +706,7 @@ AC_DEFUN_ONCE([FLAGS_SETUP_COMPILER_FLAGS_FOR_JDK],
         # And since we now know that the linker is gnu, then add:
         #   -z defs, to forbid undefined symbols in object files
         #   -z noexecstack, to mark stack regions as non-executable
-        LDFLAGS_JDK="${LDFLAGS_JDK} -Xlinker -z -Xlinker defs -Xlinker -z -Xlinker noexecstack"
+        LDFLAGS_JDK="${LDFLAGS_JDK} -Xlinker -z -Xlinker defs -Xlinker -z -Xlinker noexecstack -Xlinker -z -Xlinker relro -Xlinker -z -Xlinker now"
         if test "x$DEBUG_LEVEL" = "xrelease"; then
           # When building release libraries, tell the linker optimize them.
           # Should this be supplied to the OSS linker as well?

@@ -382,6 +382,11 @@ void VM_Version::initialize() {
     }
   }
 
+  if (UseF2jBLASIntrinsics) {
+    warning("F2jBLAS instructions are not available on this CPU");
+    FLAG_SET_DEFAULT(UseF2jBLASIntrinsics, false);
+  }
+
   if (FLAG_IS_DEFAULT(ContendedPaddingWidth) &&
     (cache_line_size > ContendedPaddingWidth))
     ContendedPaddingWidth = cache_line_size;

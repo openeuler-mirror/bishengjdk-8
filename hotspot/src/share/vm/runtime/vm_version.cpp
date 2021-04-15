@@ -142,7 +142,12 @@ const char* Abstract_VM_Version::vm_name() {
 
 
 const char* Abstract_VM_Version::vm_vendor() {
-  return "Huawei Technologies Co., Ltd";
+#ifdef VENDOR
+  return VENDOR;
+#else
+  return JDK_Version::is_gte_jdk17x_version() ?
+    "Oracle Corporation" : "Sun Microsystems Inc.";
+#endif
 }
 
 
@@ -232,12 +237,10 @@ const char* Abstract_VM_Version::internal_vm_info_string() {
         #define HOTSPOT_BUILD_COMPILER "MS VC++ 15.5 (VS2017)"
       #elif _MSC_VER == 1913
         #define HOTSPOT_BUILD_COMPILER "MS VC++ 15.6 (VS2017)"
-      #elif _MSC_VER == 1914
-        #define HOTSPOT_BUILD_COMPILER "MS VC++ 15.7 (VS2017)"
       #elif _MSC_VER == 1915
         #define HOTSPOT_BUILD_COMPILER "MS VC++ 15.8 (VS2017)"
       #elif _MSC_VER == 1916
-        #define HOTSPOT_BUILD_COMPILER "MS VC++ 15.9 (VS2017)"
+        #define HOTSPOT_BUILD_COMPILER "MS VC++ 16.2 (VS2017)"
       #elif _MSC_VER == 1920
         #define HOTSPOT_BUILD_COMPILER "MS VC++ 16.0 (VS2019)"
       #elif _MSC_VER == 1921
