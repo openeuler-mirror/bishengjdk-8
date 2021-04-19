@@ -370,6 +370,7 @@ bool FileMapInfo::open_for_read() {
 void FileMapInfo::open_for_write() {
   if (UseAppCDS && AppCDSLockFile != NULL) {
     char* pos = strrchr(const_cast<char*>(AppCDSLockFile), '/');
+#ifdef __linux__
     if (pos != NULL && pos != AppCDSLockFile) { // No directory path specified
       char buf[PATH_MAX + 1] = "\0";
       char filePath[PATH_MAX] = "\0";
@@ -391,6 +392,7 @@ void FileMapInfo::open_for_write() {
       }
       tty->print_cr("You are using file lock %s in concurrent mode", AppCDSLockFile);
     }
+#endif
   }
   _full_path = make_log_name(Arguments::GetSharedArchivePath(), NULL);
   if (PrintSharedSpaces) {

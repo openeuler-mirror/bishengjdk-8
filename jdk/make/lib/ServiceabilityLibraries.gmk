@@ -299,7 +299,7 @@ endif
 
 BUILD_LIBMANAGEMENT_EXCLUDES :=
 
-BUILD_LIBMANAGEMENT_CFLAGS += -I$(JDK_TOPDIR)/src/share/native/sun/management
+BUILD_LIBMANAGEMENT_CFLAGS += -I$(JDK_TOPDIR)/src/share/native/sun/management -DPSAPI_VERSION=1
 
 ifneq ($(OPENJDK_TARGET_OS), solaris)
   BUILD_LIBMANAGEMENT_EXCLUDES += SolarisOperatingSystem.c

@@ -67,6 +67,9 @@
 #ifdef TARGET_OS_FAMILY_bsd
 # include "os_bsd.inline.hpp"
 #endif
+#ifndef _MSC_VER
+#define _MSC_VER 1916
+#endif
 
 # include <signal.h>
 

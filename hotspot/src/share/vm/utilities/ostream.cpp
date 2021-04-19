@@ -35,9 +35,8 @@
 #include "utilities/top.hpp"
 #include "utilities/xmlstream.hpp"
 
-# include <sys/file.h>
-
 #ifdef TARGET_OS_FAMILY_linux
+# include <sys/file.h>
 # include "os_linux.inline.hpp"
 #endif
 #ifdef TARGET_OS_FAMILY_solaris
@@ -764,6 +763,7 @@ void fileStream::flush() {
 }
 
 jsaFileStream::jsaFileStream(const char* file_name) : fileStream(file_name, "a") {
+#ifdef __linux__
   if (_file != NULL) {
     if (flock(fileno(_file), LOCK_EX | LOCK_NB) != 0) {
       if (errno == EWOULDBLOCK) {
@@ -781,6 +781,7 @@ jsaFileStream::jsaFileStream(const char* file_name) : fileStream(file_name, "a")
       ::rewind(_file);
     }
   }
+#endif
 }
 
 jsaFileStream::~jsaFileStream() {

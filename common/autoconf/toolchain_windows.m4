@@ -25,7 +25,7 @@
 
 ################################################################################
 # The order of these defines the priority by which we try to find them.
-VALID_VS_VERSIONS="2010 2012 2013 2015 2017"
+VALID_VS_VERSIONS="2010 2012 2013 2015 2017 2019"
 
 VS_DESCRIPTION_2010="Microsoft Visual Studio 2010"
 VS_VERSION_INTERNAL_2010=100
@@ -83,6 +83,18 @@ VS_SDK_INSTALLDIR_2017=
 VS_VS_PLATFORM_NAME_2017="v141"
 VS_SDK_PLATFORM_NAME_2017=
 
+VS_DESCRIPTION_2019="Microsoft Visual Studio 2019 - CURRENTLY NOT WORKING"
+VS_VERSION_INTERNAL_2019=141
+VS_MSVCR_2019=vcruntime140.dll
+VS_MSVCP_2019=msvcp140.dll
+VS_ENVVAR_2019="VS150COMNTOOLS"
+VS_USE_UCRT_2019="true"
+VS_VS_INSTALLDIR_2019="Microsoft Visual Studio/2019"
+VS_EDITIONS_2019="Community Professional Enterprise"
+VS_SDK_INSTALLDIR_2019=
+VS_VS_PLATFORM_NAME_2019="v141"
+VS_SDK_PLATFORM_NAME_2019=
+
 ################################################################################
 
 AC_DEFUN([TOOLCHAIN_CHECK_POSSIBLE_VISUAL_STUDIO_ROOT],
@@ -107,10 +119,10 @@ AC_DEFUN([TOOLCHAIN_CHECK_POSSIBLE_VISUAL_STUDIO_ROOT],
     if test -d "$VS_BASE"; then
       AC_MSG_NOTICE([Found Visual Studio installation at $VS_BASE using $METHOD])
       if test "x$OPENJDK_TARGET_CPU_BITS" = x32; then
-        VCVARSFILES="vc/bin/vcvars32.bat vc/auxiliary/build/vcvars32.bat"
+        VCVARSFILES="vc/bin/vcvars32.bat vc/auxiliary/build/vcvars32.bat Auxiliary/Build/vcvars32.bat"
       else
         VCVARSFILES="vc/bin/amd64/vcvars64.bat vc/bin/x86_amd64/vcvarsx86_amd64.bat \
-            vc/auxiliary/build/vcvarsx86_amd64.bat vc/auxiliary/build/vcvars64.bat"
+            vc/auxiliary/build/vcvarsx86_amd64.bat vc/auxiliary/build/vcvars64.bat Auxiliary/Build/vcvars64.bat"
       fi
 
       for VCVARSFILE in $VCVARSFILES; do
@@ -197,8 +209,6 @@ AC_DEFUN([TOOLCHAIN_FIND_VISUAL_STUDIO_BAT_FILE],
       AC_MSG_ERROR([Cannot locate a valid Visual Studio installation])
     fi
   fi
-
-  VS_ENV_CMD=""
 
   if test "x$VS_COMNTOOLS" != x; then
     TOOLCHAIN_CHECK_POSSIBLE_VISUAL_STUDIO_ROOT([${VS_VERSION}],

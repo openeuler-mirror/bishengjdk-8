@@ -269,9 +269,6 @@ ifeq ($(USE_EXTERNAL_LIBZ), true)
   LIBZIP_EXCLUDES += zlib
 else
   ZLIB_CPPFLAGS := -I$(JDK_TOPDIR)/src/share/native/java/util/zip/zlib
-  ifeq ($(OPENJDK_TARGET_CPU), aarch64)
-    ZLIB_CPPFLAGS += -DCRC32_ARMV8_CRC32 -DHASH_ARMV8_CRC32 -march=armv8-a+crc -DUNALIGNED_OK -DADLER32_SIMD_NEON -DSLIDE_HASH_NEON -DINFLATE_CHUNK_SIMD_NEON -O3
-  endif
 endif
 
 BUILD_LIBZIP_REORDER :=
@@ -289,7 +286,7 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBZIP, \
     LIBRARY := zip, \
     OUTPUT_DIR := $(INSTALL_LIBRARIES_HERE), \
     LANG := C, \
-    OPTIMIZATION := HIGHEST, \
+    OPTIMIZATION := LOW, \
     EXTRA_FILES := $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp, \
     SRC := $(JDK_TOPDIR)/src/share/native/java/util/zip, \
     EXCLUDES := $(LIBZIP_EXCLUDES), \

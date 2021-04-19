@@ -52,12 +52,12 @@ public class VerifyCACerts {
             + File.separator + "security" + File.separator + "cacerts";
 
     // The numbers of certs now.
-    private static final int COUNT = 90;
+    private static final int COUNT = 88;
 
     // SHA-256 of cacerts, can be generated with
     // shasum -a 256 cacerts | sed -e 's/../&:/g' | tr '[:lower:]' '[:upper:]' | cut -c1-95
     private static final String CHECKSUM
-            = "8E:A5:85:3C:66:C0:7C:B1:2A:B6:67:31:B3:4A:8E:78:1B:8D:DC:49:F1:42:65:DB:CE:7C:69:41:F3:94:3A:F7";
+            = "25:2F:A9:73:74:A5:62:71:E0:12:75:FB:E7:C0:BF:BF:38:E5:B1:93:72:D4:2C:3C:2D:4D:B8:FA:05:F7:EC:3F";
 
     // map of cert alias to SHA-256 fingerprint
     @SuppressWarnings("serial")
@@ -146,10 +146,6 @@ public class VerifyCACerts {
                     "5D:56:49:9B:E4:D2:E0:8B:CF:CA:D0:8A:3E:38:72:3D:50:50:3B:DE:70:69:48:E4:2F:55:60:30:19:E5:28:AE");
             put("letsencryptisrgx1 [jdk]",
                     "96:BC:EC:06:26:49:76:F3:74:60:77:9A:CF:28:C5:A7:CF:E8:A3:C0:AA:E1:1A:8F:FC:EE:05:C0:BD:DF:08:C6");
-            put("luxtrustglobalrootca [jdk]",
-                    "A1:B2:DB:EB:64:E7:06:C6:16:9E:3C:41:18:B2:3B:AA:09:01:8A:84:27:66:6D:8B:F0:E2:88:91:EC:05:19:50");
-            put("quovadisrootca [jdk]",
-                    "A4:5E:DE:3B:BB:F0:9C:8A:E1:5C:72:EF:C0:72:68:D6:93:A2:1C:99:6F:D5:1E:67:CA:07:94:60:FD:6D:88:73");
             put("quovadisrootca1g3 [jdk]",
                     "8A:86:6F:D1:B2:76:B5:7E:57:8E:92:1C:65:82:8A:2B:ED:58:E9:F2:F2:88:05:41:34:B7:F1:F4:BF:C9:CC:74");
             put("quovadisrootca2 [jdk]",
@@ -246,6 +242,8 @@ public class VerifyCACerts {
     @SuppressWarnings("serial")
     private static final HashSet<String> EXPIRY_EXC_ENTRIES = new HashSet<String>() {
         {
+            // Valid until: Tue Apr 06 15:29:40 HKT 2021
+            add("soneraclass2ca [jdk]");
         }
     };
 
