@@ -266,6 +266,15 @@ public abstract class FontConfiguration {
     private File findFontConfigFile(String javaLib) {
         String baseName = javaLib + File.separator + "fontconfig";
         File configFile;
+        String useFontConfig = System.getProperty("useFontConfig");
+        if (FontUtilities.isLinux && (useFontConfig == null || !useFontConfig.equals("true"))) {
+            foundOsSpecificFile = false;
+            configFile = findImpl(baseName);
+            if (configFile != null) {
+                return configFile;
+            }
+            return null;
+        }
         String osMajorVersion = null;
         if (osVersion != null && osName != null) {
             configFile = findImpl(baseName + "." + osName + "." + osVersion);
@@ -300,12 +309,7 @@ public abstract class FontConfiguration {
             }
         }
         foundOsSpecificFile = false;
-
-        configFile = findImpl(baseName);
-        if (configFile != null) {
-            return configFile;
-        }
-        return null;
+        return (configFile = findImpl(baseName));
     }
 
     /* Initialize the internal data tables from binary format font

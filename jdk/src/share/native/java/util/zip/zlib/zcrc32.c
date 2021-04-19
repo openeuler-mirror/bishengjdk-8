@@ -257,56 +257,7 @@ uLong ZEXPORT crc32_z(crc, buf, len)
     return crc ^ 0xffffffffUL;
 }
 
-
-#ifdef CRC32_ARMV8_CRC32
-#include <arm_acle.h>
-
-uLong ZEXPORT crc32(crc, buf, len)
-    uLong crc;
-    const unsigned char FAR *buf;
-    uInt len;
-{
-    
-    uint32_t c = (uint32_t) ~crc;
-
-    if (buf == Z_NULL) return 0UL; 
-
-    while (len && ((uintptr_t)buf & 7)) {
-        c = __crc32b(c, *buf++);
-        --len;
-    }
-
-    const uint64_t *buf8 = (const uint64_t *)buf;
-
-    while (len >= 64) {
-        c = __crc32d(c, *buf8++);
-        c = __crc32d(c, *buf8++);
-        c = __crc32d(c, *buf8++);
-        c = __crc32d(c, *buf8++);
-
-        c = __crc32d(c, *buf8++);
-        c = __crc32d(c, *buf8++);
-        c = __crc32d(c, *buf8++);
-        c = __crc32d(c, *buf8++);
-        len -= 64;
-    }
-
-    while (len >= 8) {
-        c = __crc32d(c, *buf8++);
-        len -= 8;
-    }
-
-    buf = (const unsigned char *)buf8;
-
-    while (len--) {
-        c = __crc32b(c, *buf++);
-    }
-
-    return ~c;
-}
-
-#else
-
+/* ========================================================================= */
 uLong ZEXPORT crc32(crc, buf, len)
     uLong crc;
     const unsigned char FAR *buf;
@@ -314,8 +265,6 @@ uLong ZEXPORT crc32(crc, buf, len)
 {
     return crc32_z(crc, buf, len);
 }
-
-#endif
 
 #ifdef BYFOUR
 

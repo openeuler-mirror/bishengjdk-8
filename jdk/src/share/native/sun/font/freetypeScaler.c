@@ -43,6 +43,7 @@
 #include FT_SYNTHESIS_H
 #include FT_LCD_FILTER_H
 #include FT_MODULE_H
+#include FT_LCD_FILTER_H
 
 #include "fontscaler.h"
 

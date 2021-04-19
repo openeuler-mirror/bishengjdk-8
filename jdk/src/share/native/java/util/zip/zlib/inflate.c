@@ -429,16 +429,9 @@ unsigned copy;
 
     /* if it hasn't been done already, allocate space for the window */
     if (state->window == Z_NULL) {
-#if defined(INFLATE_CHUNK_SIMD_NEON)
-        unsigned wsize = 1U << state->wbits;
-        state->window = (unsigned char FAR *)
-                        ZALLOC(strm, CHUNKCOPY_CHUNK_SIZE + wsize,
-                               sizeof(unsigned char));
-#else
         state->window = (unsigned char FAR *)
                         ZALLOC(strm, 1U << state->wbits,
                                sizeof(unsigned char));
-#endif
         if (state->window == Z_NULL) return 1;
     }
 

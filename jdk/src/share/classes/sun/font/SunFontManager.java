@@ -438,11 +438,17 @@ public abstract class SunFontManager implements FontSupport, FontManagerForSGE {
                         /* Create the font configuration and get any font path
                          * that might be specified.
                          */
-                        fontConfig = createFontConfiguration();
-                        if (isOpenJDK()) {
-                            String[] fontInfo = getDefaultPlatformFont();
-                            defaultFontName = fontInfo[0];
-                            defaultFontFileName = fontInfo[1];
+                        try {
+                            fontConfig = createFontConfiguration();
+                            if (isOpenJDK()) {
+                                String[] fontInfo = getDefaultPlatformFont();
+                                defaultFontName = fontInfo[0];
+                                defaultFontFileName = fontInfo[1];
+                            }
+                        } catch(Exception e) {
+                            e.printStackTrace();
+                            System.out.println("Initialize default font fail,try font in jre/lib/fonts if exists.");
+                            FontUtilities.isOpenJDK = false;
                         }
 
                         String extraFontPath = fontConfig.getExtraFontPath();

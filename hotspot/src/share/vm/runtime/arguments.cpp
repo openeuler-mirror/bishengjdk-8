@@ -2172,9 +2172,10 @@ void Arguments::set_bytecode_flags() {
 
 // set Integer and Long box type cached MAX num flag : -XX:BoxTypeCachedMax=<size>
 void Arguments::set_boxtype_cached_max_flags() {
+#ifdef COMPILER2
   if (!AggressiveOpts) {
     if (!FLAG_IS_DEFAULT(BoxTypeCachedMax)) {
-       int  size = 1024;
+       const int size = 1024;
        char buffer[size];
        jio_snprintf(buffer, size, "java.lang.Long.LongCache.high=" INTX_FORMAT, BoxTypeCachedMax);
        add_property(buffer);
@@ -2182,6 +2183,7 @@ void Arguments::set_boxtype_cached_max_flags() {
        add_property(buffer);
     }
   }
+#endif
 }
 
 // Aggressive optimization flags  -XX:+AggressiveOpts
@@ -2827,7 +2829,9 @@ bool Arguments::check_vm_args_consistency() {
   // Check the minimum number of compiler threads
   status &=verify_min_value(CICompilerCount, min_number_of_compiler_threads, "CICompilerCount");
 
+#ifdef COMPILER2
   status &= verify_min_value(BoxTypeCachedMax, 1, "BoxTypeCachedMax");
+#endif
 
   return status;
 }
@@ -3020,6 +3024,10 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args,
   for (int index = 0; index < args->nOptions; index++) {
     const JavaVMOption* option = args->options + index;
     if (match_option(option, "-XX:+UseAppCDS", &tail)) {
+#ifndef __linux__
+        tty->print_cr("failed: must not use AppCDS on non-linux system.");
+        JVM_Exit(0);
+#endif
       if (!process_argument("+UseAppCDS", args->ignoreUnrecognized, origin)) {
         return JNI_EINVAL;
       } else {

@@ -55,6 +55,10 @@ CXX=cl.exe
 # These are always used in all compiles
 CXX_FLAGS=$(EXTRA_CFLAGS) /nologo /W3 /WX /GS
 
+!if "$(MSC_VER)" > "1910"
+CXX_FLAGS=$(EXTRA_CFLAGS) /nologo /W3 /GS /arch:IA32
+!endif
+
 # Let's add debug information when Full Debug Symbols is enabled
 !if "$(ENABLE_FULL_DEBUG_SYMBOLS)" == "1"
 CXX_FLAGS=$(CXX_FLAGS) /Zi
@@ -158,6 +162,12 @@ COMPILER_NAME=VS2017
 !endif
 !if "$(MSC_VER)" == "1913"
 COMPILER_NAME=VS2017
+!endif
+!if "$(MSC_VER)" == "1914"
+COMPILER_NAME=VS2017
+!endif
+!if "$(MSC_VER)" == "1916"
+COMPILER_NAME=VS2019
 !endif
 !endif
 
@@ -294,6 +304,21 @@ SAFESEH_FLAG = /SAFESEH
 !endif
 
 !if "$(COMPILER_NAME)" == "VS2017"
+PRODUCT_OPT_OPTION   = /O2 /Oy-
+FASTDEBUG_OPT_OPTION = /O2 /Oy-
+DEBUG_OPT_OPTION     = /Od
+GX_OPTION = /EHsc
+LD_FLAGS = /manifest $(LD_FLAGS)
+MP_FLAG = /MP
+# Manifest Tool - used in VS2005 and later to adjust manifests stored
+# as resources inside build artifacts.
+!if "x$(MT)" == "x"
+MT=mt.exe
+!endif
+SAFESEH_FLAG = /SAFESEH
+!endif
+
+!if "$(COMPILER_NAME)" == "VS2019"
 PRODUCT_OPT_OPTION   = /O2 /Oy-
 FASTDEBUG_OPT_OPTION = /O2 /Oy-
 DEBUG_OPT_OPTION     = /Od

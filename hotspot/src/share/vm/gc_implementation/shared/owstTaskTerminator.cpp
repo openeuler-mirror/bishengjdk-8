@@ -21,9 +21,8 @@
  *
  */
  
+#include "precompiled.hpp"
 #include "owstTaskTerminator.hpp"
-
-#include "precompiled/precompiled.hpp"
 
 bool OWSTTaskTerminator::exit_termination(size_t tasks, TerminatorTerminator* terminator) {
   return tasks > 0 || (terminator != NULL && terminator->should_exit_termination());
