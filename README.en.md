@@ -10,6 +10,10 @@ User Guide && Installation Guide, see [wiki](https://gitee.com/openeuler/bisheng
 
 Bisheng JDK currentyly supports `Linux/AArch64`.
 
+## Build platforms
+
+Build platforms for Bisheng JDK, see[wiki](https://gitee.com/openeuler/bishengjdk-8/wikis/Bisheng%20JDK%208%20Source%20Code%20Building%20Description?sort_id=3919536)
+
 ## License
 
 Bisheng JDK is licensed under GPLv2 with Classpath Exception, see [License](https://gitee.com/openeuler/bishengjdk-8/blob/master/LICENSE).
