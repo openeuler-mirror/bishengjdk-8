@@ -609,7 +609,7 @@ void LIRGenerator::do_ArithmeticOp_Int(ArithmeticOp* x) {
     if (right.is_constant()) {
       jint c = right.get_jint_constant();
       if (c > 0 && c < max_jint && (is_power_of_2(c) || is_power_of_2(c - 1) || is_power_of_2(c + 1))) {
-        right.dont_load_item();
+        right_arg->dont_load_item();
       } else {
         // Cannot use constant op.
 	right_arg->load_item();
