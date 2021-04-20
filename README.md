@@ -10,6 +10,10 @@
 
 毕昇JDK 当前支持 `Linux/AArch64` 平台。
 
+## 源码构建说明
+
+毕昇JDK源码构建说明，请见[wiki](https://gitee.com/openeuler/bishengjdk-8/wikis/毕昇JDK%208%20源码构建说明?sort_id=3919289)
+
 ## License
 
 毕昇JDK 使用 GPLv2 with Classpath Exception协议，请见 [License](https://gitee.com/openeuler/bishengjdk-8/blob/master/LICENSE)。
