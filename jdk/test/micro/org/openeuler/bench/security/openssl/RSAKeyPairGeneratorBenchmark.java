@@ -30,6 +30,7 @@ import org.openjdk.jmh.annotations.Setup;
 import java.util.concurrent.TimeUnit;
 import org.openjdk.jmh.annotations.Warmup;
 
+import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 
 @Warmup(iterations = 10, time = 2, timeUnit = TimeUnit.SECONDS)
@@ -46,12 +47,12 @@ public class RSAKeyPairGeneratorBenchmark extends BenchmarkBase {
     public void setUp() throws Exception {
         setupProvider();
         keyPairGenerator = createKeyPairGenerator();
+        keyPairGenerator.initialize(keySize);
     }
 
     @Benchmark
-    public void generateKeyPair() throws Exception {
-        keyPairGenerator.initialize(keySize);
-        keyPairGenerator.generateKeyPair();
+    public KeyPair generateKeyPair() throws Exception {
+        return keyPairGenerator.generateKeyPair();
     }
 
     private KeyPairGenerator createKeyPairGenerator() throws Exception {
