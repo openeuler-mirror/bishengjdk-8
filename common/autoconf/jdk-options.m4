@@ -466,8 +466,8 @@ AC_DEFUN_ONCE([JDKOPT_SETUP_JDK_OPTIONS],
   #
   # Enable or disable kae
   #
-  AC_ARG_ENABLE(kae, [AS_HELP_STRING([--disable-kae],
-      [disable KAE @<:@disabled@:>@])],,
+  AC_ARG_ENABLE(kae, [AS_HELP_STRING([--enable-kae],
+      [enable KAE @<:@enabled@:>@])],,
       [enable_kae=no])
   if test "x$enable_kae" = "xyes"; then
     ENABLE_KAE=true

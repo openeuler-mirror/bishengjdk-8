@@ -1849,7 +1849,7 @@ Optional Features:
   --enable-unlimited-crypto
                           Enable unlimited crypto policy [disabled]
   --disable-jfr           Disable Java Flight Recorder support [enabled]
-  --disable-kae           Disable KAE support on aarch64 [enabled]
+  --enable-kae            Enable KAE support on aarch64 [disabled]
   --disable-debug-symbols disable generation of debug symbols [enabled]
   --disable-zip-debug-info
                           disable zipping of debug-info files [enabled]
@@ -19868,12 +19868,8 @@ $as_echo_n "checking whether to build KAE... " >&6; }
 if test "${enable_kae+set}" = set; then :
   enableval=$enable_kae; enable_kae="${enableval}"
 else
-  #default enable on aarch64
-  if test "x$OPENJDK_TARGET_CPU" = xaarch64; then
-    enable_kae="yes"
-  else
-    enable_kae="no"
-  fi
+  #default disable kae
+  enable_kae="no"
 fi
 
   if test "x$enable_kae" = "xyes"; then
