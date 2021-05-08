@@ -2,7 +2,7 @@
 
 Bisheng JDK is a high-performance, production-ready downstream distribution of OpenJDK. As the in-house OpenJDK implementation at Huawei, Bisheng JDK runs on more than 500 products within Huawei, accumulating a large number of usage scenarios and problems and demands from java developers, solving many problems encountered in the actual operation of the business, and typically optimizated on the ARM architecture. Bisheng JDK can run in big data applications with better performance. Bisheng JDK 8 is compatible with the Java SE standard. As a "friendly fork" project under the same license as the upstream OpenJDK project, Bisheng JDK continues to contribute to the OpenJDK community all along.
 
-The latest binary builds can be downloaded from [releases](https://mirrors.huaweicloud.com/kunpeng/archive/compiler/bisheng_jdk/).
+The latest binary builds can be downloaded from [releases](https://www.hikunpeng.com/en/developer/devkit/compiler?data=JDK).
 
 User Guide && Installation Guide, see [wiki](https://gitee.com/openeuler/bishengjdk-8/wikis/Home?sort_id=2879418)
 
