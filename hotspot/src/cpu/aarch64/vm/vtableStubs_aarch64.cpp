@@ -229,7 +229,7 @@ int VtableStub::pd_code_size_limit(bool is_vtable_stub) {
   if (is_vtable_stub) {
     size += 52;
   } else {
-    // itable code size limit, see issue#983
+    // itable code size limit.
     size += 192;
   }
   return size;

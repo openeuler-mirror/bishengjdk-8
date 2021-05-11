@@ -172,7 +172,6 @@ static int RSACryptOAEPPadding(JNIEnv* env, jlong keyAddress, jint inLen, jbyteA
     jbyte* inBytes = NULL;
     // outLen type should be size_t
     // EVP_PKEY_encrypt takes the outLen address as a parameter, and the parameter type is size_t*
-    // You can refer to the issue #2774 to see more content
     size_t outLen = 0;
 
     EVP_PKEY* pkey = (EVP_PKEY*) keyAddress;
