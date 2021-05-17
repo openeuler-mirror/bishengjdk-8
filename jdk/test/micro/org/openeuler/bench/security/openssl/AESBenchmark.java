@@ -83,7 +83,7 @@ public class AESBenchmark extends BenchmarkBase {
     }
 
     @Benchmark
-    @Fork(jvmArgsAppend = {"-Dkae.disableKaeDispose=true"})
+    @Fork(jvmArgsPrepend = {"-Xms100G", "-Xmx100G", "-XX:+AlwaysPreTouch", "-Dkae.disableKaeDispose=true"}, value = 5)
     public byte[] encryptDispose() throws IllegalBlockSizeException, BadPaddingException {
         byte[] d = data[index];
         index = (index + 1) % SET_SIZE;
@@ -98,7 +98,7 @@ public class AESBenchmark extends BenchmarkBase {
     }
 
     @Benchmark
-    @Fork(jvmArgsAppend = {"-Dkae.disableKaeDispose=true"})
+    @Fork(jvmArgsPrepend = {"-Xms100G", "-Xmx100G", "-XX:+AlwaysPreTouch", "-Dkae.disableKaeDispose=true"}, value = 5)
     public byte[] decryptDispose() throws IllegalBlockSizeException, BadPaddingException {
         byte[] e = encryptedData[index];
         index = (index + 1) % SET_SIZE;

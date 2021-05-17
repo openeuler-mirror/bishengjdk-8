@@ -21,14 +21,12 @@
  * questions.
  */
 
+#include <stdbool.h>
 #include <openssl/rsa.h>
 #include <openssl/evp.h>
 #include "kae_util.h"
 #include "kae_exception.h"
 #include "org_openeuler_security_openssl_KAERSACipher.h"
-
-#define SUCCESS 1
-#define FAILED -1
 
 typedef int RSACryptOperation(int, const unsigned char*, unsigned char*, RSA*, int);
 
@@ -88,55 +86,55 @@ cleanup:
 /*
  * set rsa padding
  */
-static int SetRSAPadding(JNIEnv* env, EVP_PKEY_CTX* pkeyCtx, int paddingType) {
+static bool SetRSAPadding(JNIEnv* env, EVP_PKEY_CTX* pkeyCtx, int paddingType) {
     if (EVP_PKEY_CTX_set_rsa_padding(pkeyCtx, paddingType) <= 0) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_CTX_set_rsa_padding", KAE_ThrowInvalidAlgorithmParameterException);
-        return FAILED;
+        return false;
     }
-    return SUCCESS;
+    return true;
 }
 
 /*
  * set rsa mgf1 md
  */
-static int SetRSAMgf1Md(JNIEnv* env, EVP_PKEY_CTX* pkeyCtx, const char* mgf1MdAlgoUTF) {
+static bool SetRSAMgf1Md(JNIEnv* env, EVP_PKEY_CTX* pkeyCtx, const char* mgf1MdAlgoUTF) {
     EVP_MD* mgf1MD = (EVP_MD*)EVP_get_digestbyname(mgf1MdAlgoUTF);
     if (mgf1MD == NULL) {
         KAE_ThrowFromOpenssl(env, "EVP_get_digestbyname", KAE_ThrowInvalidAlgorithmParameterException);
-        return FAILED;
+        return false;
     }
     if (EVP_PKEY_CTX_set_rsa_mgf1_md(pkeyCtx, mgf1MD) <= 0) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_CTX_set_rsa_mgf1_md", KAE_ThrowInvalidAlgorithmParameterException);
-        return FAILED;
+        return false;
     }
-    return SUCCESS;
+    return true;
 }
 
 /*
  * set rsa oaep md
  */
-static int SetRSAOaepMd(JNIEnv* env, EVP_PKEY_CTX* pkeyCtx, const char* oaepMdAlgoUTF) {
+static bool SetRSAOaepMd(JNIEnv* env, EVP_PKEY_CTX* pkeyCtx, const char* oaepMdAlgoUTF) {
     EVP_MD* oaepMD = (EVP_MD*)EVP_get_digestbyname(oaepMdAlgoUTF);
     if (oaepMD == NULL) {
         KAE_ThrowFromOpenssl(env, "EVP_get_digestbyname", KAE_ThrowInvalidAlgorithmParameterException);
-        return FAILED;
+        return false;
     }
     if (EVP_PKEY_CTX_set_rsa_oaep_md(pkeyCtx, oaepMD) <= 0) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_CTX_set_rsa_oaep_md", KAE_ThrowInvalidAlgorithmParameterException);
-        return FAILED;
+        return false;
     }
-    return SUCCESS;
+    return true;
 }
 
 /*
  * set rsa oaep label
  */
-static int SetRSAOaepLabel(JNIEnv* env, EVP_PKEY_CTX* pkeyCtx, jbyte* labelBytes, jsize labelSize) {
+static bool SetRSAOaepLabel(JNIEnv* env, EVP_PKEY_CTX* pkeyCtx, jbyte* labelBytes, jsize labelSize) {
     if (EVP_PKEY_CTX_set0_rsa_oaep_label(pkeyCtx, labelBytes, labelSize) <= 0) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_CTX_set0_rsa_oaep_label", KAE_ThrowInvalidAlgorithmParameterException);
-        return FAILED;
+        return false;
     }
-    return SUCCESS;
+    return true;
 }
 
 /*
@@ -194,9 +192,9 @@ static int RSACryptOAEPPadding(JNIEnv* env, jlong keyAddress, jint inLen, jbyteA
      * set rsa mgf1 md
      * set rsa oaep md
      */
-    if(SetRSAPadding(env, pkeyCtx, paddingType) == FAILED ||
-       SetRSAMgf1Md(env, pkeyCtx, mgf1MdAlgoUTF) == FAILED ||
-       SetRSAOaepMd(env, pkeyCtx, oaepMdAlgoUTF) == FAILED) {
+    if(!SetRSAPadding(env, pkeyCtx, paddingType) ||
+       !SetRSAMgf1Md(env, pkeyCtx, mgf1MdAlgoUTF) ||
+       !SetRSAOaepMd(env, pkeyCtx, oaepMdAlgoUTF)) {
         goto cleanup;
     }
 
@@ -210,7 +208,7 @@ static int RSACryptOAEPPadding(JNIEnv* env, jlong keyAddress, jint inLen, jbyteA
             goto cleanup;
         }
         (*env)->GetByteArrayRegion(env, label, 0, labelSize, labelBytes);
-        if(SetRSAOaepLabel(env, pkeyCtx, labelBytes, labelSize) == FAILED) {
+        if(!SetRSAOaepLabel(env, pkeyCtx, labelBytes, labelSize)) {
             free(labelBytes);
             goto cleanup;
         }
@@ -279,21 +277,21 @@ JNIEXPORT jlong JNICALL Java_org_openeuler_security_openssl_KAERSACipher_nativeC
         (bnDMP1 = KAE_GetBigNumFromByteArray(env, dmp1)) == NULL ||
         (bnDMQ1 = KAE_GetBigNumFromByteArray(env, dmq1)) == NULL ||
         (bnIQMP = KAE_GetBigNumFromByteArray(env, iqmp)) == NULL) {
-        goto err;
+        goto cleanup;
     }
 
     // new pkey
     pkey = EVP_PKEY_new();
     if (pkey == NULL) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_new", KAE_ThrowRuntimeException);
-        goto err;
+        goto cleanup;
     }
 
     // new rsa
     rsa = RSA_new();
     if (rsa == NULL) {
         KAE_ThrowFromOpenssl(env, "RSA_new", KAE_ThrowRuntimeException);
-        goto err;
+        goto cleanup;
     }
 
     // set rsa private crt key params n,e,d,p,q,dmp1,dmp1,iqmp
@@ -301,17 +299,17 @@ JNIEXPORT jlong JNICALL Java_org_openeuler_security_openssl_KAERSACipher_nativeC
         RSA_set0_factors(rsa, bnP, bnQ) <= 0 ||
         RSA_set0_crt_params(rsa, bnDMP1, bnDMQ1, bnIQMP) <= 0) {
         KAE_ThrowFromOpenssl(env, "RSA set param", KAE_ThrowRuntimeException);
-        goto err;
+        goto cleanup;
     }
 
     // assign rsa to pkey
     int result = EVP_PKEY_assign_RSA(pkey, rsa);
     if (result <= 0) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_assign_RSA", KAE_ThrowRuntimeException);
-        goto err;
+        goto cleanup;
     }
     return (jlong)pkey;
-err:
+cleanup:
     ReleaseRSAParams(bnN, bnE, bnD, bnP, bnQ, bnDMP1, bnDMQ1, bnIQMP);
     RSA_free(rsa);
     EVP_PKEY_free(pkey);
@@ -334,43 +332,43 @@ JNIEXPORT jlong JNICALL Java_org_openeuler_security_openssl_KAERSACipher_nativeC
     // get public key param n
     bnN = KAE_GetBigNumFromByteArray(env, n);
     if (bnN == NULL) {
-        goto err;
+        goto cleanup;
     }
 
     // get public key param e
     bnE = KAE_GetBigNumFromByteArray(env, e);
     if (bnE == NULL) {
-        goto err;
+        goto cleanup;
     }
 
     // new RSA
     rsa = RSA_new();
     if (rsa == NULL) {
         KAE_ThrowFromOpenssl(env, "RSA_new", KAE_ThrowRuntimeException);
-        goto err;
+        goto cleanup;
     }
 
     // new EVP_PKEY
     pkey = EVP_PKEY_new();
     if (pkey == NULL) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_new", KAE_ThrowRuntimeException);
-        goto err;
+        goto cleanup;
     }
 
     // set rsa public key params n and e
     if(RSA_set0_key(rsa, bnN, bnE, NULL) <= 0) {
         KAE_ThrowFromOpenssl(env, "RSA_set0_key", KAE_ThrowRuntimeException);
-        goto err;
+        goto cleanup;
     }
 
     // assign rsa to pkey
     int result = EVP_PKEY_assign_RSA(pkey, rsa);
     if (result <= 0) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_assign_RSA", KAE_ThrowRuntimeException);
-        goto err;
+        goto cleanup;
     }
     return (jlong)pkey;
-err:
+cleanup:
     KAE_ReleaseBigNumFromByteArray(bnN);
     KAE_ReleaseBigNumFromByteArray(bnE);
     RSA_free(rsa);

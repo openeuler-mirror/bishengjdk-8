@@ -20,6 +20,8 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
+
+#include <stdbool.h>
 #include <openssl/rsa.h>
 #include "kae_util.h"
 #include "kae_exception.h"
@@ -31,18 +33,18 @@
 
 // rsa param index
 typedef enum RSAParamIndex {
-    rsa_n = 0,
-    rsa_e = 1,
-    rsa_d = 2,
-    rsa_p = 3,
-    rsa_q = 4,
-    rsa_dmp1 = 5,
-    rsa_dmq1 = 6,
-    rsa_iqmp = 7
+    rsaN = 0,
+    rsaE,
+    rsaD,
+    rsaP,
+    rsaQ,
+    rsaDmp1,
+    rsaDmq1,
+    rsaIqmp
 } RSAParamIndex;
 
 // rsa param name array
-static const char* RSAParamNames[] = {"n", "e", "d", "p", "q", "dmp1", "dmq1", "iqmp"};
+static const char* rsaParamNames[] = {"n", "e", "d", "p", "q", "dmp1", "dmq1", "iqmp"};
 
 // rsa get rsa param function list
 static const BIGNUM* (* GetRSAParamFunctionList[])(const RSA*) = {
@@ -103,25 +105,25 @@ static void ReleaseRSA(RSA* rsa) {
  * step 3. Convert paramValue (BIGNUM) to jbyteArray
  * step 4. Set the rsa param to the param array
  */
-static int SetRSAKeyParam(JNIEnv* env, RSA* rsa, jobjectArray params, RSAParamIndex rsaParamIndex) {
+static bool SetRSAKeyParam(JNIEnv* env, RSA* rsa, jobjectArray params, RSAParamIndex rsaParamIndex) {
     // get rsa param name
-    const char* rsaParamName = RSAParamNames[rsaParamIndex];
+    const char* rsaParamName = rsaParamNames[rsaParamIndex];
 
     // get rsa param value
     const BIGNUM* rsaParamValue = GetRSAParamFunctionList[rsaParamIndex](rsa);
     if (rsaParamValue == NULL) {
-        return FAILED;
+        return false;
     }
 
     // Convert paramValue to jbyteArray
     jbyteArray param = KAE_GetByteArrayFromBigNum(env, rsaParamValue, rsaParamName);
     if (param == NULL) {
-        return FAILED;
+        return false;
     }
 
     // Set the rsa param to the param array
     (*env)->SetObjectArrayElement(env, params, rsaParamIndex, param);
-    return SUCCESS;
+    return true;
 }
 
 /*
@@ -139,8 +141,8 @@ static jobjectArray NewRSAKeyParams(JNIEnv* env, RSA* rsa) {
     }
 
     // set rsa key param
-    for (RSAParamIndex paramIndex = rsa_n; paramIndex <= rsa_iqmp; paramIndex++) {
-        if (SetRSAKeyParam(env, rsa, params, paramIndex) == FAILED) {
+    for (RSAParamIndex paramIndex = rsaN; paramIndex <= rsaIqmp; paramIndex++) {
+        if (!SetRSAKeyParam(env, rsa, params, paramIndex)) {
             return NULL;
         }
     }

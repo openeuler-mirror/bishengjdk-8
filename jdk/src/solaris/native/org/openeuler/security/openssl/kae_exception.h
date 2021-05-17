@@ -49,4 +49,9 @@ void KAE_ThrowInvalidKeyException(JNIEnv* env, const char* msg);
 /* Throw AlgorithmParameterException */
 void KAE_ThrowInvalidAlgorithmParameterException(JNIEnv* env, const char* msg);
 
+void KAE_ThrowAEADBadTagException(JNIEnv* env, const char* msg);
+
+void KAE_ThrowSignatureException(JNIEnv* env, const char* msg);
+
+void KAE_ThrowClassNotFoundException(JNIEnv* env, const char* msg);
 #endif

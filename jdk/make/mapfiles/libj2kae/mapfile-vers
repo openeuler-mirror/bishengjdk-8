@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, Huawei Technologies Co., Ltd. All rights reserved.
+# Copyright (c) 2021, Huawei Technologies Co., Ltd. All rights reserved.
 # DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
 #
 # This code is free software; you can redistribute it and/or modify it
@@ -32,14 +32,18 @@ SUNWprivate_1.1 {
 		Java_org_openeuler_security_openssl_KAEDigest_nativeDigest;
 		Java_org_openeuler_security_openssl_KAEDigest_nativeClone;
 		Java_org_openeuler_security_openssl_KAEDigest_nativeFree;
-		Java_org_openeuler_security_openssl_KAEAESCipher_nativeInit;
-		Java_org_openeuler_security_openssl_KAEAESCipher_nativeUpdate;
-		Java_org_openeuler_security_openssl_KAEAESCipher_nativeFinal;
-		Java_org_openeuler_security_openssl_KAEAESCipher_nativeFree;
-		Java_org_openeuler_security_openssl_KAEMac_nativeInit;
-		Java_org_openeuler_security_openssl_KAEMac_nativeUpdate;
-		Java_org_openeuler_security_openssl_KAEMac_nativeFinal;
-		Java_org_openeuler_security_openssl_KAEMac_nativeFree;
+		Java_org_openeuler_security_openssl_KAESymmetricCipherBase_nativeInit;
+		Java_org_openeuler_security_openssl_KAESymmetricCipherBase_nativeUpdate;
+		Java_org_openeuler_security_openssl_KAESymmetricCipherBase_nativeFinal;
+		Java_org_openeuler_security_openssl_KAESymmetricCipherBase_nativeFinalGcm;
+		Java_org_openeuler_security_openssl_KAESymmetricCipherBase_nativeFree;
+		Java_org_openeuler_security_openssl_KAEECKeyPairGenerator_nativeGenerateParam;
+		Java_org_openeuler_security_openssl_KAEECKeyPairGenerator_nativeGenerateKeyPair;
+		Java_org_openeuler_security_openssl_KAEECDHKeyAgreement_nativeGenerateSecret;
+		Java_org_openeuler_security_openssl_KAEHMac_nativeInit;
+		Java_org_openeuler_security_openssl_KAEHMac_nativeUpdate;
+		Java_org_openeuler_security_openssl_KAEHMac_nativeFinal;
+		Java_org_openeuler_security_openssl_KAEHMac_nativeFree;
 		Java_org_openeuler_security_openssl_KAERSAKeyPairGenerator_nativeGenerateKeyPair;
 		Java_org_openeuler_security_openssl_KAERSACipher_nativeCreateRSAPrivateCrtKey;
 		Java_org_openeuler_security_openssl_KAERSACipher_nativeCreateRSAPrivateKey;
@@ -51,6 +55,12 @@ SUNWprivate_1.1 {
 		Java_org_openeuler_security_openssl_KAERSACipher_nativeRSAEncryptOAEPPadding;
 		Java_org_openeuler_security_openssl_KAERSACipher_nativeRSADecryptOAEPPadding;
 		Java_org_openeuler_security_openssl_KAERSACipher_nativeFreeKey;
+		Java_org_openeuler_security_openssl_KAEDHKeyPairGenerator_nativeGenerateKeyPair;
+		Java_org_openeuler_security_openssl_KAEDHKeyAgreement_nativeComputeKey;
+		Java_org_openeuler_security_openssl_KAERSASignatureNative_rsaSign;
+		Java_org_openeuler_security_openssl_KAERSASignatureNative_rsaVerify;
+		Java_org_openeuler_security_openssl_KAERSASignatureNative_pssSign;
+		Java_org_openeuler_security_openssl_KAERSASignatureNative_pssVerify;
 
 	local:
 		*;

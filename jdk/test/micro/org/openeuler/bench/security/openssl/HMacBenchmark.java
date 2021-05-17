@@ -63,7 +63,7 @@ public class HMacBenchmark extends BenchmarkBase {
     }
 
     @Benchmark
-    @Fork(jvmArgsAppend = {"-Dkae.disableKaeDispose=true"})
+    @Fork(jvmArgsPrepend = {"-Xms100G", "-Xmx100G", "-XX:+AlwaysPreTouch", "-Dkae.disableKaeDispose=true"}, value = 5)
     public byte[] macDispose() {
         byte[] d = data[index];
         index = (index + 1) % SET_SIZE;

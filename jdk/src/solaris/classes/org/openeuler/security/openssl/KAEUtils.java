@@ -91,8 +91,12 @@ class KAEUtils {
     private static final Map<String, String> DIGEST_ALGORITHM_NAME_MAP = new HashMap<>();
     private static final Map<String, Integer> DIGEST_ALGORITHM_LENGTH_MAP = new HashMap<>();
 
+    private static final Map<Integer, String> SIZE_TO_CURVE = new HashMap<>();
+    private static final Map<String, String> CURVE_ALIAS = new HashMap<>();
+
     static {
         initDigest();
+        initECDH();
     }
 
     private static void initDigest() {
@@ -109,11 +113,11 @@ class KAEUtils {
 
     // get the kae digest algorithm name
     static String getKAEDigestName(String digestName) {
-        return DIGEST_ALGORITHM_NAME_MAP.get(digestName);
+        return digestName == null ? null : DIGEST_ALGORITHM_NAME_MAP.get(digestName.toUpperCase(Locale.ROOT));
     }
 
-    static int getDigestLength(String digestName) {
-        return DIGEST_ALGORITHM_LENGTH_MAP.get(digestName);
+    static Integer getDigestLength(String digestName) {
+        return digestName == null ? null :DIGEST_ALGORITHM_LENGTH_MAP.get(digestName.toUpperCase(Locale.ROOT));
     }
 
     static class ConstructKeys {
@@ -192,5 +196,25 @@ class KAEUtils {
                     throw new InvalidKeyException("Unknown keytype " + keyType);
             }
         }
+    }
+
+    private static void initECDH() {
+        SIZE_TO_CURVE.put(224, "secp224r1");
+        SIZE_TO_CURVE.put(256, "prime256v1");
+        SIZE_TO_CURVE.put(384, "secp384r1");
+        SIZE_TO_CURVE.put(521, "secp521r1");
+        CURVE_ALIAS.put("secp256r1", "prime256v1");
+        CURVE_ALIAS.put("1.3.132.0.33", "secp224r1");
+        CURVE_ALIAS.put("1.3.132.0.34", "secp384r1");
+        CURVE_ALIAS.put("1.3.132.0.35", "secp521r1");
+        CURVE_ALIAS.put("1.2.840.10045.3.1.7", "prime256v1");
+    }
+
+    static String getCurveBySize(int size) {
+        return SIZE_TO_CURVE.get(size);
+    }
+
+    static String getCurveByAlias(String alias) {
+        return CURVE_ALIAS.get(alias);
     }
 }

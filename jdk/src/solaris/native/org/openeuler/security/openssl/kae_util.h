@@ -36,4 +36,12 @@ void KAE_ReleaseBigNumFromByteArray(BIGNUM* bn);
 /* BIGNUM convert to jbyteArray */
 jbyteArray KAE_GetByteArrayFromBigNum(JNIEnv* env, const BIGNUM* bn, const char* sourceName);
 
+void SetKaeEngine(ENGINE* engine);
+
+ENGINE* GetKaeEngine();
+
+void SetKaeEngine(ENGINE* engine);
+
+ENGINE* GetKaeEngine();
+
 #endif

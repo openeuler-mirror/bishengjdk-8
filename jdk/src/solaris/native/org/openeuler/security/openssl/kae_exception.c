@@ -56,6 +56,7 @@ void KAE_ThrowEvpException(JNIEnv* env, int reason, const char* msg, void (* def
             KAE_ThrowByName(env, "java/security/InvalidKeyException", msg);
             break;
         case EVP_R_BAD_DECRYPT:
+        case EVP_R_DATA_NOT_MULTIPLE_OF_BLOCK_LENGTH:
             KAE_ThrowByName(env, "javax/crypto/BadPaddingException", msg);
             break;
         default:
@@ -90,7 +91,7 @@ void KAE_ThrowFromOpenssl(JNIEnv* env, const char* msg, void (* defaultException
 
     err = ERR_get_error_line_data(&file, &line, &data, &flags);
     if (err == 0) {
-        KAE_ThrowRuntimeException(env, "Unknown OpenSSL error");
+        defaultException(env, msg);
         return;
     }
 
@@ -104,6 +105,7 @@ void KAE_ThrowFromOpenssl(JNIEnv* env, const char* msg, void (* defaultException
 
         switch (lib) {
             case ERR_LIB_EVP:
+            case ERR_LIB_RSA:
                 KAE_ThrowEvpException(env, reason, estring, defaultException);
                 break;
             default:
@@ -113,4 +115,16 @@ void KAE_ThrowFromOpenssl(JNIEnv* env, const char* msg, void (* defaultException
     }
 
     ERR_clear_error();
+}
+
+void KAE_ThrowAEADBadTagException(JNIEnv *env, const char *msg) {
+    KAE_ThrowByName(env, "javax/crypto/AEADBadTagException", msg);
+}
+
+void KAE_ThrowSignatureException(JNIEnv* env, const char* msg) {
+    KAE_ThrowByName(env, "java/security/SignatureException", msg);
+}
+
+void KAE_ThrowClassNotFoundException(JNIEnv* env, const char* msg) {
+    KAE_ThrowByName(env, "java/lang/ClassNotFoundException", msg);
 }

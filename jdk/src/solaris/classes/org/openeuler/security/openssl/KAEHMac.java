@@ -34,12 +34,12 @@ import java.security.spec.AlgorithmParameterSpec;
 import java.util.Set;
 import java.util.concurrent.ConcurrentSkipListSet;
 
-public abstract class KAEMac extends MacSpi implements Cloneable {
+public abstract class KAEHMac extends MacSpi implements Cloneable {
 
     private final String algorithm;
 
     /**
-     * The secret key used in this keyed MAC.
+     * The secret key used in this keyed HMAC.
      */
     private byte[] keyBytes;
 
@@ -55,22 +55,22 @@ public abstract class KAEMac extends MacSpi implements Cloneable {
 
     private HmacContextRef contextRef = null;
 
-    private KAEMac(String algo, int size) {
+    private KAEHMac(String algo, int size) {
         this.algorithm = algo;
         this.digestSize = size;
     }
 
-    private static class HmacContextRef extends PhantomReference<KAEMac>
+    private static class HmacContextRef extends PhantomReference<KAEHMac>
             implements Comparable<HmacContextRef> {
 
-        private static ReferenceQueue<KAEMac> referenceQueue = new ReferenceQueue<>();
+        private static ReferenceQueue<KAEHMac> referenceQueue = new ReferenceQueue<>();
         private static Set<HmacContextRef> referenceList = new ConcurrentSkipListSet<>();
         private static boolean disableKaeDispose = Boolean.getBoolean("kae.disableKaeDispose");
 
         private final long address;
 
-        HmacContextRef(KAEMac kaeMac, long address) {
-            super(kaeMac, referenceQueue);
+        HmacContextRef(KAEHMac kaeHMac, long address) {
+            super(kaeHMac, referenceQueue);
             this.address = address;
             if (!disableKaeDispose) {
                 referenceList.add(this);
@@ -187,32 +187,32 @@ public abstract class KAEMac extends MacSpi implements Cloneable {
         }
     }
 
-    public static final class HmacMD5 extends KAEMac {
+    public static final class HmacMD5 extends KAEHMac {
         public HmacMD5() {
             super("MD5", 16);
         }
     }
-    public static final class HmacSHA1 extends KAEMac {
+    public static final class HmacSHA1 extends KAEHMac {
         public HmacSHA1() {
             super("SHA1", 20);
         }
     }
-    public static final class HmacSHA224 extends KAEMac {
+    public static final class HmacSHA224 extends KAEHMac {
         public HmacSHA224() throws NoSuchAlgorithmException {
             super("SHA224", 28);
         }
     }
-    public static final class HmacSHA256 extends KAEMac {
+    public static final class HmacSHA256 extends KAEHMac {
         public HmacSHA256() throws NoSuchAlgorithmException {
             super("SHA256", 32);
         }
     }
-    public static final class HmacSHA384 extends KAEMac {
+    public static final class HmacSHA384 extends KAEHMac {
         public HmacSHA384() throws NoSuchAlgorithmException {
             super("SHA384", 48);
         }
     }
-    public static final class HmacSHA512 extends KAEMac {
+    public static final class HmacSHA512 extends KAEHMac {
         public HmacSHA512() throws NoSuchAlgorithmException {
             super("SHA512", 64);
         }

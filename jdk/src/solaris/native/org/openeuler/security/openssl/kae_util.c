@@ -25,6 +25,15 @@
 #include "kae_util.h"
 #include "kae_exception.h"
 
+static ENGINE* kaeEngine = NULL;
+
+void SetKaeEngine(ENGINE* engine) {
+    kaeEngine = engine;
+}
+
+ENGINE* GetKaeEngine() {
+    return kaeEngine;
+}
 
 BIGNUM* KAE_GetBigNumFromByteArray(JNIEnv* env, jbyteArray byteArray) {
     if (byteArray == NULL) {
@@ -47,17 +56,17 @@ BIGNUM* KAE_GetBigNumFromByteArray(JNIEnv* env, jbyteArray byteArray) {
     jbyte* bytes = (*env)->GetByteArrayElements(env, byteArray, NULL);
     if (bytes == NULL) {
         KAE_ThrowNullPointerException(env,"GetByteArrayElements failed");
-        goto error;
+        goto cleanup;
     }
     BIGNUM* result = BN_bin2bn((const unsigned char*) bytes, len, bn);
     (*env)->ReleaseByteArrayElements(env, byteArray, bytes, 0);
     if (result == NULL) {
         KAE_ThrowFromOpenssl(env, "BN_bin2bn", KAE_ThrowRuntimeException);
-        goto error;
+        goto cleanup;
     }
     return bn;
 
-error:
+cleanup:
     BN_free(bn);
     return NULL;
 }
