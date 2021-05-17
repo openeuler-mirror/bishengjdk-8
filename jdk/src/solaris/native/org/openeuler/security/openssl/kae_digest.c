@@ -21,10 +21,12 @@
  * questions.
  */
 
+#include <string.h>
 #include <openssl/evp.h>
 #include <openssl/md5.h>
-#include "kae_log.h"
 #include "kae_exception.h"
+#include "kae_log.h"
+#include "kae_util.h"
 #include "org_openeuler_security_openssl_KAEDigest.h"
 
 #define DIGEST_STACK_SIZE 1024
@@ -40,6 +42,7 @@ JNIEXPORT jlong JNICALL
 Java_org_openeuler_security_openssl_KAEDigest_nativeInit(JNIEnv *env, jclass cls, jstring algorithmName)
 {
     EVP_MD_CTX* ctx = NULL;
+    static ENGINE* kaeEngine = NULL;
 
     if (algorithmName == NULL) {
         KAE_ThrowNullPointerException(env, "algorithm is null");
@@ -48,6 +51,11 @@ Java_org_openeuler_security_openssl_KAEDigest_nativeInit(JNIEnv *env, jclass cls
 
     // EVP_get_digestbyname
     const char* algo_utf = (*env)->GetStringUTFChars(env, algorithmName, 0);
+    if ((strcasecmp(algo_utf, "md5") == 0) || (strcasecmp(algo_utf, "sm3") == 0)) {
+        kaeEngine = (kaeEngine == NULL) ? GetKaeEngine() : kaeEngine;
+    } else {
+        kaeEngine = NULL;
+    }
     EVP_MD* md = (EVP_MD*) EVP_get_digestbyname(algo_utf);
     (*env)->ReleaseStringUTFChars(env, algorithmName, algo_utf);
     if (md == NULL) {
@@ -64,17 +72,17 @@ Java_org_openeuler_security_openssl_KAEDigest_nativeInit(JNIEnv *env, jclass cls
     KAE_TRACE("KAEDigest_nativeInit: create ctx => %p", ctx);
 
     // EVP_DigestInit_ex
-    int result_code = EVP_DigestInit_ex(ctx, md, NULL);
+    int result_code = EVP_DigestInit_ex(ctx, md, kaeEngine);
     if (result_code == 0) {
         KAE_ThrowFromOpenssl(env, "EVP_DigestInit_ex failed", KAE_ThrowRuntimeException);
-        goto err;
+        goto cleanup;
     }
     KAE_TRACE("KAEDigest_nativeInit EVP_DigestInit_ex(ctx = %p, md = %p) success", ctx, md);
 
     KAE_TRACE("KAEDigest_nativeInit: finished");
     return (jlong) ctx;
 
-err:
+cleanup:
     EVP_MD_CTX_destroy(ctx);
     return 0;
 }
@@ -198,13 +206,13 @@ Java_org_openeuler_security_openssl_KAEDigest_nativeClone(JNIEnv *env, jclass cl
     int result_code = EVP_MD_CTX_copy_ex(ctxCopy, ctx);
     if (result_code == 0) {
         KAE_ThrowFromOpenssl(env, "EVP_MD_CTX_copy_ex failed", KAE_ThrowRuntimeException);
-        goto err;
+        goto cleanup;
     }
     KAE_TRACE("KAEDigest_nativeClone EVP_MD_CTX_copy_ex(ctxCopy = %p, ctx = %p) success", ctxCopy, ctx);
     KAE_TRACE("KAEDigest_nativeClone: finished");
     return (jlong) ctxCopy;
 
-err:
+cleanup:
     EVP_MD_CTX_destroy(ctxCopy);
     return 0;
 }

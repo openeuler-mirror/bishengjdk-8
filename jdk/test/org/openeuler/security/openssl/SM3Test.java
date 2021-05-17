@@ -21,37 +21,34 @@
  * questions.
  */
 
-#include <openssl/bio.h>
-#include <openssl/ssl.h>
-#include <openssl/engine.h>
-#include "kae_exception.h"
-#include "kae_util.h"
-#include "org_openeuler_security_openssl_KAEProvider.h"
+import org.openeuler.security.openssl.KAEProvider;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.security.MessageDigest;
+import java.security.Security;
 
-/*
- * Class:     Java_org_openeuler_security_openssl_KAEProvider
- * Method:    initOpenssl
- * Signature: ()V
+/**
+ * @test
+ * @summary Basic test for sm3
+ * @run main SM3Test
  */
-JNIEXPORT void JNICALL Java_org_openeuler_security_openssl_KAEProvider_initOpenssl
-        (JNIEnv *env, jclass cls) {
-    SSL_load_error_strings();
-    ERR_load_BIO_strings();
-    OpenSSL_add_all_algorithms();
 
-    // check if KaeEngine holder is already set
-    ENGINE* e = GetKaeEngine();
-    if (e != NULL) {
-        ENGINE_free(e);
-        e = NULL;
+public class SM3Test {
+
+    private static String plainText = "helloworldhellow";
+
+    public static void main(String[] args) throws Exception {
+        Security.insertProviderAt(new KAEProvider(), 1);
+        test(plainText, "SM3", new byte[]{40, -103, -71, 4, -80, -49, 94, 112, 11, -75, -66, 121, 63, 80, 62, -14, -45, -75, -34, 66, -77, -34, -26, 26, 33, -23, 45, 52, -74, 67, -18, 118});
     }
 
-    // determine whether KAE is loaded successfully
-    e = ENGINE_by_id("kae");
-    if (e == NULL) {
-        ERR_clear_error();
-        KAE_ThrowRuntimeException(env, "kae engine not found");
-        return;
+    public static void test(String plainText, String algo, byte[] expectRes) throws Exception {
+       MessageDigest md = MessageDigest.getInstance(algo);
+       md.update(plainText.getBytes(StandardCharsets.UTF_8));
+       byte[] res = md.digest();
+       if (!Arrays.equals(res, expectRes)) {
+           throw new RuntimeException("sm3 failed");
+       }
     }
-    SetKaeEngine(e);
+
 }

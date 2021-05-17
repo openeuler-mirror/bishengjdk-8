@@ -25,13 +25,17 @@
 package org.openeuler.security.openssl;
 
 import java.io.BufferedWriter;
+import java.io.BufferedInputStream;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.Date;
+import java.util.Properties;
 import java.security.Provider;
 
 /**
@@ -79,8 +83,63 @@ public class KAEProvider extends Provider {
         KAEProvider.excp = null; // Exception already logged, clean it.
     }
 
-    private void putCipherAES() {
-        final String blockModes = "ECB|CBC|CTR";
+    private Properties getProp() {
+        Properties props = new Properties();
+        String sep = File.separator;
+        File propFile = new File(System.getProperty("java.home") + sep + "lib" + sep +
+                        "ext" + sep + "kaeprovider.conf");
+        if (propFile.exists()) {
+            try (InputStream is = new BufferedInputStream(new FileInputStream(propFile))) {
+                props.load(is);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        return props;
+    }
+
+    public KAEProvider() {
+        super("KAEProvider", 1.8d, "KAE provider");
+        if (needLog) {
+            logStart(excp);
+            needLog = false; // Log only once
+        }
+        Properties props = getProp();
+        if (!"false".equalsIgnoreCase(props.getProperty("kae.md5"))) {
+            putMD5();
+        }
+        if (!"false".equalsIgnoreCase(props.getProperty("kae.sha256"))) {
+            putSHA256();
+        }
+        if (!"false".equalsIgnoreCase(props.getProperty("kae.sha384"))) {
+            putSHA384();
+        }
+        if (!"false".equalsIgnoreCase(props.getProperty("kae.sm3"))) {
+            putSM3();
+        }
+        if (!"false".equalsIgnoreCase(props.getProperty("kae.aes"))) {
+            putAES();
+        }
+        if (!"false".equalsIgnoreCase(props.getProperty("kae.sm4"))) {
+            putSM4();
+        }
+        if (!"false".equalsIgnoreCase(props.getProperty("kae.hmac"))) {
+            putHMAC();
+        }
+        if (!"false".equalsIgnoreCase(props.getProperty("kae.rsa"))) {
+            putRSA();
+            putSignatureRSA();
+        }
+        if (!"false".equalsIgnoreCase(props.getProperty("kae.dh"))) {
+            putDH();
+        }
+        if (!"false".equalsIgnoreCase(props.getProperty("kae.ec"))) {
+            putEC();
+        }
+    }
+
+    private void putAES() {
+        final String blockModes = "ECB|CBC|CTR|GCM";
         final String blockPads = "NOPADDING|PKCS5PADDING";
 
         put("Cipher.AES SupportedModes", blockModes);
@@ -94,6 +153,8 @@ public class KAEProvider extends Provider {
         put("Cipher.AES/ECB/PKCS5Padding", "org.openeuler.security.openssl.KAEAESCipher$Aes$Ecb$PKCS5Padding");
         put("Alg.Alias.Cipher.AES/ECB/PKCS7Padding", "AES/ECB/PKCS5Padding");
         put("Cipher.AES/CTR/NoPadding", "org.openeuler.security.openssl.KAEAESCipher$Aes$Ctr$NoPadding");
+        put("Cipher.AES/GCM/NoPadding", "org.openeuler.security.openssl.KAEAESCipher$Aes$Gcm$NoPadding");
+        put("Alg.Alias.Cipher.AES/GCM/PKCS5Padding", "AES/GCM/NoPadding"); // PKCS5Padding -> noPadding
 
         put("Cipher.AES_128/CBC/PKCS5Padding", "org.openeuler.security.openssl.KAEAESCipher$Aes_128$Cbc$PKCS5Padding");
         put("Cipher.AES_128/CBC/NoPadding", "org.openeuler.security.openssl.KAEAESCipher$Aes_128$Cbc$NoPadding");
@@ -102,6 +163,8 @@ public class KAEProvider extends Provider {
         put("Cipher.AES_128/ECB/PKCS5Padding", "org.openeuler.security.openssl.KAEAESCipher$Aes_128$Ecb$PKCS5Padding");
         put("Alg.Alias.Cipher.AES_128/ECB/PKCS7Padding", "AES_128/ECB/PKCS5Padding");
         put("Cipher.AES_128/CTR/NoPadding", "org.openeuler.security.openssl.KAEAESCipher$Aes_128$Ctr$NoPadding");
+        put("Cipher.AES_128/GCM/NoPadding", "org.openeuler.security.openssl.KAEAESCipher$Aes_128$Gcm$NoPadding");
+        put("Alg.Alias.Cipher.AES_128/GCM/PKCS5Padding", "AES/GCM/NoPadding");
 
         put("Cipher.AES_192/CBC/PKCS5Padding", "org.openeuler.security.openssl.KAEAESCipher$Aes_192$Cbc$PKCS5Padding");
         put("Cipher.AES_192/CBC/NoPadding", "org.openeuler.security.openssl.KAEAESCipher$Aes_192$Cbc$NoPadding");
@@ -110,6 +173,8 @@ public class KAEProvider extends Provider {
         put("Cipher.AES_192/ECB/PKCS5Padding", "org.openeuler.security.openssl.KAEAESCipher$Aes_192$Ecb$PKCS5Padding");
         put("Alg.Alias.Cipher.AES_192/ECB/PKCS7Padding", "AES_192/ECB/PKCS5Padding");
         put("Cipher.AES_192/CTR/NoPadding", "org.openeuler.security.openssl.KAEAESCipher$Aes_192$Ctr$NoPadding");
+        put("Cipher.AES_192/GCM/NoPadding", "org.openeuler.security.openssl.KAEAESCipher$Aes_192$Gcm$NoPadding");
+        put("Alg.Alias.Cipher.AES_192/GCM/PKCS5Padding", "AES/GCM/NoPadding");
 
         put("Cipher.AES_256/CBC/PKCS5Padding", "org.openeuler.security.openssl.KAEAESCipher$Aes_256$Cbc$PKCS5Padding");
         put("Cipher.AES_256/CBC/NoPadding", "org.openeuler.security.openssl.KAEAESCipher$Aes_256$Cbc$NoPadding");
@@ -118,15 +183,50 @@ public class KAEProvider extends Provider {
         put("Cipher.AES_256/ECB/PKCS5Padding", "org.openeuler.security.openssl.KAEAESCipher$Aes_256$Ecb$PKCS5Padding");
         put("Alg.Alias.Cipher.AES_256/ECB/PKCS7Padding", "AES_256/ECB/PKCS5Padding");
         put("Cipher.AES_256/CTR/NoPadding", "org.openeuler.security.openssl.KAEAESCipher$Aes_256$Ctr$NoPadding");
+        put("Cipher.AES_256/GCM/NoPadding", "org.openeuler.security.openssl.KAEAESCipher$Aes_256$Gcm$NoPadding");
+        put("Alg.Alias.Cipher.AES_256/GCM/PKCS5Padding", "AES/GCM/NoPadding");
     }
 
-    private void putMessageDigest() {
+    private void putMD5() {
         put("MessageDigest.MD5", "org.openeuler.security.openssl.KAEDigest$MD5");
+    }
+
+    private void putSHA256() {
         put("MessageDigest.SHA-256", "org.openeuler.security.openssl.KAEDigest$SHA256");
+    }
+
+    private void putSHA384() {
         put("MessageDigest.SHA-384", "org.openeuler.security.openssl.KAEDigest$SHA384");
     }
 
-    private void putCipherRSA() {
+    private void putSM3() {
+        put("MessageDigest.SM3", "org.openeuler.security.openssl.KAEDigest$SM3");
+    }
+
+    private void putSM4() {
+        final String blockModes = "ECB|CBC|CTR|OFB";
+        final String blockPads = "NOPADDING|PKCS5PADDING";
+
+        put("Cipher.SM4 SupportedModes", blockModes);
+        put("Cipher.SM4 SupportedPaddings", blockPads);
+        put("Cipher.SM4", "org.openeuler.security.openssl.KAESM4Cipher$Sm4$Ecb$PKCS5Padding");
+
+        put("Cipher.SM4/CBC/PKCS5Padding", "org.openeuler.security.openssl.KAESM4Cipher$Sm4$Cbc$PKCS5Padding");
+        put("Cipher.SM4/CBC/NoPadding", "org.openeuler.security.openssl.KAESM4Cipher$Sm4$Cbc$NoPadding");
+        put("Alg.Alias.Cipher.SM4/CBC/PKCS7Padding", "SM4/CBC/PKCS5Padding");
+        put("Cipher.SM4/ECB/NoPadding", "org.openeuler.security.openssl.KAESM4Cipher$Sm4$Ecb$NoPadding");
+        put("Cipher.SM4/ECB/PKCS5Padding", "org.openeuler.security.openssl.KAESM4Cipher$Sm4$Ecb$PKCS5Padding");
+        put("Alg.Alias.Cipher.SM4/ECB/PKCS7Padding", "SM4/ECB/PKCS5Padding");
+        put("Cipher.SM4/CTR/NoPadding", "org.openeuler.security.openssl.KAESM4Cipher$Sm4$Ctr$NoPadding");
+        put("Cipher.SM4/OFB/NoPadding", "org.openeuler.security.openssl.KAESM4Cipher$Sm4$Ofb$NoPadding");
+        put("Cipher.SM4/OFB/PKCS5Padding", "org.openeuler.security.openssl.KAESM4Cipher$Sm4$Ofb$PKCS5Padding");
+        put("Alg.Alias.Cipher.SM4/OFB/PKCS7Padding", "SM4/OFB/PKCS5Padding");
+
+        put("KeyGenerator.SM4", "com.sun.crypto.provider.AESKeyGenerator");
+        put("AlgorithmParameters.SM4", "com.sun.crypto.provider.AESParameters");
+    }
+
+    private void putRSA() {
         // rsa
         put("KeyPairGenerator.RSA", "org.openeuler.security.openssl.KAERSAKeyPairGenerator$Legacy");
         put("Alg.Alias.KeyPairGenerator.1.2.840.113549.1.1", "RSA");
@@ -154,27 +254,78 @@ public class KAEProvider extends Provider {
                         "|java.security.interfaces.RSAPrivateKey");
     }
 
-    private void putMAC() {
-        put("MAC.HmacMD5", "org.openeuler.security.openssl.KAEMac$HmacMD5");
-        put("MAC.HmacSHA1", "org.openeuler.security.openssl.KAEMac$HmacSHA1");
-        put("MAC.HmacSHA224", "org.openeuler.security.openssl.KAEMac$HmacSHA224");
-        put("MAC.HmacSHA256", "org.openeuler.security.openssl.KAEMac$HmacSHA256");
-        put("MAC.HmacSHA384", "org.openeuler.security.openssl.KAEMac$HmacSHA384");
-        put("MAC.HmacSHA512", "org.openeuler.security.openssl.KAEMac$HmacSHA512");
+    private void putHMAC() {
+        put("MAC.HmacMD5", "org.openeuler.security.openssl.KAEHMac$HmacMD5");
+        put("MAC.HmacSHA1", "org.openeuler.security.openssl.KAEHMac$HmacSHA1");
+        put("MAC.HmacSHA224", "org.openeuler.security.openssl.KAEHMac$HmacSHA224");
+        put("MAC.HmacSHA256", "org.openeuler.security.openssl.KAEHMac$HmacSHA256");
+        put("MAC.HmacSHA384", "org.openeuler.security.openssl.KAEHMac$HmacSHA384");
+        put("MAC.HmacSHA512", "org.openeuler.security.openssl.KAEHMac$HmacSHA512");
     }
 
-    public KAEProvider() {
-        super("KAEProvider", 1.8d, "KAE provider");
-        if (needLog) {
-            logStart(excp);
-            needLog = false; // Log only once
-        }
-        putMessageDigest();
-        putCipherAES();
-        putMAC();
-        putCipherRSA();
+    private void putDH() {
+        put("KeyPairGenerator.DiffieHellman", "org.openeuler.security.openssl.KAEDHKeyPairGenerator");
+        put("Alg.Alias.KeyPairGenerator.DH", "DiffieHellman");
+        put("KeyAgreement.DiffieHellman", "org.openeuler.security.openssl.KAEDHKeyAgreement");
+        put("Alg.Alias.KeyAgreement.DH", "DiffieHellman");
     }
 
+    private void putSignatureRSA() {
+        put("Signature.MD5withRSA",
+                "org.openeuler.security.openssl.KAERSASignature$MD5withRSA");
+        put("Signature.SHA1withRSA",
+                "org.openeuler.security.openssl.KAERSASignature$SHA1withRSA");
+        put("Signature.SHA224withRSA",
+                "org.openeuler.security.openssl.KAERSASignature$SHA224withRSA");
+        put("Signature.SHA256withRSA",
+                "org.openeuler.security.openssl.KAERSASignature$SHA256withRSA");
+        put("Signature.SHA384withRSA",
+                "org.openeuler.security.openssl.KAERSASignature$SHA384withRSA");
+        put("Signature.SHA512withRSA",
+                "org.openeuler.security.openssl.KAERSASignature$SHA512withRSA");
+
+        // alias
+        put("Alg.Alias.Signature.1.2.840.113549.1.1.4",     "MD5withRSA");
+        put("Alg.Alias.Signature.OID.1.2.840.113549.1.1.4", "MD5withRSA");
+
+        put("Alg.Alias.Signature.1.2.840.113549.1.1.5",     "SHA1withRSA");
+        put("Alg.Alias.Signature.OID.1.2.840.113549.1.1.5", "SHA1withRSA");
+        put("Alg.Alias.Signature.1.3.14.3.2.29",            "SHA1withRSA");
+
+        put("Alg.Alias.Signature.1.2.840.113549.1.1.14",     "SHA224withRSA");
+        put("Alg.Alias.Signature.OID.1.2.840.113549.1.1.14", "SHA224withRSA");
+
+        put("Alg.Alias.Signature.1.2.840.113549.1.1.11",     "SHA256withRSA");
+        put("Alg.Alias.Signature.OID.1.2.840.113549.1.1.11", "SHA256withRSA");
+
+        put("Alg.Alias.Signature.1.2.840.113549.1.1.12",     "SHA384withRSA");
+        put("Alg.Alias.Signature.OID.1.2.840.113549.1.1.12", "SHA384withRSA");
+
+        put("Alg.Alias.Signature.1.2.840.113549.1.1.13",     "SHA512withRSA");
+        put("Alg.Alias.Signature.OID.1.2.840.113549.1.1.13", "SHA512withRSA");
+
+        put("Signature.RSASSA-PSS", "org.openeuler.security.openssl.KAERSAPSSSignature");
+
+        put("Alg.Alias.Signature.1.2.840.113549.1.1.10",     "RSASSA-PSS");
+        put("Alg.Alias.Signature.OID.1.2.840.113549.1.1.10", "RSASSA-PSS");
+
+        // attributes for supported key classes
+        String rsaKeyClasses = "java.security.interfaces.RSAPublicKey" +
+                "|java.security.interfaces.RSAPrivateKey";
+        put("Signature.MD5withRSA SupportedKeyClasses", rsaKeyClasses);
+        put("Signature.SHA1withRSA SupportedKeyClasses", rsaKeyClasses);
+        put("Signature.SHA224withRSA SupportedKeyClasses", rsaKeyClasses);
+        put("Signature.SHA256withRSA SupportedKeyClasses", rsaKeyClasses);
+        put("Signature.SHA384withRSA SupportedKeyClasses", rsaKeyClasses);
+        put("Signature.SHA512withRSA SupportedKeyClasses", rsaKeyClasses);
+        put("Signature.RSASSA-PSS SupportedKeyClasses", rsaKeyClasses);
+    }
+
+    private void putEC() {
+        put("KeyPairGenerator.EC", "org.openeuler.security.openssl.KAEECKeyPairGenerator");
+        put("Alg.Alias.KeyPairGenerator.EllipticCurve", "EC");
+        put("KeyAgreement.ECDH", "org.openeuler.security.openssl.KAEECDHKeyAgreement");
+    }
     // init openssl
     static native void initOpenssl() throws RuntimeException;
 }

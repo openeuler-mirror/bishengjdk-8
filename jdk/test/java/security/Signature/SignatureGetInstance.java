@@ -48,8 +48,11 @@ public class SignatureGetInstance {
         MyPrivKey testPriv = new MyPrivKey();
         MyPubKey testPub = new MyPubKey();
 
+        Provider kaeProvider = Security.getProvider("KAEProvider");
+        String expectedProvName = kaeProvider != null ? "KAEProvider" : "SunRsaSign";
+
         testDblInit(testPriv, testPub, true, "TestProvider");
-        testDblInit(kp.getPrivate(), kp.getPublic(), true, "SunRsaSign");
+        testDblInit(kp.getPrivate(), kp.getPublic(), true, expectedProvName);
         testDblInit(testPriv, kp.getPublic(), false, null);
         testDblInit(kp.getPrivate(), testPub, false, null);
 

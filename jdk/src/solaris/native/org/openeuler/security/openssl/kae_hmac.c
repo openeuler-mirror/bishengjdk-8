@@ -22,9 +22,11 @@
  */
 
 #include <jni.h>
+#include <string.h>
 #include <openssl/hmac.h>
 #include "kae_exception.h"
 #include "kae_log.h"
+#include "kae_util.h"
 
 static const EVP_MD* EVPGetDigestByName(JNIEnv* env, const char* algo)
 {
@@ -54,11 +56,11 @@ static const EVP_MD* EVPGetDigestByName(JNIEnv* env, const char* algo)
 }
 
 /*
- * Class:     org_openeuler_security_openssl_KAEMac
+ * Class:     org_openeuler_security_openssl_KAEHMac
  * Method:    nativeInit
  * Signature: ([BILjava/lang/String;)J
  */
-JNIEXPORT jlong JNICALL Java_org_openeuler_security_openssl_KAEMac_nativeInit
+JNIEXPORT jlong JNICALL Java_org_openeuler_security_openssl_KAEHMac_nativeInit
     (JNIEnv* env, jclass cls, jbyteArray key, jint key_len, jstring algoStr) {
     if (key == NULL || algoStr == NULL) {
         KAE_ThrowNullPointerException(env, "param key or algoStr is null");
@@ -92,32 +94,32 @@ JNIEXPORT jlong JNICALL Java_org_openeuler_security_openssl_KAEMac_nativeInit
     ctx = HMAC_CTX_new();
     if (ctx == NULL) {
         KAE_ThrowRuntimeException(env, "Hmac_CTX_new invoked failed");
-        goto err;
+        goto cleanup;
     }
 
     // init hmac context with sc_key and evp_md
     int result_code = HMAC_Init_ex(ctx, key_buffer, key_len, md, NULL);
     if (result_code == 0) {
         KAE_ThrowRuntimeException(env, "Hmac_Init_ex invoked failed");
-        goto err;
+        goto cleanup;
     }
     free(key_buffer);
     return (jlong) ctx;
 
-err:
+cleanup:
     free(key_buffer);
     HMAC_CTX_free(ctx);
     return 0;
 }
 
 /*
- * Class:     org_openeuler_security_openssl_KAEMac
+ * Class:     org_openeuler_security_openssl_KAEHMac
  * Method:    nativeUpdate
  * Signature: (J[BII)V
  */
-JNIEXPORT void JNICALL Java_org_openeuler_security_openssl_KAEMac_nativeUpdate
+JNIEXPORT void JNICALL Java_org_openeuler_security_openssl_KAEHMac_nativeUpdate
     (JNIEnv* env, jclass cls, jlong hmac_ctx, jbyteArray input, jint in_offset, jint in_len) {
-    KAE_TRACE("KAEMac_nativeUpdate(ctx = %p, input = %p, offset = %d, inLen = %d", hmac_ctx, input, in_offset, in_len);
+    KAE_TRACE("KAEHMac_nativeUpdate(ctx = %p, input = %p, offset = %d, inLen = %d", hmac_ctx, input, in_offset, in_len);
     HMAC_CTX* ctx = (HMAC_CTX*) hmac_ctx;
     if (ctx == NULL || input == NULL) {
         KAE_ThrowNullPointerException(env, "param ctx or input is null");
@@ -146,11 +148,11 @@ JNIEXPORT void JNICALL Java_org_openeuler_security_openssl_KAEMac_nativeUpdate
 }
 
 /*
- * Class:     org_openeuler_security_openssl_KAEMac
+ * Class:     org_openeuler_security_openssl_KAEHMac
  * Method:    nativeFinal
  * Signature: (J[BII)I
  */
-JNIEXPORT jint JNICALL Java_org_openeuler_security_openssl_KAEMac_nativeFinal
+JNIEXPORT jint JNICALL Java_org_openeuler_security_openssl_KAEHMac_nativeFinal
     (JNIEnv* env, jclass cls, jlong hmac_ctx, jbyteArray output, jint out_offset, jint in_len) {
     HMAC_CTX* ctx = (HMAC_CTX*) hmac_ctx;
     if (ctx == NULL || output == NULL) {
@@ -180,7 +182,7 @@ JNIEXPORT jint JNICALL Java_org_openeuler_security_openssl_KAEMac_nativeFinal
 
     // write back to output_array
     (*env)->SetByteArrayRegion(env, output, out_offset, bytesWritten, (jbyte*) temp_result);
-    KAE_TRACE("KAEMac_nativeFinal success, output_offset = %d, bytesWritten = %d", out_offset, bytesWritten);
+    KAE_TRACE("KAEHMac_nativeFinal success, output_offset = %d, bytesWritten = %d", out_offset, bytesWritten);
 
 cleanup:
     free(temp_result);
@@ -188,11 +190,11 @@ cleanup:
 }
 
 /*
- * Class:     org_openeuler_security_openssl_KAEMac
+ * Class:     org_openeuler_security_openssl_KAEHMac
  * Method:    nativeFree
  * Signature: (J)V
  */
-JNIEXPORT void JNICALL Java_org_openeuler_security_openssl_KAEMac_nativeFree
+JNIEXPORT void JNICALL Java_org_openeuler_security_openssl_KAEHMac_nativeFree
     (JNIEnv* env, jclass cls, jlong hmac_ctx) {
     HMAC_CTX* ctx = (HMAC_CTX*) hmac_ctx;
     if (ctx != NULL) {

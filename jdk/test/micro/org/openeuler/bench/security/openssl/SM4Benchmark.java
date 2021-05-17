@@ -25,25 +25,32 @@ package org.openeuler.bench.security.openssl;
 
 import org.openeuler.security.openssl.KAEProvider;
 import org.openjdk.jmh.annotations.BenchmarkMode;
+import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.Fork;
 import org.openjdk.jmh.annotations.Measurement;
 import org.openjdk.jmh.annotations.Mode;
 import org.openjdk.jmh.annotations.OutputTimeUnit;
-import org.openjdk.jmh.annotations.Param;
 import org.openjdk.jmh.annotations.Scope;
+import org.openjdk.jmh.annotations.Param;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Threads;
 import org.openjdk.jmh.annotations.Warmup;
 
-import javax.crypto.BadPaddingException;
-import javax.crypto.Cipher;
-import javax.crypto.IllegalBlockSizeException;
+import java.security.InvalidKeyException;
+import java.security.InvalidAlgorithmParameterException;
+import java.security.NoSuchAlgorithmException;
 import java.security.Provider;
 import java.security.SecureRandom;
 import java.security.Security;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
+
+import javax.crypto.BadPaddingException;
+import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
+import javax.crypto.spec.SecretKeySpec;
 
 @BenchmarkMode(Mode.Throughput)
 @OutputTimeUnit(TimeUnit.SECONDS)
@@ -52,26 +59,70 @@ import java.util.concurrent.TimeUnit;
 @Fork(jvmArgsPrepend = {"-Xms100G", "-Xmx100G", "-XX:+AlwaysPreTouch"}, value = 5)
 @Threads(1)
 @State(Scope.Thread)
-public class BenchmarkBase {
+public class SM4Benchmark {
     public static final int SET_SIZE = 128;
-
     byte[][] data;
     int index = 0;
 
-    @Param({"", "KAEProvider"})
-    private String provider;
+    @Param({"SM4/ECB/NoPadding", "SM4/ECB/PKCS5Padding", "SM4/CBC/NoPadding", "SM4/CBC/PKCS5Padding", "SM4/CTR/NoPadding", "SM4/OFB/NoPadding", "SM4/OFB/PKCS5Padding"})
+    private String algorithm;
 
-    public Provider prov = null;
+    @Param({"128"})
+    private int keyLength;
+
+    @Param({"" + 1024, "" + 10 * 1024, "" + 100 * 1024, "" + 1024 * 1024})
+    private int dataSize;
+
+    private byte[][] encryptedData;
+    private Cipher encryptCipher;
+    private Cipher decryptCipher;
 
     @Setup
-    public void setupProvider() {
+    public void setup() throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException,
+            InvalidAlgorithmParameterException, IllegalBlockSizeException, BadPaddingException {
         Security.addProvider(new KAEProvider());
-        if (provider != null && !provider.isEmpty()) {
-            prov = Security.getProvider(provider);
-            if (prov == null) {
-                throw new RuntimeException("Can't find provider \"" + provider + "\"");
-            }
-        }
+        Provider prov = Security.getProvider("KAEProvider");
+
+        byte[] keystring = fillSecureRandom(new byte[keyLength / 8]);
+        SecretKeySpec ks = new SecretKeySpec(keystring, "SM4");
+
+        encryptCipher = (prov == null) ? Cipher.getInstance(algorithm) : Cipher.getInstance(algorithm, prov);
+        encryptCipher.init(Cipher.ENCRYPT_MODE, ks);
+        decryptCipher = (prov == null) ? Cipher.getInstance(algorithm) : Cipher.getInstance(algorithm, prov);
+        decryptCipher.init(Cipher.DECRYPT_MODE, ks, encryptCipher.getParameters());
+
+        data = fillRandom(new byte[SET_SIZE][dataSize]);
+        encryptedData = fillEncrypted(data, encryptCipher);
+    }
+
+    @Benchmark
+    public byte[] encrypt() throws IllegalBlockSizeException, BadPaddingException {
+        byte[] d = data[index];
+        index = (index + 1) % SET_SIZE;
+        return encryptCipher.doFinal(d);
+    }
+
+    @Benchmark
+    @Fork(jvmArgsPrepend = {"-Xms100G", "-Xmx100G", "-XX:+AlwaysPreTouch", "-Dkae.disableKaeDispose=true"}, value = 5)
+    public byte[] encryptDispose() throws IllegalBlockSizeException, BadPaddingException {
+        byte[] d = data[index];
+        index = (index + 1) % SET_SIZE;
+        return encryptCipher.doFinal(d);
+    }
+
+    @Benchmark
+    public byte[] decrypt() throws IllegalBlockSizeException, BadPaddingException {
+        byte[] e = encryptedData[index];
+        index = (index + 1) % SET_SIZE;
+        return decryptCipher.doFinal(e);
+    }
+
+    @Benchmark
+    @Fork(jvmArgsPrepend = {"-Xms100G", "-Xmx100G", "-XX:+AlwaysPreTouch", "-Dkae.disableKaeDispose=true"}, value = 5)
+    public byte[] decryptDispose() throws IllegalBlockSizeException, BadPaddingException {
+        byte[] e = encryptedData[index];
+        index = (index + 1) % SET_SIZE;
+        return decryptCipher.doFinal(e);
     }
 
     public static byte[][] fillRandom(byte[][] data) {
@@ -102,5 +153,5 @@ public class BenchmarkBase {
         }
         return encryptedData;
     }
-
 }
+

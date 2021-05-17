@@ -21,49 +21,43 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
+
 package org.openeuler.bench.security.openssl;
 
 import org.openjdk.jmh.annotations.Benchmark;
-import org.openjdk.jmh.annotations.Fork;
 import org.openjdk.jmh.annotations.Param;
 import org.openjdk.jmh.annotations.Setup;
-
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.Provider;
-import java.security.Security;
 import java.util.concurrent.TimeUnit;
+import org.openjdk.jmh.annotations.Warmup;
 
-public class DigestBenchmark extends BenchmarkBase {
+import java.security.KeyPairGenerator;
 
-    @Param({"MD5", "SHA-256", "SHA-384"})
+@Warmup(iterations = 10, time = 2, timeUnit = TimeUnit.SECONDS)
+public class ECKeyPairGeneratorBenchmark extends BenchmarkBase {
+    @Param({"EC"})
     private String algorithm;
 
-    @Param({"" + 1024, "" + 10 * 1024, "" + 100 * 1024, "" + 1024 * 1024})
-    int dataSize;
+    @Param({"224", "256", "384", "521"})
+    private int keySize;
 
-    MessageDigest md;
+    private KeyPairGenerator keyPairGenerator;
 
     @Setup
-    public void setup() throws NoSuchAlgorithmException {
+    public void setUp() throws Exception {
         setupProvider();
-        data = fillRandom(new byte[SET_SIZE][dataSize]);
-        md = (prov == null) ? MessageDigest.getInstance(algorithm) : MessageDigest.getInstance(algorithm, prov);
+        keyPairGenerator = createKeyPairGenerator();
+        keyPairGenerator.initialize(keySize);
     }
 
     @Benchmark
-    public byte[] digest() {
-        byte[] d = data[index];
-        index = (index + 1) % SET_SIZE;
-        return md.digest(d);
+    public void generateKeyPair() throws Exception {
+        keyPairGenerator.generateKeyPair();
     }
 
-    @Benchmark
-    @Fork(jvmArgsPrepend = {"-Xms100G", "-Xmx100G", "-XX:+AlwaysPreTouch", "-Dkae.disableKaeDispose=true"}, value = 5)
-    public byte[] digestDispose() {
-        byte[] d = data[index];
-        index = (index + 1) % SET_SIZE;
-        return md.digest(d);
+    private KeyPairGenerator createKeyPairGenerator() throws Exception {
+        if (prov != null) {
+            return KeyPairGenerator.getInstance(algorithm, prov);
+        }
+        return KeyPairGenerator.getInstance(algorithm);
     }
 }
-

@@ -33,5 +33,7 @@ grant codeBase "file:com.jar" {
 	"javax.net.ssl.trustStore", "write";
     permission java.util.PropertyPermission
 	"javax.net.ssl.trustStorePassword", "write";
+    permission java.util.PropertyPermission
+	"kae.disableKaeDispose", "read";
 };
 

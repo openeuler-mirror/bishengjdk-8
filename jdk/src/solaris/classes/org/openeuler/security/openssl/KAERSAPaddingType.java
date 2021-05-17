@@ -50,7 +50,10 @@ enum KAERSAPaddingType {
                     "OAEPWITHSHA-512ANDMGF1PADDING",
                     "OAEPWITHSHA-512/224ANDMGF1PADDING",
                     "OAEPWITHSHA-512/256ANDMGF1PADDING"))
-    );
+    ),
+
+    // PSS
+    PKCS1PssPadding(6, "RSA_PKCS1_PSS_PADDING");
 
     private final int id;
     private final String name;
