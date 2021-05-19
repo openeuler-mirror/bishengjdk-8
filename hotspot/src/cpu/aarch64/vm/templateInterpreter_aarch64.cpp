@@ -69,8 +69,8 @@ address TemplateInterpreterGenerator::generate_StackOverflowError_handler() {
   {
     Label L;
     __ ldr(rscratch1, Address(rfp,
-		       frame::interpreter_frame_monitor_block_top_offset *
-		       wordSize));
+                       frame::interpreter_frame_monitor_block_top_offset *
+                       wordSize));
     __ mov(rscratch2, sp);
     __ cmp(rscratch1, rscratch2); // maximal rsp for current rfp (stack
                            // grows negative)
@@ -144,8 +144,8 @@ address TemplateInterpreterGenerator::generate_exception_handler_common(
   __ lea(c_rarg1, Address((address)name));
   if (pass_oop) {
     __ call_VM(r0, CAST_FROM_FN_PTR(address,
-				    InterpreterRuntime::
-				    create_klass_exception),
+                                    InterpreterRuntime::
+                                    create_klass_exception),
                c_rarg1, c_rarg2);
   } else {
     // kind of lame ExternalAddress can't take NULL because
@@ -196,7 +196,7 @@ address TemplateInterpreterGenerator::generate_return_entry_for(TosState state, 
   __ ldrh(rscratch1, Address(rscratch1, ConstMethod::max_stack_offset()));
   __ add(rscratch1, rscratch1, frame::interpreter_frame_monitor_size() + 2);
   __ ldr(rscratch2,
-	 Address(rfp, frame::interpreter_frame_initial_sp_offset * wordSize));
+         Address(rfp, frame::interpreter_frame_initial_sp_offset * wordSize));
   __ sub(rscratch1, rscratch2, rscratch1, ext::uxtw, 3);
   __ andr(sp, rscratch1, -16);
 
@@ -219,9 +219,9 @@ address TemplateInterpreterGenerator::generate_deopt_entry_for(TosState state,
   __ ldr(rscratch1, Address(rmethod, Method::const_offset()));
   __ ldrh(rscratch1, Address(rscratch1, ConstMethod::max_stack_offset()));
   __ add(rscratch1, rscratch1, frame::interpreter_frame_monitor_size()
-	 + (EnableInvokeDynamic ? 2 : 0));
+         + (EnableInvokeDynamic ? 2 : 0));
   __ ldr(rscratch2,
-	 Address(rfp, frame::interpreter_frame_initial_sp_offset * wordSize));
+         Address(rfp, frame::interpreter_frame_initial_sp_offset * wordSize));
   __ sub(rscratch1, rscratch2, rscratch1, ext::uxtx, 3);
   __ andr(sp, rscratch1, -16);
 
@@ -376,7 +376,7 @@ void InterpreterGenerator::generate_counter_incr(
       // Test to see if we should create a method data oop
       unsigned long offset;
       __ adrp(rscratch2, ExternalAddress((address)&InvocationCounter::InterpreterProfileLimit),
-	      offset);
+              offset);
       __ ldrw(rscratch2, Address(rscratch2, offset));
       __ cmp(r0, rscratch2);
       __ br(Assembler::LT, *profile_method_continue);
@@ -388,8 +388,8 @@ void InterpreterGenerator::generate_counter_incr(
     {
       unsigned long offset;
       __ adrp(rscratch2,
-	      ExternalAddress((address)&InvocationCounter::InterpreterInvocationLimit),
-	      offset);
+              ExternalAddress((address)&InvocationCounter::InterpreterInvocationLimit),
+              offset);
       __ ldrw(rscratch2, Address(rscratch2, offset));
       __ cmpw(r0, rscratch2);
       __ br(Assembler::HS, *overflow);
@@ -637,7 +637,7 @@ void TemplateInterpreterGenerator::generate_fixed_frame(bool native_call) {
     __ ldr(rscratch1, Address(rmethod, Method::const_offset()));
     __ ldrh(rscratch1, Address(rscratch1, ConstMethod::max_stack_offset()));
     __ add(rscratch1, rscratch1, frame::interpreter_frame_monitor_size()
-	   + (EnableInvokeDynamic ? 2 : 0));
+           + (EnableInvokeDynamic ? 2 : 0));
     __ sub(rscratch1, sp, rscratch1, ext::uxtw, 3);
     __ andr(sp, rscratch1, -16);
   }
@@ -709,12 +709,18 @@ address InterpreterGenerator::generate_Reference_get_entry(void) {
     // Generate the G1 pre-barrier code to log the value of
     // the referent field in an SATB buffer.
     __ enter(); // g1_write may call runtime
+    if (UseShenandoahGC) {
+      __ push_call_clobbered_registers();
+    }
     __ g1_write_barrier_pre(noreg /* obj */,
                             local_0 /* pre_val */,
                             rthread /* thread */,
                             rscratch2 /* tmp */,
                             true /* tosca_live */,
                             true /* expand_call */);
+    if (UseShenandoahGC) {
+      __ pop_call_clobbered_registers();
+    }
     __ leave();
     // areturn
     __ andr(sp, r19, -16);  // done with stack
@@ -880,7 +886,7 @@ address InterpreterGenerator::generate_native_entry(bool synchronized) {
   const Address constMethod       (rmethod, Method::const_offset());
   const Address access_flags      (rmethod, Method::access_flags_offset());
   const Address size_of_parameters(r2, ConstMethod::
-				       size_of_parameters_offset());
+                                       size_of_parameters_offset());
 
   // get parameter size (always needed)
   __ ldr(r2, constMethod);
@@ -1138,7 +1144,7 @@ address InterpreterGenerator::generate_native_entry(bool synchronized) {
       __ ldrw(rscratch2, Address(rscratch2, offset));
     }
     assert(SafepointSynchronize::_not_synchronized == 0,
-	   "SafepointSynchronize::_not_synchronized");
+           "SafepointSynchronize::_not_synchronized");
     Label L;
     __ cbnz(rscratch2, L);
     __ ldrw(rscratch2, Address(rthread, JavaThread::suspend_flags_offset()));
@@ -1233,7 +1239,7 @@ address InterpreterGenerator::generate_native_entry(bool synchronized) {
 
   // restore bcp to have legal interpreter frame, i.e., bci == 0 <=>
   // rbcp == code_base()
-  __ ldr(rbcp, Address(rmethod, Method::const_offset()));   // get ConstMethod* 
+  __ ldr(rbcp, Address(rmethod, Method::const_offset()));   // get ConstMethod*
   __ add(rbcp, rbcp, in_bytes(ConstMethod::codes_offset()));          // get codebase
   // handle exceptions (exception handling will handle unlocking!)
   {
@@ -1267,8 +1273,8 @@ address InterpreterGenerator::generate_native_entry(bool synchronized) {
 
       // monitor expect in c_rarg1 for slow unlock path
       __ lea (c_rarg1, Address(rfp,   // address of first monitor
-			       (intptr_t)(frame::interpreter_frame_initial_sp_offset *
-					  wordSize - sizeof(BasicObjectLock))));
+                               (intptr_t)(frame::interpreter_frame_initial_sp_offset *
+                                          wordSize - sizeof(BasicObjectLock))));
 
       __ ldr(t, Address(c_rarg1, BasicObjectLock::obj_offset_in_bytes()));
       __ cbnz(t, unlock);
@@ -1302,8 +1308,8 @@ address InterpreterGenerator::generate_native_entry(bool synchronized) {
 
   // remove activation
   __ ldr(esp, Address(rfp,
-		    frame::interpreter_frame_sender_sp_offset *
-		    wordSize)); // get sender sp
+                    frame::interpreter_frame_sender_sp_offset *
+                    wordSize)); // get sender sp
   // remove frame anchor
   __ leave();
 
@@ -1758,7 +1764,7 @@ void TemplateInterpreterGenerator::generate_throw_exception() {
   __ add(rscratch1, rscratch1, frame::interpreter_frame_monitor_size()
          + (EnableInvokeDynamic ? 2 : 0) + 2);
   __ ldr(rscratch2,
-	 Address(rfp, frame::interpreter_frame_initial_sp_offset * wordSize));
+         Address(rfp, frame::interpreter_frame_initial_sp_offset * wordSize));
   __ sub(rscratch1, rscratch2, rscratch1, ext::uxtx, 3);
   __ andr(sp, rscratch1, -16);
 
@@ -1813,7 +1819,7 @@ void TemplateInterpreterGenerator::generate_throw_exception() {
     __ get_method(r0);
     __ ldr(r0, Address(r0, Method::const_offset()));
     __ load_unsigned_short(r0, Address(r0, in_bytes(ConstMethod::
-						    size_of_parameters_offset())));
+                                                    size_of_parameters_offset())));
     __ lsl(r0, r0, Interpreter::logStackElementSize);
     __ restore_locals(); // XXX do we need this?
     __ sub(rlocals, rlocals, r0);
@@ -1890,9 +1896,9 @@ void TemplateInterpreterGenerator::generate_throw_exception() {
   __ ldr(rscratch1, Address(rmethod, Method::const_offset()));
   __ ldrh(rscratch1, Address(rscratch1, ConstMethod::max_stack_offset()));
   __ add(rscratch1, rscratch1, frame::interpreter_frame_monitor_size()
-	 + (EnableInvokeDynamic ? 2 : 0));
+         + (EnableInvokeDynamic ? 2 : 0));
   __ ldr(rscratch2,
-	 Address(rfp, frame::interpreter_frame_initial_sp_offset * wordSize));
+         Address(rfp, frame::interpreter_frame_initial_sp_offset * wordSize));
   __ sub(rscratch1, rscratch2, rscratch1, ext::uxtw, 3);
   __ andr(sp, rscratch1, -16);
 

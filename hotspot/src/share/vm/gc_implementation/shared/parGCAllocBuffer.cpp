@@ -98,9 +98,9 @@ void PLABStats::adjust_desired_plab_sz(uint no_of_gc_workers) {
   if (_allocated == 0) {
     assert(_unused == 0,
            err_msg("Inconsistency in PLAB stats: "
-                   "_allocated: "SIZE_FORMAT", "
-                   "_wasted: "SIZE_FORMAT", "
-                   "_unused: "SIZE_FORMAT", "
+                   "_allocated: " SIZE_FORMAT ", "
+                   "_wasted: " SIZE_FORMAT ", "
+                   "_unused: " SIZE_FORMAT ", "
                    "_used  : "SIZE_FORMAT,
                    _allocated, _wasted, _unused, _used));
 

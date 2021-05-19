@@ -941,7 +941,7 @@ static bool match(UnsafeRawOp* x,
 // AARCH64 cannot handle shifts which are not either 0, or log2 of the type size
 #ifdef AARCH64
   if (*log2_scale != 0 &&
-	(1 << *log2_scale) != type2aelembytes(x->basic_type(), true))
+        (1 << *log2_scale) != type2aelembytes(x->basic_type(), true))
     return false;
 #endif
 

@@ -61,9 +61,16 @@ case "$OS" in
     exit 0;
     ;;
 esac
+
 ${TESTJAVA}${FS}bin${FS}java -XshowSettings 2>&1 | grep sun.arch.data.model | grep 32
 if [ 0 -eq $? ] ; then
     M32="-m32"
+fi
+
+# CriticalJNINatives is not supported for aarch64
+if [ $VM_CPU == "aarch64" ]; then
+    echo "Test Passed"
+    exit 0;
 fi
 
 THIS_DIR=.

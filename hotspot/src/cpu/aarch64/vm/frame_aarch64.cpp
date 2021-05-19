@@ -733,11 +733,11 @@ intptr_t* frame::real_fp() const {
 
 #undef DESCRIBE_FP_OFFSET
 
-#define DESCRIBE_FP_OFFSET(name)					\
-  {									\
-    unsigned long *p = (unsigned long *)fp;				\
+#define DESCRIBE_FP_OFFSET(name)                                        \
+  {                                                                     \
+    unsigned long *p = (unsigned long *)fp;                             \
     printf("0x%016lx 0x%016lx %s\n", (unsigned long)(p + frame::name##_offset), \
-	   p[frame::name##_offset], #name);				\
+           p[frame::name##_offset], #name);                             \
   }
 
 static __thread unsigned long nextfp;
@@ -807,11 +807,11 @@ void internal_pf(unsigned long sp, unsigned long fp, unsigned long pc, unsigned 
     CodeBlob *cb = CodeCache::find_blob((address)pc);
     if (cb != NULL) {
       if (cb->is_nmethod()) {
-	ResourceMark rm;
-	nmethod* nm = (nmethod*)cb;
-	printf("nmethod %s\n", nm->method()->name_and_sig_as_C_string());
+        ResourceMark rm;
+        nmethod* nm = (nmethod*)cb;
+        printf("nmethod %s\n", nm->method()->name_and_sig_as_C_string());
       } else if (cb->name()) {
-	printf("CodeBlob %s\n", cb->name());
+        printf("CodeBlob %s\n", cb->name());
       }
     }
   }
@@ -829,7 +829,7 @@ extern "C" void npf() {
 }
 
 extern "C" void pf(unsigned long sp, unsigned long fp, unsigned long pc,
-		   unsigned long bcx, unsigned long thread) {
+                   unsigned long bcx, unsigned long thread) {
   if (!reg_map) {
     reg_map = NEW_C_HEAP_OBJ(RegisterMap, mtNone);
     ::new (reg_map) RegisterMap((JavaThread*)thread, false);

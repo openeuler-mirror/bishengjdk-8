@@ -1955,10 +1955,6 @@ void * os::dll_load(const char *filename, char *ebuf, int ebuflen)
   #define EM_AARCH64    183               /* ARM AARCH64 */
   #endif
 
-  #ifndef EM_AARCH64
-  #define EM_AARCH64	183
-  #endif
-
   static const arch_t arch_array[]={
     {EM_386,         EM_386,     ELFCLASS32, ELFDATA2LSB, (char*)"IA 32"},
     {EM_486,         EM_386,     ELFCLASS32, ELFDATA2LSB, (char*)"IA 32"},
@@ -2015,7 +2011,7 @@ void * os::dll_load(const char *filename, char *ebuf, int ebuflen)
     static  Elf32_Half running_arch_code=EM_AARCH64;
   #else
     #error Method os::dll_load requires that one of following is defined:\
-      IA32, AMD64, IA64, __sparc, __powerpc__, ARM, S390, ALPHA, MIPS, MIPSEL, PARISC, M68K, AARCH64
+         IA32, AMD64, IA64, __sparc, __powerpc__, ARM, S390, ALPHA, MIPS, MIPSEL, PARISC, M68K, AARCH64
   #endif
 
   // Identify compatability class for VM's architecture and library's architecture
@@ -2966,7 +2962,7 @@ int os::Linux::sched_getcpu_syscall(void) {
   retval = vgetcpu(&cpu, NULL, NULL);
 #elif defined(IA32) || defined(AARCH64)
 # ifndef SYS_getcpu
-#  define SYS_getcpu AARCH64_ONLY(168) NOT_AARCH64(318)
+#  define SYS_getcpu AARCH64_ONLY(168) IA32_ONLY(318)
 # endif
   retval = syscall(SYS_getcpu, &cpu, NULL, NULL);
 #endif
@@ -5806,7 +5802,6 @@ jlong os::thread_cpu_time(Thread *thread, bool user_sys_cpu_time) {
 PRAGMA_DIAG_PUSH
 PRAGMA_FORMAT_NONLITERAL_IGNORED
 static jlong slow_thread_cpu_time(Thread *thread, bool user_sys_cpu_time) {
-  static bool proc_task_unchecked = true;
   pid_t  tid = thread->osthread()->thread_id();
   char *s;
   char stat[2048];
@@ -5819,24 +5814,7 @@ static jlong slow_thread_cpu_time(Thread *thread, bool user_sys_cpu_time) {
   long ldummy;
   FILE *fp;
 
-  snprintf(proc_name, 64, "/proc/%d/stat", tid);
-
-  // The /proc/<tid>/stat aggregates per-process usage on
-  // new Linux kernels 2.6+ where NPTL is supported.
-  // The /proc/self/task/<tid>/stat still has the per-thread usage.
-  // See bug 6328462.
-  // There possibly can be cases where there is no directory
-  // /proc/self/task, so we check its availability.
-  if (proc_task_unchecked && os::Linux::is_NPTL()) {
-    // This is executed only once
-    proc_task_unchecked = false;
-    fp = fopen("/proc/self/task", "r");
-    if (fp != NULL) {
-      snprintf(proc_name, 64, "/proc/self/task/%d/stat", tid);
-      fclose(fp);
-    }
-  }
-
+  snprintf(proc_name, 64, "/proc/self/task/%d/stat", tid);
   fp = fopen(proc_name, "r");
   if ( fp == NULL ) return -1;
   statlen = fread(stat, 1, 2047, fp);

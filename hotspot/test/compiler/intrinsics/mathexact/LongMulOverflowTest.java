@@ -25,11 +25,9 @@
  * @test
  * @bug 8191915
  * @summary Regression test for multiplyExact intrinsic
- * @compile AddExactICondTest.java
- * @run main/othervm -Xcomp -XX:-TieredCompilation compiler.intrinsics.mathexact.LongMulOverflowTest
+ * @compile LongMulOverflowTest.java
+ * @run main/othervm -Xcomp -XX:-TieredCompilation LongMulOverflowTest
  */
-
-package compiler.intrinsics.mathexact;
 
 public class LongMulOverflowTest {
     public static void main(String[] args) {

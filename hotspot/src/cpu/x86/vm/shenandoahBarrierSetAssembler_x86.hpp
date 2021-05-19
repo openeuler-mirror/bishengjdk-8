@@ -36,8 +36,6 @@ class StubCodeGenerator;
 class ShenandoahBarrierSetAssembler : public CHeapObj<mtGC> {
 private:
 
-  void load_reference_barrier_not_null(MacroAssembler* masm, Register dst);
-
   void storeval_barrier_impl(MacroAssembler* masm, Register dst, Register tmp);
 
 public:
@@ -48,7 +46,9 @@ public:
   void gen_load_reference_barrier_stub(LIR_Assembler* ce, ShenandoahLoadReferenceBarrierStub* stub);
 #endif
 
-  void load_reference_barrier(MacroAssembler* masm, Register dst);
+  void load_reference_barrier(MacroAssembler* masm, Register dst, Address src);
+
+  void load_heap_oop(MacroAssembler* masm, Register dst, Address src);
 
   virtual void arraycopy_prologue(MacroAssembler* masm, bool dest_uninitialized,
                                   Register src, Register dst, Register count);

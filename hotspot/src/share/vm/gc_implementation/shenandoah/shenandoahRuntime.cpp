@@ -47,9 +47,12 @@ JRT_LEAF(void, ShenandoahRuntime::write_ref_field_pre_entry(oopDesc* orig, JavaT
   thread->satb_mark_queue().enqueue_known_active(orig);
 JRT_END
 
-JRT_LEAF(oopDesc*, ShenandoahRuntime::load_reference_barrier(oopDesc* src))
-  oop result = ShenandoahBarrierSet::barrier_set()->load_reference_barrier_mutator(oop(src));
-  return (oopDesc*) result;
+JRT_LEAF(oopDesc*, ShenandoahRuntime::load_reference_barrier(oopDesc* src, oop* load_addr))
+  return ShenandoahBarrierSet::barrier_set()->load_reference_barrier_mutator(src, load_addr);
+JRT_END
+
+JRT_LEAF(oopDesc*, ShenandoahRuntime::load_reference_barrier_narrow(oopDesc* src, narrowOop* load_addr))
+  return ShenandoahBarrierSet::barrier_set()->load_reference_barrier_mutator(src, load_addr);
 JRT_END
 
 IRT_LEAF(oopDesc*, ShenandoahRuntime::load_reference_barrier_interpreter(oopDesc* src))

@@ -153,8 +153,7 @@ class java_lang_String : AllStatic {
     if (count_offset > 0) {
       return java_string->int_field(count_offset);
     } else {
-      oop value = java_string->obj_field(value_offset);
-      return ((typeArrayOop) value)->length();
+      return ((typeArrayOop)java_string->obj_field(value_offset))->length();
     }
   }
   static int utf8_length(oop java_string);

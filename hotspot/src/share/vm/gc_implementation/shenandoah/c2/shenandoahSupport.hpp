@@ -63,7 +63,7 @@ private:
   static void test_null(Node*& ctrl, Node* val, Node*& null_ctrl, PhaseIdealLoop* phase);
   static void test_gc_state(Node*& ctrl, Node* raw_mem, Node*& heap_stable_ctrl,
                             PhaseIdealLoop* phase, int flags);
-  static void call_lrb_stub(Node*& ctrl, Node*& val, Node*& result_mem, Node* raw_mem, PhaseIdealLoop* phase);
+  static void call_lrb_stub(Node*& ctrl, Node*& val, Node* load_addr, Node*& result_mem, Node* raw_mem, bool is_native, PhaseIdealLoop* phase);
   static Node* clone_null_check(Node*& c, Node* val, Node* unc_ctrl, PhaseIdealLoop* phase);
   static void fix_null_check(Node* unc, Node* unc_ctrl, Node* new_unc_ctrl, Unique_Node_List& uses,
                              PhaseIdealLoop* phase);
@@ -74,6 +74,7 @@ private:
   static void fix_ctrl(Node* barrier, Node* region, const MemoryGraphFixer& fixer, Unique_Node_List& uses, Unique_Node_List& uses_to_ignore, uint last, PhaseIdealLoop* phase);
   static IfNode* find_unswitching_candidate(const IdealLoopTree *loop, PhaseIdealLoop* phase);
 
+  static Node* get_load_addr(PhaseIdealLoop* phase, VectorSet& visited, Node* lrb);
 public:
   static bool is_dominator(Node* d_c, Node* n_c, Node* d, Node* n, PhaseIdealLoop* phase);
   static bool is_dominator_same_ctrl(Node* c, Node* d, Node* n, PhaseIdealLoop* phase);
@@ -156,10 +157,6 @@ public:
     ValueIn
   };
 
-  enum Strength {
-    NONE, STRONG
-  };
-
   ShenandoahLoadReferenceBarrierNode(Node* ctrl, Node* val);
 
   virtual int Opcode() const;
@@ -177,7 +174,7 @@ public:
     return sizeof(*this);
   }
 
-  Strength get_barrier_strength();
+  bool is_redundant();
   CallStaticJavaNode* pin_and_expand_null_check(PhaseIterGVN& igvn);
 
 private:

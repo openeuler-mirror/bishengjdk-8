@@ -54,7 +54,6 @@ CXX=cl.exe
 
 # These are always used in all compiles
 CXX_FLAGS=$(EXTRA_CFLAGS) /nologo /W3 /WX /GS
-
 !if "$(MSC_VER)" > "1910"
 CXX_FLAGS=$(EXTRA_CFLAGS) /nologo /W3 /GS /arch:IA32
 !endif
@@ -166,8 +165,11 @@ COMPILER_NAME=VS2017
 !if "$(MSC_VER)" == "1914"
 COMPILER_NAME=VS2017
 !endif
+!if "$(MSC_VER)" == "1915"
+COMPILER_NAME=VS2017
+!endif
 !if "$(MSC_VER)" == "1916"
-COMPILER_NAME=VS2019
+COMPILER_NAME=VS2017
 !endif
 !endif
 

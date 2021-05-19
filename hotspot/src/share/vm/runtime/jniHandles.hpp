@@ -218,8 +218,8 @@ template<bool external_guard>
 inline oop JNIHandles::guard_value(oop value) {
   if (!external_guard) {
     assert(value != badJNIHandle, "Pointing to zapped jni handle area");
-    assert(value != deleted_handle(), "Used a deleted global handle.");
-  } else if (value == badJNIHandle || value == deleted_handle()) {
+    assert(value != deleted_handle(), "Used a deleted global handle");
+  } else if ((value == badJNIHandle) || (value == deleted_handle())) {
     value = NULL;
   }
   return value;

@@ -70,6 +70,7 @@ class StubAssembler;
   stub(load_appendix_patching)       \
   stub(g1_pre_barrier_slow)          \
   stub(g1_post_barrier_slow)         \
+  stub(shenandoah_lrb_slow)          \
   stub(fpu2long_stub)                \
   stub(counter_overflow)             \
   stub(predicate_failed_trap)        \
@@ -167,6 +168,7 @@ class Runtime1: public AllStatic {
 #ifdef TARGET_ARCH_aarch64
   static void patch_code_aarch64(JavaThread* thread, StubID stub_id);
 #endif
+
  public:
   // initialization
   static void initialize(BufferBlob* blob);

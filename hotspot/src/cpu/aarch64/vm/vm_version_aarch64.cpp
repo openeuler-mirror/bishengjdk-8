@@ -30,7 +30,6 @@
 #include "runtime/java.hpp"
 #include "runtime/stubCodeGenerator.hpp"
 #include "vm_version_aarch64.hpp"
-#include "runtime/arguments.hpp"
 #ifdef TARGET_OS_FAMILY_linux
 # include "os_linux.inline.hpp"
 #endif
@@ -341,5 +340,10 @@ void VM_Version::initialize() {
 
   get_processor_features();
 
-  UNSUPPORTED_OPTION(CriticalJNINatives, "CriticalJNINatives");
+  if (CriticalJNINatives) {
+    if (FLAG_IS_CMDLINE(CriticalJNINatives)) {
+      warning("CriticalJNINatives specified, but not supported in this VM");
+    }
+    FLAG_SET_DEFAULT(CriticalJNINatives, false);
+  }
 }

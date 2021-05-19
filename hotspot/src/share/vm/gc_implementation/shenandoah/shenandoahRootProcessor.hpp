@@ -234,10 +234,9 @@ private:
   ShenandoahStringTableRoots      _string_table_roots;
   ShenandoahCodeCacheRoots<ShenandoahCsetCodeRootsIterator>
                                   _code_roots;
-  const bool                      _update_code_cache;
 
 public:
-  ShenandoahRootUpdater(ShenandoahPhaseTimings::Phase phase, bool update_code_cache);
+  ShenandoahRootUpdater(ShenandoahPhaseTimings::Phase phase);
   void roots_do(uint worker_id, BoolObjectClosure* is_alive, OopClosure* keep_alive);
 };
 

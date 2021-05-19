@@ -23,6 +23,7 @@
  */
 
 // FORMS.CPP - Definitions for ADL Parser Forms Classes
+#include "utilities/macros.hpp"
 #include "adlc.hpp"
 
 //==============================Instructions===================================
@@ -766,8 +767,7 @@ bool InstructForm::captures_bottom_type(FormDict &globals) const {
         !strcmp(_matrule->_rChild->_opType,"CreateEx")     ||  // type of exception
         !strcmp(_matrule->_rChild->_opType,"CheckCastPP")  ||
         !strcmp(_matrule->_rChild->_opType,"GetAndSetP")   ||
-        !strcmp(_matrule->_rChild->_opType,"GetAndSetN")   ||
-        !strcmp(_matrule->_rChild->_opType,"ShenandoahReadBarrier"))) return true;
+        !strcmp(_matrule->_rChild->_opType,"GetAndSetN")) )  return true;
   else if ( is_ideal_load() == Form::idealP )                return true;
   else if ( is_ideal_store() != Form::none  )                return true;
 
@@ -1230,8 +1230,8 @@ bool InstructForm::check_branch_variant(ArchDesc &AD, InstructForm *short_branch
       !is_short_branch() &&     // Don't match another short branch variant
       reduce_result() != NULL &&
       strcmp(reduce_result(), short_branch->reduce_result()) == 0 &&
-      _matrule->equivalent(AD.globalNames(), short_branch->_matrule) &&
-      equivalent_predicates(this, short_branch)) {
+      _matrule->equivalent(AD.globalNames(), short_branch->_matrule)
+      AARCH64_ONLY(&& equivalent_predicates(this, short_branch))) {
     // The instructions are equivalent.
 
     // Now verify that both instructions have the same parameters and
@@ -3474,11 +3474,11 @@ int MatchNode::needs_ideal_memory_edge(FormDict &globals) const {
     "LoadPLocked",
     "StorePConditional", "StoreIConditional", "StoreLConditional",
     "CompareAndSwapI", "CompareAndSwapL", "CompareAndSwapP", "CompareAndSwapN",
+    "ShenandoahCompareAndSwapN", "ShenandoahCompareAndSwapP",
     "StoreCM",
     "ClearArray",
     "GetAndAddI", "GetAndSetI", "GetAndSetP",
     "GetAndAddL", "GetAndSetL", "GetAndSetN",
-    "ShenandoahReadBarrier",
   };
   int cnt = sizeof(needs_ideal_memory_list)/sizeof(char*);
   if( strcmp(_opType,"PrefetchRead")==0 ||

@@ -3777,7 +3777,6 @@ const TypeOopPtr *TypeAryPtr::cast_to_instance_id(int instance_id) const {
   return make(_ptr, const_oop(), _ary, klass(), _klass_is_exact, _offset, instance_id, _speculative, _inline_depth);
 }
 
-
 //-----------------------------max_array_length-------------------------------
 // A wrapper around arrayOopDesc::max_array_length(etype) with some input normalization.
 jint TypeAryPtr::max_array_length(BasicType etype) {

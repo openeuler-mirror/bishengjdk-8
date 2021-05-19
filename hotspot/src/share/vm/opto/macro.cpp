@@ -1414,14 +1414,13 @@ void PhaseMacroExpand::expand_allocate_common(
     // implementation: CMS and G1 will not scan newly created object,
     // so it's safe to skip storestore barrier when allocation does
     // not escape.
-    if ( AARCH64_ONLY ( !alloc->does_not_escape_thread() &&
-			!alloc->is_allocation_MemBar_redundant() &&
-	                (init == NULL ||
-			 !init->is_complete_with_arraycopy()) )
-         NOT_AARCH64  ( init == NULL ||
-			(!init->is_complete_with_arraycopy() &&
-			 !init->does_not_escape()) )
-       ) {
+#ifndef AARCH64
+    if (init == NULL || (!init->is_complete_with_arraycopy() && !init->does_not_escape())) {
+#else
+    if (!alloc->does_not_escape_thread() &&
+        !alloc->is_allocation_MemBar_redundant() &&
+        (init == NULL || !init->is_complete_with_arraycopy())) {
+#endif
       if (init == NULL || init->req() < InitializeNode::RawStores) {
         // No InitializeNode or no stores captured by zeroing
         // elimination. Simply add the MemBarStoreStore after object

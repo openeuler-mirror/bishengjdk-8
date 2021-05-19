@@ -5786,6 +5786,13 @@ void MacroAssembler::store_klass(Register dst, Register src) {
 }
 
 void MacroAssembler::load_heap_oop(Register dst, Address src) {
+#if INCLUDE_ALL_GCS
+  if (UseShenandoahGC) {
+    ShenandoahBarrierSetAssembler::bsasm()->load_heap_oop(this, dst, src);
+    return;
+  }
+#endif
+
 #ifdef _LP64
   // FIXME: Must change all places where we try to load the klass.
   if (UseCompressedOops) {
@@ -5794,16 +5801,17 @@ void MacroAssembler::load_heap_oop(Register dst, Address src) {
   } else
 #endif
     movptr(dst, src);
-
-#if INCLUDE_ALL_GCS
-  if (UseShenandoahGC) {
-    ShenandoahBarrierSetAssembler::bsasm()->load_reference_barrier(this, dst);
-  }
-#endif
 }
 
 // Doesn't do verfication, generates fixed size code
 void MacroAssembler::load_heap_oop_not_null(Register dst, Address src) {
+#if INCLUDE_ALL_GCS
+  if (UseShenandoahGC) {
+    ShenandoahBarrierSetAssembler::bsasm()->load_heap_oop(this, dst, src);
+    return;
+  }
+#endif
+
 #ifdef _LP64
   if (UseCompressedOops) {
     movl(dst, src);
@@ -5811,12 +5819,6 @@ void MacroAssembler::load_heap_oop_not_null(Register dst, Address src) {
   } else
 #endif
     movptr(dst, src);
-
-#if INCLUDE_ALL_GCS
-  if (UseShenandoahGC) {
-    ShenandoahBarrierSetAssembler::bsasm()->load_reference_barrier(this, dst);
-  }
-#endif
 }
 
 void MacroAssembler::store_heap_oop(Address dst, Register src) {

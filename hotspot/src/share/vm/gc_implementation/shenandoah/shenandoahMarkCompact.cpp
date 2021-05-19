@@ -105,7 +105,7 @@ void ShenandoahMarkCompact::do_it(GCCause::Cause gc_cause) {
     // b. Cancel concurrent mark, if in progress
     if (heap->is_concurrent_mark_in_progress()) {
       heap->concurrent_mark()->cancel();
-      heap->stop_concurrent_marking();
+      heap->complete_marking();
     }
     assert(!heap->is_concurrent_mark_in_progress(), "sanity");
 

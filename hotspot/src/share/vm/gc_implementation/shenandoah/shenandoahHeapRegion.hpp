@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2018, Red Hat, Inc. All rights reserved.
+ * Copyright (c) 2013, 2019, Red Hat, Inc. All rights reserved.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -31,9 +31,11 @@
 #include "gc_implementation/shenandoah/shenandoahPadding.hpp"
 
 class VMStructs;
+class ShenandoahHeapRegionStateConstant;
 
 class ShenandoahHeapRegion {
   friend class VMStructs;
+  friend class ShenandoahHeapRegionStateConstant;
 private:
   /*
     Region state is described by a state machine. Transitions are guarded by
@@ -113,10 +115,11 @@ private:
     _cset,                    // region is in collection set
     _pinned,                  // region is pinned
     _pinned_cset,             // region is pinned and in cset (evac failure path)
-    _trash                    // region contains only trash
+    _trash,                   // region contains only trash
+    _REGION_STATES_NUM        // last
   };
 
-  const char* region_state_to_string(RegionState s) const {
+  static const char* region_state_to_string(RegionState s) {
     switch (s) {
       case _empty_uncommitted:       return "Empty Uncommitted";
       case _empty_committed:         return "Empty Committed";
@@ -156,6 +159,10 @@ private:
   void report_illegal_transition(const char* method);
 
 public:
+  static const int region_states_num() {
+    return _REGION_STATES_NUM;
+  }
+
   // Allowed transitions from the outside code:
   void make_regular_allocation();
   void make_regular_bypass();
@@ -379,6 +386,8 @@ private:
   void do_uncommit();
 
   inline void internal_increase_live_data(size_t s);
+
+  void set_state(RegionState to);
 };
 
 #endif // SHARE_VM_GC_SHENANDOAH_SHENANDOAHHEAPREGION_HPP

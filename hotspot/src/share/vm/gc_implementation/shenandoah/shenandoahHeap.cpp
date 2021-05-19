@@ -58,6 +58,9 @@
 #include "gc_implementation/shenandoah/mode/shenandoahIUMode.hpp"
 #include "gc_implementation/shenandoah/mode/shenandoahPassiveMode.hpp"
 #include "gc_implementation/shenandoah/mode/shenandoahSATBMode.hpp"
+#if INCLUDE_JFR
+#include "gc_implementation/shenandoah/shenandoahJfrSupport.hpp"
+#endif
 
 #include "memory/metaspace.hpp"
 #include "runtime/vmThread.hpp"
@@ -146,6 +149,9 @@ jint ShenandoahHeap::initialize() {
   assert(num_min_regions <= _num_regions, "sanity");
   _minimum_size = num_min_regions * reg_size_bytes;
 
+  // Default to max heap size.
+  _soft_max_size = _num_regions * reg_size_bytes;
+
   _committed = _initial_size;
 
   size_t heap_page_size   = UseLargePages ? (size_t)os::large_page_size() : (size_t)os::vm_page_size();
@@ -166,14 +172,14 @@ jint ShenandoahHeap::initialize() {
   assert((((size_t) base()) & ShenandoahHeapRegion::region_size_bytes_mask()) == 0,
          err_msg("Misaligned heap: " PTR_FORMAT, p2i(base())));
 
-#if SHENANDOAH_OPTIMIZED_OBJTASK
+#if SHENANDOAH_OPTIMIZED_MARKTASK
   // The optimized ObjArrayChunkedTask takes some bits away from the full object bits.
   // Fail if we ever attempt to address more than we can.
-  if ((uintptr_t)(heap_rs.base() + heap_rs.size()) >= ObjArrayChunkedTask::max_addressable()) {
+  if ((uintptr_t)(heap_rs.base() + heap_rs.size()) >= ShenandoahMarkTask::max_addressable()) {
     FormatBuffer<512> buf("Shenandoah reserved [" PTR_FORMAT ", " PTR_FORMAT") for the heap, \n"
                           "but max object address is " PTR_FORMAT ". Try to reduce heap size, or try other \n"
                           "VM options that allocate heap at lower addresses (HeapBaseMinAddress, AllocateHeapAt, etc).",
-                p2i(heap_rs.base()), p2i(heap_rs.base() + heap_rs.size()), ObjArrayChunkedTask::max_addressable());
+                p2i(heap_rs.base()), p2i(heap_rs.base() + heap_rs.size()), ShenandoahMarkTask::max_addressable());
     vm_exit_during_initialization("Fatal Error", buf);
   }
 #endif
@@ -517,8 +523,9 @@ void ShenandoahHeap::reset_mark_bitmap() {
 
 void ShenandoahHeap::print_on(outputStream* st) const {
   st->print_cr("Shenandoah Heap");
-  st->print_cr(" " SIZE_FORMAT "%s total, " SIZE_FORMAT "%s committed, " SIZE_FORMAT "%s used",
+  st->print_cr(" " SIZE_FORMAT "%s max, " SIZE_FORMAT "%s soft max, " SIZE_FORMAT "%s committed, " SIZE_FORMAT "%s used",
                byte_size_in_proper_unit(max_capacity()), proper_unit_for_byte_size(max_capacity()),
+               byte_size_in_proper_unit(soft_max_capacity()), proper_unit_for_byte_size(soft_max_capacity()),
                byte_size_in_proper_unit(committed()),    proper_unit_for_byte_size(committed()),
                byte_size_in_proper_unit(used()),         proper_unit_for_byte_size(used()));
   st->print_cr(" " SIZE_FORMAT " x " SIZE_FORMAT"%s regions",
@@ -588,6 +595,8 @@ void ShenandoahHeap::post_initialize() {
   ref_processing_init();
 
   _heuristics->initialize();
+
+  JFR_ONLY(ShenandoahJFRSupport::register_jfr_type_serializers());
 }
 
 size_t ShenandoahHeap::used() const {
@@ -649,6 +658,21 @@ size_t ShenandoahHeap::max_capacity() const {
   return _num_regions * ShenandoahHeapRegion::region_size_bytes();
 }
 
+size_t ShenandoahHeap::soft_max_capacity() const {
+  size_t v = OrderAccess::load_acquire((volatile size_t*)&_soft_max_size);
+  assert(min_capacity() <= v && v <= max_capacity(),
+         err_msg("Should be in bounds: " SIZE_FORMAT " <= " SIZE_FORMAT " <= " SIZE_FORMAT,
+                 min_capacity(), v, max_capacity()));
+  return v;
+}
+
+void ShenandoahHeap::set_soft_max_capacity(size_t v) {
+  assert(min_capacity() <= v && v <= max_capacity(),
+         err_msg("Should be in bounds: " SIZE_FORMAT " <= " SIZE_FORMAT " <= " SIZE_FORMAT,
+                 min_capacity(), v, max_capacity()));
+  OrderAccess::release_store_fence(&_soft_max_size, v);
+}
+
 size_t ShenandoahHeap::min_capacity() const {
   return _minimum_size;
 }
@@ -663,7 +687,7 @@ bool ShenandoahHeap::is_in(const void* p) const {
   return p >= heap_base && p < last_region_end;
 }
 
-void ShenandoahHeap::op_uncommit(double shrink_before) {
+void ShenandoahHeap::op_uncommit(double shrink_before, size_t shrink_until) {
   assert (ShenandoahUncommit, "should be enabled");
 
   // Application allocates from the beginning of the heap, and GC allocates at
@@ -677,8 +701,7 @@ void ShenandoahHeap::op_uncommit(double shrink_before) {
     if (r->is_empty_committed() && (r->empty_time() < shrink_before)) {
       ShenandoahHeapLocker locker(lock());
       if (r->is_empty_committed()) {
-        // Do not uncommit below minimal capacity
-        if (committed() < min_capacity() + ShenandoahHeapRegion::region_size_bytes()) {
+        if (committed() < shrink_until + ShenandoahHeapRegion::region_size_bytes()) {
           break;
         }
 
@@ -1445,8 +1468,6 @@ void ShenandoahHeap::op_final_mark() {
 
     TASKQUEUE_STATS_ONLY(concurrent_mark()->task_queues()->print_taskqueue_stats());
 
-    stop_concurrent_marking();
-
     {
       ShenandoahGCPhase phase(ShenandoahPhaseTimings::final_update_region_states);
       ShenandoahFinalMarkUpdateRegionStateClosure cl;
@@ -1511,7 +1532,7 @@ void ShenandoahHeap::op_final_mark() {
 
   } else {
     concurrent_mark()->cancel();
-    stop_concurrent_marking();
+    complete_marking();
 
     if (process_references()) {
       // Abandon reference processing right away: pre-cleaning must have failed.
@@ -1741,9 +1762,11 @@ void ShenandoahHeap::op_degenerated_futile() {
   op_full(GCCause::_shenandoah_upgrade_to_full_gc);
 }
 
-void ShenandoahHeap::stop_concurrent_marking() {
-  assert(is_concurrent_mark_in_progress(), "How else could we get here?");
-  set_concurrent_mark_in_progress(false);
+void ShenandoahHeap::complete_marking() {
+  if (is_concurrent_mark_in_progress()) {
+    set_concurrent_mark_in_progress(false);
+  }
+
   if (!cancelled_gc()) {
     // If we needed to update refs, and concurrent marking has been cancelled,
     // we need to finish updating references.
@@ -2560,14 +2583,14 @@ void ShenandoahHeap::entry_preclean() {
   }
 }
 
-void ShenandoahHeap::entry_uncommit(double shrink_before) {
+void ShenandoahHeap::entry_uncommit(double shrink_before, size_t shrink_until) {
   static const char *msg = "Concurrent uncommit";
   GCTraceTime time(msg, PrintGC, NULL, tracer()->gc_id(), true);
   EventMark em("%s", msg);
 
   ShenandoahGCPhase phase(ShenandoahPhaseTimings::conc_uncommit);
 
-  op_uncommit(shrink_before);
+  op_uncommit(shrink_before, shrink_until);
 }
 
 void ShenandoahHeap::try_inject_alloc_failure() {

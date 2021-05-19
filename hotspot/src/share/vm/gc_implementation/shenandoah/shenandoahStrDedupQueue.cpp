@@ -63,7 +63,7 @@ ShenandoahStrDedupQueueSet::~ShenandoahStrDedupQueueSet() {
   QueueChunkedList* q;
   QueueChunkedList* tmp;
 
-  for (uint index = 0; index < num_queues(); index ++) {
+  for (uint index = 0; index < num_queues_nv(); index ++) {
     if (_local_queues[index] != NULL) {
       delete _local_queues[index];
     }

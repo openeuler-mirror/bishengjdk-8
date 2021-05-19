@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, Red Hat, Inc. All rights reserved.
+ * Copyright (c) 2018, 2020 Red Hat, Inc. All rights reserved.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -39,6 +39,30 @@ ShenandoahBarrierSetAssembler* ShenandoahBarrierSetAssembler::bsasm() {
 }
 
 #define __ masm->
+
+static void save_xmm_registers(MacroAssembler* masm) {
+    __ subptr(rsp, 64);
+    __ movdbl(Address(rsp, 0), xmm0);
+    __ movdbl(Address(rsp, 8), xmm1);
+    __ movdbl(Address(rsp, 16), xmm2);
+    __ movdbl(Address(rsp, 24), xmm3);
+    __ movdbl(Address(rsp, 32), xmm4);
+    __ movdbl(Address(rsp, 40), xmm5);
+    __ movdbl(Address(rsp, 48), xmm6);
+    __ movdbl(Address(rsp, 56), xmm7);
+}
+
+static void restore_xmm_registers(MacroAssembler* masm) {
+    __ movdbl(xmm0, Address(rsp, 0));
+    __ movdbl(xmm1, Address(rsp, 8));
+    __ movdbl(xmm2, Address(rsp, 16));
+    __ movdbl(xmm3, Address(rsp, 24));
+    __ movdbl(xmm4, Address(rsp, 32));
+    __ movdbl(xmm5, Address(rsp, 40));
+    __ movdbl(xmm6, Address(rsp, 48));
+    __ movdbl(xmm7, Address(rsp, 56));
+    __ addptr(rsp, 64);
+}
 
 void ShenandoahBarrierSetAssembler::arraycopy_prologue(MacroAssembler* masm, bool dest_uninitialized,
                                                        Register src, Register dst, Register count) {
@@ -102,82 +126,136 @@ void ShenandoahBarrierSetAssembler::arraycopy_prologue(MacroAssembler* masm, boo
   }
 }
 
-void ShenandoahBarrierSetAssembler::load_reference_barrier_not_null(MacroAssembler* masm, Register dst) {
-  assert(ShenandoahLoadRefBarrier, "Should be enabled");
+void ShenandoahBarrierSetAssembler::load_reference_barrier(MacroAssembler* masm, Register dst, Address src) {
+  if (!ShenandoahLoadRefBarrier) {
+    return;
+  }
 
-  Label done;
+  bool is_narrow  = UseCompressedOops;
 
+  Label heap_stable, not_cset;
+
+  __ block_comment("load_reference_barrier { ");
+
+  // Check if GC is active
 #ifdef _LP64
   Register thread = r15_thread;
 #else
-  Register thread = rcx;
+  Register thread = rsi;
   if (thread == dst) {
     thread = rbx;
   }
+  assert_different_registers(dst, src.base(), src.index(), thread);
   __ push(thread);
   __ get_thread(thread);
 #endif
-  assert_different_registers(dst, thread);
 
   Address gc_state(thread, in_bytes(JavaThread::gc_state_offset()));
   __ testb(gc_state, ShenandoahHeap::HAS_FORWARDED);
-  __ jcc(Assembler::zero, done);
+  __ jcc(Assembler::zero, heap_stable);
 
-  {
-    __ save_vector_registers();
+  Register tmp1 = noreg, tmp2 = noreg;
 
-    __ subptr(rsp, LP64_ONLY(16) NOT_LP64(8) * wordSize);
-
-    __ movptr(Address(rsp,  0 * wordSize), rax);
-    __ movptr(Address(rsp,  1 * wordSize), rcx);
-    __ movptr(Address(rsp,  2 * wordSize), rdx);
-    __ movptr(Address(rsp,  3 * wordSize), rbx);
-    // skip rsp
-    __ movptr(Address(rsp,  5 * wordSize), rbp);
-    __ movptr(Address(rsp,  6 * wordSize), rsi);
-    __ movptr(Address(rsp,  7 * wordSize), rdi);
-#ifdef _LP64
-    __ movptr(Address(rsp,  8 * wordSize),  r8);
-    __ movptr(Address(rsp,  9 * wordSize),  r9);
-    __ movptr(Address(rsp, 10 * wordSize), r10);
-    __ movptr(Address(rsp, 11 * wordSize), r11);
-    __ movptr(Address(rsp, 12 * wordSize), r12);
-    __ movptr(Address(rsp, 13 * wordSize), r13);
-    __ movptr(Address(rsp, 14 * wordSize), r14);
-    __ movptr(Address(rsp, 15 * wordSize), r15);
-#endif
-  }
-  __ super_call_VM_leaf(CAST_FROM_FN_PTR(address, ShenandoahRuntime::load_reference_barrier_interpreter), dst);
-  {
-#ifdef _LP64
-    __ movptr(r15, Address(rsp, 15 * wordSize));
-    __ movptr(r14, Address(rsp, 14 * wordSize));
-    __ movptr(r13, Address(rsp, 13 * wordSize));
-    __ movptr(r12, Address(rsp, 12 * wordSize));
-    __ movptr(r11, Address(rsp, 11 * wordSize));
-    __ movptr(r10, Address(rsp, 10 * wordSize));
-    __ movptr(r9,  Address(rsp,  9 * wordSize));
-    __ movptr(r8,  Address(rsp,  8 * wordSize));
-#endif
-    __ movptr(rdi, Address(rsp,  7 * wordSize));
-    __ movptr(rsi, Address(rsp,  6 * wordSize));
-    __ movptr(rbp, Address(rsp,  5 * wordSize));
-    // skip rsp
-    __ movptr(rbx, Address(rsp,  3 * wordSize));
-    __ movptr(rdx, Address(rsp,  2 * wordSize));
-    __ movptr(rcx, Address(rsp,  1 * wordSize));
-    if (dst != rax) {
-      __ movptr(dst, rax);
-      __ movptr(rax, Address(rsp, 0 * wordSize));
+  // Test for object in cset
+  // Allocate temporary registers
+  for (int i = 0; i < 8; i++) {
+    Register r = as_Register(i);
+    if (r != rsp && r != rbp && r != dst && r != src.base() && r != src.index()) {
+      if (tmp1 == noreg) {
+        tmp1 = r;
+      } else {
+        tmp2 = r;
+        break;
+      }
     }
-    __ addptr(rsp, LP64_ONLY(16) NOT_LP64(8) * wordSize);
-
-    __ restore_vector_registers();
   }
-  __ bind(done);
+  assert(tmp1 != noreg, "tmp1 allocated");
+  assert(tmp2 != noreg, "tmp2 allocated");
+  assert_different_registers(tmp1, tmp2, src.base(), src.index());
+  assert_different_registers(tmp1, tmp2, dst);
+
+  __ push(tmp1);
+  __ push(tmp2);
+
+  // Optimized cset-test
+  __ movptr(tmp1, dst);
+  __ shrptr(tmp1, ShenandoahHeapRegion::region_size_bytes_shift_jint());
+  __ movptr(tmp2, (intptr_t) ShenandoahHeap::in_cset_fast_test_addr());
+  __ movbool(tmp1, Address(tmp1, tmp2, Address::times_1));
+  __ testbool(tmp1);
+  __ jcc(Assembler::zero, not_cset);
+
+  uint num_saved_regs = 4 + (dst != rax ? 1 : 0) LP64_ONLY(+4);
+  __ subptr(rsp, num_saved_regs * wordSize);
+  uint slot = num_saved_regs;
+  if (dst != rax) {
+    __ movptr(Address(rsp, (--slot) * wordSize), rax);
+  }
+  __ movptr(Address(rsp, (--slot) * wordSize), rcx);
+  __ movptr(Address(rsp, (--slot) * wordSize), rdx);
+  __ movptr(Address(rsp, (--slot) * wordSize), rdi);
+  __ movptr(Address(rsp, (--slot) * wordSize), rsi);
+#ifdef _LP64
+  __ movptr(Address(rsp, (--slot) * wordSize), r8);
+  __ movptr(Address(rsp, (--slot) * wordSize), r9);
+  __ movptr(Address(rsp, (--slot) * wordSize), r10);
+  __ movptr(Address(rsp, (--slot) * wordSize), r11);
+  // r12-r15 are callee saved in all calling conventions
+#endif
+  assert(slot == 0, "must use all slots");
+
+  // Shuffle registers such that dst is in c_rarg0 and addr in c_rarg1.
+#ifdef _LP64
+  Register arg0 = c_rarg0, arg1 = c_rarg1;
+#else
+  Register arg0 = rdi, arg1 = rsi;
+#endif
+  if (dst == arg1) {
+    __ lea(arg0, src);
+    __ xchgptr(arg1, arg0);
+  } else {
+    __ lea(arg1, src);
+    __ movptr(arg0, dst);
+  }
+
+  save_xmm_registers(masm);
+  if (is_narrow) {
+    __ super_call_VM_leaf(CAST_FROM_FN_PTR(address, ShenandoahRuntime::load_reference_barrier_narrow), arg0, arg1);
+  } else {
+    __ super_call_VM_leaf(CAST_FROM_FN_PTR(address, ShenandoahRuntime::load_reference_barrier), arg0, arg1);
+  }
+  restore_xmm_registers(masm);
+
+#ifdef _LP64
+  __ movptr(r11, Address(rsp, (slot++) * wordSize));
+  __ movptr(r10, Address(rsp, (slot++) * wordSize));
+  __ movptr(r9,  Address(rsp, (slot++) * wordSize));
+  __ movptr(r8,  Address(rsp, (slot++) * wordSize));
+#endif
+  __ movptr(rsi, Address(rsp, (slot++) * wordSize));
+  __ movptr(rdi, Address(rsp, (slot++) * wordSize));
+  __ movptr(rdx, Address(rsp, (slot++) * wordSize));
+  __ movptr(rcx, Address(rsp, (slot++) * wordSize));
+
+  if (dst != rax) {
+    __ movptr(dst, rax);
+    __ movptr(rax, Address(rsp, (slot++) * wordSize));
+  }
+
+  assert(slot == num_saved_regs, "must use all slots");
+  __ addptr(rsp, num_saved_regs * wordSize);
+
+  __ bind(not_cset);
+
+  __ pop(tmp2);
+  __ pop(tmp1);
+
+  __ bind(heap_stable);
+
+  __ block_comment("} load_reference_barrier");
 
 #ifndef _LP64
-  __ pop(thread);
+    __ pop(thread);
 #endif
 }
 
@@ -222,13 +300,30 @@ void ShenandoahBarrierSetAssembler::storeval_barrier_impl(MacroAssembler* masm, 
   }
 }
 
-void ShenandoahBarrierSetAssembler::load_reference_barrier(MacroAssembler* masm, Register dst) {
-  if (ShenandoahLoadRefBarrier) {
-    Label done;
-    __ testptr(dst, dst);
-    __ jcc(Assembler::zero, done);
-    load_reference_barrier_not_null(masm, dst);
-    __ bind(done);
+void ShenandoahBarrierSetAssembler::load_heap_oop(MacroAssembler* masm, Register dst, Address src) {
+  Register result_dst = dst;
+  // Preserve src location for LRB
+  if (dst == src.base() || dst == src.index()) {
+    dst = rdi;
+    __ push(dst);
+    assert_different_registers(dst, src.base(), src.index());
+  }
+
+#ifdef _LP64
+  // FIXME: Must change all places where we try to load the klass.
+  if (UseCompressedOops) {
+    __ movl(dst, src);
+    __ decode_heap_oop(dst);
+  } else
+#endif
+    __ movptr(dst, src);
+
+  load_reference_barrier(masm, dst, src);
+
+  // Move loaded oop to final destination
+  if (dst != result_dst) {
+    __ movptr(result_dst, dst);
+    __ pop(dst);
   }
 }
 
@@ -412,6 +507,14 @@ void ShenandoahBarrierSetAssembler::gen_load_reference_barrier_stub(LIR_Assemble
   Label done;
   Register obj = stub->obj()->as_register();
   Register res = stub->result()->as_register();
+  Register addr = stub->addr()->as_pointer_register();
+  Register tmp1 = stub->tmp1()->as_register();
+  Register tmp2 = stub->tmp2()->as_register();
+  assert_different_registers(obj, res, addr, tmp1, tmp2);
+
+  Label slow_path;
+
+  assert(res == rax, "result must arrive in rax");
 
   if (res != obj) {
     __ mov(res, obj);
@@ -419,11 +522,28 @@ void ShenandoahBarrierSetAssembler::gen_load_reference_barrier_stub(LIR_Assemble
 
   // Check for null.
   __ testptr(res, res);
-  __ jcc(Assembler::zero, done);
+  __ jcc(Assembler::zero, *stub->continuation());
 
-  load_reference_barrier_not_null(ce->masm(), res);
+  // Check for object being in the collection set.
+  __ mov(tmp1, res);
+  __ shrptr(tmp1, ShenandoahHeapRegion::region_size_bytes_shift_jint());
+  __ movptr(tmp2, (intptr_t) ShenandoahHeap::in_cset_fast_test_addr());
+#ifdef _LP64
+  __ movbool(tmp2, Address(tmp2, tmp1, Address::times_1));
+  __ testbool(tmp2);
+#else
+  // On x86_32, C1 register allocator can give us the register without 8-bit support.
+  // Do the full-register access and test to avoid compilation failures.
+  __ movptr(tmp2, Address(tmp2, tmp1, Address::times_1));
+  __ testptr(tmp2, 0xFF);
+#endif
+  __ jcc(Assembler::zero, *stub->continuation());
 
-  __ bind(done);
+  __ bind(slow_path);
+  ce->store_parameter(res, 0);
+  ce->store_parameter(addr, 1);
+  __ call(RuntimeAddress(Runtime1::entry_for(Runtime1::shenandoah_lrb_slow_id)));
+
   __ jmp(*stub->continuation());
 }
 

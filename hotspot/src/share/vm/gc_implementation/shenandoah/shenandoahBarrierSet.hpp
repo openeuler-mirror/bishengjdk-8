@@ -110,7 +110,11 @@ public:
 
   oop load_reference_barrier(oop obj);
   oop load_reference_barrier_not_null(oop obj);
-  inline oop load_reference_barrier_mutator(oop obj);
+  inline oop load_reference_barrier_mutator(oop obj, oop* load_addr);
+  inline oop load_reference_barrier_mutator(oop obj, narrowOop* load_addr);
+
+  template <class T>
+  inline oop load_reference_barrier_mutator_work(oop obj, T* load_addr);
 
   oop oop_atomic_cmpxchg_in_heap(oop new_value, volatile HeapWord* dest, oop compare_value);
 

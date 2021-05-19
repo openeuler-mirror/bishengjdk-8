@@ -39,28 +39,6 @@ extern "C" {
   typedef jint (JNICALL *vfprintf_hook_t)(FILE *fp, const char *format, va_list args)  ATTRIBUTE_PRINTF(2, 0);
 }
 
-// Disable options not supported in this release, with a warning if they
-// were explicitly requested on the command-line
-#define UNSUPPORTED_OPTION(opt, description)                    \
-do {                                                            \
-  if (opt) {                                                    \
-    if (FLAG_IS_CMDLINE(opt)) {                                 \
-      warning(description " is disabled in this release.");     \
-    }                                                           \
-    FLAG_SET_DEFAULT(opt, false);                               \
-  }                                                             \
-} while(0)
-
-#define UNSUPPORTED_GC_OPTION(gc)                                     \
-do {                                                                  \
-  if (gc) {                                                           \
-    if (FLAG_IS_CMDLINE(gc)) {                                        \
-      warning(#gc " is not supported in this VM.  Using Serial GC."); \
-    }                                                                 \
-    FLAG_SET_DEFAULT(gc, false);                                      \
-  }                                                                   \
-} while(0)
-
 // Forward declarations
 
 class SysClassPath;

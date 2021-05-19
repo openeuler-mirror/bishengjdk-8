@@ -667,7 +667,7 @@ JNI_QUICK_ENTRY(jboolean, jni_IsAssignableFrom(JNIEnv *env, jclass sub, jclass s
   oop super_mirror = JNIHandles::resolve_non_null(super);
   if (java_lang_Class::is_primitive(sub_mirror) ||
       java_lang_Class::is_primitive(super_mirror)) {
-    jboolean ret = sub_mirror == super_mirror;
+    jboolean ret = (sub_mirror == super_mirror);
 #ifndef USDT2
     DTRACE_PROBE1(hotspot_jni, IsAssignableFrom__return, ret);
 #else /* USDT2 */
@@ -998,8 +998,7 @@ JNI_QUICK_ENTRY(jboolean, jni_IsSameObject(JNIEnv *env, jobject r1, jobject r2))
 #endif /* USDT2 */
   oop a = JNIHandles::resolve(r1);
   oop b = JNIHandles::resolve(r2);
-  jboolean ret = a == b ? JNI_TRUE : JNI_FALSE;
-
+  jboolean ret = (a == b) ? JNI_TRUE : JNI_FALSE;
 #ifndef USDT2
   DTRACE_PROBE1(hotspot_jni, IsSameObject__return, ret);
 #else /* USDT2 */

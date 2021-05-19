@@ -31,13 +31,11 @@
 #ifndef CC_INTERP
 
 class TemplateInterpreterGenerator: public AbstractInterpreterGenerator {
-
  protected:
 
   // entry points for shared code sequence
   address _unimplemented_bytecode;
   address _illegal_bytecode_sequence;
-
 
   // shared code sequences
   // Converter for native abi result to tosca result
