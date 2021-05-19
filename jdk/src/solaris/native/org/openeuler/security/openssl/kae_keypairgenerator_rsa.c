@@ -65,10 +65,12 @@ static const BIGNUM* (* GetRSAParamFunctionList[])(const RSA*) = {
  * step 3.Generate rsa key, and all key information is stored in RSA
  */
 static RSA* NewRSA(JNIEnv* env, jint keySize, jbyteArray publicExponent) {
-    // RSA_new
-    RSA* rsa = RSA_new();
+    static ENGINE* kaeEngine = NULL;
+    kaeEngine = (kaeEngine == NULL) ? GetKaeEngine() : kaeEngine;
+    // new rsa
+    RSA* rsa = RSA_new_method(kaeEngine);
     if (rsa == NULL) {
-        KAE_ThrowFromOpenssl(env, "RSA_new", KAE_ThrowRuntimeException);
+        KAE_ThrowFromOpenssl(env, "RSA_new_method", KAE_ThrowRuntimeException);
         return NULL;
     }
 

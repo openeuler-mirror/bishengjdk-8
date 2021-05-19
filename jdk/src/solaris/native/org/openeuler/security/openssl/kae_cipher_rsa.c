@@ -28,6 +28,8 @@
 #include "kae_exception.h"
 #include "org_openeuler_security_openssl_KAERSACipher.h"
 
+static ENGINE* kaeEngine = NULL;
+
 typedef int RSACryptOperation(int, const unsigned char*, unsigned char*, RSA*, int);
 
 typedef int EvpPkeyCryptOperation(EVP_PKEY_CTX*, unsigned char*, size_t*, const unsigned char*, size_t);
@@ -171,12 +173,13 @@ static int RSACryptOAEPPadding(JNIEnv* env, jlong keyAddress, jint inLen, jbyteA
     // outLen type should be size_t
     // EVP_PKEY_encrypt takes the outLen address as a parameter, and the parameter type is size_t*
     size_t outLen = 0;
+    kaeEngine = (kaeEngine == NULL) ? GetKaeEngine() : kaeEngine;
 
     EVP_PKEY* pkey = (EVP_PKEY*) keyAddress;
 
     // new ctx
     // rsa encrypt/decrypt init
-    if ((pkeyCtx = EVP_PKEY_CTX_new(pkey, NULL)) == NULL || cryptInitOperation(pkeyCtx) <= 0) {
+    if ((pkeyCtx = EVP_PKEY_CTX_new(pkey, kaeEngine)) == NULL || cryptInitOperation(pkeyCtx) <= 0) {
         KAE_ThrowFromOpenssl(env, pkeyCtx == NULL ? "EVP_PKEY_CTX_new" : cryptInitName, KAE_ThrowInvalidKeyException);
         goto cleanup;
     }
@@ -192,8 +195,7 @@ static int RSACryptOAEPPadding(JNIEnv* env, jlong keyAddress, jint inLen, jbyteA
      * set rsa mgf1 md
      * set rsa oaep md
      */
-    if(!SetRSAPadding(env, pkeyCtx, paddingType) ||
-       !SetRSAMgf1Md(env, pkeyCtx, mgf1MdAlgoUTF) ||
+    if(!SetRSAPadding(env, pkeyCtx, paddingType) || !SetRSAMgf1Md(env, pkeyCtx, mgf1MdAlgoUTF) ||
        !SetRSAOaepMd(env, pkeyCtx, oaepMdAlgoUTF)) {
         goto cleanup;
     }
@@ -267,6 +269,7 @@ JNIEXPORT jlong JNICALL Java_org_openeuler_security_openssl_KAERSACipher_nativeC
     BIGNUM* bnIQMP = NULL;
     RSA* rsa = NULL;
     EVP_PKEY* pkey = NULL;
+    kaeEngine = (kaeEngine == NULL) ? GetKaeEngine() : kaeEngine;
 
     // convert to big num
     if ((bnN = KAE_GetBigNumFromByteArray(env, n)) == NULL ||
@@ -288,9 +291,9 @@ JNIEXPORT jlong JNICALL Java_org_openeuler_security_openssl_KAERSACipher_nativeC
     }
 
     // new rsa
-    rsa = RSA_new();
+    rsa = RSA_new_method(kaeEngine);
     if (rsa == NULL) {
-        KAE_ThrowFromOpenssl(env, "RSA_new", KAE_ThrowRuntimeException);
+        KAE_ThrowFromOpenssl(env, "RSA_new_method", KAE_ThrowRuntimeException);
         goto cleanup;
     }
 
@@ -328,6 +331,7 @@ JNIEXPORT jlong JNICALL Java_org_openeuler_security_openssl_KAERSACipher_nativeC
     BIGNUM* bnE = NULL;
     RSA* rsa = NULL;
     EVP_PKEY* pkey = NULL;
+    kaeEngine = (kaeEngine == NULL) ? GetKaeEngine() : kaeEngine;
 
     // get public key param n
     bnN = KAE_GetBigNumFromByteArray(env, n);
@@ -341,10 +345,10 @@ JNIEXPORT jlong JNICALL Java_org_openeuler_security_openssl_KAERSACipher_nativeC
         goto cleanup;
     }
 
-    // new RSA
-    rsa = RSA_new();
+    // new rsa
+    rsa = RSA_new_method(kaeEngine);
     if (rsa == NULL) {
-        KAE_ThrowFromOpenssl(env, "RSA_new", KAE_ThrowRuntimeException);
+        KAE_ThrowFromOpenssl(env, "RSA_new_method", KAE_ThrowRuntimeException);
         goto cleanup;
     }
 
