@@ -58,6 +58,10 @@
 #include "utilities/exceptions.hpp"
 #include "utilities/globalDefinitions.hpp"
 
+#if INCLUDE_ALL_GCS
+#include "gc_implementation/shenandoah/shenandoahJfrSupport.hpp"
+#endif
+
 /**
  *  JfrPeriodic class
  *  Implementation of declarations in
@@ -558,3 +562,14 @@ TRACE_REQUEST_FUNC(CodeSweeperConfiguration) {
   event.set_flushingEnabled(UseCodeCacheFlushing);
   event.commit();
 }
+
+
+TRACE_REQUEST_FUNC(ShenandoahHeapRegionInformation) {
+#if INCLUDE_ALL_GCS
+  if (UseShenandoahGC) {
+    VM_ShenandoahSendHeapRegionInfoEvents op;
+    VMThread::execute(&op);
+  }
+#endif
+}
+

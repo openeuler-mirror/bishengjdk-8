@@ -224,7 +224,8 @@ class ShenandoahFinalMarkingTask : public AbstractGangTask {
 private:
   ShenandoahConcurrentMark* _cm;
   ShenandoahTaskTerminator* _terminator;
-  bool _dedup_string;
+  bool                      _dedup_string;
+  ShenandoahSharedFlag      _claimed_syncroots;
 
 public:
   ShenandoahFinalMarkingTask(ShenandoahConcurrentMark* cm, ShenandoahTaskTerminator* terminator, bool dedup_string) :
@@ -264,6 +265,9 @@ public:
                                                           ShenandoahStoreValEnqueueBarrier ? &resolve_mark_cl : NULL,
                                                           do_nmethods ? &blobsCl : NULL);
         Threads::threads_do(&tc);
+        if (ShenandoahStoreValEnqueueBarrier && _claimed_syncroots.try_set()) {
+          ObjectSynchronizer::oops_do(&resolve_mark_cl);
+        }
       } else {
         ShenandoahMarkRefsClosure mark_cl(q, rp);
         MarkingCodeBlobClosure blobsCl(&mark_cl, !CodeBlobToOopClosure::FixRelocations);
@@ -271,6 +275,9 @@ public:
                                                           ShenandoahStoreValEnqueueBarrier ? &mark_cl : NULL,
                                                           do_nmethods ? &blobsCl : NULL);
         Threads::threads_do(&tc);
+        if (ShenandoahStoreValEnqueueBarrier && _claimed_syncroots.try_set()) {
+          ObjectSynchronizer::oops_do(&mark_cl);
+        }
       }
     }
 
@@ -319,31 +326,18 @@ void ShenandoahConcurrentMark::mark_roots(ShenandoahPhaseTimings::Phase root_pha
 
 void ShenandoahConcurrentMark::update_roots(ShenandoahPhaseTimings::Phase root_phase) {
   assert(ShenandoahSafepoint::is_at_shenandoah_safepoint(), "Must be at a safepoint");
-
-  bool update_code_cache = true; // initialize to safer value
-  switch (root_phase) {
-    case ShenandoahPhaseTimings::update_roots:
-    case ShenandoahPhaseTimings::final_update_refs_roots:
-      update_code_cache = false;
-      break;
-    case ShenandoahPhaseTimings::full_gc_update_roots:
-    case ShenandoahPhaseTimings::full_gc_adjust_roots:
-    case ShenandoahPhaseTimings::degen_gc_update_roots:
-      update_code_cache = true;
-      break;
-    default:
-      ShouldNotReachHere();
-  }
+  assert(root_phase == ShenandoahPhaseTimings::full_gc_update_roots ||
+         root_phase == ShenandoahPhaseTimings::degen_gc_update_roots,
+         "Only for these phases");
 
   ShenandoahHeap* heap = ShenandoahHeap::heap();
-
   ShenandoahGCPhase phase(root_phase);
 
   COMPILER2_PRESENT(DerivedPointerTable::clear());
 
   uint nworkers = heap->workers()->active_workers();
 
-  ShenandoahRootUpdater root_updater(root_phase, update_code_cache);
+  ShenandoahRootUpdater root_updater(root_phase);
   ShenandoahUpdateRootsTask update_roots(&root_updater);
   _heap->workers()->run_task(&update_roots);
 
@@ -486,6 +480,9 @@ void ShenandoahConcurrentMark::finish_mark_from_roots(bool full_gc) {
   }
 
   assert(task_queues()->is_empty(), "Should be empty");
+
+  // Marking is completed, deactivate SATB barrier if it is active
+  _heap->complete_marking();
 
   // When we're done marking everything, we process weak references.
   // It is not obvious, but reference processing actually calls

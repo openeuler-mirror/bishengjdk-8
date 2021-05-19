@@ -3486,7 +3486,7 @@ void LIR_Assembler::unpack64(LIR_Opr src, LIR_Opr dst) {
 }
 
 
-void LIR_Assembler::leal(LIR_Opr addr_opr, LIR_Opr dest) {
+void LIR_Assembler::leal(LIR_Opr addr_opr, LIR_Opr dest, LIR_PatchCode patch_code, CodeEmitInfo* info) {
   LIR_Address* addr = addr_opr->as_address_ptr();
   assert(addr->index()->is_illegal() && addr->scale() == LIR_Address::times_1, "can't handle complex addresses yet");
 

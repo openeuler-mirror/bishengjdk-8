@@ -71,7 +71,7 @@ $gcc_cmd -O1 -DLINUX -fPIC -shared \
     ${TESTSRC}${FS}libTestPinnedGarbage.c
 
 # run the java test in the background
-cmd="${TESTJAVA}${FS}bin${FS}java -Xmx512m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -XX:+UseShenandoahGC -XX:+ShenandoahVerify -XX:+ShenandoahDegeneratedGC -XX:ShenandoahGCMode=passive \
+cmd="${TESTJAVA}${FS}bin${FS}java -Xmx128m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -XX:+UseShenandoahGC -XX:+ShenandoahVerify -XX:+ShenandoahDegeneratedGC -XX:ShenandoahGCMode=passive \
     -Djava.library.path=${THIS_DIR}${FS} TestPinnedGarbage"
 
 echo "$cmd"
@@ -83,7 +83,7 @@ then
     exit 1
 fi
 
-cmd="${TESTJAVA}${FS}bin${FS}java -Xmx512m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -XX:+UseShenandoahGC -XX:+ShenandoahVerify -XX:-ShenandoahDegeneratedGC -XX:ShenandoahGCMode=passive \
+cmd="${TESTJAVA}${FS}bin${FS}java -Xmx128m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -XX:+UseShenandoahGC -XX:+ShenandoahVerify -XX:-ShenandoahDegeneratedGC -XX:ShenandoahGCMode=passive \
     -Djava.library.path=${THIS_DIR}${FS} TestPinnedGarbage"
 
 echo "$cmd"
@@ -95,7 +95,7 @@ then
     exit 1
 fi
 
-cmd="${TESTJAVA}${FS}bin${FS}java -Xmx512m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -XX:+UseShenandoahGC -XX:+ShenandoahVerify \
+cmd="${TESTJAVA}${FS}bin${FS}java -Xmx128m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -XX:+UseShenandoahGC -XX:+ShenandoahVerify \
     -Djava.library.path=${THIS_DIR}${FS} TestPinnedGarbage"
 
 echo "$cmd"
@@ -107,7 +107,7 @@ then
     exit 1
 fi
 
-cmd="${TESTJAVA}${FS}bin${FS}java -Xmx512m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=aggressive \
+cmd="${TESTJAVA}${FS}bin${FS}java -Xmx128m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=aggressive \
     -Djava.library.path=${THIS_DIR}${FS} TestPinnedGarbage"
 
 echo "$cmd"

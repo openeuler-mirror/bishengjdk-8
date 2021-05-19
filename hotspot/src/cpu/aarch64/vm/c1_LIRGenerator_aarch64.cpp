@@ -162,9 +162,9 @@ LIR_Address* LIRGenerator::generate_address(LIR_Opr base, LIR_Opr index,
       LIR_Opr tmp = new_pointer_register();
       if (Assembler::operand_valid_for_add_sub_immediate(disp)) {
         __ add(tmp, tmp, LIR_OprFact::intptrConst(disp));
-	index = tmp;
+        index = tmp;
       } else {
-	__ move(tmp, LIR_OprFact::intptrConst(disp));
+        __ move(tmp, LIR_OprFact::intptrConst(disp));
         __ add(tmp, index, tmp);
         index = tmp;
       }
@@ -542,18 +542,18 @@ void LIRGenerator::do_ArithmeticOp_Long(ArithmeticOp* x) {
 
   } else {
     assert (x->op() == Bytecodes::_lmul || x->op() == Bytecodes::_ladd || x->op() == Bytecodes::_lsub,
-	    "expect lmul, ladd or lsub");
+            "expect lmul, ladd or lsub");
     // add, sub, mul
     left.load_item();
     if (! right.is_register()) {
       if (x->op() == Bytecodes::_lmul
           || ! right.is_constant()
-	  || ! Assembler::operand_valid_for_add_sub_immediate(right.get_jlong_constant())) {
-	right.load_item();
+          || ! Assembler::operand_valid_for_add_sub_immediate(right.get_jlong_constant())) {
+        right.load_item();
       } else { // add, sub
-	assert (x->op() == Bytecodes::_ladd || x->op() == Bytecodes::_lsub, "expect ladd or lsub");
-	// don't load constants to save register
-	right.load_nonconstant();
+        assert (x->op() == Bytecodes::_ladd || x->op() == Bytecodes::_lsub, "expect ladd or lsub");
+        // don't load constants to save register
+        right.load_nonconstant();
       }
     }
     rlock_result(x);
@@ -597,7 +597,7 @@ void LIRGenerator::do_ArithmeticOp_Int(ArithmeticOp* x) {
 
   } else if (x->op() == Bytecodes::_iadd || x->op() == Bytecodes::_isub) {
     if (right.is_constant()
-	&& Assembler::operand_valid_for_add_sub_immediate(right.get_jint_constant())) {
+        && Assembler::operand_valid_for_add_sub_immediate(right.get_jint_constant())) {
       right.load_nonconstant();
     } else {
       right.load_item();
@@ -651,7 +651,7 @@ void LIRGenerator::do_ShiftOp(ShiftOp* x) {
   rlock_result(x);
   if (right.is_constant()) {
     right.dont_load_item();
-    
+
     switch (x->op()) {
     case Bytecodes::_ishl: {
       int c = right.get_jint_constant() & 0x1f;
@@ -737,9 +737,9 @@ void LIRGenerator::do_LogicOp(LogicOp* x) {
   rlock_result(x);
   if (right.is_constant()
       && ((right.type()->tag() == intTag
-	   && Assembler::operand_valid_for_logical_immediate(true, right.get_jint_constant()))
-	  || (right.type()->tag() == longTag
-	      && Assembler::operand_valid_for_logical_immediate(false, right.get_jlong_constant()))))  {
+           && Assembler::operand_valid_for_logical_immediate(true, right.get_jint_constant()))
+          || (right.type()->tag() == longTag
+              && Assembler::operand_valid_for_logical_immediate(false, right.get_jlong_constant()))))  {
     right.dont_load_item();
   } else {
     right.load_item();
@@ -837,7 +837,7 @@ void LIRGenerator::do_CompareAndSwap(Intrinsic* x, ValueType* type) {
 
   if (type == objectType) {
     __ cas_obj(addr, cmp.result(), val.result(), new_register(T_INT), new_register(T_INT),
-	       result);
+               result);
   } else if (type == intType)
     __ cas_int(addr, cmp.result(), val.result(), ill, ill, result);
   else if (type == longType)
@@ -1297,14 +1297,14 @@ void LIRGenerator::do_If(If* x) {
 
   if (tag == longTag) {
     if (yin->is_constant()
-	&& Assembler::operand_valid_for_add_sub_immediate(yin->get_jlong_constant())) {
+        && Assembler::operand_valid_for_add_sub_immediate(yin->get_jlong_constant())) {
       yin->dont_load_item();
     } else {
       yin->load_item();
     }
   } else if (tag == intTag) {
     if (yin->is_constant()
-	&& Assembler::operand_valid_for_add_sub_immediate(yin->get_jint_constant()))  {
+        && Assembler::operand_valid_for_add_sub_immediate(yin->get_jint_constant()))  {
       yin->dont_load_item();
     } else {
       yin->load_item();
@@ -1378,7 +1378,7 @@ void LIRGenerator::put_Object_unsafe(LIR_Opr src, LIR_Opr offset, LIR_Opr data,
   if (is_obj) {
     // Do the pre-write barrier, if any.
     pre_barrier(LIR_OprFact::address(addr), LIR_OprFact::illegalOpr /* pre_val */,
-		true /* do_load */, false /* patch */, NULL);
+                true /* do_load */, false /* patch */, NULL);
     __ move(data, addr);
     assert(src->is_register(), "must be register");
     // Seems to be a precise address
@@ -1399,8 +1399,8 @@ void LIRGenerator::do_UnsafeGetAndSetObject(UnsafeGetAndSetObject* x) {
 
   // We can cope with a constant increment in an xadd
   if (! (x->is_add()
-	 && value.is_constant()
-	 && can_inline_as_constant(x->value()))) {
+         && value.is_constant()
+         && can_inline_as_constant(x->value()))) {
     value.load_item();
   }
 
@@ -1414,8 +1414,6 @@ void LIRGenerator::do_UnsafeGetAndSetObject(UnsafeGetAndSetObject* x) {
     __ move(data, tmp);
     data = tmp;
   }
-
-  LIR_Opr src_op = src.result();
 
   LIR_Address* addr;
   if (offset->is_constant()) {
@@ -1436,14 +1434,14 @@ void LIRGenerator::do_UnsafeGetAndSetObject(UnsafeGetAndSetObject* x) {
     if (is_obj) {
       // Do the pre-write barrier, if any.
       ptr = new_pointer_register();
-      __ add(src_op, off.result(), ptr);
+      __ add(src.result(), off.result(), ptr);
       pre_barrier(ptr, LIR_OprFact::illegalOpr /* pre_val */,
-		  true /* do_load */, false /* patch */, NULL);
+                  true /* do_load */, false /* patch */, NULL);
     }
     __ xchg(LIR_OprFact::address(addr), data, dst, tmp);
 #if INCLUDE_ALL_GCS
     if (UseShenandoahGC && is_obj) {
-      LIR_Opr tmp = ShenandoahBarrierSet::barrier_set()->bsc1()->load_reference_barrier(this, dst);
+      LIR_Opr tmp = ShenandoahBarrierSet::barrier_set()->bsc1()->load_reference_barrier(this, dst, LIR_OprFact::addressConst(0));
       __ move(tmp, dst);
     }
 #endif

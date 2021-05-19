@@ -124,7 +124,7 @@ public final class FontUtilities {
                         jreLibDirName + File.separator + "fonts";
                 File lucidaFile = new File(jreFontDirName + File.separator
                                            + LUCIDA_FILE_NAME);
-                isOpenJDK = true;
+                isOpenJDK = !lucidaFile.exists();
 
                 String debugLevel =
                     System.getProperty("sun.java2d.debugfonts");

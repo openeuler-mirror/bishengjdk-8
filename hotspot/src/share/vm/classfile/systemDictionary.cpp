@@ -371,7 +371,7 @@ Klass* SystemDictionary::resolve_super_or_fail(Symbol* child_name,
        ((quicksuperk = InstanceKlass::cast(childk)->super()) != NULL) &&
 
          ((quicksuperk->name() == class_name) &&
-          (quicksuperk->class_loader() == class_loader()))) {
+            (quicksuperk->class_loader()  == class_loader()))) {
            return quicksuperk;
     } else {
       PlaceholderEntry* probe = placeholders()->get_entry(p_index, p_hash, child_name, loader_data);
@@ -512,7 +512,7 @@ void SystemDictionary::double_lock_wait(Handle lockObject, TRAPS) {
   bool calledholdinglock
       = ObjectSynchronizer::current_thread_holds_lock((JavaThread*)THREAD, lockObject);
   assert(calledholdinglock,"must hold lock for notify");
-  assert((lockObject() != _system_loader_lock_obj && !is_parallelCapable(lockObject)), "unexpected double_lock_wait");
+  assert((!(lockObject() == _system_loader_lock_obj) && !is_parallelCapable(lockObject)), "unexpected double_lock_wait");
   ObjectSynchronizer::notifyall(lockObject, THREAD);
   intptr_t recursions =  ObjectSynchronizer::complete_exit(lockObject, THREAD);
   SystemDictionary_lock->wait();
@@ -846,7 +846,7 @@ Klass* SystemDictionary::resolve_instance_class_or_null(Symbol* name,
       // If everything was OK (no exceptions, no null return value), and
       // class_loader is NOT the defining loader, do a little more bookkeeping.
       if (!HAS_PENDING_EXCEPTION && !k.is_null() &&
-          k->class_loader() != class_loader()) {
+        k->class_loader() != class_loader()) {
 
         check_constraints(d_index, d_hash, k, class_loader, false, THREAD);
 

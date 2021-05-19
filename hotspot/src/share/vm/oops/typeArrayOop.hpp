@@ -92,90 +92,48 @@ class typeArrayOopDesc : public arrayOopDesc {
     return &double_base()[which];
   }
 
-  jbyte byte_at(int which) const                  {
-    return *byte_at_addr(which);
-  }
-  void byte_at_put(int which, jbyte contents)     {
-    *byte_at_addr(which) = contents;
-  }
+  jbyte byte_at(int which) const                  { return *byte_at_addr(which); }
+  void byte_at_put(int which, jbyte contents)     { *byte_at_addr(which) = contents; }
 
-  jboolean bool_at(int which) const               {
-    return *bool_at_addr(which);
-  }
-  void bool_at_put(int which, jboolean contents)  {
-    *bool_at_addr(which) = (((jint)contents) & 1);
-  }
+  jboolean bool_at(int which) const               { return *bool_at_addr(which); }
+  void bool_at_put(int which, jboolean contents)  { *bool_at_addr(which) = (((jint)contents) & 1); }
 
-  jchar char_at(int which) const                  {
-    return *char_at_addr(which);
-  }
-  void char_at_put(int which, jchar contents)     {
-    *char_at_addr(which) = contents;
-  }
+  jchar char_at(int which) const                  { return *char_at_addr(which); }
+  void char_at_put(int which, jchar contents)     { *char_at_addr(which) = contents; }
 
-  jint int_at(int which) const                    {
-    return *int_at_addr(which);
-  }
-  void int_at_put(int which, jint contents)       {
-    *int_at_addr(which) = contents;
-  }
+  jint int_at(int which) const                    { return *int_at_addr(which); }
+  void int_at_put(int which, jint contents)       { *int_at_addr(which) = contents; }
 
-  jshort short_at(int which) const                {
-    return *short_at_addr(which);
-  }
-  void short_at_put(int which, jshort contents)   {
-    *short_at_addr(which) = contents;
-  }
+  jshort short_at(int which) const                { return *short_at_addr(which); }
+  void short_at_put(int which, jshort contents)   { *short_at_addr(which) = contents; }
 
-  jushort ushort_at(int which) const              {
-    return *ushort_at_addr(which);
-  }
-  void ushort_at_put(int which, jushort contents) {
-    *ushort_at_addr(which) = contents;
-  }
+  jushort ushort_at(int which) const              { return *ushort_at_addr(which); }
+  void ushort_at_put(int which, jushort contents) { *ushort_at_addr(which) = contents; }
 
-  jlong long_at(int which) const                  {
-    return *long_at_addr(which);
-  }
-  void long_at_put(int which, jlong contents)     {
-    *long_at_addr(which) = contents;
-  }
+  jlong long_at(int which) const                  { return *long_at_addr(which); }
+  void long_at_put(int which, jlong contents)     { *long_at_addr(which) = contents; }
 
-  jfloat float_at(int which) const                {
-    return *float_at_addr(which);
-  }
-  void float_at_put(int which, jfloat contents)   {
-    *float_at_addr(which) = contents;
-  }
+  jfloat float_at(int which) const                { return *float_at_addr(which); }
+  void float_at_put(int which, jfloat contents)   { *float_at_addr(which) = contents; }
 
-  jdouble double_at(int which) const              {
-    return *double_at_addr(which);
-  }
-  void double_at_put(int which, jdouble contents) {
-    *double_at_addr(which) = contents;
-  }
+  jdouble double_at(int which) const              { return *double_at_addr(which); }
+  void double_at_put(int which, jdouble contents) { *double_at_addr(which) = contents; }
 
-  jbyte byte_at_acquire(int which) const              {
-    return OrderAccess::load_acquire(byte_at_addr(which));
-  }
-  void release_byte_at_put(int which, jbyte contents) {
-    OrderAccess::release_store(byte_at_addr(which), contents);
-  }
+  jbyte byte_at_acquire(int which) const              { return OrderAccess::load_acquire(byte_at_addr(which)); }
+  void release_byte_at_put(int which, jbyte contents) { OrderAccess::release_store(byte_at_addr(which), contents); }
 
   // Java thinks metadata arrays are just arrays of either long or int, since
   // there doesn't seem to be T_ADDRESS, so this is a bit of unfortunate
   // casting
 #ifdef _LP64
   Metadata* metadata_at(int which) const {
-    return (Metadata*)*long_at_addr(which);
-  }
+    return (Metadata*)*long_at_addr(which); }
   void metadata_at_put(int which, Metadata* contents) {
     *long_at_addr(which) = (jlong)contents;
   }
 #else
   Metadata* metadata_at(int which) const {
-    return (Metadata*)*int_at_addr(which);
-  }
+    return (Metadata*)*int_at_addr(which); }
   void metadata_at_put(int which, Metadata* contents) {
     *int_at_addr(which) = (int)contents;
   }

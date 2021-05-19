@@ -542,7 +542,7 @@ void os::print_context(outputStream *st, void *context) {
   ucontext_t *uc = (ucontext_t*)context;
   st->print_cr("Registers:");
   for (int r = 0; r < 31; r++)
-	  st->print_cr(  "R%d=" INTPTR_FORMAT, r, (int64_t)uc->uc_mcontext.regs[r]);
+          st->print_cr(  "R%d=" INTPTR_FORMAT, r, (int64_t)uc->uc_mcontext.regs[r]);
   st->cr();
 
   intptr_t *sp = (intptr_t *)os::Linux::ucontext_get_sp(uc);
@@ -573,7 +573,7 @@ void os::print_register_info(outputStream *st, void *context) {
   // this is only for the "general purpose" registers
 
   for (int r = 0; r < 31; r++)
-	  st->print_cr(  "R%d=" INTPTR_FORMAT, r, (int64_t)uc->uc_mcontext.regs[r]);
+          st->print_cr(  "R%d=" INTPTR_FORMAT, r, (int64_t)uc->uc_mcontext.regs[r]);
   st->cr();
 }
 

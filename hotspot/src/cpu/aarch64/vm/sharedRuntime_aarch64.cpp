@@ -95,7 +95,7 @@ class RegisterSaver {
                 // the "natural" place and will override any oopMap
                 // setting for it. We must therefore force the layout
                 // so that it agrees with the frame sender code.
-		r0_off = fpu_state_off+FPUStateSizeInWords,
+                r0_off = fpu_state_off+FPUStateSizeInWords,
                 rfp_off = r0_off + 30 * 2,
                 return_off = rfp_off + 2,      // slot for return address
                 reg_save_size = return_off + 2};
@@ -140,9 +140,9 @@ OopMap* RegisterSaver::save_live_registers(MacroAssembler* masm, int additional_
     Register r = as_Register(i);
     if (r < rheapbase && r != rscratch1 && r != rscratch2) {
       int sp_offset = 2 * (i + 32); // SP offsets are in 4-byte words,
-				    // register slots are 8 bytes
-				    // wide, 32 floating-point
-				    // registers
+                                    // register slots are 8 bytes
+                                    // wide, 32 floating-point
+                                    // registers
       oop_map->set_callee_saved(VMRegImpl::stack2reg(sp_offset + additional_frame_slots),
                                 r->as_VMReg());
     }
@@ -152,7 +152,7 @@ OopMap* RegisterSaver::save_live_registers(MacroAssembler* masm, int additional_
     FloatRegister r = as_FloatRegister(i);
     int sp_offset = save_vectors ? (4 * i) : (2 * i);
     oop_map->set_callee_saved(VMRegImpl::stack2reg(sp_offset),
-			      r->as_VMReg());
+                              r->as_VMReg());
   }
 
   return oop_map;
@@ -364,7 +364,7 @@ static void gen_c2i_adapter(MacroAssembler *masm,
   for (int i = 0; i < total_args_passed; i++) {
     if (sig_bt[i] == T_VOID) {
       assert(i > 0 && (sig_bt[i-1] == T_LONG || sig_bt[i-1] == T_DOUBLE), "missing half");
-      continue; 
+      continue;
     }
 
     // offset to start parameters
@@ -393,8 +393,8 @@ static void gen_c2i_adapter(MacroAssembler *masm,
     if (r_1->is_stack()) {
       // memory to memory use rscratch1
       int ld_off = (r_1->reg2stack() * VMRegImpl::stack_slot_size
-		    + extraspace
-		    + words_pushed * wordSize);
+                    + extraspace
+                    + words_pushed * wordSize);
       if (!r_2->is_valid()) {
         // sign extend??
         __ ldrw(rscratch1, Address(sp, ld_off));
@@ -1600,7 +1600,7 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
             freg_destroyed[out_regs[c_arg].first()->as_FloatRegister()->encoding()] = true;
           }
 #endif
-	  int_args++;
+          int_args++;
           break;
         }
       case T_OBJECT:
@@ -1608,34 +1608,34 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
         object_move(masm, map, oop_handle_offset, stack_slots, in_regs[i], out_regs[c_arg],
                     ((i == 0) && (!is_static)),
                     &receiver_offset);
-	int_args++;
+        int_args++;
         break;
       case T_VOID:
         break;
 
       case T_FLOAT:
         float_move(masm, in_regs[i], out_regs[c_arg]);
-	float_args++;
-	break;
+        float_args++;
+        break;
 
       case T_DOUBLE:
         assert( i + 1 < total_in_args &&
                 in_sig_bt[i + 1] == T_VOID &&
                 out_sig_bt[c_arg+1] == T_VOID, "bad arg list");
         double_move(masm, in_regs[i], out_regs[c_arg]);
-	float_args++;
+        float_args++;
         break;
 
       case T_LONG :
         long_move(masm, in_regs[i], out_regs[c_arg]);
-	int_args++;
+        int_args++;
         break;
 
       case T_ADDRESS: assert(false, "found T_ADDRESS in java args");
 
       default:
         move32_64(masm, in_regs[i], out_regs[c_arg]);
-	int_args++;
+        int_args++;
     }
   }
 
@@ -1648,8 +1648,8 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
 
     //  load oop into a register
     __ movoop(c_rarg1,
-	      JNIHandles::make_local(method->method_holder()->java_mirror()),
-	      /*immediate*/true);
+              JNIHandles::make_local(method->method_holder()->java_mirror()),
+              /*immediate*/true);
 
     // Now handlize the static class mirror it's known not-null.
     __ str(c_rarg1, Address(sp, klass_offset));
@@ -1720,7 +1720,7 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
       __ biased_locking_enter(lock_reg, obj_reg, swap_reg, tmp, false, lock_done, &slow_path_lock);
     }
 
-    // Load (object->mark() | 1) into swap_reg r0
+    // Load (object->mark() | 1) into swap_reg %r0
     __ ldr(rscratch1, Address(obj_reg, 0));
     __ orr(swap_reg, rscratch1, 1);
 
@@ -2333,7 +2333,7 @@ void SharedRuntime::generate_deopt_blob() {
 #ifdef ASSERT0
   { Label L;
     __ ldr(rscratch1, Address(rthread,
-			      JavaThread::last_Java_fp_offset()));
+                              JavaThread::last_Java_fp_offset()));
     __ cbz(rscratch1, L);
     __ stop("SharedRuntime::generate_deopt_blob: last_Java_fp not cleared");
     __ bind(L);
@@ -2548,8 +2548,8 @@ void SharedRuntime::generate_uncommon_trap_blob() {
 
   __ mov(c_rarg0, rthread);
   __ lea(rscratch1,
-	 RuntimeAddress(CAST_FROM_FN_PTR(address,
-					 Deoptimization::uncommon_trap)));
+         RuntimeAddress(CAST_FROM_FN_PTR(address,
+                                         Deoptimization::uncommon_trap)));
   __ blr(rscratch1);
   __ bind(retaddr);
 
@@ -2578,8 +2578,8 @@ void SharedRuntime::generate_uncommon_trap_blob() {
 
   // Pop deoptimized frame (int)
   __ ldrw(r2, Address(r4,
-		      Deoptimization::UnrollBlock::
-		      size_of_deoptimized_frame_offset_in_bytes()));
+                      Deoptimization::UnrollBlock::
+                      size_of_deoptimized_frame_offset_in_bytes()));
   __ sub(r2, r2, 2 * wordSize);
   __ add(sp, sp, r2);
   __ ldp(rfp, lr, __ post(sp, 2 * wordSize));
@@ -2588,24 +2588,24 @@ void SharedRuntime::generate_uncommon_trap_blob() {
   // Stack bang to make sure there's enough room for these interpreter frames.
   if (UseStackBanging) {
     __ ldrw(r1, Address(r4,
-			Deoptimization::UnrollBlock::
-			total_frame_sizes_offset_in_bytes()));
+                        Deoptimization::UnrollBlock::
+                        total_frame_sizes_offset_in_bytes()));
     __ bang_stack_size(r1, r2);
   }
 
   // Load address of array of frame pcs into r2 (address*)
   __ ldr(r2, Address(r4,
-		     Deoptimization::UnrollBlock::frame_pcs_offset_in_bytes()));
+                     Deoptimization::UnrollBlock::frame_pcs_offset_in_bytes()));
 
   // Load address of array of frame sizes into r5 (intptr_t*)
   __ ldr(r5, Address(r4,
-		     Deoptimization::UnrollBlock::
-		     frame_sizes_offset_in_bytes()));
+                     Deoptimization::UnrollBlock::
+                     frame_sizes_offset_in_bytes()));
 
   // Counter
   __ ldrw(r3, Address(r4,
-		      Deoptimization::UnrollBlock::
-		      number_of_frames_offset_in_bytes())); // (int)
+                      Deoptimization::UnrollBlock::
+                      number_of_frames_offset_in_bytes())); // (int)
 
   // Now adjust the caller's stack to make up for the extra locals but
   // record the original sp so that we can save it in the skeletal
@@ -2616,29 +2616,29 @@ void SharedRuntime::generate_uncommon_trap_blob() {
 
   __ mov(sender_sp, sp);
   __ ldrw(r1, Address(r4,
-		      Deoptimization::UnrollBlock::
-		      caller_adjustment_offset_in_bytes())); // (int)
+                      Deoptimization::UnrollBlock::
+                      caller_adjustment_offset_in_bytes())); // (int)
   __ sub(sp, sp, r1);
 
   // Push interpreter frames in a loop
   Label loop;
   __ bind(loop);
   __ ldr(r1, Address(r5, 0));       // Load frame size
-  __ sub(r1, r1, 2 * wordSize);	    // We'll push pc and rfp by hand
-  __ ldr(lr, Address(r2, 0));	    // Save return address
-  __ enter();			    // and old rfp & set new rfp
-  __ sub(sp, sp, r1);		    // Prolog
+  __ sub(r1, r1, 2 * wordSize);     // We'll push pc and rfp by hand
+  __ ldr(lr, Address(r2, 0));       // Save return address
+  __ enter();                       // and old rfp & set new rfp
+  __ sub(sp, sp, r1);               // Prolog
   __ str(sender_sp, Address(rfp, frame::interpreter_frame_sender_sp_offset * wordSize)); // Make it walkable
   // This value is corrected by layout_activation_impl
   __ str(zr, Address(rfp, frame::interpreter_frame_last_sp_offset * wordSize));
   __ mov(sender_sp, sp);          // Pass sender_sp to next frame
-  __ add(r5, r5, wordSize);	  // Bump array pointer (sizes)
-  __ add(r2, r2, wordSize);	  // Bump array pointer (pcs)
-  __ subsw(r3, r3, 1);		  // Decrement counter
+  __ add(r5, r5, wordSize);       // Bump array pointer (sizes)
+  __ add(r2, r2, wordSize);       // Bump array pointer (pcs)
+  __ subsw(r3, r3, 1);            // Decrement counter
   __ br(Assembler::GT, loop);
-  __ ldr(lr, Address(r2, 0));	  // save final return address
+  __ ldr(lr, Address(r2, 0));     // save final return address
   // Re-push self-frame
-  __ enter();			  // & old rfp & set new rfp
+  __ enter();                     // & old rfp & set new rfp
 
   // Use rfp because the frames look interpreted now
   // Save "the_pc" since it cannot easily be retrieved using the last_java_SP after we aligned SP.

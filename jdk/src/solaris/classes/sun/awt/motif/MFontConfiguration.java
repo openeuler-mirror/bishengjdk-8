@@ -159,10 +159,7 @@ public class MFontConfiguration extends FontConfiguration {
         } else if (osName.equals("Linux")) {
             try {
                 File f;
-                if ((f = new File("/etc/euleros-release")).canRead()) {
-                    osName = "Euler";
-                    osVersion = getVersionString(f);
-                } else if ((f = new File("/etc/fedora-release")).canRead()) {
+                if ((f = new File("/etc/fedora-release")).canRead()) {
                     osName = "Fedora";
                     osVersion = getVersionString(f);
                 } else if ((f = new File("/etc/redhat-release")).canRead()) {

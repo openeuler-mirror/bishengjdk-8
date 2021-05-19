@@ -170,7 +170,7 @@ void LIR_Assembler::emit_stubs(CodeStubList* stub_list) {
 #endif
     s->emit_code(this);
 #ifdef ASSERT
-# ifndef AARCH64
+#ifndef AARCH64
     s->assert_no_unbound_labels();
 #endif
 #endif
@@ -305,7 +305,8 @@ void LIR_Assembler::emit_lir_list(LIR_List* list) {
       // branches since they include block and stub names.  Also print
       // patching moves since they generate funny looking code.
       if (op->code() == lir_branch ||
-          (op->code() == lir_move && op->as_Op1()->patch_code() != lir_patch_none)) {
+          (op->code() == lir_move && op->as_Op1()->patch_code() != lir_patch_none) ||
+          (op->code() == lir_leal && op->as_Op1()->patch_code() != lir_patch_none)) {
         stringStream st;
         op->print_on(&st);
         _masm->block_comment(st.as_string());
@@ -590,7 +591,7 @@ void LIR_Assembler::emit_op1(LIR_Op1* op) {
       break;
 
     case lir_leal:
-      leal(op->in_opr(), op->result_opr());
+      leal(op->in_opr(), op->result_opr(), op->patch_code(), op->info());
       break;
 
     case lir_null_check:

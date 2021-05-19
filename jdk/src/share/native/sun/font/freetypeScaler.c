@@ -43,7 +43,6 @@
 #include FT_SYNTHESIS_H
 #include FT_LCD_FILTER_H
 #include FT_MODULE_H
-#include FT_LCD_FILTER_H
 
 #include "fontscaler.h"
 
@@ -268,7 +267,7 @@ static void setInterpreterVersion(FT_Library library) {
     const char* property = "interpreter-version";
 
     /* If some one is setting this, don't override it */
-    if (props != NULL && strstr(property, props)) {
+    if (props != NULL && strstr(props, property)) {
         return;
     }
     /*

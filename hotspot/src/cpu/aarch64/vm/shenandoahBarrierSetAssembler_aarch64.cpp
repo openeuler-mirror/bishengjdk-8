@@ -29,6 +29,7 @@
 #include "gc_implementation/shenandoah/shenandoahBarrierSet.hpp"
 #include "gc_implementation/shenandoah/shenandoahForwarding.hpp"
 #include "gc_implementation/shenandoah/shenandoahHeap.hpp"
+#include "gc_implementation/shenandoah/shenandoahHeapRegion.hpp"
 #include "gc_implementation/shenandoah/shenandoahRuntime.hpp"
 #include "gc_implementation/shenandoah/c1/shenandoahBarrierSetC1.hpp"
 #include "runtime/stubCodeGenerator.hpp"
@@ -118,36 +119,60 @@ void ShenandoahBarrierSetAssembler::resolve_forward_pointer_not_null(MacroAssemb
   }
 }
 
-void ShenandoahBarrierSetAssembler::load_reference_barrier_not_null(MacroAssembler* masm, Register dst) {
-  assert(ShenandoahLoadRefBarrier, "Should be enabled");
-  assert(dst != rscratch2, "need rscratch2");
+void ShenandoahBarrierSetAssembler::load_reference_barrier(MacroAssembler* masm, Register dst, Address load_addr) {
+  if (!ShenandoahLoadRefBarrier) {
+    return;
+  }
 
-  Label done;
+  assert(dst != rscratch2, "need rscratch2");
+  assert_different_registers(load_addr.base(), load_addr.index(), rscratch1, rscratch2);
+
+  bool is_narrow  = UseCompressedOops;
+
+  Label heap_stable, not_cset;
   __ enter();
   Address gc_state(rthread, in_bytes(JavaThread::gc_state_offset()));
   __ ldrb(rscratch2, gc_state);
 
   // Check for heap stability
-  __ tbz(rscratch2, ShenandoahHeap::HAS_FORWARDED_BITPOS, done);
+  __ tbz(rscratch2, ShenandoahHeap::HAS_FORWARDED_BITPOS, heap_stable);
 
-  RegSet to_save = RegSet::of(r0);
-  if (dst != r0) {
-    __ push(to_save, sp);
-    __ mov(r0, dst);
+  // use r1 for load address
+  Register result_dst = dst;
+  if (dst == r1) {
+    __ mov(rscratch1, dst);
+    dst = rscratch1;
   }
 
+  // Save r0 and r1, unless it is an output register
+  RegSet to_save = RegSet::of(r0, r1) - result_dst;
+  __ push(to_save, sp);
+  __ lea(r1, load_addr);
+  __ mov(r0, dst);
+
+  // Test for in-cset
+  __ mov(rscratch2, ShenandoahHeap::in_cset_fast_test_addr());
+  __ lsr(rscratch1, r0, ShenandoahHeapRegion::region_size_bytes_shift_jint());
+  __ ldrb(rscratch2, Address(rscratch2, rscratch1));
+  __ tbz(rscratch2, 0, not_cset);
+
   __ push_call_clobbered_registers();
-  __ super_call_VM_leaf(CAST_FROM_FN_PTR(address, ShenandoahRuntime::load_reference_barrier_interpreter), r0);
+  if (is_narrow) {
+    __ mov(lr, CAST_FROM_FN_PTR(address, ShenandoahRuntime::load_reference_barrier_narrow));
+  } else {
+    __ mov(lr, CAST_FROM_FN_PTR(address, ShenandoahRuntime::load_reference_barrier));
+  }
+  __ blr(lr);
   __ mov(rscratch1, r0);
   __ pop_call_clobbered_registers();
   __ mov(r0, rscratch1);
 
-  if (dst != r0) {
-    __ mov(dst, r0);
-    __ pop(to_save, sp);
-  }
+  __ bind(not_cset);
 
-  __ bind(done);
+  __ mov(result_dst, r0);
+  __ pop(to_save, sp);
+
+  __ bind(heap_stable);
   __ leave();
 }
 
@@ -166,12 +191,27 @@ void ShenandoahBarrierSetAssembler::storeval_barrier(MacroAssembler* masm, Regis
   }
 }
 
-void ShenandoahBarrierSetAssembler::load_reference_barrier(MacroAssembler* masm, Register dst) {
-  if (ShenandoahLoadRefBarrier) {
-    Label is_null;
-    __ cbz(dst, is_null);
-    load_reference_barrier_not_null(masm, dst);
-    __ bind(is_null);
+void ShenandoahBarrierSetAssembler::load_heap_oop(MacroAssembler* masm, Register dst, Address src) {
+  Register result_dst = dst;
+
+  // Preserve src location for LRB
+  if (dst == src.base() || dst == src.index()) {
+    dst = rscratch1;
+  }
+  assert_different_registers(dst, src.base(), src.index());
+
+  if (UseCompressedOops) {
+    __ ldrw(dst, src);
+    __ decode_heap_oop(dst);
+  } else {
+    __ ldr(dst, src);
+  }
+
+  load_reference_barrier(masm, dst, src);
+
+  if (dst != result_dst) {
+    __ mov(result_dst, dst);
+    dst = result_dst;
   }
 }
 
@@ -240,23 +280,46 @@ void ShenandoahBarrierSetAssembler::cmpxchg_oop(MacroAssembler* masm, Register a
 #define __ ce->masm()->
 
 void ShenandoahBarrierSetAssembler::gen_load_reference_barrier_stub(LIR_Assembler* ce, ShenandoahLoadReferenceBarrierStub* stub) {
+  __ bind(*stub->entry());
 
   Register obj = stub->obj()->as_register();
   Register res = stub->result()->as_register();
+  Register addr = stub->addr()->as_pointer_register();
+  Register tmp1 = stub->tmp1()->as_register();
+  Register tmp2 = stub->tmp2()->as_register();
 
-  Label done;
-
-  __ bind(*stub->entry());
+  assert(res == r0, "result must arrive in r0");
 
   if (res != obj) {
     __ mov(res, obj);
   }
+
   // Check for null.
-  __ cbz(res, done);
+  __ cbz(res, *stub->continuation());
 
-  load_reference_barrier_not_null(ce->masm(), res);
+  // Check for object in cset.
+  __ mov(tmp2, ShenandoahHeap::in_cset_fast_test_addr());
+  __ lsr(tmp1, res, ShenandoahHeapRegion::region_size_bytes_shift_jint());
+  __ ldrb(tmp2, Address(tmp2, tmp1));
+  __ cbz(tmp2, *stub->continuation());
 
-  __ bind(done);
+  // Check if object is already forwarded.
+  Label slow_path;
+  __ ldr(tmp1, Address(res, oopDesc::mark_offset_in_bytes()));
+  __ eon(tmp1, tmp1, zr);
+  __ ands(zr, tmp1, markOopDesc::lock_mask_in_place);
+  __ br(Assembler::NE, slow_path);
+
+  // Decode forwarded object.
+  __ orr(tmp1, tmp1, markOopDesc::marked_value);
+  __ eon(res, tmp1, zr);
+  __ b(*stub->continuation());
+
+  __ bind(slow_path);
+  ce->store_parameter(res, 0);
+  ce->store_parameter(addr, 1);
+  __ far_call(RuntimeAddress(Runtime1::entry_for(Runtime1::shenandoah_lrb_slow_id)));
+
   __ b(*stub->continuation());
 }
 

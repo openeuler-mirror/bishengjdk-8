@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000, 2015, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2000, 2018, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -1474,7 +1474,7 @@ class LIR_OpConvert: public LIR_Op1 {
  private:
    Bytecodes::Code _bytecode;
    ConversionStub* _stub;
-#if defined(PPC) || defined(TARGET_ARCH_aarch64)
+#if defined(PPC) || defined(AARCH64)
   LIR_Opr _tmp1;
   LIR_Opr _tmp2;
 #endif
@@ -1489,7 +1489,7 @@ class LIR_OpConvert: public LIR_Op1 {
 #endif
      , _bytecode(code)                           {}
 
-#if defined(PPC) || defined(TARGET_ARCH_aarch64)
+#if defined(PPC) || defined(AARCH64)
    LIR_OpConvert(Bytecodes::Code code, LIR_Opr opr, LIR_Opr result, ConversionStub* stub
                  ,LIR_Opr tmp1, LIR_Opr tmp2)
      : LIR_Op1(lir_convert, opr, result)
@@ -1501,7 +1501,7 @@ class LIR_OpConvert: public LIR_Op1 {
 
   Bytecodes::Code bytecode() const               { return _bytecode; }
   ConversionStub* stub() const                   { return _stub; }
-#if defined(PPC) || defined(TARGET_ARCH_aarch64)
+#if defined(PPC) || defined(AARCH64)
   LIR_Opr tmp1() const                           { return _tmp1; }
   LIR_Opr tmp2() const                           { return _tmp2; }
 #endif
@@ -2104,7 +2104,7 @@ class LIR_List: public CompilationResourceObj {
   void branch_destination(Label* lbl)            { append(new LIR_OpLabel(lbl)); }
 
   void negate(LIR_Opr from, LIR_Opr to)          { append(new LIR_Op1(lir_neg, from, to)); }
-  void leal(LIR_Opr from, LIR_Opr result_reg)    { append(new LIR_Op1(lir_leal, from, result_reg)); }
+  void leal(LIR_Opr from, LIR_Opr result_reg, LIR_PatchCode patch_code = lir_patch_none, CodeEmitInfo* info = NULL) { append(new LIR_Op1(lir_leal, from, result_reg, T_ILLEGAL, patch_code, info)); }
 
   // result is a stack location for old backend and vreg for UseLinearScan
   // stack_loc_temp is an illegal register for old backend
@@ -2144,9 +2144,9 @@ class LIR_List: public CompilationResourceObj {
 #ifdef PPC
   void convert(Bytecodes::Code code, LIR_Opr left, LIR_Opr dst, LIR_Opr tmp1, LIR_Opr tmp2) { append(new LIR_OpConvert(code, left, dst, NULL, tmp1, tmp2)); }
 #endif
-#if defined (TARGET_ARCH_aarch64)
+#if defined(AARCH64)
   void convert(Bytecodes::Code code, LIR_Opr left, LIR_Opr dst,
-	       ConversionStub* stub = NULL, LIR_Opr tmp1 = LIR_OprDesc::illegalOpr()) {
+               ConversionStub* stub = NULL, LIR_Opr tmp1 = LIR_OprDesc::illegalOpr()) {
     append(new LIR_OpConvert(code, left, dst, stub, tmp1, LIR_OprDesc::illegalOpr()));
   }
 #else

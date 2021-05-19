@@ -73,22 +73,20 @@ public class FcFontManager extends SunFontManager {
         getFontConfigManager().initFontConfigFonts(false);
         FontConfigManager.FcCompFont[] fontConfigFonts =
             getFontConfigManager().getFontConfigFonts();
-        if (fontConfigFonts != null) {
-            for (int i = 0; i < fontConfigFonts.length; i++) {
-                if ("sans".equals(fontConfigFonts[i].fcFamily) &&
-                    0 == fontConfigFonts[i].style) {
-                    info[0] = fontConfigFonts[i].firstFont.familyName;
-                    info[1] = fontConfigFonts[i].firstFont.fontFile;
-                    break;
-                }
-            }
-        }
-        /* Absolute last ditch attempt in the face of fontconfig problems.
+        for (int i=0; i<fontConfigFonts.length; i++) {
+            if ("sans".equals(fontConfigFonts[i].fcFamily) &&
+                0 == fontConfigFonts[i].style) {
+                info[0] = fontConfigFonts[i].firstFont.familyName;
+                info[1] = fontConfigFonts[i].firstFont.fontFile;
+                break;
+	    }
+	}
+	/* Absolute last ditch attempt in the face of fontconfig problems.
          * If we didn't match, pick the first, or just make something
          * up so we don't NPE.
          */
         if (info[0] == null) {
-            if (fontConfigFonts != null && fontConfigFonts.length > 0 &&
+            if (fontConfigFonts.length > 0 &&
                 fontConfigFonts[0].firstFont.fontFile != null) {
                 info[0] = fontConfigFonts[0].firstFont.familyName;
                 info[1] = fontConfigFonts[0].firstFont.fontFile;

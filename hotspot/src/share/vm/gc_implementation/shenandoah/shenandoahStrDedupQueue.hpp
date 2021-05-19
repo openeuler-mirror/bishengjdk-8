@@ -103,7 +103,7 @@ public:
   ShenandoahStrDedupQueueSet(uint n);
   ~ShenandoahStrDedupQueueSet();
 
-  uint num_queues() const { return _num_queues; }
+  uint num_queues() const { return num_queues_nv(); }
 
   ShenandoahStrDedupQueue* queue_at(size_t index) {
     assert(index < num_queues(), "Index out of bound");
@@ -123,6 +123,8 @@ public:
   }
 
 private:
+  inline uint num_queues_nv() const { return _num_queues; }
+
   void release_chunked_list(QueueChunkedList* l);
 
   QueueChunkedList* allocate_chunked_list();

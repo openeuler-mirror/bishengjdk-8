@@ -48,9 +48,18 @@ inline oop ShenandoahBarrierSet::resolve_forwarded_not_null_mutator(oop p) {
   return ShenandoahForwarding::get_forwardee_mutator(p);
 }
 
-inline oop ShenandoahBarrierSet::load_reference_barrier_mutator(oop obj) {
+inline oop ShenandoahBarrierSet::load_reference_barrier_mutator(oop obj, oop* load_addr) {
+  return load_reference_barrier_mutator_work(obj, load_addr);
+}
+
+inline oop ShenandoahBarrierSet::load_reference_barrier_mutator(oop obj, narrowOop* load_addr) {
+  return load_reference_barrier_mutator_work(obj, load_addr);
+}
+
+template <class T>
+oop ShenandoahBarrierSet::load_reference_barrier_mutator_work(oop obj, T* load_addr) {
   assert(ShenandoahLoadRefBarrier, "should be enabled");
-  shenandoah_assert_in_cset(NULL, obj);
+  shenandoah_assert_in_cset(load_addr, obj);
 
   oop fwd = resolve_forwarded_not_null_mutator(obj);
   if (obj == fwd) {
@@ -58,6 +67,11 @@ inline oop ShenandoahBarrierSet::load_reference_barrier_mutator(oop obj) {
            "evac should be in progress");
     ShenandoahEvacOOMScope scope;
     fwd = _heap->evacuate_object(obj, Thread::current());
+  }
+
+  if (load_addr != NULL && fwd != obj) {
+    // Since we are here and we know the load address, update the reference.
+    ShenandoahHeap::cas_oop(fwd, load_addr, obj);
   }
 
   return fwd;

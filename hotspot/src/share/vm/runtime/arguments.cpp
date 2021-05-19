@@ -80,6 +80,28 @@
 #endif
 #define DEFAULT_JAVA_LAUNCHER  "generic"
 
+// Disable options not supported in this release, with a warning if they
+// were explicitly requested on the command-line
+#define UNSUPPORTED_OPTION(opt, description)                    \
+do {                                                            \
+  if (opt) {                                                    \
+    if (FLAG_IS_CMDLINE(opt)) {                                 \
+      warning(description " is disabled in this release.");     \
+    }                                                           \
+    FLAG_SET_DEFAULT(opt, false);                               \
+  }                                                             \
+} while(0)
+
+#define UNSUPPORTED_GC_OPTION(gc)                                     \
+do {                                                                  \
+  if (gc) {                                                           \
+    if (FLAG_IS_CMDLINE(gc)) {                                        \
+      warning(#gc " is not supported in this VM.  Using Serial GC."); \
+    }                                                                 \
+    FLAG_SET_DEFAULT(gc, false);                                      \
+  }                                                                   \
+} while(0)
+
 char**  Arguments::_jvm_flags_array             = NULL;
 int     Arguments::_num_jvm_flags               = 0;
 char**  Arguments::_jvm_args_array              = NULL;
@@ -1143,9 +1165,12 @@ void Arguments::set_tiered_flags() {
   }
   // Increase the code cache size - tiered compiles a lot more.
   if (FLAG_IS_DEFAULT(ReservedCodeCacheSize)) {
-    NOT_AARCH64(FLAG_SET_DEFAULT(ReservedCodeCacheSize, ReservedCodeCacheSize * 5));
-    AARCH64_ONLY(FLAG_SET_DEFAULT(ReservedCodeCacheSize,
-                                  MIN2(CODE_CACHE_DEFAULT_LIMIT, ReservedCodeCacheSize * 5)));
+#ifndef AARCH64
+    FLAG_SET_DEFAULT(ReservedCodeCacheSize, ReservedCodeCacheSize * 5);
+#else
+    FLAG_SET_DEFAULT(ReservedCodeCacheSize,
+                     MIN2(CODE_CACHE_DEFAULT_LIMIT, ReservedCodeCacheSize * 5));
+#endif
   }
   if (!UseInterpreter) { // -Xcomp
     Tier3InvokeNotifyFreqLog = 0;
@@ -1872,6 +1897,14 @@ void Arguments::set_shenandoah_gc_flags() {
   // to converge faster over smaller number of resizing decisions.
   if (FLAG_IS_DEFAULT(TLABAllocationWeight)) {
     FLAG_SET_DEFAULT(TLABAllocationWeight, 90);
+  }
+
+  if (FLAG_IS_DEFAULT(ShenandoahSoftMaxHeapSize)) {
+    FLAG_SET_DEFAULT(ShenandoahSoftMaxHeapSize, MaxHeapSize);
+  } else {
+    if (ShenandoahSoftMaxHeapSize > MaxHeapSize) {
+      vm_exit_during_initialization("ShenandoahSoftMaxHeapSize must be less than or equal to the maximum heap size\n");
+    }
   }
 #endif
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,6 +27,7 @@
  * @bug 8189131 8198240 8191844 8189949 8191031 8196141 8204923 8195774 8199779
  *      8209452 8209506 8210432 8195793 8216577 8222089 8222133 8222137 8222136
  *      8223499 8225392 8232019 8234245 8233223 8225068 8225069 8243321 8243320
+ *      8225072 8258630 8259312
  * @summary Check root CA entries in cacerts file
  */
 import java.io.ByteArrayInputStream;
@@ -52,12 +53,12 @@ public class VerifyCACerts {
             + File.separator + "security" + File.separator + "cacerts";
 
     // The numbers of certs now.
-    private static final int COUNT = 88;
+    private static final int COUNT = 90;
 
     // SHA-256 of cacerts, can be generated with
     // shasum -a 256 cacerts | sed -e 's/../&:/g' | tr '[:lower:]' '[:upper:]' | cut -c1-95
     private static final String CHECKSUM
-            = "25:2F:A9:73:74:A5:62:71:E0:12:75:FB:E7:C0:BF:BF:38:E5:B1:93:72:D4:2C:3C:2D:4D:B8:FA:05:F7:EC:3F";
+            = "DC:22:7E:D7:F3:46:1F:8B:A8:4E:EE:C2:A8:4B:8E:26:89:4F:95:5C:71:A3:1B:5A:6E:A6:48:FD:CB:C9:F2:95";
 
     // map of cert alias to SHA-256 fingerprint
     @SuppressWarnings("serial")
@@ -234,6 +235,10 @@ public class VerifyCACerts {
                     "2E:7B:F1:6C:C2:24:85:A7:BB:E2:AA:86:96:75:07:61:B0:AE:39:BE:3B:2F:E9:D0:CC:6D:4E:F7:34:91:42:5C");
             put("sslrooteccca [jdk]",
                     "34:17:BB:06:CC:60:07:DA:1B:96:1C:92:0B:8A:B4:CE:3F:AD:82:0E:4A:A3:0B:9A:CB:C4:A7:4E:BD:CE:BC:65");
+            put("haricarootca2015 [jdk]",
+                    "A0:40:92:9A:02:CE:53:B4:AC:F4:F2:FF:C6:98:1C:E4:49:6F:75:5E:6D:45:FE:0B:2A:69:2B:CD:52:52:3F:36");
+            put("haricaeccrootca2015 [jdk]",
+                    "44:B5:45:AA:8A:25:E6:5A:73:CA:15:DC:27:FC:36:D2:4C:1C:B9:95:3A:06:65:39:B1:15:82:DC:48:7B:48:33");
         }
     };
 

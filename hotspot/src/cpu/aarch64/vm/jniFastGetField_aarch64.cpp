@@ -73,7 +73,7 @@ address JNI_FastGetField::generate_fast_get_int_field0(BasicType type) {
 
   unsigned long offset;
   __ adrp(rcounter_addr,
-	  SafepointSynchronize::safepoint_counter_addr(), offset);
+          SafepointSynchronize::safepoint_counter_addr(), offset);
   Address safepoint_counter_addr(rcounter_addr, offset);
   __ ldrw(rcounter, safepoint_counter_addr);
   __ andw(rscratch1, rcounter, 1);
@@ -177,4 +177,3 @@ address JNI_FastGetField::generate_fast_get_float_field() {
 address JNI_FastGetField::generate_fast_get_double_field() {
   return generate_fast_get_int_field0(T_DOUBLE);
 }
-

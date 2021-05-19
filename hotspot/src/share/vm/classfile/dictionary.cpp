@@ -91,7 +91,7 @@ void Dictionary::free_entry(DictionaryEntry* entry) {
 
 bool DictionaryEntry::contains_protection_domain(oop protection_domain) const {
 #ifdef ASSERT
-  if (protection_domain == klass()->protection_domain()) {
+  if (protection_domain == InstanceKlass::cast(klass())->protection_domain()) {
     // Ensure this doesn't show up in the pd_set (invariant)
     bool in_pd_set = false;
     for (ProtectionDomainEntry* current = _pd_set;
@@ -109,7 +109,7 @@ bool DictionaryEntry::contains_protection_domain(oop protection_domain) const {
   }
 #endif /* ASSERT */
 
-  if (protection_domain == klass()->protection_domain()) {
+  if (protection_domain == InstanceKlass::cast(klass())->protection_domain()) {
     // Succeeds trivially
     return true;
   }
@@ -764,3 +764,4 @@ void Dictionary::verify() {
 
   _pd_cache_table->verify();
 }
+

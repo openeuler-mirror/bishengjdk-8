@@ -25,12 +25,17 @@
 #define SHARE_VM_GC_SHENANDOAH_SHENANDOAHCOLLECTORPOLICY_HPP
 
 #include "memory/collectorPolicy.hpp"
+#include "gc_implementation/shared/gcTrace.hpp"
 #include "gc_implementation/shenandoah/shenandoahHeap.hpp"
-#include "gc_implementation/shenandoah/shenandoahTracer.hpp"
 #include "utilities/ostream.hpp"
 
 class STWGCTimer;
 class ConcurrentGCTimer;
+
+class ShenandoahTracer : public GCTracer {
+public:
+  ShenandoahTracer() : GCTracer(Shenandoah) {}
+};
 
 class ShenandoahCollectorPolicy: public CollectorPolicy {
 private:

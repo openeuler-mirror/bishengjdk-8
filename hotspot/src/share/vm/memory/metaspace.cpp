@@ -3086,24 +3086,24 @@ void Metaspace::allocate_metaspace_compressed_klass_ptrs(char* requested_addr, a
     // with a single MOVK instruction.  We can do this iff the
     // compressed class base is a multiple of 4G.
     for (char *a = (char*)align_ptr_up(requested_addr, 4*G);
-	 a < (char*)(1024*G);
-	 a += 4*G) {
+         a < (char*)(1024*G);
+         a += 4*G) {
       if (UseSharedSpaces
-	  && ! can_use_cds_with_metaspace_addr(a, cds_base)) {
-	// We failed to find an aligned base that will reach.  Fall
-	// back to using our requested addr.
-	metaspace_rs = ReservedSpace(compressed_class_space_size(),
+          && ! can_use_cds_with_metaspace_addr(a, cds_base)) {
+        // We failed to find an aligned base that will reach.  Fall
+        // back to using our requested addr.
+        metaspace_rs = ReservedSpace(compressed_class_space_size(),
                                              _reserve_alignment,
                                              large_pages,
                                              requested_addr, 0);
-	break;
+        break;
       }
       metaspace_rs = ReservedSpace(compressed_class_space_size(),
-				   _reserve_alignment,
-				   large_pages,
-				   a, 0);
+                                   _reserve_alignment,
+                                   large_pages,
+                                   a, 0);
       if (metaspace_rs.is_reserved())
-	break;
+        break;
     }
   }
 
