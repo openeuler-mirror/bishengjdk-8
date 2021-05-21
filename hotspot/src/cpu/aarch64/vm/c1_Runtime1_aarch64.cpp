@@ -597,7 +597,8 @@ OopMapSet* Runtime1::generate_patching(StubAssembler* sasm, address target) {
     __ verify_not_null_oop(r0);
 
     // load throwing pc: this is the return address of the stub
-    __ mov(r3, lr);
+    // Note that lr register has been destroyed by the call.
+    __ ldr(r3, Address(rfp, wordSize));
 
 #ifdef ASSERT
     // check that fields in JavaThread for exception oop and issuing pc are empty
