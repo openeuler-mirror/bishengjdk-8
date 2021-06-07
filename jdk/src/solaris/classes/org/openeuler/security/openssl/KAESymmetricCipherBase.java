@@ -556,7 +556,7 @@ abstract class KAESymmetricCipherBase extends CipherSpi {
             if (e instanceof AEADBadTagException) {
                 throw e; // AEADBadTagException is expected for some tests
             } else if (e instanceof BadPaddingException) {
-                if (padding == Padding.NOPADDING) {
+                if (padding == Padding.NOPADDING || e.getMessage().contains("wrong final block length")) {
                     throw new IllegalBlockSizeException("Input length not multiple of " + blockSize + " bytes");
                 } else {
                     throw e;

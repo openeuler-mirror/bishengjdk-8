@@ -100,11 +100,11 @@ public class KAEProvider extends Provider {
 
     public KAEProvider() {
         super("KAEProvider", 1.8d, "KAE provider");
-        if (needLog) {
+        Properties props = getProp();
+        if (needLog && "true".equalsIgnoreCase(props.getProperty("kae.log"))) {
             logStart(excp);
             needLog = false; // Log only once
         }
-        Properties props = getProp();
         if (!"false".equalsIgnoreCase(props.getProperty("kae.md5"))) {
             putMD5();
         }

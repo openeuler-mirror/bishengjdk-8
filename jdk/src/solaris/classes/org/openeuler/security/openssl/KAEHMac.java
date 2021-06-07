@@ -34,7 +34,7 @@ import java.security.spec.AlgorithmParameterSpec;
 import java.util.Set;
 import java.util.concurrent.ConcurrentSkipListSet;
 
-public abstract class KAEHMac extends MacSpi implements Cloneable {
+public abstract class KAEHMac extends MacSpi {
 
     private final String algorithm;
 
