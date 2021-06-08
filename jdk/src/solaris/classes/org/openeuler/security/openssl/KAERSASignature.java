@@ -263,6 +263,10 @@ public abstract class KAERSASignature extends SignatureSpi {
         } catch (SignatureException e) {
             throw e;
         } catch (BadPaddingException e) {
+            // occurs if the app has used the wrong RSA public key
+            // or if sigBytes is invalid or sourceBytes is invalid
+            // return false rather than propagating the exception for
+            // compatibility/ease of use
             return false;
         } finally {
             // free keyAddress

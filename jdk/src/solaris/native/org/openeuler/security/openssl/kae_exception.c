@@ -57,6 +57,7 @@ void KAE_ThrowEvpException(JNIEnv* env, int reason, const char* msg, void (* def
             break;
         case EVP_R_BAD_DECRYPT:
         case EVP_R_DATA_NOT_MULTIPLE_OF_BLOCK_LENGTH:
+        case EVP_F_EVP_PKEY_DECRYPT:
             KAE_ThrowByName(env, "javax/crypto/BadPaddingException", msg);
             break;
         default:
