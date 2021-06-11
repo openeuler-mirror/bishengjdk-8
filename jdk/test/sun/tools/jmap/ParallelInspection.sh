@@ -76,4 +76,36 @@ set -e
 stopApplication "${PORTFILE}"
 waitForApplication
 
+# parallel num in CMS GC
+# Start application and use PORTFILE for coordination
+PORTFILE="${TESTCLASSES}"/shutdown.port
+startApplication SimpleApplication "${PORTFILE}" defineGC UseConcMarkSweepGC
+
+# all return statuses are checked in this test
+set +e
+
+failed=0
+
+${JMAP} -J-XX:+UsePerfData -histo:parallel=0 $appJavaPid
+if [ $? != 0 ]; then failed=1; fi
+
+${JMAP} -J-XX:+UsePerfData -histo:parallel=1 $appJavaPid
+if [ $? != 0 ]; then failed=1; fi
+
+${JMAP} -J-XX:+UsePerfData -histo:parallel=2 $appJavaPid
+if [ $? != 0 ]; then failed=1; fi
+
+${JMAP} -J-XX:+UsePerfData -histo:live,parallel=0 $appJavaPid
+if [ $? != 0 ]; then failed=1; fi
+
+${JMAP} -J-XX:+UsePerfData -histo:live,parallel=1 $appJavaPid
+if [ $? != 0 ]; then failed=1; fi
+
+${JMAP} -J-XX:+UsePerfData -histo:live,parallel=2 $appJavaPid
+if [ $? != 0 ]; then failed=1; fi
+set -e
+
+stopApplication "${PORTFILE}"
+waitForApplication
+
 exit $failed

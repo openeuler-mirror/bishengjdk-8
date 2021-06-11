@@ -30,6 +30,7 @@
 #include "memory/generation.hpp"
 #include "memory/sharedHeap.hpp"
 
+class CMSHeapBlockClaimer;
 class SubTasksDone;
 
 // A "GenCollectedHeap" is a SharedHeap that uses generational
@@ -213,7 +214,14 @@ public:
   // Iteration functions.
   void oop_iterate(ExtendedOopClosure* cl);
   void object_iterate(ObjectClosure* cl);
+  virtual ParallelObjectIterator* parallel_object_iterator(uint thread_num);
+  // Iteration functions.
+  void object_iterate_parallel(ObjectClosure *cl, CMSHeapBlockClaimer *claimer);
   void safe_object_iterate(ObjectClosure* cl);
+  virtual FlexibleWorkGang* get_safepoint_workers()
+  {
+    return workers();
+  }
   Space* space_containing(const void* addr) const;
 
   // A CollectedHeap is divided into a dense sequence of "blocks"; that is,

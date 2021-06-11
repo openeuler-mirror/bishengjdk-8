@@ -1272,6 +1272,73 @@ void GenCollectedHeap::print_heap_change(size_t prev_used) const {
   }
 }
 
+// The CMSHeapBlockClaimer is used during parallel iteration over the heap,
+// allowing workers to claim heap areas ("blocks"), gaining exclusive rights to these.
+// The eden and survivor spaces are treated as single blocks as it is hard to divide
+// these spaces.
+// The old space is divided into fixed-size blocks.
+class CMSHeapBlockClaimer : public StackObj {
+  size_t _claimed_index;
+
+public:
+  static const size_t InvalidIndex = SIZE_MAX;
+  static const size_t EdenIndex = 0;
+  static const size_t SurvivorIndex = 1;
+  static const size_t NumNonOldGenClaims = 2;
+
+  CMSHeapBlockClaimer() : _claimed_index(EdenIndex) { }
+  // Claim the block and get the block index.
+  size_t claim_and_get_block()
+  {
+    size_t block_index;
+    block_index = Atomic::add(1u, reinterpret_cast<volatile jint *>(&_claimed_index)) - 1;
+    Generation *old_gen = GenCollectedHeap::heap()->get_gen(1);
+    size_t num_claims = old_gen->num_iterable_blocks() + NumNonOldGenClaims;
+    return block_index < num_claims ? block_index : InvalidIndex;
+  }
+  ~CMSHeapBlockClaimer() {}
+};
+
+void GenCollectedHeap::object_iterate_parallel(ObjectClosure *cl, CMSHeapBlockClaimer *claimer)
+{
+  size_t block_index = claimer->claim_and_get_block();
+  DefNewGeneration *def_new_gen = (DefNewGeneration*) get_gen(0);
+  // Iterate until all blocks are claimed
+  if (block_index == CMSHeapBlockClaimer::EdenIndex) {
+    def_new_gen->eden()->object_iterate(cl);
+    block_index = claimer->claim_and_get_block();
+  }
+  if (block_index == CMSHeapBlockClaimer::SurvivorIndex) {
+    def_new_gen->from()->object_iterate(cl);
+    def_new_gen->to()->object_iterate(cl);
+    block_index = claimer->claim_and_get_block();
+  }
+  while (block_index != CMSHeapBlockClaimer::InvalidIndex) {
+    get_gen(1)->object_iterate_block(cl, block_index - CMSHeapBlockClaimer::NumNonOldGenClaims);
+    block_index = claimer->claim_and_get_block();
+  }
+}
+
+class GenParallelObjectIterator : public ParallelObjectIterator {
+private:
+  GenCollectedHeap *_heap;
+  CMSHeapBlockClaimer  _claimer;
+
+public:
+  GenParallelObjectIterator(uint thread_num) : _heap(GenCollectedHeap::heap()),_claimer(){}
+
+  virtual void object_iterate(ObjectClosure *cl, uint worker_id)
+  {
+    _heap->object_iterate_parallel(cl, &_claimer);
+  }
+  ~GenParallelObjectIterator() {}
+};
+
+ParallelObjectIterator* GenCollectedHeap::parallel_object_iterator(uint thread_num)
+{
+  return new GenParallelObjectIterator(thread_num);
+}
+
 class GenGCPrologueClosure: public GenCollectedHeap::GenClosure {
  private:
   bool _full;
@@ -1415,6 +1482,7 @@ void GenCollectedHeap::stop() {
 #endif
 }
 
-void GenCollectedHeap::run_task(AbstractGangTask *task) {
-
+void GenCollectedHeap::run_task(AbstractGangTask *task)
+{
+  workers()->run_task(task);
 }

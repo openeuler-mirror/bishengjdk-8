@@ -220,20 +220,24 @@ public class JMap {
 
     private static void histo(String pid, String options) throws IOException {
         VirtualMachine vm = attach(pid);
-        String parallel = null;
         String liveopt = "-all";
-        if (options.startsWith("live")) {
-            liveopt = "-live";
-        }
-        String[] subopts = options.split(",");
+        String parallel = null;
+        String subopts[] = options.split(",");
         for (int i = 0; i < subopts.length; i++) {
             String subopt = subopts[i];
-            if (subopt.startsWith("parallel=")) {
+            if (subopt.equals("") || subopt.equals("all")) {
+                // pass
+            } else if (subopt.equals("live")) {
+                liveopt = "-live";
+            } else if (subopt.startsWith("parallel=")) {
                 parallel = subopt.substring("parallel=".length());
                 if (parallel == null) {
                     System.err.println("Fail: no number provided in option: '" + subopt + "'");
-                    System.exit(1);
+                    usage(1);
                 }
+            } else {
+                System.err.println("Fail: invalid option: '" + subopt + "'");
+                usage(1);
             }
         }
         InputStream in = ((HotSpotVirtualMachine)vm).heapHisto(liveopt,parallel);

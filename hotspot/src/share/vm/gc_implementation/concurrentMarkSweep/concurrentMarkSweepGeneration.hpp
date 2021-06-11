@@ -1154,9 +1154,10 @@ class ConcurrentMarkSweepGeneration: public CardGeneration {
 
   // Adaptive size policy
   CMSAdaptiveSizePolicy* size_policy();
-
+  static const size_t CMSIterateBlockSize = 1024 * 1024;
   void set_did_compact(bool v) { _did_compact = v; }
-
+  virtual size_t num_iterable_blocks() const;
+  virtual void object_iterate_block(ObjectClosure *cl, size_t block_index);
   bool refs_discovery_is_atomic() const { return false; }
   bool refs_discovery_is_mt()     const {
     // Note: CMS does MT-discovery during the parallel-remark

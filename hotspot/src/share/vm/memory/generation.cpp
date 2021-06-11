@@ -103,6 +103,12 @@ void Generation::ref_processor_init() {
   }
 }
 
+size_t Generation::num_iterable_blocks() const
+{
+  return 0;
+}
+void Generation::object_iterate_block(ObjectClosure *cl, size_t block_index){};
+
 void Generation::print() const { print_on(tty); }
 
 void Generation::print_on(outputStream* st)  const {

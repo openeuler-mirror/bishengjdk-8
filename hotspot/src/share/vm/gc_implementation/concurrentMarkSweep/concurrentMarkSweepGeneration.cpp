@@ -2871,6 +2871,47 @@ void ConcurrentMarkSweepGeneration::gc_epilogue(bool full) {
   }
 }
 
+size_t ConcurrentMarkSweepGeneration::num_iterable_blocks() const
+{
+  return (used_stable() + CMSIterateBlockSize - 1) / CMSIterateBlockSize;
+}
+
+void ConcurrentMarkSweepGeneration::object_iterate_block(ObjectClosure *cl, size_t block_index)
+{
+  size_t block_word_size = CMSIterateBlockSize / HeapWordSize;
+  MemRegion span = MemRegion(cmsSpace()->bottom() + block_index * block_word_size,
+                             cmsSpace()->bottom() + (block_index + 1) * block_word_size);
+  if (!span.is_empty()) {  // Non-null task
+    HeapWord *prev_obj;
+    if (block_index == 0) {
+      prev_obj = span.start();
+    } else {
+      prev_obj = cmsSpace()->block_start_careful(span.start());
+      while (prev_obj < span.start()) {
+        size_t sz = cmsSpace()->block_size_no_stall(prev_obj, _collector);
+        if (sz > 0) {
+          prev_obj += sz;
+        } else {
+          break;
+        }
+      }
+    }
+    if (prev_obj < span.end()) {
+      HeapWord *cur, *limit;
+      size_t curSize;
+      for (cur = prev_obj, limit = span.end(); cur < limit; cur += curSize) {
+        curSize = cmsSpace()->block_size_no_stall(cur, _collector);
+        if (curSize == 0) {
+          break;
+        }
+        if (cmsSpace()->block_is_obj(cur)) {
+          cl->do_object(oop(cur));
+        }
+      }
+    }
+  }
+}
+
 void ConcurrentMarkSweepGeneration::gc_epilogue_work(bool full) {
   assert(!incremental_collection_failed(), "Should have been cleared");
   cmsSpace()->setPreconsumptionDirtyCardClosure(NULL);

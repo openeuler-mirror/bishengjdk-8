@@ -175,7 +175,8 @@ class Generation: public CHeapObj<mtGC> {
   // Returns the total number of bytes  available in a generation
   // for the allocation of objects.
   virtual size_t max_capacity() const;
-
+  virtual size_t num_iterable_blocks() const;
+  virtual void object_iterate_block(ObjectClosure *cl, size_t block_index);
   // If this is a young generation, the maximum number of bytes that can be
   // allocated in this generation before a GC is triggered.
   virtual size_t capacity_before_gc() const { return 0; }
