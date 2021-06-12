@@ -40,6 +40,8 @@ G1ParScanThreadState::G1ParScanThreadState(G1CollectedHeap* g1h, uint queue_num,
     _term_attempts(0),
     _tenuring_threshold(g1h->g1_policy()->tenuring_threshold()),
     _age_table(false), _scanner(g1h, rp),
+    _numa(g1h->numa()),
+    _obj_alloc_stat(NULL),
     _strong_roots_time(0), _term_time(0) {
   _scanner.set_par_scan_thread_state(this);
   // we allocate G1YoungSurvRateNumRegions plus one entries, since
@@ -60,19 +62,20 @@ G1ParScanThreadState::G1ParScanThreadState(G1CollectedHeap* g1h, uint queue_num,
 
   _g1_par_allocator = G1ParGCAllocator::create_allocator(_g1h);
 
-  _dest[InCSetState::NotInCSet]    = InCSetState::NotInCSet;
   // The dest for Young is used when the objects are aged enough to
   // need to be moved to the next space.
   _dest[InCSetState::Young]        = InCSetState::Old;
   _dest[InCSetState::Old]          = InCSetState::Old;
 
   _start = os::elapsedTime();
+  initialize_numa_stats();
 }
 
 G1ParScanThreadState::~G1ParScanThreadState() {
   _g1_par_allocator->retire_alloc_buffers();
   delete _g1_par_allocator;
   FREE_C_HEAP_ARRAY(size_t, _surviving_young_words_base, mtGC);
+  FREE_C_HEAP_ARRAY(size_t, _obj_alloc_stat, mtGC);
 }
 
 void
@@ -162,7 +165,8 @@ void G1ParScanThreadState::trim_queue() {
 HeapWord* G1ParScanThreadState::allocate_in_next_plab(InCSetState const state,
                                                       InCSetState* dest,
                                                       size_t word_sz,
-                                                      AllocationContext_t const context) {
+                                                      AllocationContext_t const context,
+                                                      uint node_index) {
   assert(state.is_in_cset_or_humongous(), err_msg("Unexpected state: " CSETSTATE_FORMAT, state.value()));
   assert(dest->is_in_cset_or_humongous(), err_msg("Unexpected dest: " CSETSTATE_FORMAT, dest->value()));
 
@@ -170,7 +174,7 @@ HeapWord* G1ParScanThreadState::allocate_in_next_plab(InCSetState const state,
   // let's keep the logic here simple. We can generalize it when necessary.
   if (dest->is_young()) {
     HeapWord* const obj_ptr = _g1_par_allocator->allocate(InCSetState::Old,
-                                                          word_sz, context);
+                                                          word_sz, context, node_index);
     if (obj_ptr == NULL) {
       return NULL;
     }
@@ -190,8 +194,8 @@ HeapWord* G1ParScanThreadState::allocate_in_next_plab(InCSetState const state,
 void G1ParScanThreadState::report_promotion_event(InCSetState const dest_state,
                                                   oop const old, size_t word_sz, uint age,
                                                   HeapWord * const obj_ptr,
-                                                  AllocationContext_t context) const {
-  ParGCAllocBuffer* alloc_buf = _g1_par_allocator->alloc_buffer(dest_state, context);
+                                                  AllocationContext_t context, uint node_index) const {
+  ParGCAllocBuffer* alloc_buf = _g1_par_allocator->alloc_buffer(dest_state, context, node_index);
   if (alloc_buf->contains(obj_ptr)) {
     _g1h->_gc_tracer_stw->report_promotion_in_new_plab_event(old->klass(), word_sz, age,
                                                              dest_state.value() == InCSetState::Old,
@@ -226,23 +230,25 @@ oop G1ParScanThreadState::copy_to_survivor_space(InCSetState const state,
 
   uint age = 0;
   InCSetState dest_state = next_state(state, old_mark, age);
-  HeapWord* obj_ptr = _g1_par_allocator->plab_allocate(dest_state, word_sz, context);
+  uint node_index = from_region->node_index();
+  HeapWord* obj_ptr = _g1_par_allocator->plab_allocate(dest_state, word_sz, context, node_index);
 
   // PLAB allocations should succeed most of the time, so we'll
   // normally check against NULL once and that's it.
   if (obj_ptr == NULL) {
-    obj_ptr = _g1_par_allocator->allocate_direct_or_new_plab(dest_state, word_sz, context);
+    obj_ptr = _g1_par_allocator->allocate_direct_or_new_plab(dest_state, word_sz, context, node_index);
     if (obj_ptr == NULL) {
-      obj_ptr = allocate_in_next_plab(state, &dest_state, word_sz, context);
+      obj_ptr = allocate_in_next_plab(state, &dest_state, word_sz, context, node_index);
       if (obj_ptr == NULL) {
         // This will either forward-to-self, or detect that someone else has
         // installed a forwarding pointer.
         return _g1h->handle_evacuation_failure_par(this, old);
       }
     }
+    update_numa_stats(node_index);
     if (_g1h->_gc_tracer_stw->should_report_promotion_events()) {
       // The events are checked individually as part of the actual commit
-      report_promotion_event(dest_state, old, word_sz, age, obj_ptr, context);
+      report_promotion_event(dest_state, old, word_sz, age, obj_ptr, context, node_index);
     }
   }
 
@@ -252,7 +258,7 @@ oop G1ParScanThreadState::copy_to_survivor_space(InCSetState const state,
   if (_g1h->evacuation_should_fail()) {
     // Doing this after all the allocation attempts also tests the
     // undo_allocation() method too.
-    _g1_par_allocator->undo_allocation(dest_state, obj_ptr, word_sz, context);
+    _g1_par_allocator->undo_allocation(dest_state, obj_ptr, word_sz, context, node_index);
     return _g1h->handle_evacuation_failure_par(this, old);
   }
 #endif // !PRODUCT
@@ -314,7 +320,49 @@ oop G1ParScanThreadState::copy_to_survivor_space(InCSetState const state,
     }
     return obj;
   } else {
-    _g1_par_allocator->undo_allocation(dest_state, obj_ptr, word_sz, context);
+    _g1_par_allocator->undo_allocation(dest_state, obj_ptr, word_sz, context, node_index);
     return forward_ptr;
   }
+}
+
+G1ParScanThreadState* G1ParScanThreadStateSet::state_for_worker(uint worker_id, ReferenceProcessor* rp) {
+  assert(worker_id < _n_workers, "out of bounds access");
+  if (_states[worker_id] == NULL) {
+    _states[worker_id] =
+      new G1ParScanThreadState(_g1h, worker_id, rp);
+  }
+  return _states[worker_id];
+}
+
+void G1ParScanThreadStateSet::flush() {
+  assert(!_flushed, "thread local state from the per thread states should be flushed once");
+
+  for (uint worker_index = 0; worker_index < _n_workers; ++worker_index) {
+    G1ParScanThreadState* pss = _states[worker_index];
+
+    if (pss == NULL) {
+      continue;
+    }
+
+    pss->flush_numa_stats();
+    delete pss;
+    _states[worker_index] = NULL;
+  }
+  _flushed = true;
+}
+
+G1ParScanThreadStateSet::G1ParScanThreadStateSet(G1CollectedHeap* g1h,
+                                                 uint n_workers) :
+    _g1h(g1h),
+    _states(NEW_C_HEAP_ARRAY(G1ParScanThreadState*, n_workers, mtGC)),
+    _n_workers(n_workers),
+    _flushed(false) {
+  for (uint i = 0; i < n_workers; ++i) {
+    _states[i] = NULL;
+  }
+}
+
+G1ParScanThreadStateSet::~G1ParScanThreadStateSet() {
+  assert(_flushed, "thread local state from the per thread states should have been flushed");
+  FREE_C_HEAP_ARRAY(G1ParScanThreadState*, _states, mtGC);
 }

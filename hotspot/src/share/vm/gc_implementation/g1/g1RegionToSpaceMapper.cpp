@@ -24,6 +24,7 @@
 
 #include "precompiled.hpp"
 #include "gc_implementation/g1/g1BiasedArray.hpp"
+#include "gc_implementation/g1/g1NUMA.hpp"
 #include "gc_implementation/g1/g1RegionToSpaceMapper.hpp"
 #include "memory/allocation.inline.hpp"
 #include "runtime/mutex.hpp"
@@ -40,6 +41,7 @@ G1RegionToSpaceMapper::G1RegionToSpaceMapper(ReservedSpace rs,
   _storage(rs, used_size, page_size),
   _region_granularity(region_granularity),
   _listener(NULL),
+  _memory_type(type),
   _commit_map() {
   guarantee(is_power_of_2(page_size), "must be");
   guarantee(is_power_of_2(region_granularity), "must be");
@@ -71,6 +73,14 @@ class G1RegionsLargerThanCommitSizeMapper : public G1RegionToSpaceMapper {
   virtual void commit_regions(uint start_idx, size_t num_regions) {
     bool zero_filled = _storage.commit((size_t)start_idx * _pages_per_region, num_regions * _pages_per_region);
     _commit_map.par_set_range(start_idx, start_idx + num_regions, BitMap::unknown_range);
+    if (_memory_type == mtJavaHeap) {
+      for (uint region_index = start_idx; region_index < start_idx + num_regions; region_index++ ) {
+        void* address = _storage.page_start(region_index * _pages_per_region);
+        size_t size_in_bytes = _storage.page_size() * _pages_per_region;
+        G1NUMA::numa()->request_memory_on_node(address, size_in_bytes, region_index);
+      }
+    }
+
     fire_on_commit(start_idx, num_regions, zero_filled);
   }
 
@@ -106,7 +116,7 @@ class G1RegionsSmallerThanCommitSizeMapper : public G1RegionToSpaceMapper {
                                        size_t commit_factor,
                                        MemoryType type) :
     G1RegionToSpaceMapper(rs, actual_size, page_size, alloc_granularity, type),
-    _par_lock(Mutex::leaf, "G1RegionsSmallerThanCommitSizeMapper par lock"),
+    _par_lock(Mutex::leaf, "G1RegionsSmallerThanCommitSizeMapper par lock", true),
     _regions_per_page((page_size * commit_factor) / alloc_granularity), _refcounts() {
 
     guarantee((page_size * commit_factor) >= alloc_granularity, "allocation granularity smaller than commit granularity");
@@ -123,6 +133,11 @@ class G1RegionsSmallerThanCommitSizeMapper : public G1RegionToSpaceMapper {
       bool zero_filled = false;
       if (old_refcount == 0) {
         zero_filled = _storage.commit(idx, 1);
+        if (_memory_type == mtJavaHeap) {
+          void* address = _storage.page_start(idx);
+          size_t size_in_bytes = _storage.page_size();
+          G1NUMA::numa()->request_memory_on_node(address, size_in_bytes, i);
+        }
       }
       _refcounts.set_by_index(idx, old_refcount + 1);
       _commit_map.set_bit(i);

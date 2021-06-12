@@ -141,6 +141,8 @@ public class WhiteBox {
   public native int     g1RegionSize();
   public native MemoryUsage g1AuxiliaryMemoryUsage();
   public native Object[]    parseCommandLine(String commandline, DiagnosticCommand[] args);
+  public native int g1ActiveMemoryNodeCount();
+  public native int[] g1MemoryNodeIds();
 
   // Parallel GC
   public native long psVirtualSpaceAlignment();

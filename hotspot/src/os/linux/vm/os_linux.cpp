@@ -2908,6 +2908,19 @@ int os::numa_get_group_id() {
   return 0;
 }
 
+int os::numa_get_group_id_for_address(const void* address) {
+  void** pages = const_cast<void**>(&address);
+  int id = -1;
+
+  if (os::Linux::numa_move_pages(0, 1, pages, NULL, &id, 0) == -1) {
+    return -1;
+  }
+  if (id < 0) {
+    return -1;
+  }
+  return id;
+}
+
 int os::Linux::get_existing_num_nodes() {
   size_t node;
   size_t highest_node_number = Linux::numa_max_node();
@@ -2930,7 +2943,7 @@ size_t os::numa_get_leaf_groups(int *ids, size_t size) {
   // not always consecutively available, i.e. available from 0 to the highest
   // node number.
   for (size_t node = 0; node <= highest_node_number; node++) {
-    if (Linux::isnode_in_configured_nodes(node)) {
+    if (Linux::isnode_in_bound_nodes(node)) {
       ids[i++] = node;
     }
   }
@@ -3023,11 +3036,21 @@ bool os::Linux::libnuma_init() {
                                                libnuma_dlsym(handle, "numa_bitmask_isbitset")));
       set_numa_distance(CAST_TO_FN_PTR(numa_distance_func_t,
                                        libnuma_dlsym(handle, "numa_distance")));
+      set_numa_get_membind(CAST_TO_FN_PTR(numa_get_membind_func_t,
+                                          libnuma_v2_dlsym(handle, "numa_get_membind")));
+      set_numa_get_interleave_mask(CAST_TO_FN_PTR(numa_get_interleave_mask_func_t,
+                                                  libnuma_v2_dlsym(handle, "numa_get_interleave_mask")));
+      set_numa_move_pages(CAST_TO_FN_PTR(numa_move_pages_func_t,
+                                         libnuma_dlsym(handle, "numa_move_pages")));
+      set_numa_run_on_node(CAST_TO_FN_PTR(numa_run_on_node_func_t,
+                                         libnuma_dlsym(handle, "numa_run_on_node")));
 
       if (numa_available() != -1) {
         set_numa_all_nodes((unsigned long*)libnuma_dlsym(handle, "numa_all_nodes"));
         set_numa_all_nodes_ptr((struct bitmask **)libnuma_dlsym(handle, "numa_all_nodes_ptr"));
         set_numa_nodes_ptr((struct bitmask **)libnuma_dlsym(handle, "numa_nodes_ptr"));
+        set_numa_interleave_bitmask(_numa_get_interleave_mask());
+        set_numa_membind_bitmask(_numa_get_membind());
         // Create an index -> node mapping, since nodes are not always consecutive
         _nindex_to_node = new (ResourceObj::C_HEAP, mtInternal) GrowableArray<int>(0, true);
         rebuild_nindex_to_node_map();
@@ -3081,12 +3104,15 @@ void os::Linux::rebuild_cpu_to_node_map() {
   for (size_t i = 0; i < node_num; i++) {
     // Check if node is configured (not a memory-less node). If it is not, find
     // the closest configured node.
-    if (!isnode_in_configured_nodes(nindex_to_node()->at(i))) {
+    if (!isnode_in_configured_nodes(nindex_to_node()->at(i)) ||
+        !isnode_in_bound_nodes(nindex_to_node()->at(i))) {
       closest_distance = INT_MAX;
       // Check distance from all remaining nodes in the system. Ignore distance
       // from itself and from another non-configured node.
       for (size_t m = 0; m < node_num; m++) {
-        if (m != i && isnode_in_configured_nodes(nindex_to_node()->at(m))) {
+        if (m != i &&
+            isnode_in_configured_nodes(nindex_to_node()->at(m)) &&
+            isnode_in_bound_nodes(nindex_to_node()->at(m))) {
           distance = numa_distance(nindex_to_node()->at(i), nindex_to_node()->at(m));
           // If a closest node is found, update. There is always at least one
           // configured node in the system so there is always at least one node
@@ -3140,9 +3166,16 @@ os::Linux::numa_interleave_memory_v2_func_t os::Linux::_numa_interleave_memory_v
 os::Linux::numa_set_bind_policy_func_t os::Linux::_numa_set_bind_policy;
 os::Linux::numa_bitmask_isbitset_func_t os::Linux::_numa_bitmask_isbitset;
 os::Linux::numa_distance_func_t os::Linux::_numa_distance;
+os::Linux::numa_get_membind_func_t os::Linux::_numa_get_membind;
+os::Linux::numa_get_interleave_mask_func_t os::Linux::_numa_get_interleave_mask;
+os::Linux::numa_move_pages_func_t os::Linux::_numa_move_pages;
+os::Linux::numa_run_on_node_func_t os::Linux::_numa_run_on_node;
+os::Linux::NumaAllocationPolicy os::Linux::_current_numa_policy;
 unsigned long* os::Linux::_numa_all_nodes;
 struct bitmask* os::Linux::_numa_all_nodes_ptr;
 struct bitmask* os::Linux::_numa_nodes_ptr;
+struct bitmask* os::Linux::_numa_interleave_bitmask;
+struct bitmask* os::Linux::_numa_membind_bitmask;
 
 bool os::pd_uncommit_memory(char* addr, size_t size) {
   uintptr_t res = (uintptr_t) ::mmap(addr, size, PROT_NONE,
@@ -5195,9 +5228,11 @@ jint os::init_2(void)
     if (!Linux::libnuma_init()) {
       UseNUMA = false;
     } else {
-      if ((Linux::numa_max_node() < 1)) {
+      if ((Linux::numa_max_node() < 1) || Linux::isbound_to_single_node()) {
         // There's only one node(they start from 0), disable NUMA.
         UseNUMA = false;
+      } else {
+        Linux::set_configured_numa_policy(Linux::identify_numa_policy());
       }
     }
     // With SHM and HugeTLBFS large pages we cannot uncommit a page, so there's no way

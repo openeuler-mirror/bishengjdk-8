@@ -2788,6 +2788,10 @@ int os::numa_get_group_id() {
   return ids[os::random() % r];
 }
 
+int os::numa_get_group_id_for_address(const void* address) {
+  return 0;
+}
+
 // Request information about the page.
 bool os::get_page_info(char *start, page_info* info) {
   const uint_t info_types[] = { MEMINFO_VLGRP, MEMINFO_VPAGESIZE };

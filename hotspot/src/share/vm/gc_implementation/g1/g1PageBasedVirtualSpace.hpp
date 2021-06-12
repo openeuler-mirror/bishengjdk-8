@@ -90,8 +90,6 @@ class G1PageBasedVirtualSpace VALUE_OBJ_CLASS_SPEC {
 
   // Returns the index of the page which contains the given address.
   uintptr_t  addr_to_page_index(char* addr) const;
-  // Returns the address of the given page index.
-  char*  page_start(size_t index) const;
 
   // Is the given page index the last page?
   bool is_last_page(size_t index) const { return index == (_committed.size() - 1); }
@@ -142,6 +140,10 @@ class G1PageBasedVirtualSpace VALUE_OBJ_CLASS_SPEC {
   void release();
 
   void check_for_contiguity() PRODUCT_RETURN;
+
+  // Returns the address of the given page index.
+  char*  page_start(size_t index) const;
+  size_t page_size() const;
 
   // Debugging
   void print_on(outputStream* out) PRODUCT_RETURN;
