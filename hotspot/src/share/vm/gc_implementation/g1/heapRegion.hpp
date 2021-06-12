@@ -295,7 +295,7 @@ class HeapRegion: public G1OffsetTableContigSpace {
   // The RSet length that was added to the total value
   // for the collection set.
   size_t _recorded_rs_length;
-
+  uint _node_index;
   // The predicted elapsed time that was added to total value
   // for the collection set.
   double _predicted_elapsed_time_ms;
@@ -767,6 +767,9 @@ class HeapRegion: public G1OffsetTableContigSpace {
   // Applies blk->do_code_blob() to each of the entries in
   // the strong code roots list for this region
   void strong_code_roots_do(CodeBlobClosure* blk) const;
+
+  uint node_index() const { return _node_index; }
+  void set_node_index(uint node_index) { _node_index = node_index; }
 
   // Verify that the entries on the strong code root list for this
   // region are live and include at least one pointer into this region.

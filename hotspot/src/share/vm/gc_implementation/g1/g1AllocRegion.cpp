@@ -235,15 +235,16 @@ void G1AllocRegion::trace(const char* str, size_t word_size, HeapWord* result) {
 #endif // G1_ALLOC_REGION_TRACING
 
 G1AllocRegion::G1AllocRegion(const char* name,
-                             bool bot_updates)
-  : _name(name), _bot_updates(bot_updates),
+                             bool bot_updates,
+                             uint node_index)
+  : _name(name), _bot_updates(bot_updates), _node_index(node_index),
     _alloc_region(NULL), _count(0), _used_bytes_before(0),
     _allocation_context(AllocationContext::system()) { }
 
 
 HeapRegion* MutatorAllocRegion::allocate_new_region(size_t word_size,
                                                     bool force) {
-  return _g1h->new_mutator_alloc_region(word_size, force);
+  return _g1h->new_mutator_alloc_region(word_size, force, _node_index);
 }
 
 void MutatorAllocRegion::retire_region(HeapRegion* alloc_region,
@@ -254,7 +255,7 @@ void MutatorAllocRegion::retire_region(HeapRegion* alloc_region,
 HeapRegion* SurvivorGCAllocRegion::allocate_new_region(size_t word_size,
                                                        bool force) {
   assert(!force, "not supported for GC alloc regions");
-  return _g1h->new_gc_alloc_region(word_size, count(), InCSetState::Young);
+  return _g1h->new_gc_alloc_region(word_size, count(), InCSetState::Young, _node_index);
 }
 
 void SurvivorGCAllocRegion::retire_region(HeapRegion* alloc_region,
@@ -265,7 +266,7 @@ void SurvivorGCAllocRegion::retire_region(HeapRegion* alloc_region,
 HeapRegion* OldGCAllocRegion::allocate_new_region(size_t word_size,
                                                   bool force) {
   assert(!force, "not supported for GC alloc regions");
-  return _g1h->new_gc_alloc_region(word_size, count(), InCSetState::Old);
+  return _g1h->new_gc_alloc_region(word_size, count(), InCSetState::Old, _node_index);
 }
 
 void OldGCAllocRegion::retire_region(HeapRegion* alloc_region,

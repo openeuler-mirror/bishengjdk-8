@@ -197,22 +197,45 @@ public:
 // add / remove one region at a time or concatenate two lists.
 
 class FreeRegionListIterator;
+class G1NUMA;
 
 class FreeRegionList : public HeapRegionSetBase {
   friend class FreeRegionListIterator;
 
 private:
+  // This class is only initialized if there are multiple active nodes.
+  class NodeInfo : public CHeapObj<mtGC> {
+    G1NUMA* _numa;
+    uint*   _length_of_node;
+    uint    _num_nodes;
+
+  public:
+    NodeInfo();
+    ~NodeInfo();
+
+    inline void increase_length(uint node_index);
+    inline void decrease_length(uint node_index);
+
+    inline uint length(uint index) const;
+
+    void clear();
+
+    void add(NodeInfo* info);
+  };
+
   HeapRegion* _head;
   HeapRegion* _tail;
 
   // _last is used to keep track of where we added an element the last
   // time. It helps to improve performance when adding several ordered items in a row.
   HeapRegion* _last;
-
+  NodeInfo*   _node_info;
   static uint _unrealistically_long_length;
 
   inline HeapRegion* remove_from_head_impl();
   inline HeapRegion* remove_from_tail_impl();
+  inline void increase_length(uint node_index);
+  inline void decrease_length(uint node_index);
 
 protected:
   virtual void fill_in_ext_msg_extra(hrs_ext_msg* msg);
@@ -221,9 +244,12 @@ protected:
   virtual void clear();
 
 public:
-  FreeRegionList(const char* name, HRSMtSafeChecker* mt_safety_checker = NULL):
-    HeapRegionSetBase(name, false /* humongous */, true /* empty */, mt_safety_checker) {
-    clear();
+  FreeRegionList(const char* name, HRSMtSafeChecker* mt_safety_checker = NULL);
+
+  ~FreeRegionList() {
+    if (_node_info != NULL) {
+      delete _node_info;
+    }
   }
 
   void verify_list();
@@ -244,6 +270,10 @@ public:
   // Removes from head or tail based on the given argument.
   HeapRegion* remove_region(bool from_head);
 
+  HeapRegion* remove_region_with_node_index(bool from_head,
+                                            uint requested_node_index);
+
+
   // Merge two ordered lists. The result is also ordered. The order is
   // determined by hrm_index.
   void add_ordered(FreeRegionList* from_list);
@@ -259,6 +289,9 @@ public:
   uint move_regions_to(FreeRegionList* dest, uint num_regions);
 
   virtual void verify();
+
+  using HeapRegionSetBase::length;
+  uint length(uint node_index) const;
 
   virtual void print_on(outputStream* out, bool print_contents = false);
 };

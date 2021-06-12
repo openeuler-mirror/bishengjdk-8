@@ -26,6 +26,7 @@
 #define SHARE_VM_GC_IMPLEMENTATION_G1_G1ALLOCREGION_HPP
 
 #include "gc_implementation/g1/heapRegion.hpp"
+#include "gc_implementation/g1/g1NUMA.hpp"
 
 class G1CollectedHeap;
 
@@ -133,7 +134,9 @@ protected:
   virtual void retire_region(HeapRegion* alloc_region,
                              size_t allocated_bytes) = 0;
 
-  G1AllocRegion(const char* name, bool bot_updates);
+  G1AllocRegion(const char* name, bool bot_updates, uint node_index);
+  // The memory node index this allocation region belongs to.
+  uint _node_index;
 
 public:
   static void setup(G1CollectedHeap* g1h, HeapRegion* dummy_region);
@@ -197,8 +200,8 @@ protected:
   virtual HeapRegion* allocate_new_region(size_t word_size, bool force);
   virtual void retire_region(HeapRegion* alloc_region, size_t allocated_bytes);
 public:
-  MutatorAllocRegion()
-    : G1AllocRegion("Mutator Alloc Region", false /* bot_updates */) { }
+  MutatorAllocRegion(uint node_index)
+    : G1AllocRegion("Mutator Alloc Region", false /* bot_updates */, node_index) { }
 };
 
 class SurvivorGCAllocRegion : public G1AllocRegion {
@@ -206,8 +209,8 @@ protected:
   virtual HeapRegion* allocate_new_region(size_t word_size, bool force);
   virtual void retire_region(HeapRegion* alloc_region, size_t allocated_bytes);
 public:
-  SurvivorGCAllocRegion()
-  : G1AllocRegion("Survivor GC Alloc Region", false /* bot_updates */) { }
+  SurvivorGCAllocRegion(uint node_index)
+  : G1AllocRegion("Survivor GC Alloc Region", false /* bot_updates */, node_index) { }
 };
 
 class OldGCAllocRegion : public G1AllocRegion {
@@ -216,7 +219,7 @@ protected:
   virtual void retire_region(HeapRegion* alloc_region, size_t allocated_bytes);
 public:
   OldGCAllocRegion()
-  : G1AllocRegion("Old GC Alloc Region", true /* bot_updates */) { }
+  : G1AllocRegion("Old GC Alloc Region", true /* bot_updates */, G1NUMA::AnyNodeIndex) { }
 
   // This specialization of release() makes sure that the last card that has
   // been allocated into has been completely filled by a dummy object.  This

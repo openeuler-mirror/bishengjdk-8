@@ -58,10 +58,10 @@ struct InCSetState {
     // or not, which is encoded by values < 0.
     // The other values are simply encoded in increasing generation order, which
     // makes getting the next generation fast by a simple increment.
-    Humongous    = -1,    // The region is humongous - note that actually any value < 0 would be possible here.
-    NotInCSet    =  0,    // The region is not in the collection set.
-    Young        =  1,    // The region is in the collection set and a young region.
-    Old          =  2,    // The region is in the collection set and an old region.
+    Humongous    = -2,    // The region is humongous - note that actually any value < 0 would be possible here.
+    NotInCSet    = -1,    // The region is not in the collection set.
+    Young        =  0,    // The region is in the collection set and a young region.
+    Old          =  1,    // The region is in the collection set and an old region.
     Num
   };
 

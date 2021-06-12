@@ -26,6 +26,7 @@
 #include "code/nmethod.hpp"
 #include "gc_implementation/g1/g1BlockOffsetTable.inline.hpp"
 #include "gc_implementation/g1/g1CollectedHeap.inline.hpp"
+#include "gc_implementation/g1/g1NUMA.hpp"
 #include "gc_implementation/g1/g1OopClosures.inline.hpp"
 #include "gc_implementation/g1/heapRegion.inline.hpp"
 #include "gc_implementation/g1/heapRegionBounds.inline.hpp"
@@ -313,7 +314,7 @@ HeapRegion::HeapRegion(uint hrm_index,
     _in_uncommit_list(false),
     _young_index_in_cset(-1), _surv_rate_group(NULL), _age_index(-1),
     _rem_set(NULL), _recorded_rs_length(0), _predicted_elapsed_time_ms(0),
-    _predicted_bytes_to_copy(0)
+    _predicted_bytes_to_copy(0), _node_index(G1NUMA::UnknownNodeIndex)
 {
   _rem_set = new HeapRegionRemSet(sharedOffsetArray, this);
   assert(HeapRegionRemSet::num_par_rem_sets() > 0, "Invariant.");
@@ -704,6 +705,15 @@ void HeapRegion::print_on(outputStream* st) const {
   st->print(" TS %5d", _gc_time_stamp);
   st->print(" PTAMS " PTR_FORMAT " NTAMS " PTR_FORMAT,
             prev_top_at_mark_start(), next_top_at_mark_start());
+  if (UseNUMA) {
+    G1NUMA* numa = G1NUMA::numa();
+    if (node_index() < numa->num_active_nodes()) {
+      st->print("|%d", numa->numa_id(node_index()));
+    } else {
+      st->print("|-");
+    }
+  }
+  st->print_cr(" ");
   G1OffsetTableContigSpace::print_on(st);
 }
 

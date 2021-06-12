@@ -26,18 +26,72 @@
 #include "gc_implementation/g1/g1Allocator.hpp"
 #include "gc_implementation/g1/g1CollectedHeap.hpp"
 #include "gc_implementation/g1/g1CollectorPolicy.hpp"
+#include "gc_implementation/g1/g1NUMA.hpp"
 #include "gc_implementation/g1/heapRegion.inline.hpp"
 #include "gc_implementation/g1/heapRegionSet.inline.hpp"
 
-void G1DefaultAllocator::init_mutator_alloc_region() {
-  assert(_mutator_alloc_region.get() == NULL, "pre-condition");
-  _mutator_alloc_region.init();
+void G1DefaultAllocator::init_mutator_alloc_regions() {
+  for (uint i = 0; i < _num_alloc_regions; i++) {
+    assert(mutator_alloc_region(i)->get() == NULL, "pre-condition");
+    mutator_alloc_region(i)->init();
+  }
 }
 
-void G1DefaultAllocator::release_mutator_alloc_region() {
-  _mutator_alloc_region.release();
-  assert(_mutator_alloc_region.get() == NULL, "post-condition");
+void G1DefaultAllocator::release_mutator_alloc_regions() {
+  for (uint i = 0; i < _num_alloc_regions; i++) {
+    mutator_alloc_region(i)->release();
+    assert(mutator_alloc_region(i)->get() == NULL, "post-condition");
+  }
 }
+
+inline HeapWord* G1DefaultAllocator::attempt_allocation_locked(size_t word_size, bool bot_updates, uint &node_index) {
+  node_index = current_node_index();
+  HeapWord* result = mutator_alloc_region(node_index)->attempt_allocation_locked(word_size, bot_updates);
+  assert(result != NULL || mutator_alloc_region(node_index)->get() == NULL,
+         err_msg("Must not have a mutator alloc region if there is no memory, but is " PTR_FORMAT, p2i(mutator_alloc_region(node_index)->get())));
+  return result;
+}
+
+inline HeapWord* G1DefaultAllocator::attempt_allocation_force(size_t word_size, bool bot_updates, uint node_index) {
+  if (node_index == G1NUMA::AnyNodeIndex) {
+    return NULL;
+  }
+  assert(node_index < _num_alloc_regions, err_msg("Invalid index: %u", node_index));
+  return mutator_alloc_region(node_index)->attempt_allocation_force(word_size, bot_updates);
+}
+
+G1DefaultAllocator::G1DefaultAllocator(G1CollectedHeap* heap) :
+  G1Allocator(heap),
+  _numa(heap->numa()),
+  _num_alloc_regions(_numa->num_active_nodes()),
+  _mutator_alloc_regions(NULL),
+  _survivor_gc_alloc_regions(NULL),
+  _old_gc_alloc_region(),
+  _retained_old_gc_alloc_region(NULL) {
+
+  _mutator_alloc_regions = NEW_C_HEAP_ARRAY(MutatorAllocRegion, _num_alloc_regions, mtGC);
+  _survivor_gc_alloc_regions = NEW_C_HEAP_ARRAY(SurvivorGCAllocRegion, _num_alloc_regions, mtGC);
+  for (uint i = 0; i < _num_alloc_regions; i++) {
+    ::new(_mutator_alloc_regions + i) MutatorAllocRegion(i);
+    ::new(_survivor_gc_alloc_regions + i) SurvivorGCAllocRegion(i);
+  }
+}
+
+G1DefaultAllocator::~G1DefaultAllocator() {
+  for (uint i = 0; i < _num_alloc_regions; i++) {
+    _mutator_alloc_regions[i].~MutatorAllocRegion();
+    _survivor_gc_alloc_regions[i].~SurvivorGCAllocRegion();
+  }
+  FREE_C_HEAP_ARRAY(MutatorAllocRegion, _mutator_alloc_regions, mtGC);
+  FREE_C_HEAP_ARRAY(SurvivorGCAllocRegion, _survivor_gc_alloc_regions, mtGC);
+}
+
+#ifdef ASSERT
+bool G1Allocator::has_mutator_alloc_region() {
+  uint node_index = current_node_index();
+  return mutator_alloc_region(node_index)->get() != NULL;
+}
+#endif
 
 void G1Allocator::reuse_retained_old_region(EvacuationInfo& evacuation_info,
                                             OldGCAllocRegion* old,
@@ -76,7 +130,9 @@ void G1Allocator::reuse_retained_old_region(EvacuationInfo& evacuation_info,
 void G1DefaultAllocator::init_gc_alloc_regions(EvacuationInfo& evacuation_info) {
   assert_at_safepoint(true /* should_be_vm_thread */);
 
-  _survivor_gc_alloc_region.init();
+  for (uint i = 0; i < _num_alloc_regions; i++) {
+    survivor_gc_alloc_region(i)->init();
+  }
   _old_gc_alloc_region.init();
   reuse_retained_old_region(evacuation_info,
                             &_old_gc_alloc_region,
@@ -85,9 +141,13 @@ void G1DefaultAllocator::init_gc_alloc_regions(EvacuationInfo& evacuation_info) 
 
 void G1DefaultAllocator::release_gc_alloc_regions(uint no_of_gc_workers, EvacuationInfo& evacuation_info) {
   AllocationContext_t context = AllocationContext::current();
-  evacuation_info.set_allocation_regions(survivor_gc_alloc_region(context)->count() +
+  uint survivor_region_count = 0;
+  for (uint node_index = 0; node_index < _num_alloc_regions; node_index++) {
+    survivor_region_count += survivor_gc_alloc_region(node_index)->count();
+    survivor_gc_alloc_region(node_index)->release();
+  }
+  evacuation_info.set_allocation_regions(survivor_region_count +
                                          old_gc_alloc_region(context)->count());
-  survivor_gc_alloc_region(context)->release();
   // If we have an old GC alloc region to release, we'll save it in
   // _retained_old_gc_alloc_region. If we don't
   // _retained_old_gc_alloc_region will become NULL. This is what we
@@ -105,7 +165,9 @@ void G1DefaultAllocator::release_gc_alloc_regions(uint no_of_gc_workers, Evacuat
 }
 
 void G1DefaultAllocator::abandon_gc_alloc_regions() {
-  assert(survivor_gc_alloc_region(AllocationContext::current())->get() == NULL, "pre-condition");
+  for (uint i = 0; i < _num_alloc_regions; i++) {
+    assert(survivor_gc_alloc_region(i)->get() == NULL, "pre-condition");
+  }
   assert(old_gc_alloc_region(AllocationContext::current())->get() == NULL, "pre-condition");
   _retained_old_gc_alloc_region = NULL;
 }
@@ -113,16 +175,24 @@ void G1DefaultAllocator::abandon_gc_alloc_regions() {
 G1ParGCAllocBuffer::G1ParGCAllocBuffer(size_t gclab_word_size) :
   ParGCAllocBuffer(gclab_word_size), _retired(true) { }
 
+G1ParGCAllocator::G1ParGCAllocator(G1CollectedHeap* g1h) :
+  _g1h(g1h), _survivor_alignment_bytes(calc_survivor_alignment_bytes()),
+  _numa(g1h->numa()),
+  _num_alloc_regions(_numa->num_active_nodes()),
+  _alloc_buffer_waste(0), _undo_waste(0) {
+}
+
 HeapWord* G1ParGCAllocator::allocate_direct_or_new_plab(InCSetState dest,
                                                         size_t word_sz,
-                                                        AllocationContext_t context) {
+                                                        AllocationContext_t context,
+                                                        uint node_index) {
   size_t gclab_word_size = _g1h->desired_plab_sz(dest);
   if (word_sz * 100 < gclab_word_size * ParallelGCBufferWastePct) {
-    G1ParGCAllocBuffer* alloc_buf = alloc_buffer(dest, context);
+    G1ParGCAllocBuffer* alloc_buf = alloc_buffer(dest, context, node_index);
     add_to_alloc_buffer_waste(alloc_buf->words_remaining());
     alloc_buf->retire(false /* end_of_gc */, false /* retain */);
 
-    HeapWord* buf = _g1h->par_allocate_during_gc(dest, gclab_word_size, context);
+    HeapWord* buf = _g1h->par_allocate_during_gc(dest, gclab_word_size, context, node_index);
     if (buf == NULL) {
       return NULL; // Let caller handle allocation failure.
     }
@@ -134,29 +204,47 @@ HeapWord* G1ParGCAllocator::allocate_direct_or_new_plab(InCSetState dest,
     assert(obj != NULL, "buffer was definitely big enough...");
     return obj;
   } else {
-    return _g1h->par_allocate_during_gc(dest, word_sz, context);
+    return _g1h->par_allocate_during_gc(dest, word_sz, context, node_index);
   }
 }
 
 G1DefaultParGCAllocator::G1DefaultParGCAllocator(G1CollectedHeap* g1h) :
-  G1ParGCAllocator(g1h),
-  _surviving_alloc_buffer(g1h->desired_plab_sz(InCSetState::Young)),
-  _tenured_alloc_buffer(g1h->desired_plab_sz(InCSetState::Old)) {
+  G1ParGCAllocator(g1h) {
   for (uint state = 0; state < InCSetState::Num; state++) {
     _alloc_buffers[state] = NULL;
+    uint length = alloc_buffers_length(state);
+    _alloc_buffers[state] = NEW_C_HEAP_ARRAY(G1ParGCAllocBuffer*, length, mtGC);
+    for (uint node_index = 0; node_index < length; node_index++) {
+      _alloc_buffers[state][node_index] = new G1ParGCAllocBuffer(_g1h->desired_plab_sz(state));
+    }
   }
-  _alloc_buffers[InCSetState::Young] = &_surviving_alloc_buffer;
-  _alloc_buffers[InCSetState::Old]  = &_tenured_alloc_buffer;
+}
+
+G1DefaultParGCAllocator::~G1DefaultParGCAllocator() {
+  for (in_cset_state_t state = 0; state < InCSetState::Num; state++) {
+    uint length = alloc_buffers_length(state);
+    for (uint node_index = 0; node_index < length; node_index++) {
+      delete _alloc_buffers[state][node_index];
+    }
+    FREE_C_HEAP_ARRAY(G1ParGCAllocBuffer*, _alloc_buffers[state], mtGC);
+  }
 }
 
 void G1DefaultParGCAllocator::retire_alloc_buffers() {
   for (uint state = 0; state < InCSetState::Num; state++) {
-    G1ParGCAllocBuffer* const buf = _alloc_buffers[state];
-    if (buf != NULL) {
-      add_to_alloc_buffer_waste(buf->words_remaining());
-      buf->flush_stats_and_retire(_g1h->alloc_buffer_stats(state),
+    uint length = alloc_buffers_length(state);
+    for (uint node_index = 0; node_index < length; node_index++) {
+      G1ParGCAllocBuffer* const buf = _alloc_buffers[state][node_index];
+      if (buf != NULL) {
+        add_to_alloc_buffer_waste(buf->words_remaining());
+        buf->flush_stats_and_retire(_g1h->alloc_buffer_stats(state),
                                   true /* end_of_gc */,
                                   false /* retain */);
+      }
     }
   }
+}
+
+uint G1DefaultAllocator::current_node_index() const {
+  return _numa->index_of_current_thread();
 }

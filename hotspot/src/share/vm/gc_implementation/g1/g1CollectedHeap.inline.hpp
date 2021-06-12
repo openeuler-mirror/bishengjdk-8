@@ -58,10 +58,11 @@ size_t G1CollectedHeap::desired_plab_sz(InCSetState dest) {
 
 HeapWord* G1CollectedHeap::par_allocate_during_gc(InCSetState dest,
                                                   size_t word_size,
-                                                  AllocationContext_t context) {
+                                                  AllocationContext_t context,
+                                                  uint node_index) {
   switch (dest.value()) {
     case InCSetState::Young:
-      return survivor_attempt_allocation(word_size, context);
+      return survivor_attempt_allocation(word_size, context, node_index);
     case InCSetState::Old:
       return old_attempt_allocation(word_size, context);
     default:
@@ -138,7 +139,7 @@ inline HeapWord* G1CollectedHeap::attempt_allocation(size_t word_size,
          "be called for humongous allocation requests");
 
   AllocationContext_t context = AllocationContext::current();
-  HeapWord* result = _allocator->mutator_alloc_region(context)->attempt_allocation(word_size,
+  HeapWord* result = _allocator->mutator_alloc_region()->attempt_allocation(word_size,
                                                                                    false /* bot_updates */);
   if (result == NULL) {
     result = attempt_allocation_slow(word_size,
@@ -154,15 +155,16 @@ inline HeapWord* G1CollectedHeap::attempt_allocation(size_t word_size,
 }
 
 inline HeapWord* G1CollectedHeap::survivor_attempt_allocation(size_t word_size,
-                                                              AllocationContext_t context) {
+                                                              AllocationContext_t context,
+                                                              uint node_index) {
   assert(!isHumongous(word_size),
          "we should not be seeing humongous-size allocations in this path");
 
-  HeapWord* result = _allocator->survivor_gc_alloc_region(context)->attempt_allocation(word_size,
+  HeapWord* result = _allocator->survivor_gc_alloc_region(node_index)->attempt_allocation(word_size,
                                                                                        false /* bot_updates */);
   if (result == NULL) {
     MutexLockerEx x(FreeList_lock, Mutex::_no_safepoint_check_flag);
-    result = _allocator->survivor_gc_alloc_region(context)->attempt_allocation_locked(word_size,
+    result = _allocator->survivor_gc_alloc_region(node_index)->attempt_allocation_locked(word_size,
                                                                                       false /* bot_updates */);
   }
   if (result != NULL) {

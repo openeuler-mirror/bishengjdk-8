@@ -38,7 +38,7 @@
 class HeapRegion;
 class outputStream;
 
-class G1ParScanThreadState : public StackObj {
+class G1ParScanThreadState : public CHeapObj<mtGC> {
  private:
   G1CollectedHeap* _g1h;
   RefToScanQueue*  _refs;
@@ -90,6 +90,13 @@ class G1ParScanThreadState : public StackObj {
            err_msg("Dest state is invalid: " CSETSTATE_FORMAT, _dest[original.value()].value()));
     return _dest[original.value()];
   }
+
+  G1NUMA* _numa;
+
+  // Records how many object allocations happened at each node during copy to survivor.
+  // Only starts recording when log of gc+heap+numa is enabled and its data is
+  // transferred when flushed.
+  size_t* _obj_alloc_stat;
 
  public:
   G1ParScanThreadState(G1CollectedHeap* g1h, uint queue_num, ReferenceProcessor* rp);
@@ -208,13 +215,19 @@ class G1ParScanThreadState : public StackObj {
   HeapWord* allocate_in_next_plab(InCSetState const state,
                                   InCSetState* dest,
                                   size_t word_sz,
-                                  AllocationContext_t const context);
+                                  AllocationContext_t const context,
+                                  uint node_index);
 
   void report_promotion_event(InCSetState const dest_state,
                               oop const old, size_t word_sz, uint age,
-                              HeapWord * const obj_ptr, AllocationContext_t context) const;
+                              HeapWord * const obj_ptr, AllocationContext_t context, uint node_index) const;
 
   inline InCSetState next_state(InCSetState const state, markOop const m, uint& age);
+
+  // NUMA statistics related methods.
+  inline void initialize_numa_stats();
+  inline void update_numa_stats(uint node_index);
+
  public:
 
   oop copy_to_survivor_space(InCSetState const state, oop const obj, markOop const old_mark);
@@ -222,6 +235,22 @@ class G1ParScanThreadState : public StackObj {
   void trim_queue();
 
   inline void steal_and_trim_queue(RefToScanQueueSet *task_queues);
+  inline void flush_numa_stats();
+};
+
+class G1ParScanThreadStateSet : public StackObj {
+  G1CollectedHeap* _g1h;
+  G1ParScanThreadState** _states;
+  uint _n_workers;
+  bool _flushed;
+
+ public:
+  G1ParScanThreadStateSet(G1CollectedHeap* g1h,
+                          uint n_workers);
+  ~G1ParScanThreadStateSet();
+
+  void flush();
+  G1ParScanThreadState* state_for_worker(uint worker_id, ReferenceProcessor* rp);
 };
 
 #endif // SHARE_VM_GC_IMPLEMENTATION_G1_G1PARSCANTHREADSTATE_HPP

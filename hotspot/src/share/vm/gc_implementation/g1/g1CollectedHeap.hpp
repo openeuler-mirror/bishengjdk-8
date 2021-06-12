@@ -268,6 +268,9 @@ private:
   // Callback for region mapping changed events.
   G1RegionMappingChangedListener _listener;
 
+  // Handle G1 NUMA support.
+  G1NUMA* _numa;
+
   // The sequence of all heap regions in the heap.
   HeapRegionManager _hrm;
 
@@ -468,14 +471,14 @@ protected:
   // check whether there's anything available on the
   // secondary_free_list and/or wait for more regions to appear on
   // that list, if _free_regions_coming is set.
-  HeapRegion* new_region_try_secondary_free_list(bool is_old);
+  HeapRegion* new_region_try_secondary_free_list(bool is_old, uint node_index);
 
   // Try to allocate a single non-humongous HeapRegion sufficient for
   // an allocation of the given word_size. If do_expand is true,
   // attempt to expand the heap if necessary to satisfy the allocation
   // request. If the region is to be used as an old region or for a
   // humongous object, set is_old to true. If not, to false.
-  HeapRegion* new_region(size_t word_size, bool is_old, bool do_expand);
+  HeapRegion* new_region(size_t word_size, bool is_old, bool do_expand, uint node_index = G1NUMA::AnyNodeIndex);
 
   // Initialize a contiguous set of free regions of length num_regions
   // and starting at index first so that they appear as a single
@@ -573,14 +576,16 @@ protected:
   // may not be a humongous - it must fit into a single heap region.
   inline HeapWord* par_allocate_during_gc(InCSetState dest,
                                           size_t word_size,
-                                          AllocationContext_t context);
+                                          AllocationContext_t context,
+                                          uint node_index);
   // Ensure that no further allocations can happen in "r", bearing in mind
   // that parallel threads might be attempting allocations.
   void par_allocate_remaining_space(HeapRegion* r);
 
   // Allocation attempt during GC for a survivor object / PLAB.
   inline HeapWord* survivor_attempt_allocation(size_t word_size,
-                                               AllocationContext_t context);
+                                               AllocationContext_t context,
+                                               uint node_index);
 
   // Allocation attempt during GC for an old object / PLAB.
   inline HeapWord* old_attempt_allocation(size_t word_size,
@@ -589,13 +594,13 @@ protected:
   // These methods are the "callbacks" from the G1AllocRegion class.
 
   // For mutator alloc regions.
-  HeapRegion* new_mutator_alloc_region(size_t word_size, bool force);
+  HeapRegion* new_mutator_alloc_region(size_t word_size, bool force, uint node_index);
   void retire_mutator_alloc_region(HeapRegion* alloc_region,
                                    size_t allocated_bytes);
 
   // For GC alloc regions.
   HeapRegion* new_gc_alloc_region(size_t word_size, uint count,
-                                  InCSetState dest);
+                                  InCSetState dest, uint node_index);
   void retire_gc_alloc_region(HeapRegion* alloc_region,
                               size_t allocated_bytes, InCSetState dest);
 
@@ -641,6 +646,8 @@ protected:
   // after processing.
   void enqueue_discovered_references(uint no_of_gc_workers);
 
+  void verify_numa_regions(const char* desc);
+
 public:
 
   G1Allocator* allocator() {
@@ -654,11 +661,13 @@ public:
     return _g1mm;
   }
 
+  G1NUMA* numa() const { return _numa; }
   // Expand the garbage-first heap by at least the given size (in bytes!).
   // Returns true if the heap was expanded by the requested amount;
   // false otherwise.
   // (Rounds up to a HeapRegion boundary.)
   bool expand(size_t expand_bytes);
+  bool expand_single_region(uint node_index);
 
   // Returns the PLAB statistics for a given destination.
   inline PLABStats* alloc_buffer_stats(InCSetState dest);
