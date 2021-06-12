@@ -136,7 +136,10 @@ address StubRoutines::_sha512_implCompressMB = NULL;
 address StubRoutines::_updateBytesCRC32 = NULL;
 address StubRoutines::_crc_table_adr = NULL;
 
+address StubRoutines::_BLAS_library = NULL;
 address StubRoutines::_ddotF2jBLAS = NULL;
+address StubRoutines::_dgemmDgemm = NULL;
+address StubRoutines::_dgemvDgemv = NULL;
 
 address StubRoutines::_multiplyToLen = NULL;
 address StubRoutines::_squareToLen = NULL;

@@ -1208,7 +1208,7 @@ void LIRGenerator::do_Return(Return* x) {
   set_no_result(x);
 }
 
-// Examble: ref.get()
+// Example: ref.get()
 // Combination of LoadField and g1 pre-write barrier
 void LIRGenerator::do_Reference_get(Intrinsic* x) {
 
@@ -1220,7 +1220,7 @@ void LIRGenerator::do_Reference_get(Intrinsic* x) {
   LIRItem reference(x->argument_at(0), this);
   reference.load_item();
 
-  // need to perform the null check on the reference objecy
+  // need to perform the null check on the reference object
   CodeEmitInfo* info = NULL;
   if (x->needs_null_check()) {
     info = state_for(x);
@@ -1420,6 +1420,44 @@ LIR_Opr LIRGenerator::load_constant(LIR_Const* c) {
   _constants.append(c);
   _reg_for_constants.append(result);
   return result;
+}
+
+// Access the char-array of String
+LIR_Opr LIRGenerator::load_String_value(LIR_Opr str) {
+  int value_offset = java_lang_String::value_offset_in_bytes();
+  LIR_Opr value = new_register(T_ARRAY);
+  LIR_Opr tmp = new_pointer_register();
+
+  __ add(str, LIR_OprFact::intConst(value_offset), tmp);
+  LIR_Address* array_addr = new LIR_Address(tmp, T_ARRAY);
+#if INCLUDE_ALL_GCS
+  if (UseShenandoahGC) {
+    LIR_Opr tmp = new_register(T_OBJECT);
+    LIR_Opr addr = ShenandoahBarrierSet::barrier_set()->bsc1()->resolve_address(this, array_addr, T_OBJECT, NULL);
+    __ load(addr->as_address_ptr(), tmp);
+    tmp = ShenandoahBarrierSet::barrier_set()->bsc1()->load_reference_barrier(this, tmp, addr);
+    __ move(tmp, value);
+  } else
+#endif
+  __ load(array_addr, value);
+
+  return value;
+}
+
+LIR_Opr LIRGenerator::load_String_offset(LIR_Opr str) {
+  LIR_Opr offset = new_register(T_INT);
+
+  if (java_lang_String::has_offset_field()) {
+    LIR_Opr tmp = new_pointer_register();
+    int offset_offset = java_lang_String::offset_offset_in_bytes();
+    __ add(str, LIR_OprFact::intConst(offset_offset), tmp);
+    LIR_Address* addr = new LIR_Address(tmp, T_INT);
+    __ load(addr, offset);
+  } else {
+    offset = LIR_OprFact::intConst(0);
+  }
+
+  return offset;
 }
 
 // Various barriers
@@ -3288,6 +3326,14 @@ void LIRGenerator::do_Intrinsic(Intrinsic* x) {
   case vmIntrinsics::_updateBytesCRC32:
   case vmIntrinsics::_updateByteBufferCRC32:
     do_update_CRC32(x);
+    break;
+
+  case vmIntrinsics::_dgemm_dgemm:
+    do_dgemm_dgemm(x);
+    break;
+
+  case vmIntrinsics::_dgemv_dgemv:
+    do_dgemv_dgemv(x);
     break;
 
   default: ShouldNotReachHere(); break;

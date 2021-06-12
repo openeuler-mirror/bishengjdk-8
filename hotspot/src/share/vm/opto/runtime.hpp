@@ -318,6 +318,8 @@ private:
   static const TypeFunc* updateBytesCRC32_Type();
 
   static const TypeFunc* ddotF2jBLAS_Type();
+  static const TypeFunc* dgemmDgemm_Type();
+  static const TypeFunc* dgemvDgemv_Type();
 
   // leaf on stack replacement interpreter accessor types
   static const TypeFunc* osr_end_Type();

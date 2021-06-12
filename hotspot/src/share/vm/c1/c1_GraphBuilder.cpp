@@ -3672,6 +3672,20 @@ bool GraphBuilder::try_inline_intrinsics(ciMethod* callee) {
     case vmIntrinsics::_fullFence :
       break;
 
+    case vmIntrinsics::_dgemm_dgemm:
+      if (!UseF2jBLASIntrinsics || (StubRoutines::dgemmDgemm() == NULL)) {
+        return false;
+      }
+      cantrap = false;
+      preserves_state = true;
+      break;
+
+    case vmIntrinsics::_dgemv_dgemv:
+      if (!UseF2jBLASIntrinsics || (StubRoutines::dgemvDgemv() == NULL)) return false;
+      cantrap = false;
+      preserves_state = true;
+      break;
+
     default                       : return false; // do not inline
   }
   // create intrinsic node

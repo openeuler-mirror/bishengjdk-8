@@ -818,7 +818,11 @@ class GraphKit : public Phase {
                           Node* parm0 = NULL, Node* parm1 = NULL,
                           Node* parm2 = NULL, Node* parm3 = NULL,
                           Node* parm4 = NULL, Node* parm5 = NULL,
-                          Node* parm6 = NULL, Node* parm7 = NULL);
+                          Node* parm6 = NULL, Node* parm7 = NULL,
+                          Node* parm8 = NULL, Node* parm9 = NULL,
+                          Node* parm10 = NULL, Node* parm11 = NULL,
+                          Node* parm12 = NULL, Node* parm13 = NULL,
+                          Node* parm14 = NULL, Node* parm15 = NULL);
   enum {  // flag values for make_runtime_call
     RC_NO_FP = 1,               // CallLeafNoFPNode
     RC_NO_IO = 2,               // do not hook IO edges

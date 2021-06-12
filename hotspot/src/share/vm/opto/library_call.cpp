@@ -336,6 +336,8 @@ class LibraryCallKit : public GraphKit {
   bool inline_montgomeryMultiply();
   bool inline_montgomerySquare();
   bool inline_ddotF2jBLAS();
+  bool inline_dgemmDgemm();
+  bool inline_dgemvDgemv();
 
   bool inline_profileBoolean();
 };
@@ -589,6 +591,8 @@ CallGenerator* Compile::make_vm_intrinsic(ciMethod* m, bool is_virtual) {
     break;
 
   case vmIntrinsics::_f2jblas_ddot:
+  case vmIntrinsics::_dgemm_dgemm:
+  case vmIntrinsics::_dgemv_dgemv:
     if (!UseF2jBLASIntrinsics) return NULL;
     break;
 
@@ -988,9 +992,13 @@ bool LibraryCallKit::try_to_inline(int predicate) {
 
   case vmIntrinsics::_profileBoolean:
     return inline_profileBoolean();
+
   case vmIntrinsics::_f2jblas_ddot:
     return inline_ddotF2jBLAS();
-
+  case vmIntrinsics::_dgemm_dgemm:
+    return inline_dgemmDgemm();
+  case vmIntrinsics::_dgemv_dgemv:
+    return inline_dgemvDgemv();
   default:
     // If you get here, it may be that someone has added a new intrinsic
     // to the list in vmSymbols.hpp without implementing it here.
@@ -6350,6 +6358,144 @@ bool LibraryCallKit::inline_ddotF2jBLAS() {
                            n, dx_start, incx, dy_start, incy);
   Node* result = _gvn.transform(new (C) ProjNode(call, TypeFunc::Parms));
   set_result(result);
+  return true;
+}
+
+/**
+ * double org.netlib.blas.Dgemm.dgemm(java.lang.String transa,
+ *                                    java.lang.String transb, int m, int n, int k,
+ *                                    double alpha, double[] a, int offset_a, int lda,
+ *                                    double[] b, int offset_b, int ldb, double beta,
+ *                                    double[] c, int offset_c, int Ldc)
+ */
+bool LibraryCallKit::inline_dgemmDgemm() {
+  assert(callee()->signature()->count() == 16, "Dgemm.dgemm has 16 parameters");
+
+  address stubAddr = StubRoutines::dgemmDgemm();
+  if (stubAddr == NULL) return false;
+
+  Node* transa = argument(0);
+  Node* transb = argument(1);
+  Node* m = argument(2);
+  Node* n = argument(3);
+  Node* k = argument(4);
+  Node* alpha = round_double_node(argument(5));
+  Node* a = argument(7);
+  Node* a_offset = argument(8);
+  Node* lda = argument(9);
+  Node* b = argument(10);
+  Node* b_offset = argument(11);
+  Node* ldb = argument(12);
+  Node* beta = round_double_node(argument(13));
+  Node* c = argument(15);
+  Node* c_offset = argument(16);
+  Node* ldc = argument(17);
+
+  const Type* a_type = a->Value(&_gvn);
+  const Type* b_type = b->Value(&_gvn);
+  const Type* c_type = c->Value(&_gvn);
+  const TypeAryPtr* a_base_type = a_type->isa_aryptr();
+  const TypeAryPtr* b_base_type = b_type->isa_aryptr();
+  const TypeAryPtr* c_base_type = c_type->isa_aryptr();
+  if (a_base_type == NULL || b_base_type == NULL || c_base_type == NULL) return false;
+
+  ciKlass* a_klass = a_base_type->klass();
+  ciKlass* b_klass = b_base_type->klass();
+  ciKlass* c_klass = c_base_type->klass();
+  if (a_klass == NULL || b_klass == NULL || c_klass == NULL) return false;
+
+  BasicType a_elem_type = a_klass->as_array_klass()->element_type()->basic_type();
+  BasicType b_elem_type = b_klass->as_array_klass()->element_type()->basic_type();
+  BasicType c_elem_type = a_klass->as_array_klass()->element_type()->basic_type();
+  if (a_elem_type != T_DOUBLE || b_elem_type != T_DOUBLE || c_elem_type != T_DOUBLE) return false;
+
+  // get array a/b/c's addr
+  Node* a_start = array_element_address(a, a_offset, a_elem_type);
+  Node* b_start = array_element_address(b, b_offset, b_elem_type);
+  Node* c_start = array_element_address(c, c_offset, c_elem_type);
+
+  // Get start addr of string
+  Node* transa_value   = load_String_value(NULL, transa);
+  Node* transa_offset  = load_String_offset(NULL, transa);
+  Node* transa_start   = array_element_address(transa_value, transa_offset, T_CHAR);
+  Node* transb_value   = load_String_value(NULL, transb);
+  Node* transb_offset  = load_String_offset(NULL, transb);
+  Node* transb_start   = array_element_address(transb_value, transb_offset, T_CHAR);
+
+  const char *stubName = "dgemm_dgemm";
+  make_runtime_call(RC_LEAF, OptoRuntime::dgemmDgemm_Type(),
+                            stubAddr, stubName, TypePtr::BOTTOM,
+                            transa_start, transb_start, m, n, k, alpha, top(),
+                            a_start, lda, b_start, ldb, beta, top(), c_start, ldc);
+
+  return true;
+}
+
+/**
+ * void org.netlib.blas.Dgemv.dgemv(string trans, int m, int n, double alpha,
+ *                                  double[] a, int _a_offset, int lda,
+ *                                  double[] x, int _x_offset, int incx, double beta,
+ *                                  double[] y, int _y_offset, int incy)
+ */
+bool LibraryCallKit::inline_dgemvDgemv() {
+  assert(callee()->signature()->count() == 14, "F2jBLAS.dgemv has 14 parameters");
+  Node* trans = argument(0);
+  Node* m = argument(1);
+  Node* n = argument(2);
+  Node* alpha = round_double_node(argument(3));
+  Node* a = argument(5);
+  Node* a_offset = argument(6);
+  Node* lda = argument(7);
+  Node* x = argument(8);
+  Node* x_offset = argument(9);
+  Node* incx = argument(10);
+  Node* beta = round_double_node(argument(11));
+  Node* y = argument(13);
+  Node* y_offset = argument(14);
+  Node* incy = argument(15);
+
+  const Type* a_type = a->Value(&_gvn);
+  const Type* x_type = x->Value(&_gvn);
+  const Type* y_type = y->Value(&_gvn);
+  const TypeAryPtr* a_base_type = a_type->isa_aryptr();
+  const TypeAryPtr* x_base_type = x_type->isa_aryptr();
+  const TypeAryPtr* y_base_type = y_type->isa_aryptr();
+  if (a_base_type == NULL || x_base_type == NULL || y_base_type == NULL) return false;
+
+  ciKlass* a_klass = a_base_type->klass();
+  ciKlass* x_klass = x_base_type->klass();
+  ciKlass* y_klass = y_base_type->klass();
+
+  if (a_klass == NULL || x_klass == NULL || y_klass == NULL) return false;
+
+  BasicType a_elem_type = a_klass->as_array_klass()->element_type()->basic_type();
+  BasicType x_elem_type = x_klass->as_array_klass()->element_type()->basic_type();
+  BasicType y_elem_type = y_klass->as_array_klass()->element_type()->basic_type();
+
+  if (a_elem_type != T_DOUBLE || x_elem_type != T_DOUBLE || y_elem_type != T_DOUBLE) return false;
+
+
+  address stubAddr = StubRoutines::dgemvDgemv();
+  if (stubAddr == NULL) return false;
+
+  // 'a_start' points to array a + scaled offset
+  Node* a_start = array_element_address(a, a_offset, a_elem_type);
+  // 'x_start' points to array x + scaled offset
+  Node* x_start = array_element_address(x, x_offset, x_elem_type);
+  // 'y_start' points to array y + scaled offset
+  Node* y_start = array_element_address(y, y_offset, y_elem_type);
+
+  Node* no_ctrl = NULL;
+
+  // get start addr of string
+  Node* trans_value   = load_String_value(no_ctrl, trans);
+  Node* trans_offset  = load_String_offset(no_ctrl, trans);
+  Node* trans_start   = array_element_address(trans_value, trans_offset, T_CHAR);
+
+  const char *stubName = "dgemv_dgemv";
+  Node* call = make_runtime_call(RC_LEAF, OptoRuntime::dgemvDgemv_Type(), stubAddr, stubName,
+                                 TypePtr::BOTTOM, trans_start, m, n, alpha, top(), a_start,
+                                 lda, x_start, incx, beta, top(), y_start, incy);
   return true;
 }
 

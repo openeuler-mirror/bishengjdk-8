@@ -85,8 +85,6 @@ void InterpreterCodelet::print_on(outputStream* st) const {
 // Implementation of  platform independent aspects of Interpreter
 
 void AbstractInterpreter::initialize() {
-  if (_code != NULL) return;
-
   // make sure 'imported' classes are initialized
   if (CountBytecodes || TraceBytecodes || StopInterpreterAt) BytecodeCounter::reset();
   if (PrintBytecodeHistogram)                                BytecodeHistogram::reset();
@@ -114,8 +112,22 @@ void AbstractInterpreter::print() {
 }
 
 
-void interpreter_init() {
-  Interpreter::initialize();
+// The reason that interpreter initialization is split into two parts is that the first part
+// needs to run before methods are loaded (which with CDS implies linked also), and the other
+// part needs to run after. The reason is that when methods are loaded (with CDS) or linked
+// (without CDS), the i2c adapters are generated that assert we are currently in the interpreter.
+// Asserting that requires knowledge about where the interpreter is in memory. Therefore,
+// establishing the interpreter address must be done before methods are loaded. However,
+// we would like to actually generate the interpreter after methods are loaded. That allows
+// us to remove otherwise hardcoded offsets regarding fields that are needed in the interpreter
+// code. This leads to a split if 1. reserving the memory for the interpreter, 2. loading methods
+// and 3. generating the interpreter.
+void interpreter_init_stub() {
+  Interpreter::initialize_stub();
+}
+
+void interpreter_init_code() {
+  Interpreter::initialize_code();
 #ifndef PRODUCT
   if (TraceBytecodes) BytecodeTracer::set_closure(BytecodeTracer::std_closure());
 #endif // PRODUCT
@@ -251,6 +263,13 @@ AbstractInterpreter::MethodKind AbstractInterpreter::method_kind(methodHandle m)
                                 return java_lang_ref_reference_get;
   }
 
+  if (UseF2jBLASIntrinsics) {
+    switch (m->intrinsic_id()) {
+      case vmIntrinsics::_dgemm_dgemm: return org_netlib_blas_Dgemm_dgemm;
+      case vmIntrinsics::_dgemv_dgemv: return org_netlib_blas_Dgemv_dgemv;
+    }
+  }
+
   // Accessor method?
   if (m->is_accessor()) {
     assert(m->size_of_parameters() == 1, "fast code for accessors assumes parameter size = 1");
@@ -311,6 +330,8 @@ void AbstractInterpreter::print_method_kind(MethodKind kind) {
     case java_util_zip_CRC32_update           : tty->print("java_util_zip_CRC32_update"); break;
     case java_util_zip_CRC32_updateBytes      : tty->print("java_util_zip_CRC32_updateBytes"); break;
     case java_util_zip_CRC32_updateByteBuffer : tty->print("java_util_zip_CRC32_updateByteBuffer"); break;
+    case org_netlib_blas_Dgemm_dgemm : tty->print("org_netlib_blas_Dgemm_dgemm"); break;
+    case org_netlib_blas_Dgemv_dgemv : tty->print("org_netlib_blas_Dgemv_dgemv"); break;
     default:
       if (kind >= method_handle_invoke_FIRST &&
           kind <= method_handle_invoke_LAST) {

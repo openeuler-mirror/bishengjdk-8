@@ -919,6 +919,126 @@ void LIRGenerator::do_MathIntrinsic(Intrinsic* x) {
   }
 }
 
+void LIRGenerator::do_dgemm_dgemm(Intrinsic* x) {
+  assert(x->number_of_arguments() == 16, "wrong type");
+
+  LIRItem ta(x->argument_at(0), this);
+  LIRItem tb(x->argument_at(1), this);
+  LIRItem m(x->argument_at(2), this);
+  LIRItem n(x->argument_at(3), this);
+  LIRItem k(x->argument_at(4), this);
+  LIRItem alpha(x->argument_at(5), this);
+  LIRItem a(x->argument_at(6), this);
+  LIRItem a_offset(x->argument_at(7), this);
+  LIRItem lda(x->argument_at(8), this);
+  LIRItem b(x->argument_at(9), this);
+  LIRItem b_offset(x->argument_at(10), this);
+  LIRItem ldb(x->argument_at(11), this);
+  LIRItem beta(x->argument_at(12), this);
+  LIRItem c(x->argument_at(13), this);
+  LIRItem c_offset(x->argument_at(14), this);
+  LIRItem ldc(x->argument_at(15), this);
+
+  ta.load_item();
+  tb.load_item();
+  m.load_item();
+  n.load_item();
+  k.load_item();
+  alpha.load_item();
+  a.load_item();
+  a_offset.load_nonconstant();
+  lda.load_item();
+  b.load_item();
+  b_offset.load_nonconstant();
+  ldb.load_item();
+  beta.load_item();
+  c.load_item();
+  c_offset.load_nonconstant();
+  ldc.load_item();
+
+  LIR_Opr ta_base = ta.result();
+  LIR_Opr tb_base = tb.result();
+  LIR_Opr r_m = m.result();
+  LIR_Opr r_n = n.result();
+  LIR_Opr r_k = k.result();
+  LIR_Opr r_alpha = alpha.result();
+  LIR_Opr a_base = a.result();
+  LIR_Opr r_a_offset = a_offset.result();
+  LIR_Opr r_lda = lda.result();
+  LIR_Opr b_base = b.result();
+  LIR_Opr r_b_offset = b_offset.result();
+  LIR_Opr r_ldb = ldb.result();
+  LIR_Opr r_beta = beta.result();
+  LIR_Opr c_base = c.result();
+  LIR_Opr r_c_offset = c_offset.result();
+  LIR_Opr r_ldc = ldc.result();
+
+  LIR_Opr ta_value = load_String_value(ta_base);
+  LIR_Opr ta_offset = load_String_offset(ta_base);
+  LIR_Opr tb_value = load_String_value(tb_base);
+  LIR_Opr tb_offset = load_String_offset(tb_base);
+
+  LIR_Address* addr_ta = emit_array_address(ta_value, ta_offset, T_CHAR, false);
+  LIR_Address* addr_tb = emit_array_address(tb_value, tb_offset, T_CHAR, false);
+  LIR_Address* addr_a = emit_array_address(a_base, r_a_offset, T_DOUBLE, false);
+  LIR_Address* addr_b = emit_array_address(b_base, r_b_offset, T_DOUBLE, false);
+  LIR_Address* addr_c = emit_array_address(c_base, r_c_offset, T_DOUBLE, false);
+
+  LIR_Opr tmp = new_pointer_register();
+  LIR_Opr ta_addr = new_register(T_ADDRESS);
+  __ leal(LIR_OprFact::address(addr_ta), tmp);
+  __ move(tmp, ta_addr);
+  tmp = new_pointer_register();
+  LIR_Opr tb_addr = new_register(T_ADDRESS);
+  __ leal(LIR_OprFact::address(addr_tb), tmp);
+  __ move(tmp, tb_addr);
+  tmp = new_pointer_register();
+  LIR_Opr a_addr = new_register(T_ADDRESS);
+  __ leal(LIR_OprFact::address(addr_a), tmp);
+  __ move(tmp, a_addr);
+  tmp = new_pointer_register();
+  LIR_Opr b_addr = new_register(T_ADDRESS);
+  __ leal(LIR_OprFact::address(addr_b), tmp);
+  __ move(tmp, b_addr);
+  tmp = new_pointer_register();
+  LIR_Opr c_addr = new_register(T_ADDRESS);
+  __ leal(LIR_OprFact::address(addr_c), tmp);
+  __ move(tmp, c_addr);
+
+  BasicTypeList signature(13);
+  signature.append(T_ADDRESS);
+  signature.append(T_ADDRESS);
+  signature.append(T_INT);
+  signature.append(T_INT);
+  signature.append(T_INT);
+  signature.append(T_DOUBLE);
+  signature.append(T_ADDRESS);
+  signature.append(T_INT);
+  signature.append(T_ADDRESS);
+  signature.append(T_INT);
+  signature.append(T_DOUBLE);
+  signature.append(T_ADDRESS);
+  signature.append(T_INT);
+
+  LIR_OprList* args = new LIR_OprList();
+  args->append(ta_addr);
+  args->append(tb_addr);
+  args->append(r_m);
+  args->append(r_n);
+  args->append(r_k);
+  args->append(r_alpha);
+  args->append(a_addr);
+  args->append(r_lda);
+  args->append(b_addr);
+  args->append(r_ldb);
+  args->append(r_beta);
+  args->append(c_addr);
+  args->append(r_ldc);
+
+  assert(StubRoutines::dgemmDgemm() != NULL, "invalid stub entry");
+  call_runtime(&signature, args, StubRoutines::dgemmDgemm(), voidType, NULL);
+  set_no_result(x);
+}
 
 void LIRGenerator::do_ArrayCopy(Intrinsic* x) {
   assert(x->number_of_arguments() == 5, "wrong type");
@@ -1036,6 +1156,114 @@ void LIRGenerator::do_update_CRC32(Intrinsic* x) {
       ShouldNotReachHere();
     }
   }
+}
+
+void LIRGenerator::do_dgemv_dgemv(Intrinsic* x) {
+  assert(x->number_of_arguments() == 14, "wrong type");
+
+  LIRItem trans(x->argument_at(0), this);
+  LIRItem m(x->argument_at(1), this);
+  LIRItem n(x->argument_at(2), this);
+  LIRItem alpha(x->argument_at(3), this);
+  LIRItem array_a(x->argument_at(4), this);
+  LIRItem array_a_offset(x->argument_at(5), this);
+  LIRItem lda(x->argument_at(6), this);
+  LIRItem array_x(x->argument_at(7), this);
+  LIRItem array_x_offset(x->argument_at(8), this);
+  LIRItem incx(x->argument_at(9), this);
+  LIRItem beta(x->argument_at(10), this);
+  LIRItem array_y(x->argument_at(11), this);
+  LIRItem array_y_offset(x->argument_at(12), this);
+  LIRItem incy(x->argument_at(13), this);
+
+  trans.load_item();
+  m.load_item();
+  n.load_item();
+  alpha.load_item();
+  array_a.load_item();
+  array_a_offset.load_nonconstant();
+  lda.load_item();
+  array_x.load_item();
+  array_x_offset.load_nonconstant();
+  incx.load_item();
+  beta.load_item();
+  array_y.load_item();
+  array_y_offset.load_nonconstant();
+  incy.load_item();
+
+  LIR_Opr res_trans_base = trans.result();
+  LIR_Opr res_m = m.result();
+  LIR_Opr res_n = n.result();
+  LIR_Opr res_alpha = alpha.result();
+  LIR_Opr res_a_base = array_a.result();
+  LIR_Opr res_a_offset = array_a_offset.result();
+  LIR_Opr res_lda = lda.result();
+  LIR_Opr res_x_base = array_x.result();
+  LIR_Opr res_x_offset = array_x_offset.result();
+  LIR_Opr res_incx = incx.result();
+  LIR_Opr res_beta = beta.result();
+  LIR_Opr res_y_base = array_y.result();
+  LIR_Opr res_y_offset = array_y_offset.result();
+  LIR_Opr res_incy = incy.result();
+
+  LIR_Opr addr_trans_base = LIRGenerator::load_String_value(res_trans_base);
+  LIR_Opr addr_trans_offset = LIRGenerator::load_String_offset(res_trans_base);
+  LIR_Address* addr_trans = emit_array_address(addr_trans_base, addr_trans_offset, T_CHAR, false);
+
+  LIR_Address* addr_a = emit_array_address(res_a_base, res_a_offset, T_DOUBLE, false);
+  LIR_Address* addr_x = emit_array_address(res_x_base, res_x_offset, T_DOUBLE, false);
+  LIR_Address* addr_y = emit_array_address(res_y_base, res_y_offset, T_DOUBLE, false);
+
+  // load addr to register
+  LIR_Opr tmp = new_pointer_register();
+  LIR_Opr trans_addr = new_register(T_ADDRESS);
+  __ leal(LIR_OprFact::address(addr_trans), tmp);
+  __ move(tmp, trans_addr);
+
+  LIR_Opr tmp1 = new_pointer_register();
+  LIR_Opr a_addr = new_register(T_ADDRESS);
+  __ leal(LIR_OprFact::address(addr_a), tmp1);
+  __ move(tmp1, a_addr);
+
+  LIR_Opr tmp2 = new_pointer_register();
+  LIR_Opr x_addr = new_register(T_ADDRESS);
+  __ leal(LIR_OprFact::address(addr_x), tmp2);
+  __ move(tmp2, x_addr);
+
+  LIR_Opr tmp3 = new_pointer_register();
+  LIR_Opr y_addr = new_register(T_ADDRESS);
+  __ leal(LIR_OprFact::address(addr_y), tmp3);
+  __ move(tmp3, y_addr);
+
+  BasicTypeList signature(11);
+  signature.append(T_ADDRESS);
+  signature.append(T_INT);
+  signature.append(T_INT);
+  signature.append(T_DOUBLE);
+  signature.append(T_ADDRESS);
+  signature.append(T_INT);
+  signature.append(T_ADDRESS);
+  signature.append(T_INT);
+  signature.append(T_DOUBLE);
+  signature.append(T_ADDRESS);
+  signature.append(T_INT);
+
+  LIR_OprList* args = new LIR_OprList();
+  args->append(trans_addr);
+  args->append(res_m);
+  args->append(res_n);
+  args->append(res_alpha);
+  args->append(a_addr);
+  args->append(res_lda);
+  args->append(x_addr);
+  args->append(res_incx);
+  args->append(res_beta);
+  args->append(y_addr);
+  args->append(res_incy);
+
+  assert(StubRoutines::dgemvDgemv() != NULL, "invalid stub entry");
+  call_runtime(&signature, args, StubRoutines::dgemvDgemv(), voidType, NULL);
+  set_no_result(x);
 }
 
 // _i2l, _i2f, _i2d, _l2i, _l2f, _l2d, _f2i, _f2l, _f2d, _d2i, _d2l, _d2f

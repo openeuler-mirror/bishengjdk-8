@@ -3221,6 +3221,44 @@ class StubGenerator: public StubCodeGenerator {
     return start;
   }
 
+  address load_BLAS_library() {
+    // Try to load BLAS library.
+    const char library_name[] = "openblas";
+    char err_buf[1024] = {0};
+    char path[JVM_MAXPATHLEN] = {0};
+    os::jvm_path(path, sizeof(path));
+    int jvm_offset = -1;
+
+    // Match "jvm[^/]*" in jvm_path.
+    const char* last_name = strrchr(path, '/');
+    last_name = last_name ? last_name : path;
+    const char* last_lib_name = strstr(last_name, "jvm");
+    if (last_lib_name != NULL) {
+      jvm_offset = last_lib_name - path;
+    }
+
+    address library = NULL;
+    // Find the BLAS shared library.
+    // Search path: <home>/jre/lib/<arch>/<vm>/libopenblas.so
+    if (jvm_offset >= 0) {
+      if (jvm_offset + strlen(library_name) + strlen(os::dll_file_extension()) < JVM_MAXPATHLEN) {
+        strncpy(&path[jvm_offset], library_name, strlen(library_name));
+        strncat(&path[jvm_offset], os::dll_file_extension(), strlen(os::dll_file_extension()));
+        library = (address)os::dll_load(path, err_buf, sizeof(err_buf));
+      }
+    }
+    return library;
+  }
+
+  address get_BLAS_func_entry(address library, const char* func_name) {
+    if (library == NULL) {
+        return NULL;
+    }
+
+    // Try to find BLAS function entry.
+    return (address)os::dll_lookup((void*)library, func_name);
+  }
+
   /**
    *  Arguments:
    *
@@ -3253,6 +3291,218 @@ class StubGenerator: public StubCodeGenerator {
 
     return start;
   }
+
+  // Parameter conversion from JVM to native BLAS
+  //
+  // Register:
+  // r0: transa                         r0: transa
+  // r1: transb                         r1: transb
+  // r2: m                              r2: &m
+  // r3: n                              r3: &n
+  // r4: k            =========>        r4: &k
+  // r5: A                              r5: &alpha
+  // r6: lda                            r6: A
+  // r7: B                              r7: &lda
+  // v0: alpha
+  // v1: beta
+  //
+  // Stack:
+  // |-------|                          |-------|
+  // | ldc   |                          | ldc   |
+  // |-------|                          |-------|
+  // | C     |                          | C     |
+  // |-------|                          |-------|
+  // | ldb   |                          | ldb   |
+  // |-------| <-- sp                   |-------|
+  // |       |                          | m     |
+  // |-------|                          |-------|
+  // |       |                          | n     |
+  // |-------|                          |-------|
+  // |       |                          | k     |
+  // |-------|                          |-------|
+  // |       |                          | lda   |
+  // |-------|                          |-------|
+  // |       |                          | alpha |
+  // |-------|                          |-------|
+  // |       |                          | beta  |
+  // |-------|        =========>        |-------|
+  // |       |                          | lr    |
+  // |-------|                          |-------|
+  // |       |                          | rfp   |
+  // |-------|                          |-------| <-- fp
+  // | ...   |                          | ...   |
+  // |-------|                          |-------|
+  // |       |                          | &ldc  |
+  // |-------|                          |-------|
+  // |       |                          | C     |
+  // |-------|                          |-------|
+  // |       |                          | &bata |
+  // |-------|                          |-------|
+  // |       |                          | &ldb  |
+  // |-------|                          |-------|
+  // |       |                          | B     |
+  // |-------|                          |-------| <-- sp
+  address generate_dgemmDgemm(address library) {
+    __ align(CodeEntryAlignment);
+    StubCodeMark mark(this, "StubRoutines", "dgemm_dgemm");
+
+    address fn = get_BLAS_func_entry(library, "dgemm_");
+    if (fn == NULL) return NULL;
+
+    address start = __ pc();
+
+    const Register transa       = c_rarg0;
+    const Register transb       = c_rarg1;
+    const Register m            = c_rarg2;
+    const Register n            = c_rarg3;
+    const Register k            = c_rarg4;
+    const FloatRegister alpha   = c_farg0;
+    const Register A            = c_rarg5;
+    const Register lda          = c_rarg6;
+    const Register B            = c_rarg7;
+    const FloatRegister beta    = c_farg1;
+
+    BLOCK_COMMENT("Entry:");
+
+    // extend stack
+    __ sub(sp, sp, 0x60);
+    __ stp(rfp, lr, Address(sp, 48));
+    __ add(rfp, sp, 0x30);
+    // load BLAS function entry
+    __ mov(rscratch1, fn);
+    // C
+    __ ldr(rscratch2, Address(rfp, 56));
+    // store m / n to stack
+    __ stpw(n, m, Address(rfp, 40));
+    // &beta
+    __ add(r2, rfp, 0x10);
+    // store k / lda to stack
+    __ stpw(lda, k, Address(rfp, 32));
+    // load ldc
+    __ add(r3, rfp, 0x40);
+    // store C / &beta
+    __ stp(r2, rscratch2, Address(sp, 16));
+    // &ldb
+    __ add(r2, rfp, 0x30);
+    // store B
+    __ str(B, Address(sp));
+    // move A from r5 to r6
+    __ mov(r6, A);
+    // store ldc
+    __ str(r3, Address(sp, 32));
+    // &alpha
+    __ add(r5, rfp, 0x18);
+    // store &ldb
+    __ str(r2, Address(sp, 8));
+    // &k
+    __ add(r4, rfp, 0x24);
+    // store alpha / beta
+    __ stpd(beta, alpha, Address(rfp, 16));
+    // load &lda to r7
+    __ add(r7, rfp, 0x20);
+    // load &n
+    __ add(r3, rfp, 0x28);
+    // load &m
+    __ add(r2, rfp, 0x2c);
+    // call dgemm
+    __ blr(rscratch1);
+
+    // restore rfp and lr
+    __ ldp(rfp, lr, Address(sp, 48));
+    // exit stack
+    __ add(sp, sp, 0x60);
+    __ ret(lr);
+
+    return start;
+  }
+
+  /**
+   *  public void dgemv(String trans, int m, int n,
+   *                    double alpha, double[] a, int lda,
+   *                    double[] x, int incx,
+   *                    double beta, double[] y, int incy)
+   *
+   *  Arguments:
+   *
+   *  Inputs:
+   *   c_rarg0         - char* trans
+   *   c_rarg1         - int m
+   *   c_rarg2         - int n
+   *   d0/c_farg0      - double alpha
+   *   c_rarg3         - double[] a
+   *   c_rarg4         - int lda
+   *   c_rarg5         - double[] x
+   *   c_rarg6         - int incx
+   *   d1/c_farg1      - double beta
+   *   c_rarg7         - double[] y
+   *   [sp]            - int incy
+   *
+   *  Output:
+   *       null
+   *
+   */
+
+  address generate_dgemvDgemv(address library) {
+    __ align(CodeEntryAlignment);
+    StubCodeMark mark(this, "StubRoutines", "dgemv_dgemv");
+
+    address fn = get_BLAS_func_entry(library, "dgemv_");
+    if (fn == NULL) return NULL;
+
+    address start = __ pc();
+    BLOCK_COMMENT("Entry: ");
+
+    Register trans = c_rarg0;
+    Register m = c_rarg1;
+    Register n = c_rarg2;
+    Register a = c_rarg3;
+    Register lda = c_rarg4;
+    Register x = c_rarg5;
+    Register incx = c_rarg6;
+    Register y = c_rarg7;
+
+    FloatRegister alpha = c_farg0;
+    FloatRegister beta = c_farg1;
+
+    __ sub(sp, sp, 0x50);
+    __ stp(rfp, lr, Address(sp, 32));
+    __ add(rfp, sp, 0x20);
+
+    // no need for saving trans to tmp register, keep it in register x0
+    __ strw(m, Address(rfp, 44));
+    __ strw(n, Address(rfp, 40));
+    __ strd(alpha, Address(rfp, 32));
+    __ strw(lda, Address(rfp, 28));
+    __ strw(incx, Address(rfp, 24));
+    __ strd(beta, Address(rfp, 16));
+
+    // pre call
+    // load incy and push on stack, order incy --> y --> beta
+    __ add(r1, rfp, 0x30);
+    __ str(r1, Address(sp, 16));
+    __ str(y, Address(sp, 8));
+    __ add(r1, rfp, 0x10);
+    __ str(r1, Address(sp));
+
+    __ add(r7, rfp, 0x18);
+    __ mov(r6, x);
+    __ add(r5, rfp, 0x1c);
+    __ mov(r4, a);
+    __ add(r3, rfp, 0x20);
+    __ add(r2, rfp, 0x28);
+    __ add(r1, rfp, 0x2c);
+
+    __ mov(rscratch1, fn);
+    __ blr(rscratch1);
+
+    __ ldp(rfp, lr, Address(sp, 32));
+    __ add(sp, sp, 0x50);
+    __ ret(lr);
+
+    return start;
+  }
+
+
 
   /**
    *  Arguments:
@@ -4252,6 +4502,14 @@ class StubGenerator: public StubCodeGenerator {
       StubRoutines::_crc_table_adr = (address)StubRoutines::aarch64::_crc_table;
       StubRoutines::_updateBytesCRC32 = generate_updateBytesCRC32();
     }
+
+    if (UseF2jBLASIntrinsics) {
+      StubRoutines::_BLAS_library = load_BLAS_library();
+      // F2jBLAS intrinsics will use the implements in BLAS dynamic library
+      StubRoutines::_ddotF2jBLAS = generate_ddotF2jBLAS();
+      StubRoutines::_dgemmDgemm = generate_dgemmDgemm(StubRoutines::_BLAS_library);
+      StubRoutines::_dgemvDgemv = generate_dgemvDgemv(StubRoutines::_BLAS_library);
+    }
   }
 
   void generate_all() {
@@ -4294,10 +4552,6 @@ class StubGenerator: public StubCodeGenerator {
       // We use generate_multiply() rather than generate_square()
       // because it's faster for the sizes of modulus we care about.
       StubRoutines::_montgomerySquare = g.generate_multiply();
-    }
-
-    if (UseF2jBLASIntrinsics) {
-      StubRoutines::_ddotF2jBLAS = generate_ddotF2jBLAS();
     }
 
     if (UseAESIntrinsics) {

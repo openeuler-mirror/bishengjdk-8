@@ -896,6 +896,13 @@ void LIRGenerator::do_MathIntrinsic(Intrinsic* x) {
   }
 }
 
+void LIRGenerator::do_dgemm_dgemm(Intrinsic* x) {
+  fatal("BLAS intrinsics are not implemented on this platform!");
+}
+
+void LIRGenerator::do_dgemv_dgemv(Intrinsic *x) {
+  fatal("Blas intrinsics are not implemented on this platform!");
+}
 
 void LIRGenerator::do_ArrayCopy(Intrinsic* x) {
   assert(x->number_of_arguments() == 5, "wrong type");

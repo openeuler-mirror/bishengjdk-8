@@ -305,6 +305,8 @@ const char* Runtime1::name_for_address(address entry) {
   FUNCTION_CASE(entry, JFR_TIME_FUNCTION);
 #endif
   FUNCTION_CASE(entry, StubRoutines::updateBytesCRC32());
+  FUNCTION_CASE(entry, StubRoutines::dgemmDgemm());
+  FUNCTION_CASE(entry, StubRoutines::dgemvDgemv());
 
 #undef FUNCTION_CASE
 
