@@ -857,6 +857,14 @@
   do_intrinsic(_f2jblas_ddot, com_github_fommil_netlib_f2jblas, ddot_name, ddot_signature, F_R)                         \
    do_name(     ddot_name,                                         "ddot")                                              \
    do_signature(ddot_signature,                                    "(I[DI[DI)D")                                        \
+  do_class(org_netlib_blas_dgemm,                       "org/netlib/blas/Dgemm")                                        \
+  do_intrinsic(_dgemm_dgemm, org_netlib_blas_dgemm, dgemm_name, dgemm_signature, F_S)                                    \
+   do_name(     dgemm_name,                                        "dgemm")                                             \
+   do_signature(dgemm_signature,                                   "(Ljava/lang/String;Ljava/lang/String;IIID[DII[DIID[DII)V")  \
+  do_class(org_netlib_blas_dgemv,                       "org/netlib/blas/Dgemv")                                        \
+  do_intrinsic(_dgemv_dgemv, org_netlib_blas_dgemv, dgemv_name, dgemv_signature, F_S)                                   \
+   do_name(     dgemv_name,                                         "dgemv")                                            \
+   do_signature(dgemv_signature,                                    "(Ljava/lang/String;IID[DII[DIID[DII)V")            \
                                                                                                                         \
   /* support for sun.security.provider.SHA2 */                                                                          \
   do_class(sun_security_provider_sha2,                             "sun/security/provider/SHA2")                        \

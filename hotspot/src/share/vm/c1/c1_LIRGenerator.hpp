@@ -210,6 +210,10 @@ class LIRGenerator: public InstructionVisitor, public BlockClosure {
   // Given an immediate value, return an operand usable in logical ops.
   LIR_Opr load_immediate(int x, BasicType type);
 
+  // Get String value and offset
+  LIR_Opr load_String_value(LIR_Opr str);
+  LIR_Opr load_String_offset(LIR_Opr str);
+
   void  set_result(Value x, LIR_Opr opr)           {
     assert(opr->is_valid(), "must set to valid value");
     assert(x->operand()->is_illegal(), "operand should never change");
@@ -251,6 +255,8 @@ class LIRGenerator: public InstructionVisitor, public BlockClosure {
   void do_FPIntrinsics(Intrinsic* x);
   void do_Reference_get(Intrinsic* x);
   void do_update_CRC32(Intrinsic* x);
+  void do_dgemm_dgemm(Intrinsic* x);
+  void do_dgemv_dgemv(Intrinsic* x);
 
   void do_UnsafePrefetch(UnsafePrefetch* x, bool is_store);
 

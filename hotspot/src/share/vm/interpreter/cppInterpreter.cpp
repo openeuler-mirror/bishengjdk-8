@@ -31,17 +31,20 @@
 #ifdef CC_INTERP
 # define __ _masm->
 
-void CppInterpreter::initialize() {
+void CppInterpreter::initialize_stub() {
   if (_code != NULL) return;
+  int code_size = InterpreterCodeSize;
+  NOT_PRODUCT(code_size *= 4;)  // debug uses extra interpreter code space
+  _code = new StubQueue(new InterpreterCodeletInterface, code_size, NULL,
+                        "Interpreter");
+}
+
+void CppInterpreter::initialize_code() {
   AbstractInterpreter::initialize();
 
   // generate interpreter
   { ResourceMark rm;
     TraceTime timer("Interpreter generation", TraceStartupTime);
-    int code_size = InterpreterCodeSize;
-    NOT_PRODUCT(code_size *= 4;)  // debug uses extra interpreter code space
-    _code = new StubQueue(new InterpreterCodeletInterface, code_size, NULL,
-                          "Interpreter");
     InterpreterGenerator g(_code);
     if (PrintInterpreter) print();
   }

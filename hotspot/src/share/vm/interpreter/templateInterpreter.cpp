@@ -32,12 +32,20 @@
 
 # define __ _masm->
 
-void TemplateInterpreter::initialize() {
+void TemplateInterpreter::initialize_stub() {
   if (_code != NULL) return;
   // assertions
   assert((int)Bytecodes::number_of_codes <= (int)DispatchTable::length,
          "dispatch table too small");
 
+  // allocate interpreter
+  int code_size = InterpreterCodeSize;
+  NOT_PRODUCT(code_size *= 4;)  // debug uses extra interpreter code space
+  _code = new StubQueue(new InterpreterCodeletInterface, code_size, NULL,
+                        "Interpreter");
+}
+
+void TemplateInterpreter::initialize_code() {
   AbstractInterpreter::initialize();
 
   TemplateTable::initialize();
@@ -45,10 +53,6 @@ void TemplateInterpreter::initialize() {
   // generate interpreter
   { ResourceMark rm;
     TraceTime timer("Interpreter generation", TraceStartupTime);
-    int code_size = InterpreterCodeSize;
-    NOT_PRODUCT(code_size *= 4;)  // debug uses extra interpreter code space
-    _code = new StubQueue(new InterpreterCodeletInterface, code_size, NULL,
-                          "Interpreter");
     InterpreterGenerator g(_code);
     if (PrintInterpreter) print();
   }
@@ -399,6 +403,11 @@ void TemplateInterpreterGenerator::generate_all() {
     method_entry(java_util_zip_CRC32_update)
     method_entry(java_util_zip_CRC32_updateBytes)
     method_entry(java_util_zip_CRC32_updateByteBuffer)
+  }
+
+  if (UseF2jBLASIntrinsics) {
+    method_entry(org_netlib_blas_Dgemm_dgemm)
+    method_entry(org_netlib_blas_Dgemv_dgemv)
   }
 
   initialize_method_handle_entries();

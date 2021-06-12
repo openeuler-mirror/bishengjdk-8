@@ -2372,7 +2372,11 @@ Node* GraphKit::make_runtime_call(int flags,
                                   Node* parm0, Node* parm1,
                                   Node* parm2, Node* parm3,
                                   Node* parm4, Node* parm5,
-                                  Node* parm6, Node* parm7) {
+                                  Node* parm6, Node* parm7,
+                                  Node* parm8, Node* parm9,
+                                  Node* parm10, Node* parm11,
+                                  Node* parm12, Node* parm13,
+                                  Node* parm14, Node* parm15) {
   // Slow-path call
   bool is_leaf = !(flags & RC_NO_LEAF);
   bool has_io  = (!is_leaf && !(flags & RC_NO_IO));
@@ -2415,7 +2419,15 @@ Node* GraphKit::make_runtime_call(int flags,
   if (parm5 != NULL) { call->init_req(TypeFunc::Parms+5, parm5);
   if (parm6 != NULL) { call->init_req(TypeFunc::Parms+6, parm6);
   if (parm7 != NULL) { call->init_req(TypeFunc::Parms+7, parm7);
-    /* close each nested if ===> */  } } } } } } } }
+  if (parm8 != NULL) { call->init_req(TypeFunc::Parms+8, parm8);
+  if (parm9 != NULL) { call->init_req(TypeFunc::Parms+9, parm9);
+  if (parm10 != NULL) { call->init_req(TypeFunc::Parms+10, parm10);
+  if (parm11 != NULL) { call->init_req(TypeFunc::Parms+11, parm11);
+  if (parm12 != NULL) { call->init_req(TypeFunc::Parms+12, parm12);
+  if (parm13 != NULL) { call->init_req(TypeFunc::Parms+13, parm13);
+  if (parm14 != NULL) { call->init_req(TypeFunc::Parms+14, parm14);
+  if (parm15 != NULL) { call->init_req(TypeFunc::Parms+15, parm15);
+    /* close each nested if ===> */  } } } } } } } } } } } } } } } }
   assert(call->in(call->req()-1) != NULL, "must initialize all parms");
 
   if (!is_leaf) {

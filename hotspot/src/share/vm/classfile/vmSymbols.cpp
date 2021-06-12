@@ -333,6 +333,8 @@ bool vmIntrinsics::should_be_pinned(vmIntrinsics::ID id) {
 #endif
   case vmIntrinsics::_currentTimeMillis:
   case vmIntrinsics::_nanoTime:
+  case vmIntrinsics::_dgemm_dgemm:
+  case vmIntrinsics::_dgemv_dgemv:
     return true;
   default:
     return false;

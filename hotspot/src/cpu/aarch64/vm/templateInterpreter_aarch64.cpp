@@ -856,6 +856,250 @@ address InterpreterGenerator::generate_CRC32_updateBytes_entry(AbstractInterpret
   return generate_native_entry(false);
 }
 
+// Access the char-array of String
+void InterpreterGenerator::load_String_value(Register src, Register dst) {
+  //  Need to cooperate with JDK-8243996
+  int value_offset = java_lang_String::value_offset_in_bytes();
+
+  __ add(src, src, value_offset);
+  __ load_heap_oop(dst, Address(src));
+}
+
+void InterpreterGenerator::load_String_offset(Register src, Register dst) {
+  __ mov(dst, 0);
+
+  // Get String value offset, because of order of initialization for Interpreter,
+  // we have to hardcode the offset for String value. (JDK-8243996)
+  if (java_lang_String::has_offset_field()) {
+    int offset_offset = java_lang_String::offset_offset_in_bytes();
+    __ add(src, src, offset_offset);
+    __ ldrw(dst, Address(src));
+  }
+}
+
+void InterpreterGenerator::emit_array_address(Register src, Register idx,
+                                              Register dst, BasicType type) {
+  int offset_in_bytes = arrayOopDesc::base_offset_in_bytes(type);
+  int elem_size = type2aelembytes(type);
+  int shift = exact_log2(elem_size);
+
+  __ lsl(idx, idx, shift);
+  __ add(idx, idx, offset_in_bytes);
+  __ add(dst, src, idx);
+}
+
+/**
+ * Stub Arguments:
+ *
+ *   c_rarg0   - char* transa
+ *   c_rarg1   - char* transb
+ *   c_rarg2   - int m
+ *   c_rarg3   - int n
+ *   c_rarg4   - int k
+ *   d0        - double alpha
+ *   c_rarg5   - double[] A
+ *   c_rarg6   - int lda
+ *   c_rarg7   - double[] B
+ *   d1        - double beta
+ *   [sp + 16] - int ldc
+ *   [sp + 8]  - double[] C
+ *   [sp]      - int ldb
+ *
+ */
+address InterpreterGenerator::generate_Dgemm_dgemm_entry() {
+  if (!UseF2jBLASIntrinsics || (StubRoutines::dgemmDgemm() == NULL)) return NULL;
+
+  address entry = __ pc();
+
+  // r13: senderSP must preserved for slow path
+
+  // Arguments are reversed on java expression stack
+  const Register ta         = c_rarg0;
+  const Register tb         = c_rarg1;
+  const Register m          = c_rarg2;
+  const Register n          = c_rarg3;
+  const Register k          = c_rarg4;
+  const FloatRegister alpha = c_farg0;
+  const Register A          = c_rarg5;
+  const Register lda        = c_rarg6;
+  const Register B          = c_rarg7;
+  const FloatRegister beta  = c_farg1;
+  const Register tmp1       = rscratch1;
+  const Register tmp2       = rscratch2;
+
+  // trana
+  __ ldr(ta, Address(esp, 17 * wordSize));
+  load_String_value(ta, tmp1);
+  load_String_offset(ta, tmp2);
+  emit_array_address(tmp1, tmp2, ta, T_CHAR);
+  // tranb
+  __ ldr(tb, Address(esp, 16 * wordSize));
+  load_String_value(tb, tmp1);
+  load_String_offset(tb, tmp2);
+  emit_array_address(tmp1, tmp2, tb, T_CHAR);
+  // m, n, k
+  __ ldrw(m, Address(esp, 15 * wordSize));
+  __ ldrw(n, Address(esp, 14 * wordSize));
+  __ ldrw(k, Address(esp, 13 * wordSize));
+  // alpha
+  __ ldrd(alpha, Address(esp, 11 * wordSize));
+  // A
+  __ ldr(tmp1, Address(esp, 10 * wordSize));
+  __ mov(tmp2, 0);
+  __ ldrw(tmp2, Address(esp, 9 * wordSize));
+  emit_array_address(tmp1, tmp2, A, T_DOUBLE);
+  // lda
+  __ ldrw(lda, Address(esp, 8 * wordSize));
+  // B
+  __ ldr(tmp1, Address(esp, 7 * wordSize));
+  __ ldrw(tmp2, Address(esp, 6 * wordSize));
+  emit_array_address(tmp1, tmp2, B, T_DOUBLE);
+  // beta
+  __ ldrd(beta, Address(esp, 3 * wordSize));
+  // Start pushing arguments to machine stack.
+  //
+  // Remove the incoming args, peeling the machine SP back to where it
+  // was in the caller.  This is not strictly necessary, but unless we
+  // do so the stack frame may have a garbage FP; this ensures a
+  // correct call stack that we can always unwind.  The ANDR should be
+  // unnecessary because the sender SP in r13 is always aligned, but
+  // it doesn't hurt.
+  __ andr(sp, r13, -16);
+  __ str(lr, Address(sp, -wordSize));
+  // ldc
+  __ ldrw(tmp1, Address(esp, 0x0));
+  __ strw(tmp1, Address(sp, 2 * -wordSize));
+  // C
+  __ ldr(tmp1, Address(esp, 2 * wordSize));
+  __ ldrw(tmp2, Address(esp, wordSize));
+  emit_array_address(tmp1, tmp2, tmp1, T_DOUBLE);
+  __ str(tmp1, Address(sp, 3 * -wordSize));
+  // ldb
+  __ ldrw(tmp2, Address(esp, 5 * wordSize));
+  __ strw(tmp2, Address(sp, 4 * -wordSize));
+
+  // Call function
+  __ add(sp, sp, 4 * -wordSize);
+  address fn = CAST_FROM_FN_PTR(address, StubRoutines::dgemmDgemm());
+  __ mov(tmp1, fn);
+  __ blr(tmp1);
+
+  __ ldr(lr, Address(sp, 3 * wordSize));
+  // For assert(Rd != sp || imm % 16 == 0)
+  __ add(sp, sp, 4 * wordSize);
+  __ br(lr);
+
+  return entry;
+}
+
+address InterpreterGenerator::generate_Dgemv_dgemv_entry() {
+  if (StubRoutines::dgemvDgemv() == NULL) return NULL;
+  address entry = __ pc();
+
+  const Register trans = c_rarg0;              // trans
+  const Register m = c_rarg1;                  // m
+  const Register n = c_rarg2;                  // n
+  const Register a = c_rarg3;                  // array a addr
+  const Register lda = c_rarg4;                // lda
+  const Register x = c_rarg5;                  // array x addr
+  const Register incx = c_rarg6;               // incx
+  const Register y = c_rarg7;                  // array y addr
+
+  const FloatRegister alpha = v0;              // alpha
+  const FloatRegister beta = v1;               // beta
+
+  const Register tmp1 = rscratch1;
+  const Register tmp2 = rscratch2;
+
+  // esp: expression stack of caller
+  // dgemv parameter ---> the position in stack ---> move to register
+  // | char* trans  |        | esp + 15 |                |  r0  |
+  // | int m        |        | esp + 14 |                |  r1  |
+  // | int n        |        | esp + 13 |                |  r2  |
+  // | double alpha |        | esp + 11 |                |  v0  |
+  // ----------------        ------------                --------
+  // | double* a    |        | esp + 10 |                |      |
+  // |              |        |          |                |  r3  |
+  // | int a_offset |        | esp + 9  |                |      |
+  // ----------------        ------------                --------
+  // | int lda      |        | esp + 8  |                |  r4  |
+  // ----------------        ------------                --------
+  // | double* x    |        | esp + 7  |                |      |
+  // |              |        |          |                |  r5  |
+  // | int x_offset |        | esp + 6  |                |      |
+  // ----------------        ------------                --------
+  // | int incx     |        | esp + 5  |                |  r6  |
+  // | double beta  |        | esp + 3  |                |  v1  |
+  // ----------------        ------------                --------
+  // | double* y    |        | esp + 2  |                |      |
+  // |              |        |          |                |  r7  |
+  // | int y_offset |        | esp + 1  |                |      |
+  // ----------------        ------------                --------
+  // | int incy     |        | esp      |                | [sp] |
+
+
+  // trans
+  __ ldr(trans, Address(esp, 15 * wordSize));
+  load_String_value(trans, tmp1);
+  load_String_offset(trans, tmp2);
+  emit_array_address(tmp1, tmp2, trans, T_CHAR);
+  // m, n
+  __ ldrw(m, Address(esp, 14 * wordSize));
+  __ ldrw(n, Address(esp, 13 * wordSize));
+
+  // alpha
+  __ ldrd(alpha, Address(esp, 11 * wordSize));
+
+  // a
+  __ ldr(tmp1, Address(esp, 10 * wordSize));
+  __ mov(tmp2, zr);
+  __ ldrw(tmp2, Address(esp, 9 * wordSize));
+  emit_array_address(tmp1, tmp2, a, T_DOUBLE);
+
+  // lda
+  __ ldrw(lda, Address(esp, 8 * wordSize));
+
+  // x
+  __ ldr(tmp1, Address(esp, 7 * wordSize));
+  __ mov(tmp2, zr);
+  __ ldrw(tmp2, Address(esp, 6 * wordSize));
+  emit_array_address(tmp1, tmp2, x, T_DOUBLE);
+
+  // incx
+  __ ldrw(incx, Address(esp, 5 * wordSize));
+
+  // beta
+  __ ldrd(beta, Address(esp, 3 * wordSize));
+
+  // y
+  __ ldr(tmp1, Address(esp, 2 * wordSize));
+  __ mov(tmp2, zr);
+  __ ldrw(tmp2, Address(esp, wordSize));
+  emit_array_address(tmp1, tmp2, y, T_DOUBLE);
+
+  // resume sp, restore lr
+  __ andr(sp, r13, -16);
+  __ str(lr, Address(sp, -wordSize));
+
+  // incy, push on stack
+  __ ldrw(tmp1, Address(esp, 0));
+  __ strw(tmp1, Address(sp, 2 * -wordSize));
+
+  __ add(sp, sp, -2 * wordSize);
+
+  // call function
+  address fn = CAST_FROM_FN_PTR(address, StubRoutines::dgemvDgemv());
+  __ mov(tmp1, fn);
+  __ blr(tmp1);
+
+  // resume lr
+  __ ldr(lr, Address(sp, wordSize));
+  __ add(sp, sp, 2 * wordSize);
+  __ br(lr);
+
+  return  entry;
+}
+
 void InterpreterGenerator::bang_stack_shadow_pages(bool native_call) {
   // Bang each page in the shadow zone. We can't assume it's been done for
   // an interpreter frame with greater than a page of locals, so each page
@@ -1575,6 +1819,10 @@ address AbstractInterpreterGenerator::generate_method_entry(
                                            : // fall thru
   case Interpreter::java_util_zip_CRC32_updateByteBuffer
                                            : entry_point = ((InterpreterGenerator*)this)->generate_CRC32_updateBytes_entry(kind); break;
+  case Interpreter::org_netlib_blas_Dgemm_dgemm
+                                           : entry_point = ((InterpreterGenerator*)this)->generate_Dgemm_dgemm_entry(); break;
+  case Interpreter::org_netlib_blas_Dgemv_dgemv
+                                           : entry_point = ((InterpreterGenerator*)this)->generate_Dgemv_dgemv_entry(); break;
   default                                  : ShouldNotReachHere();                                                       break;
   }
 

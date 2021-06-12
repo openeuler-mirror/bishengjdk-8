@@ -944,6 +944,81 @@ const TypeFunc* OptoRuntime::ddotF2jBLAS_Type() {
   return TypeFunc::make(domain, range);
 }
 
+/**
+ * double org.netlib.blas.Dgemm.dgemm(java.lang.String transa,
+ *                                    java.lang.String transb, int m, int n, int k,
+ *                                    double alpha, double[] a, int offset_a, int lda,
+ *                                    double[] b, int offset_b, int ldb, double beta,
+ *                                    double[] c, int offset_c, int Ldc)
+ */
+const TypeFunc* OptoRuntime::dgemmDgemm_Type() {
+    // create input type (domain)
+    int num_args = 15;
+    int argcnt = num_args;
+    const Type** fields = TypeTuple::fields(argcnt);
+    int argp = TypeFunc::Parms;
+
+    fields[argp++] = TypeAryPtr::CHARS;       // char[]
+    fields[argp++] = TypeAryPtr::CHARS;       // char[]
+    fields[argp++] = TypeInt::INT;            // int m
+    fields[argp++] = TypeInt::INT;            // int n
+    fields[argp++] = TypeInt::INT;            // int k
+    fields[argp++] = Type::DOUBLE;            // double alpha
+    fields[argp++] = Type::HALF;
+    fields[argp++] = TypeAryPtr::DOUBLES;     // double[] a
+    fields[argp++] = TypeInt::INT;            // int lda
+    fields[argp++] = TypeAryPtr::DOUBLES;     // double[] b
+    fields[argp++] = TypeInt::INT;            // int ldb
+    fields[argp++] = Type::DOUBLE;            // double beta
+    fields[argp++] = Type::HALF;
+    fields[argp++] = TypeAryPtr::DOUBLES;     // double[] c
+    fields[argp++] = TypeInt::INT;            // int ldc
+    assert(argp == TypeFunc::Parms + argcnt, "correct decoding");
+    const TypeTuple* domain = TypeTuple::make(TypeFunc::Parms + argcnt, fields);
+
+    // no result type needed
+    fields = TypeTuple::fields(1);
+    fields[TypeFunc::Parms + 0] = NULL;       // void
+    const TypeTuple* range = TypeTuple::make(TypeFunc::Parms, fields);
+    return TypeFunc::make(domain, range);
+}
+
+/**
+ * void dgemv(String trans, int m, int n, double alpha,
+ *            double[] a, int _a_offset, int lda,
+ *            double[] x, int _x_offset, int incx, double beta,
+ *            double[] y, int _y_offset, int incy)
+ */
+const TypeFunc* OptoRuntime::dgemvDgemv_Type() {
+  // create input type (domain)
+  int num_args = 13;
+  int argcnt = num_args;
+  const Type** fields = TypeTuple::fields(argcnt);
+  int argp = TypeFunc::Parms;
+
+  fields[argp++] = TypeAryPtr::CHARS;       // char[]
+  fields[argp++] = TypeInt::INT;            // int m
+  fields[argp++] = TypeInt::INT;            // int n
+  fields[argp++] = Type::DOUBLE;            // double alpha
+  fields[argp++] = Type::HALF;
+  fields[argp++] = TypeAryPtr::DOUBLES;     // double[] a
+  fields[argp++] = TypeInt::INT;            // int lda
+  fields[argp++] = TypeAryPtr::DOUBLES;     // double[] x
+  fields[argp++] = TypeInt::INT;            // int incx
+  fields[argp++] = Type::DOUBLE;            // double beta
+  fields[argp++] = Type::HALF;
+  fields[argp++] = TypeAryPtr::DOUBLES;     // double[] y
+  fields[argp++] = TypeInt::INT;            // int incy
+  assert(argp == TypeFunc::Parms + argcnt, "correct decoding");
+  const TypeTuple* domain = TypeTuple::make(TypeFunc::Parms + argcnt, fields);
+
+  // no result type needed
+  fields = TypeTuple::fields(1);
+  fields[TypeFunc::Parms + 0] = NULL;       // void
+  const TypeTuple* range = TypeTuple::make(TypeFunc::Parms, fields);
+  return TypeFunc::make(domain, range);
+}
+
 // for cipherBlockChaining calls of aescrypt encrypt/decrypt, four pointers and a length, returning int
 const TypeFunc* OptoRuntime::cipherBlockChaining_aescrypt_Type() {
   // create input type (domain)
