@@ -45,6 +45,7 @@ protected:
 public:
    G1Allocator(G1CollectedHeap* heap) :
      _g1h(heap), _summary_bytes_used(0) { }
+   virtual ~G1Allocator() { }
 
    // Node index of current thread.
    virtual uint current_node_index() const = 0;
@@ -126,7 +127,7 @@ protected:
 
 public:
   G1DefaultAllocator(G1CollectedHeap* heap);
-  ~G1DefaultAllocator();
+  virtual ~G1DefaultAllocator();
 
   uint current_node_index() const;
   uint num_nodes() { return (uint)_num_alloc_regions; }
@@ -253,6 +254,7 @@ protected:
 
 public:
   G1ParGCAllocator(G1CollectedHeap* g1h);
+  virtual ~G1ParGCAllocator() { }
 
   static G1ParGCAllocator* create_allocator(G1CollectedHeap* g1h);
 
@@ -308,7 +310,7 @@ class G1DefaultParGCAllocator : public G1ParGCAllocator {
 
 public:
   G1DefaultParGCAllocator(G1CollectedHeap* g1h);
-  ~G1DefaultParGCAllocator();
+  virtual ~G1DefaultParGCAllocator();
 
   virtual G1ParGCAllocBuffer* alloc_buffer(InCSetState dest, AllocationContext_t context, uint node_index) {
     assert(dest.is_valid(),
