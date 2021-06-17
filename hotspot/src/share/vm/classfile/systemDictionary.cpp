@@ -1170,6 +1170,7 @@ Klass* SystemDictionary::resolve_from_stream(Symbol* class_name,
       !class_loader.is_null() &&
       parsed_name != NULL &&
       parsed_name->utf8_length() >= (int)pkglen) {
+      ResourceMark rm(THREAD);
       bool prohibited;
       const jbyte* base = parsed_name->base();
       if ((base[0] | base[1] | base[2] | base[3] | base[4]) & 0x80) {
