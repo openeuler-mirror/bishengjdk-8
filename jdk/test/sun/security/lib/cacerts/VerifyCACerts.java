@@ -53,12 +53,12 @@ public class VerifyCACerts {
             + File.separator + "security" + File.separator + "cacerts";
 
     // The numbers of certs now.
-    private static final int COUNT = 90;
+    private static final int COUNT = 89;
 
     // SHA-256 of cacerts, can be generated with
     // shasum -a 256 cacerts | sed -e 's/../&:/g' | tr '[:lower:]' '[:upper:]' | cut -c1-95
     private static final String CHECKSUM
-            = "DC:22:7E:D7:F3:46:1F:8B:A8:4E:EE:C2:A8:4B:8E:26:89:4F:95:5C:71:A3:1B:5A:6E:A6:48:FD:CB:C9:F2:95";
+            = "E6:F5:ED:92:CE:E2:35:5C:84:56:78:C7:72:29:29:A9:83:99:19:D9:54:F4:FF:7F:F7:D4:DB:2D:34:36:20:B5";
 
     // map of cert alias to SHA-256 fingerprint
     @SuppressWarnings("serial")
@@ -167,8 +167,6 @@ public class VerifyCACerts {
                     "3B:22:2E:56:67:11:E9:92:30:0D:C0:B1:5A:B9:47:3D:AF:DE:F8:C8:4D:0C:EF:7D:33:17:B4:C1:82:1D:14:36");
             put("swisssignsilverg2ca [jdk]",
                     "BE:6C:4D:A2:BB:B9:BA:59:B6:F3:93:97:68:37:42:46:C3:C0:05:99:3F:A9:8F:02:0D:1D:ED:BE:D4:8A:81:D5");
-            put("soneraclass2ca [jdk]",
-                    "79:08:B4:03:14:C1:38:10:0B:51:8D:07:35:80:7F:FB:FC:F8:51:8A:00:95:33:71:05:BA:38:6B:15:3D:D9:27");
             put("securetrustca [jdk]",
                     "F1:C1:B5:0A:E5:A2:0D:D8:03:0E:C9:F6:BC:24:82:3D:D3:67:B5:25:57:59:B4:E7:1B:61:FC:E9:F7:37:5D:73");
             put("xrampglobalca [jdk]",
@@ -245,12 +243,7 @@ public class VerifyCACerts {
     // Exception list to 90 days expiry policy
     // No error will be reported if certificate in this list expires
     @SuppressWarnings("serial")
-    private static final HashSet<String> EXPIRY_EXC_ENTRIES = new HashSet<String>() {
-        {
-            // Valid until: Tue Apr 06 15:29:40 HKT 2021
-            add("soneraclass2ca [jdk]");
-        }
-    };
+    private static final HashSet<String> EXPIRY_EXC_ENTRIES = new HashSet<String>();
 
     // Ninety days in milliseconds
     private static final long NINETY_DAYS = 7776000000L;
