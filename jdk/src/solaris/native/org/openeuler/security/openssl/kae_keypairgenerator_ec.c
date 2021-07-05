@@ -383,7 +383,6 @@ static EC_GROUP* GetGroupByParam(JNIEnv* env, jbyteArray pArr, jbyteArray aArr, 
     EC_GROUP* group = NULL;
     BN_CTX* ctx = NULL;
     EC_POINT* generator = NULL;
-    p = KAE_GetBigNumFromByteArray(env, pArr);
     if ((p = KAE_GetBigNumFromByteArray(env, pArr)) == NULL || (a = KAE_GetBigNumFromByteArray(env, aArr)) == NULL ||
         (b = KAE_GetBigNumFromByteArray(env, bArr)) == NULL || (x = KAE_GetBigNumFromByteArray(env, xArr)) == NULL ||
         (y = KAE_GetBigNumFromByteArray(env, yArr)) == NULL || (cofactor = BN_new()) == NULL ||
