@@ -82,6 +82,9 @@ cleanup:
     if (inBytes != NULL) {
         (*env)->ReleaseByteArrayElements(env, in, inBytes, 0);
     }
+    if (rsa != NULL) {
+        RSA_free(rsa);
+    }
     return resultSize;
 }
 
