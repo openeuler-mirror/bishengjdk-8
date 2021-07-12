@@ -60,12 +60,6 @@ jint ParallelScavengeHeap::initialize() {
   _collector_policy->initialize_all();
 
   const size_t heap_size = _collector_policy->max_heap_byte_size();
-  _workers = new FlexibleWorkGang("GC Thread",ParallelGCThreads, true, false);
-  if (_workers == NULL) {
-      vm_exit_during_initialization("Failed necessary allocation.");
-  } else {
-      _workers->initialize_workers();
-  }
   ReservedSpace heap_rs = Universe::reserve_heap(heap_size, _collector_policy->heap_alignment());
   MemTracker::record_virtual_memory_type((address)heap_rs.base(), mtJavaHeap);
 
@@ -130,6 +124,12 @@ jint ParallelScavengeHeap::initialize() {
 
   // Set up the GCTaskManager
   _gc_task_manager = GCTaskManager::create(ParallelGCThreads);
+  _workers = new FlexibleWorkGang("GC Thread",ParallelGCThreads, true, false);
+  if (_workers == NULL) {
+      vm_exit_during_initialization("Failed necessary allocation.");
+  } else {
+      _workers->initialize_workers();
+  }
 
   if (UseParallelOldGC && !PSParallelCompact::initialize()) {
     return JNI_ENOMEM;
