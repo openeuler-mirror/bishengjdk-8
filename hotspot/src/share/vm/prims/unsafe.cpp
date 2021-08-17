@@ -27,7 +27,6 @@
 #include "utilities/macros.hpp"
 #if INCLUDE_ALL_GCS
 #include "gc_implementation/g1/g1SATBCardTableModRefBS.hpp"
-#include "gc_implementation/shenandoah/shenandoahBarrierSet.inline.hpp"
 #endif // INCLUDE_ALL_GCS
 #include "jfr/jfrEvents.hpp"
 #include "memory/allocation.inline.hpp"
@@ -197,6 +196,7 @@ jint Unsafe_invocation_key_to_method_slot(jint key) {
     v = *(oop*)index_oop_from_field_offset_long(p, offset);                 \
   }
 
+
 // Get/SetObject must be special-cased, since it works with handles.
 
 // We could be accessing the referent field in a reference
@@ -218,7 +218,7 @@ static bool is_java_lang_ref_Reference_access(oop o, jlong offset) {
 
 static void ensure_satb_referent_alive(oop o, jlong offset, oop v) {
 #if INCLUDE_ALL_GCS
-  if ((UseG1GC || (UseShenandoahGC && ShenandoahSATBBarrier)) && v != NULL && is_java_lang_ref_Reference_access(o, offset)) {
+  if (UseG1GC && v != NULL && is_java_lang_ref_Reference_access(o, offset)) {
     G1SATBCardTableModRefBS::enqueue(v);
   }
 #endif
@@ -229,12 +229,6 @@ UNSAFE_ENTRY(jobject, Unsafe_GetObject140(JNIEnv *env, jobject unsafe, jobject o
   UnsafeWrapper("Unsafe_GetObject");
   if (obj == NULL)  THROW_0(vmSymbols::java_lang_NullPointerException());
   GET_OOP_FIELD(obj, offset, v)
-
-#if INCLUDE_ALL_GCS
-  if (UseShenandoahGC) {
-    v = ShenandoahBarrierSet::barrier_set()->load_reference_barrier(v);
-  }
-#endif
 
   ensure_satb_referent_alive(p, offset, v);
 
@@ -272,12 +266,6 @@ UNSAFE_ENTRY(jobject, Unsafe_GetObject(JNIEnv *env, jobject unsafe, jobject obj,
   UnsafeWrapper("Unsafe_GetObject");
   GET_OOP_FIELD(obj, offset, v)
 
-#if INCLUDE_ALL_GCS
-  if (UseShenandoahGC) {
-    v = ShenandoahBarrierSet::barrier_set()->load_reference_barrier(v);
-  }
-#endif
-
   ensure_satb_referent_alive(p, offset, v);
 
   return JNIHandles::make_local(env, v);
@@ -305,12 +293,6 @@ UNSAFE_ENTRY(jobject, Unsafe_GetObjectVolatile(JNIEnv *env, jobject unsafe, jobj
   } else {
     (void)const_cast<oop&>(v = *(volatile oop*) addr);
   }
-
-#if INCLUDE_ALL_GCS
-  if (UseShenandoahGC) {
-    (void)const_cast<oop&>(v = ShenandoahBarrierSet::barrier_set()->load_reference_barrier(v));
-  }
-#endif
 
   ensure_satb_referent_alive(p, offset, v);
 

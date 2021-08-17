@@ -37,10 +37,6 @@
 #include "opto/rootnode.hpp"
 #include "opto/superword.hpp"
 
-#if INCLUDE_ALL_GCS
-#include "gc_implementation/shenandoah/c2/shenandoahSupport.hpp"
-#endif
-
 //=============================================================================
 //------------------------------is_loop_iv-------------------------------------
 // Determine if a node is Counted loop induction variable.
@@ -2359,12 +2355,6 @@ void PhaseIdealLoop::build_and_optimize(bool do_split_ifs, bool skip_loop_opts) 
       C->set_major_progress();
     }
 
-#if INCLUDE_ALL_GCS
-    if (UseShenandoahGC && !C->major_progress()) {
-      ShenandoahBarrierC2Support::pin_and_expand(this);
-    }
-#endif
-
     // Cleanup any modified bits
     _igvn.optimize();
 
@@ -3356,10 +3346,7 @@ Node *PhaseIdealLoop::get_late_ctrl( Node *n, Node *early ) {
     }
     while(worklist.size() != 0 && LCA != early) {
       Node* s = worklist.pop();
-      if (s->is_Load() ||
-          (UseShenandoahGC &&
-           (s->is_ShenandoahBarrier() || s->Opcode() == Op_SafePoint ||
-            (s->is_CallStaticJava() && s->as_CallStaticJava()->uncommon_trap_request() != 0)))) {
+      if (s->is_Load()) {
         continue;
       } else if (s->is_MergeMem()) {
         for (DUIterator_Fast imax, i = s->fast_outs(imax); i < imax; i++) {
@@ -3591,9 +3578,6 @@ void PhaseIdealLoop::build_loop_late_post( Node *n ) {
     case Op_AryEq:
       pinned = false;
     }
-    if (UseShenandoahGC && n->is_CMove()) {
-      pinned = false;
-    }
     if( pinned ) {
       IdealLoopTree *chosen_loop = get_loop(n->is_CFG() ? n : get_ctrl(n));
       if( !chosen_loop->_child )       // Inner loop?
@@ -3648,35 +3632,8 @@ void PhaseIdealLoop::build_loop_late_post( Node *n ) {
   // which can inhibit range check elimination.
   if (least != early) {
     Node* ctrl_out = least->unique_ctrl_out();
-    if (UseShenandoahGC && ctrl_out && ctrl_out->is_Loop() &&
+    if (ctrl_out && ctrl_out->is_CountedLoop() &&
         least == ctrl_out->in(LoopNode::EntryControl)) {
-      // Move the node above predicates as far up as possible so a
-      // following pass of loop predication doesn't hoist a predicate
-      // that depends on it above that node.
-      Node* new_ctrl = least;
-      for (;;) {
-        if (!new_ctrl->is_Proj()) {
-          break;
-        }
-        CallStaticJavaNode* call = new_ctrl->as_Proj()->is_uncommon_trap_if_pattern(Deoptimization::Reason_none);
-        if (call == NULL) {
-          break;
-        }
-        int req = call->uncommon_trap_request();
-        Deoptimization::DeoptReason trap_reason = Deoptimization::trap_request_reason(req);
-        if (trap_reason != Deoptimization::Reason_loop_limit_check &&
-            trap_reason != Deoptimization::Reason_predicate) {
-          break;
-        }
-        Node* c = new_ctrl->in(0)->in(0);
-        if (is_dominator(c, early) && c != early) {
-          break;
-        }
-        new_ctrl = c;
-      }
-      least = new_ctrl;
-    } else if (ctrl_out && ctrl_out->is_CountedLoop() &&
-               least == ctrl_out->in(LoopNode::EntryControl)) {
       Node* least_dom = idom(least);
       if (get_loop(least_dom)->is_member(get_loop(least))) {
         least = least_dom;
@@ -3862,7 +3819,6 @@ void PhaseIdealLoop::dump( IdealLoopTree *loop, uint idx, Node_List &rpo_list ) 
     }
   }
 }
-#endif
 
 // Collect a R-P-O for the whole CFG.
 // Result list is in post-order (scan backwards for RPO)
@@ -3885,6 +3841,7 @@ void PhaseIdealLoop::rpo( Node *start, Node_Stack &stk, VectorSet &visited, Node
     }
   }
 }
+#endif
 
 
 //=============================================================================

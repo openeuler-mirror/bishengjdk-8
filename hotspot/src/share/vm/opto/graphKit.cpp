@@ -27,7 +27,6 @@
 #include "gc_implementation/g1/g1SATBCardTableModRefBS.hpp"
 #include "gc_implementation/g1/heapRegion.hpp"
 #include "gc_interface/collectedHeap.hpp"
-#include "gc_implementation/shenandoah/shenandoahHeap.hpp"
 #include "memory/barrierSet.hpp"
 #include "memory/cardTableModRefBS.hpp"
 #include "opto/addnode.hpp"
@@ -40,11 +39,6 @@
 #include "opto/runtime.hpp"
 #include "runtime/deoptimization.hpp"
 #include "runtime/sharedRuntime.hpp"
-
-#if INCLUDE_ALL_GCS
-#include "gc_implementation/shenandoah/c2/shenandoahBarrierSetC2.hpp"
-#include "gc_implementation/shenandoah/c2/shenandoahSupport.hpp"
-#endif
 
 //----------------------------GraphKit-----------------------------------------
 // Main utility constructor.
@@ -1541,11 +1535,7 @@ void GraphKit::pre_barrier(bool do_load,
     case BarrierSet::G1SATBCTLogging:
       g1_write_barrier_pre(do_load, obj, adr, adr_idx, val, val_type, pre_val, bt);
       break;
-    case BarrierSet::ShenandoahBarrierSet:
-      if (ShenandoahSATBBarrier) {
-        g1_write_barrier_pre(do_load, obj, adr, adr_idx, val, val_type, pre_val, bt);
-      }
-      break;
+
     case BarrierSet::CardTableModRef:
     case BarrierSet::CardTableExtension:
     case BarrierSet::ModRef:
@@ -1563,7 +1553,6 @@ bool GraphKit::can_move_pre_barrier() const {
   switch (bs->kind()) {
     case BarrierSet::G1SATBCT:
     case BarrierSet::G1SATBCTLogging:
-    case BarrierSet::ShenandoahBarrierSet:
       return true; // Can move it if no safepoint
 
     case BarrierSet::CardTableModRef:
@@ -1593,11 +1582,7 @@ void GraphKit::post_barrier(Node* ctl,
     case BarrierSet::G1SATBCTLogging:
       g1_write_barrier_post(store, obj, adr, adr_idx, val, bt, use_precise);
       break;
-    case BarrierSet::ShenandoahBarrierSet:
-      if (ShenandoahStoreValEnqueueBarrier) {
-        g1_write_barrier_pre(false, NULL, NULL, max_juint, NULL, NULL, val, bt);
-      }
-      break;
+
     case BarrierSet::CardTableModRef:
     case BarrierSet::CardTableExtension:
       write_barrier_post(store, obj, adr, adr_idx, val, use_precise);
@@ -1722,11 +1707,6 @@ Node* GraphKit::load_array_element(Node* ctl, Node* ary, Node* idx, const TypeAr
     elembt = T_OBJECT; // To satisfy switch in LoadNode::make()
   }
   Node* ld = make_load(ctl, adr, elemtype, elembt, arytype, MemNode::unordered);
-#if INCLUDE_ALL_GCS
-  if (UseShenandoahGC && (elembt == T_OBJECT || elembt == T_ARRAY)) {
-    ld = ShenandoahBarrierSetC2::bsc2()->load_reference_barrier(this, ld);
-  }
-#endif
   return ld;
 }
 
@@ -3697,12 +3677,6 @@ AllocateNode* AllocateNode::Ideal_allocation(Node* ptr, PhaseTransform* phase) {
   if (ptr == NULL) {     // reduce dumb test in callers
     return NULL;
   }
-
-#if INCLUDE_ALL_GCS
-  if (UseShenandoahGC) {
-    ptr = ShenandoahBarrierSetC2::bsc2()->step_over_gc_barrier(ptr);
-  }
-#endif
   if (ptr->is_CheckCastPP()) { // strip only one raw-to-oop cast
     ptr = ptr->in(1);
     if (ptr == NULL) return NULL;
@@ -3961,16 +3935,7 @@ void GraphKit::g1_write_barrier_pre(bool do_load,
   Node* index_adr   = __ AddP(no_base, tls, __ ConX(index_offset));
 
   // Now some of the values
-  Node* marking;
-  if (UseShenandoahGC) {
-    Node* gc_state = __ AddP(no_base, tls, __ ConX(in_bytes(JavaThread::gc_state_offset())));
-    Node* ld = __ load(__ ctrl(), gc_state, TypeInt::BYTE, T_BYTE, Compile::AliasIdxRaw);
-    marking = __ AndI(ld, __ ConI(ShenandoahHeap::MARKING));
-    assert(ShenandoahBarrierC2Support::is_gc_state_load(ld), "Should match the shape");
-  } else {
-    assert(UseG1GC, "should be");
-    marking = __ load(__ ctrl(), marking_adr, TypeInt::INT, active_type, Compile::AliasIdxRaw);
-  }
+  Node* marking = __ load(__ ctrl(), marking_adr, TypeInt::INT, active_type, Compile::AliasIdxRaw);
 
   // if (!marking)
   __ if_then(marking, BoolTest::ne, zero, unlikely); {
@@ -4011,15 +3976,6 @@ void GraphKit::g1_write_barrier_pre(bool do_load,
 
   // Final sync IdealKit and GraphKit.
   final_sync(ideal);
-
-#if INCLUDE_ALL_GCS
-  if (UseShenandoahGC && adr != NULL) {
-    Node* c = control();
-    Node* call = c->in(1)->in(1)->in(1)->in(0);
-    assert(call->is_g1_wb_pre_call(), "g1_wb_pre call expected");
-    call->add_req(adr);
-  }
-#endif
 }
 
 //
@@ -4211,11 +4167,6 @@ Node* GraphKit::load_String_value(Node* ctrl, Node* str) {
   int value_field_idx = C->get_alias_index(value_field_type);
   Node* load = make_load(ctrl, basic_plus_adr(str, str, value_offset),
                          value_type, T_OBJECT, value_field_idx, MemNode::unordered);
-#if INCLUDE_ALL_GCS
-  if (UseShenandoahGC) {
-    load = ShenandoahBarrierSetC2::bsc2()->load_reference_barrier(this, load);
-  }
-#endif
   // String.value field is known to be @Stable.
   if (UseImplicitStableValues) {
     load = cast_array_to_stable(load, value_type);

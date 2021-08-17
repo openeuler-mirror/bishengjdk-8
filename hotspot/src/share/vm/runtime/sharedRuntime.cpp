@@ -716,6 +716,7 @@ address SharedRuntime::compute_compiled_exc_handler(nmethod* nm, address ret_pc,
 #endif
 
   if (t == NULL) {
+    ttyLocker ttyl;
     tty->print_cr("MISSING EXCEPTION HANDLER for pc " INTPTR_FORMAT " and handler bci %d", ret_pc, handler_bci);
     tty->print_cr("   Exception:");
     exception->print();
@@ -2633,8 +2634,8 @@ void AdapterHandlerLibrary::create_native_wrapper(methodHandle method) {
     BufferBlob*  buf = buffer_blob(); // the temporary code buffer in CodeCache
     if (buf != NULL) {
       CodeBuffer buffer(buf);
-      double locs_buf[20];
-      buffer.insts()->initialize_shared_locs((relocInfo*)locs_buf, sizeof(locs_buf) / sizeof(relocInfo));
+      struct { double data[20]; } locs_buf;
+      buffer.insts()->initialize_shared_locs((relocInfo*)&locs_buf, sizeof(locs_buf) / sizeof(relocInfo));
       MacroAssembler _masm(&buffer);
 
       // Fill in the signature array, for the calling-convention call.
@@ -2823,22 +2824,6 @@ void SharedRuntime::convert_ints_to_longints(int i2l_argcnt, int& in_args_count,
     assert(0, "This should not be needed on this platform");
   }
 }
-
-JRT_LEAF(oopDesc*, SharedRuntime::pin_object(JavaThread* thread, oopDesc* obj))
-  assert(Universe::heap()->supports_object_pinning(), "Why we here?");
-  assert(obj != NULL, "Should not be null");
-  oop o(obj);
-  o = Universe::heap()->pin_object(thread, o);
-  assert(o != NULL, "Should not be null");
-  return o;
-JRT_END
-
-JRT_LEAF(void, SharedRuntime::unpin_object(JavaThread* thread, oopDesc* obj))
-  assert(Universe::heap()->supports_object_pinning(), "Why we here?");
-  assert(obj != NULL, "Should not be null");
-  oop o(obj);
-  Universe::heap()->unpin_object(thread, o);
-JRT_END
 
 // -------------------------------------------------------------------------
 // Java-Java calling convention

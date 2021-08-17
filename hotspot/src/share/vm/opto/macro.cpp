@@ -41,11 +41,6 @@
 #include "opto/subnode.hpp"
 #include "opto/type.hpp"
 #include "runtime/sharedRuntime.hpp"
-#if INCLUDE_ALL_GCS
-#include "gc_implementation/shenandoah/shenandoahForwarding.hpp"
-#include "gc_implementation/shenandoah/c2/shenandoahBarrierSetC2.hpp"
-#include "gc_implementation/shenandoah/c2/shenandoahSupport.hpp"
-#endif
 
 
 //
@@ -449,13 +444,7 @@ Node *PhaseMacroExpand::value_from_mem_phi(Node *mem, BasicType ft, const Type *
       if (val == mem) {
         values.at_put(j, mem);
       } else if (val->is_Store()) {
-        Node* n = val->in(MemNode::ValueIn);
-#if INCLUDE_ALL_GCS
-        if (UseShenandoahGC) {
-          n = ShenandoahBarrierSetC2::bsc2()->step_over_gc_barrier(n);
-        }
-#endif
-        values.at_put(j, n);
+        values.at_put(j, val->in(MemNode::ValueIn));
       } else if(val->is_Proj() && val->in(0) == alloc) {
         values.at_put(j, _igvn.zerocon(ft));
       } else if (val->is_Phi()) {
@@ -557,13 +546,7 @@ Node *PhaseMacroExpand::value_from_mem(Node *sfpt_mem, BasicType ft, const Type 
       // hit a sentinel, return appropriate 0 value
       return _igvn.zerocon(ft);
     } else if (mem->is_Store()) {
-      Node* n = mem->in(MemNode::ValueIn);
-#if INCLUDE_ALL_GCS
-      if (UseShenandoahGC) {
-        n = ShenandoahBarrierSetC2::bsc2()->step_over_gc_barrier(n);
-      }
-#endif
-      return n;
+      return mem->in(MemNode::ValueIn);
     } else if (mem->is_Phi()) {
       // attempt to produce a Phi reflecting the values on the input paths of the Phi
       Node_Stack value_phis(a, 8);
@@ -630,8 +613,7 @@ bool PhaseMacroExpand::can_eliminate_allocation(AllocateNode *alloc, GrowableArr
         for (DUIterator_Fast kmax, k = use->fast_outs(kmax);
                                    k < kmax && can_eliminate; k++) {
           Node* n = use->fast_out(k);
-          if (!n->is_Store() && n->Opcode() != Op_CastP2X &&
-              (!UseShenandoahGC || !n->is_g1_wb_pre_call())) {
+          if (!n->is_Store() && n->Opcode() != Op_CastP2X) {
             DEBUG_ONLY(disq_node = n;)
             if (n->is_Load() || n->is_LoadStore()) {
               NOT_PRODUCT(fail_eliminate = "Field load";)
@@ -902,14 +884,11 @@ void PhaseMacroExpand::process_users_of_allocation(CallNode *alloc) {
             }
 #endif
             _igvn.replace_node(n, n->in(MemNode::Memory));
-          } else if (UseShenandoahGC && n->is_g1_wb_pre_call()) {
-            C->shenandoah_eliminate_g1_wb_pre(n, &_igvn);
           } else {
             eliminate_card_mark(n);
           }
           k -= (oc2 - use->outcnt());
         }
-        _igvn.remove_dead_node(use);
       } else {
         eliminate_card_mark(use);
       }

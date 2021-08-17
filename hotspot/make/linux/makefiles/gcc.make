@@ -150,7 +150,7 @@ CFLAGS += -fno-rtti
 CFLAGS += -fno-exceptions
 CFLAGS += -D_REENTRANT
 ifeq ($(USE_CLANG),)
-  CFLAGS += -fcheck-new -fstack-protector
+  CFLAGS += -fcheck-new
   # version 4 and above support fvisibility=hidden (matches jni_x86.h file)
   # except 4.1.2 gives pointless warnings that can't be disabled (afaik)
   ifneq "$(shell expr \( $(CC_VER_MAJOR) \> 4 \) \| \( \( $(CC_VER_MAJOR) = 4 \) \& \( $(CC_VER_MINOR) \>= 3 \) \))" "0"
@@ -226,6 +226,18 @@ CFLAGS_WARN/DEFAULT = $(WARNINGS_ARE_ERRORS) $(WARNING_FLAGS)
 # Special cases
 CFLAGS_WARN/BYFILE = $(CFLAGS_WARN/$@)$(CFLAGS_WARN/DEFAULT$(CFLAGS_WARN/$@)) 
 
+# On newer GCCs, the compiler complains about null being passed
+# to the %s format specifier. The warning appears only on 8u,
+# but the code is largely the same up to trunk. We disable
+# the warning until the code is fixed, to allow builds with
+# -Werror (the default).
+# See JDK-8269388 and PR3798 in IcedTea:
+# https://icedtea.wildebeest.org/hg/icedtea8-forest/hotspot/rev/9f2ceb42dc64
+# Option only exists on GCC 7 and later, checked by configure
+ifeq ($(USE_FORMAT_OVERFLOW), 1)
+  CFLAGS_WARN/os_linux.o = $(CFLAGS_WARN/DEFAULT) -Wno-error=format-overflow
+endif
+
 # The flags to use for an Optimized g++ build
 OPT_CFLAGS/SIZE=-Os
 OPT_CFLAGS/SPEED=-O3
@@ -264,9 +276,6 @@ else
     OPT_CFLAGS/mulnode.o += $(OPT_CFLAGS/NOOPT)
   endif
 endif
-
-# Need extra inlining to collapse all the templated closures into the hot loop
-OPT_CFLAGS/shenandoahConcurrentMark.o += $(OPT_CFLAGS) --param inline-unit-growth=1000
 
 # Flags for generating make dependency flags.
 DEPFLAGS = -MMD -MP -MF $(DEP_DIR)/$(@:%=%.d)

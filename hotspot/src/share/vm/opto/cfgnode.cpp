@@ -36,10 +36,6 @@
 #include "opto/regmask.hpp"
 #include "opto/runtime.hpp"
 #include "opto/subnode.hpp"
-#if INCLUDE_ALL_GCS
-#include "gc_implementation/shenandoah/c2/shenandoahBarrierSetC2.hpp"
-#include "gc_implementation/shenandoah/c2/shenandoahSupport.hpp"
-#endif
 
 // Portions of code courtesy of Clifford Click
 
@@ -591,9 +587,6 @@ Node *RegionNode::Ideal(PhaseGVN *phase, bool can_reshape) {
             in = n->in(1);               // replaced by unique input
             if( n->as_Phi()->is_unsafe_data_reference(in) )
               in = phase->C->top();      // replaced by top
-          }
-          if (n->outcnt() == 0) {
-            in = phase->C->top();
           }
           igvn->replace_node(n, in);
         }
@@ -1659,12 +1652,7 @@ Node *PhiNode::Ideal(PhaseGVN *phase, bool can_reshape) {
         if (can_reshape && igvn != NULL) {
           igvn->_worklist.push(r);
         }
-        // Nuke it down
-        if (can_reshape) {
-          set_req_X(j, top, igvn);
-        } else {
-          set_req(j, top);
-        }
+        set_req(j, top);        // Nuke it down
         progress = this;        // Record progress
       }
     }

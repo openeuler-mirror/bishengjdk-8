@@ -65,9 +65,7 @@ public:
     PSScavenge,
     PSMarkSweep,
     G1YoungGen,
-    G1OldGen,
-    ShenandoahCycles,
-    ShenandoahPauses
+    G1OldGen
   };
 
   MemoryManager();
@@ -101,8 +99,7 @@ public:
   static GCMemoryManager* get_psMarkSweep_memory_manager();
   static GCMemoryManager* get_g1YoungGen_memory_manager();
   static GCMemoryManager* get_g1OldGen_memory_manager();
-  static GCMemoryManager* get_shenandoah_cycles_memory_manager();
-  static GCMemoryManager* get_shenandoah_pauses_memory_manager();
+
 };
 
 class CodeCacheMemoryManager : public MemoryManager {
@@ -299,19 +296,4 @@ public:
   const char* name()         { return "G1 Old Generation"; }
 };
 
-class ShenandoahCyclesMemoryManager : public GCMemoryManager {
-public:
-  ShenandoahCyclesMemoryManager() : GCMemoryManager() {}
-
-  MemoryManager::Name kind() { return MemoryManager::ShenandoahCycles; }
-  const char* name()         { return "Shenandoah Cycles"; }
-};
-
-class ShenandoahPausesMemoryManager : public GCMemoryManager {
-public:
-  ShenandoahPausesMemoryManager() : GCMemoryManager() {}
-
-  MemoryManager::Name kind() { return MemoryManager::ShenandoahPauses; }
-  const char* name()         { return "Shenandoah Pauses"; }
-};
 #endif // SHARE_VM_SERVICES_MEMORYMANAGER_HPP

@@ -622,24 +622,3 @@ void CollectedHeap::test_is_in() {
       err_msg("after_heap: " PTR_FORMAT " is unexpectedly in the heap", p2i(after_heap)));
 }
 #endif
-
-void CollectedHeap::shutdown() {
-  // Default implementation does nothing.
-}
-
-void CollectedHeap::accumulate_statistics_all_gclabs() {
-  // Default implementation does nothing.
-}
-
-bool CollectedHeap::supports_object_pinning() const {
-  return false;
-}
-
-oop CollectedHeap::pin_object(JavaThread* thread, oop obj) {
-  ShouldNotReachHere();
-  return NULL;
-}
-
-void CollectedHeap::unpin_object(JavaThread* thread, oop obj) {
-  ShouldNotReachHere();
-}

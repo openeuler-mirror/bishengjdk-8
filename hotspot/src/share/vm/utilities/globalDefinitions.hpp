@@ -145,13 +145,7 @@ const int jintAsStringSize = 12;
 #ifdef _LP64
 const int SerializePageShiftCount = 4;
 #else
-#if INCLUDE_JFR && INCLUDE_ALL_GCS
-// JavaThread already has quite a few Shenandoah fields. Adding many JFR fields
-// trips sizeof(JavaThread) > 1024. Need to adjust it here.
-const int SerializePageShiftCount = 4;
-#else
 const int SerializePageShiftCount = 3;
-#endif
 #endif
 
 // An opaque struct of heap-word width, so that HeapWord* can be a generic
@@ -1433,7 +1427,6 @@ inline intptr_t p2i(const void * p) {
 #define UINT64_FORMAT_X        "%" PRIx64
 #define INT64_FORMAT_W(width)  "%" #width PRId64
 #define UINT64_FORMAT_W(width) "%" #width PRIu64
-#define UINT64_FORMAT_X_W(width) "%" #width PRIx64
 
 #define PTR64_FORMAT           "0x%016" PRIx64
 

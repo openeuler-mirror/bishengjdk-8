@@ -218,7 +218,6 @@ class oopDesc {
 
   jint int_field(int offset) const;
   void int_field_put(int offset, jint contents);
-  void int_field_put_raw(int offset, jint contents);
 
   jshort short_field(int offset) const;
   void short_field_put(int offset, jshort contents);

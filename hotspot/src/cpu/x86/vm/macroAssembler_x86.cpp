@@ -43,8 +43,6 @@
 #include "gc_implementation/g1/g1CollectedHeap.inline.hpp"
 #include "gc_implementation/g1/g1SATBCardTableModRefBS.hpp"
 #include "gc_implementation/g1/heapRegion.hpp"
-#include "shenandoahBarrierSetAssembler_x86.hpp"
-#include "gc_implementation/shenandoah/shenandoahHeap.inline.hpp"
 #endif // INCLUDE_ALL_GCS
 
 #ifdef PRODUCT
@@ -4134,7 +4132,7 @@ void MacroAssembler::resolve_jobject(Register value,
   movptr(value, Address(value, -JNIHandles::weak_tag_value));
   verify_oop(value);
 #if INCLUDE_ALL_GCS
-  if (UseG1GC || (UseShenandoahGC && ShenandoahSATBBarrier)) {
+  if (UseG1GC) {
     g1_write_barrier_pre(noreg /* obj */,
                          value /* pre_val */,
                          thread /* thread */,
@@ -4193,21 +4191,15 @@ void MacroAssembler::g1_write_barrier_pre(Register obj,
   Address buffer(thread, in_bytes(JavaThread::satb_mark_queue_offset() +
                                        PtrQueue::byte_offset_of_buf()));
 
-  if (UseShenandoahGC) {
-    Address gc_state(thread, in_bytes(JavaThread::gc_state_offset()));
-    testb(gc_state, ShenandoahHeap::MARKING);
-    jcc(Assembler::zero, done);
+
+  // Is marking active?
+  if (in_bytes(PtrQueue::byte_width_of_active()) == 4) {
+    cmpl(in_progress, 0);
   } else {
-    assert(UseG1GC, "Should be");
-    // Is marking active?
-    if (in_bytes(PtrQueue::byte_width_of_active()) == 4) {
-      cmpl(in_progress, 0);
-    } else {
-      assert(in_bytes(PtrQueue::byte_width_of_active()) == 1, "Assumption");
-      cmpb(in_progress, 0);
-    }
-    jcc(Assembler::equal, done);
+    assert(in_bytes(PtrQueue::byte_width_of_active()) == 1, "Assumption");
+    cmpb(in_progress, 0);
   }
+  jcc(Assembler::equal, done);
 
   // Do we need to load the previous value?
   if (obj != noreg) {
@@ -4289,13 +4281,6 @@ void MacroAssembler::g1_write_barrier_post(Register store_addr,
 #ifdef _LP64
   assert(thread == r15_thread, "must be");
 #endif // _LP64
-
-  if (UseShenandoahGC) {
-    // No need for this in Shenandoah.
-    return;
-  }
-
-  assert(UseG1GC, "expect G1 GC");
 
   Address queue_index(thread, in_bytes(JavaThread::dirty_card_queue_offset() +
                                        PtrQueue::byte_offset_of_index()));
@@ -4632,9 +4617,65 @@ void MacroAssembler::incr_allocated_bytes(Register thread,
 void MacroAssembler::fp_runtime_fallback(address runtime_entry, int nb_args, int num_fpu_regs_in_use) {
   pusha();
 
-  save_vector_registers();
-
   // if we are coming from c1, xmm registers may be live
+  int off = 0;
+  if (UseSSE == 1)  {
+    subptr(rsp, sizeof(jdouble)*8);
+    movflt(Address(rsp,off++*sizeof(jdouble)),xmm0);
+    movflt(Address(rsp,off++*sizeof(jdouble)),xmm1);
+    movflt(Address(rsp,off++*sizeof(jdouble)),xmm2);
+    movflt(Address(rsp,off++*sizeof(jdouble)),xmm3);
+    movflt(Address(rsp,off++*sizeof(jdouble)),xmm4);
+    movflt(Address(rsp,off++*sizeof(jdouble)),xmm5);
+    movflt(Address(rsp,off++*sizeof(jdouble)),xmm6);
+    movflt(Address(rsp,off++*sizeof(jdouble)),xmm7);
+  } else if (UseSSE >= 2)  {
+#ifdef COMPILER2
+    if (MaxVectorSize > 16) {
+      assert(UseAVX > 0, "256bit vectors are supported only with AVX");
+      // Save upper half of YMM registes
+      subptr(rsp, 16 * LP64_ONLY(16) NOT_LP64(8));
+      vextractf128h(Address(rsp,  0),xmm0);
+      vextractf128h(Address(rsp, 16),xmm1);
+      vextractf128h(Address(rsp, 32),xmm2);
+      vextractf128h(Address(rsp, 48),xmm3);
+      vextractf128h(Address(rsp, 64),xmm4);
+      vextractf128h(Address(rsp, 80),xmm5);
+      vextractf128h(Address(rsp, 96),xmm6);
+      vextractf128h(Address(rsp,112),xmm7);
+#ifdef _LP64
+      vextractf128h(Address(rsp,128),xmm8);
+      vextractf128h(Address(rsp,144),xmm9);
+      vextractf128h(Address(rsp,160),xmm10);
+      vextractf128h(Address(rsp,176),xmm11);
+      vextractf128h(Address(rsp,192),xmm12);
+      vextractf128h(Address(rsp,208),xmm13);
+      vextractf128h(Address(rsp,224),xmm14);
+      vextractf128h(Address(rsp,240),xmm15);
+#endif
+    }
+#endif
+    // Save whole 128bit (16 bytes) XMM regiters
+    subptr(rsp, 16 * LP64_ONLY(16) NOT_LP64(8));
+    movdqu(Address(rsp,off++*16),xmm0);
+    movdqu(Address(rsp,off++*16),xmm1);
+    movdqu(Address(rsp,off++*16),xmm2);
+    movdqu(Address(rsp,off++*16),xmm3);
+    movdqu(Address(rsp,off++*16),xmm4);
+    movdqu(Address(rsp,off++*16),xmm5);
+    movdqu(Address(rsp,off++*16),xmm6);
+    movdqu(Address(rsp,off++*16),xmm7);
+#ifdef _LP64
+    movdqu(Address(rsp,off++*16),xmm8);
+    movdqu(Address(rsp,off++*16),xmm9);
+    movdqu(Address(rsp,off++*16),xmm10);
+    movdqu(Address(rsp,off++*16),xmm11);
+    movdqu(Address(rsp,off++*16),xmm12);
+    movdqu(Address(rsp,off++*16),xmm13);
+    movdqu(Address(rsp,off++*16),xmm14);
+    movdqu(Address(rsp,off++*16),xmm15);
+#endif
+  }
 
   // Preserve registers across runtime call
   int incoming_argument_and_return_value_offset = -1;
@@ -4700,73 +4741,7 @@ void MacroAssembler::fp_runtime_fallback(address runtime_entry, int nb_args, int
     addptr(rsp, sizeof(jdouble) * nb_args);
   }
 
-  restore_vector_registers();
-  popa();
-}
-
-void MacroAssembler::save_vector_registers() {
-  int off = 0;
-  if (UseSSE == 1)  {
-    subptr(rsp, sizeof(jdouble)*8);
-    movflt(Address(rsp,off++*sizeof(jdouble)),xmm0);
-    movflt(Address(rsp,off++*sizeof(jdouble)),xmm1);
-    movflt(Address(rsp,off++*sizeof(jdouble)),xmm2);
-    movflt(Address(rsp,off++*sizeof(jdouble)),xmm3);
-    movflt(Address(rsp,off++*sizeof(jdouble)),xmm4);
-    movflt(Address(rsp,off++*sizeof(jdouble)),xmm5);
-    movflt(Address(rsp,off++*sizeof(jdouble)),xmm6);
-    movflt(Address(rsp,off++*sizeof(jdouble)),xmm7);
-  } else if (UseSSE >= 2)  {
-#ifdef COMPILER2
-    if (MaxVectorSize > 16) {
-      assert(UseAVX > 0, "256bit vectors are supported only with AVX");
-      // Save upper half of YMM registes
-      subptr(rsp, 16 * LP64_ONLY(16) NOT_LP64(8));
-      vextractf128h(Address(rsp,  0),xmm0);
-      vextractf128h(Address(rsp, 16),xmm1);
-      vextractf128h(Address(rsp, 32),xmm2);
-      vextractf128h(Address(rsp, 48),xmm3);
-      vextractf128h(Address(rsp, 64),xmm4);
-      vextractf128h(Address(rsp, 80),xmm5);
-      vextractf128h(Address(rsp, 96),xmm6);
-      vextractf128h(Address(rsp,112),xmm7);
-#ifdef _LP64
-      vextractf128h(Address(rsp,128),xmm8);
-      vextractf128h(Address(rsp,144),xmm9);
-      vextractf128h(Address(rsp,160),xmm10);
-      vextractf128h(Address(rsp,176),xmm11);
-      vextractf128h(Address(rsp,192),xmm12);
-      vextractf128h(Address(rsp,208),xmm13);
-      vextractf128h(Address(rsp,224),xmm14);
-      vextractf128h(Address(rsp,240),xmm15);
-#endif
-    }
-#endif
-    // Save whole 128bit (16 bytes) XMM regiters
-    subptr(rsp, 16 * LP64_ONLY(16) NOT_LP64(8));
-    movdqu(Address(rsp,off++*16),xmm0);
-    movdqu(Address(rsp,off++*16),xmm1);
-    movdqu(Address(rsp,off++*16),xmm2);
-    movdqu(Address(rsp,off++*16),xmm3);
-    movdqu(Address(rsp,off++*16),xmm4);
-    movdqu(Address(rsp,off++*16),xmm5);
-    movdqu(Address(rsp,off++*16),xmm6);
-    movdqu(Address(rsp,off++*16),xmm7);
-#ifdef _LP64
-    movdqu(Address(rsp,off++*16),xmm8);
-    movdqu(Address(rsp,off++*16),xmm9);
-    movdqu(Address(rsp,off++*16),xmm10);
-    movdqu(Address(rsp,off++*16),xmm11);
-    movdqu(Address(rsp,off++*16),xmm12);
-    movdqu(Address(rsp,off++*16),xmm13);
-    movdqu(Address(rsp,off++*16),xmm14);
-    movdqu(Address(rsp,off++*16),xmm15);
-#endif
-  }
-}
-
-void MacroAssembler::restore_vector_registers() {
-  int off = 0;
+  off = 0;
   if (UseSSE == 1)  {
     movflt(xmm0, Address(rsp,off++*sizeof(jdouble)));
     movflt(xmm1, Address(rsp,off++*sizeof(jdouble)));
@@ -4823,6 +4798,7 @@ void MacroAssembler::restore_vector_registers() {
     }
 #endif
   }
+  popa();
 }
 
 static const double     pi_4 =  0.7853981633974483;
@@ -5257,6 +5233,7 @@ void MacroAssembler::verify_oop(Register reg, const char* s) {
   // Caller pops the arguments (oop, message) and restores rax, r10
   BLOCK_COMMENT("} verify_oop");
 }
+
 
 RegisterOrConstant MacroAssembler::delayed_value_impl(intptr_t* delayed_value_addr,
                                                       Register tmp,
@@ -5786,13 +5763,6 @@ void MacroAssembler::store_klass(Register dst, Register src) {
 }
 
 void MacroAssembler::load_heap_oop(Register dst, Address src) {
-#if INCLUDE_ALL_GCS
-  if (UseShenandoahGC) {
-    ShenandoahBarrierSetAssembler::bsasm()->load_heap_oop(this, dst, src);
-    return;
-  }
-#endif
-
 #ifdef _LP64
   // FIXME: Must change all places where we try to load the klass.
   if (UseCompressedOops) {
@@ -5805,13 +5775,6 @@ void MacroAssembler::load_heap_oop(Register dst, Address src) {
 
 // Doesn't do verfication, generates fixed size code
 void MacroAssembler::load_heap_oop_not_null(Register dst, Address src) {
-#if INCLUDE_ALL_GCS
-  if (UseShenandoahGC) {
-    ShenandoahBarrierSetAssembler::bsasm()->load_heap_oop(this, dst, src);
-    return;
-  }
-#endif
-
 #ifdef _LP64
   if (UseCompressedOops) {
     movl(dst, src);

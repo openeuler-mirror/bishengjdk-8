@@ -52,10 +52,6 @@
 #include "runtime/vframe.hpp"
 #include "utilities/preserveException.hpp"
 
-#if INCLUDE_ALL_GCS
-#include "gc_implementation/shenandoah/shenandoahBarrierSet.hpp"
-#endif
-
 PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 
 #define INJECTED_FIELD_COMPUTE_OFFSET(klass, name, signature, may_be_java)    \
@@ -1220,18 +1216,11 @@ void java_lang_ThreadGroup::compute_offsets() {
 oop java_lang_Throwable::unassigned_stacktrace() {
   InstanceKlass* ik = InstanceKlass::cast(SystemDictionary::Throwable_klass());
   address addr = ik->static_field_addr(static_unassigned_stacktrace_offset);
-  oop result;
   if (UseCompressedOops) {
-    result = oopDesc::load_decode_heap_oop((narrowOop *)addr);
+    return oopDesc::load_decode_heap_oop((narrowOop *)addr);
   } else {
-    result = oopDesc::load_decode_heap_oop((oop*)addr);
+    return oopDesc::load_decode_heap_oop((oop*)addr);
   }
-#if INCLUDE_ALL_GCS
-  if (UseShenandoahGC) {
-    result = ShenandoahBarrierSet::barrier_set()->load_reference_barrier(result);
-  }
-#endif
-  return result;
 }
 
 oop java_lang_Throwable::backtrace(oop throwable) {
@@ -2667,18 +2656,11 @@ HeapWord *java_lang_ref_Reference::pending_list_lock_addr() {
 oop java_lang_ref_Reference::pending_list_lock() {
   InstanceKlass* ik = InstanceKlass::cast(SystemDictionary::Reference_klass());
   address addr = ik->static_field_addr(static_lock_offset);
-  oop result;
   if (UseCompressedOops) {
-    result = oopDesc::load_decode_heap_oop((narrowOop *)addr);
+    return oopDesc::load_decode_heap_oop((narrowOop *)addr);
   } else {
-    result = oopDesc::load_decode_heap_oop((oop*)addr);
+    return oopDesc::load_decode_heap_oop((oop*)addr);
   }
-#if INCLUDE_ALL_GCS
-  if (UseShenandoahGC) {
-    result = ShenandoahBarrierSet::barrier_set()->load_reference_barrier(result);
-  }
-#endif
-  return result;
 }
 
 HeapWord *java_lang_ref_Reference::pending_list_addr() {
@@ -2690,18 +2672,11 @@ HeapWord *java_lang_ref_Reference::pending_list_addr() {
 
 oop java_lang_ref_Reference::pending_list() {
   char *addr = (char *)pending_list_addr();
-  oop result;
   if (UseCompressedOops) {
-    result = oopDesc::load_decode_heap_oop((narrowOop *)addr);
+    return oopDesc::load_decode_heap_oop((narrowOop *)addr);
   } else {
-    result = oopDesc::load_decode_heap_oop((oop*)addr);
+    return oopDesc::load_decode_heap_oop((oop*)addr);
   }
-#if INCLUDE_ALL_GCS
-  if (UseShenandoahGC) {
-    result = ShenandoahBarrierSet::barrier_set()->load_reference_barrier(result);
-  }
-#endif
-  return result;
 }
 
 

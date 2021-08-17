@@ -1521,7 +1521,7 @@ class TagObjectCollector : public JvmtiTagHashmapEntryClosure {
         oop o = entry->object();
         assert(o != NULL && Universe::heap()->is_in_reserved(o), "sanity check");
 #if INCLUDE_ALL_GCS
-        if (UseG1GC || (UseShenandoahGC && ShenandoahSATBBarrier)) {
+        if (UseG1GC) {
           // The reference in this tag map could be the only (implicitly weak)
           // reference to that object. If we hand it out, we need to keep it live wrt
           // SATB marking similar to other j.l.ref.Reference referents.
@@ -2805,6 +2805,7 @@ inline bool VM_HeapWalkOperation::iterate_over_type_array(oop o) {
   return true;
 }
 
+#ifdef ASSERT
 // verify that a static oop field is in range
 static inline bool verify_static_oop(InstanceKlass* ik,
                                      oop mirror, int offset) {
@@ -2819,6 +2820,7 @@ static inline bool verify_static_oop(InstanceKlass* ik,
     return false;
   }
 }
+#endif // #ifdef ASSERT
 
 // a class references its super class, interfaces, class loader, ...
 // and finally its static fields

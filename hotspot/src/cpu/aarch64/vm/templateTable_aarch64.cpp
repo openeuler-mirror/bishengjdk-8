@@ -38,9 +38,6 @@
 #include "runtime/sharedRuntime.hpp"
 #include "runtime/stubRoutines.hpp"
 #include "runtime/synchronizer.hpp"
-#if INCLUDE_ALL_GCS
-#include "shenandoahBarrierSetAssembler_aarch64.hpp"
-#endif
 
 #ifndef CC_INTERP
 
@@ -185,35 +182,6 @@ static void do_oop_store(InterpreterMacroAssembler* _masm,
                                    rthread /* thread */,
                                    r10 /* tmp */,
                                    r1 /* tmp2 */);
-        }
-
-      }
-      break;
-    case BarrierSet::ShenandoahBarrierSet:
-      {
-        // flatten object address if needed
-        if (obj.index() == noreg && obj.offset() == 0) {
-          if (obj.base() != r3) {
-            __ mov(r3, obj.base());
-          }
-        } else {
-          __ lea(r3, obj);
-        }
-        if (ShenandoahSATBBarrier) {
-          __ g1_write_barrier_pre(r3 /* obj */,
-                                  r1 /* pre_val */,
-                                  rthread /* thread */,
-                                  r10  /* tmp */,
-                                  val != noreg /* tosca_live */,
-                                  false /* expand_call */);
-        }
-        if (val == noreg) {
-          __ store_heap_oop_null(Address(r3, 0));
-        } else {
-          if (ShenandoahStoreValEnqueueBarrier) {
-            ShenandoahBarrierSetAssembler::bsasm()->storeval_barrier(_masm, val, r10);
-          }
-          __ store_heap_oop(Address(r3, 0), val);
         }
 
       }

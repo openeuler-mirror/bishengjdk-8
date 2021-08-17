@@ -447,13 +447,14 @@ public:
   // 64 bits of each vector register.
   void push_call_clobbered_registers();
   void pop_call_clobbered_registers();
-  void push_call_clobbered_fp_registers();
-  void pop_call_clobbered_fp_registers();
 
   // now mov instructions for loading absolute addresses and 32 or
   // 64 bit integers
 
-  void mov(Register dst, address addr);
+  inline void mov(Register dst, address addr)
+  {
+    mov_immediate64(dst, (u_int64_t)addr);
+  }
 
   inline void mov(Register dst, u_int64_t imm64)
   {

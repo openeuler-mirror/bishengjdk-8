@@ -75,7 +75,6 @@ CFLAGS += -fno-rtti
 CFLAGS += -fno-exceptions
 CFLAGS += -D_REENTRANT
 CFLAGS += -fcheck-new
-CFLAGS += -fstack-protector
 
 ARCHFLAG = $(ARCHFLAG/$(BUILDARCH))
 

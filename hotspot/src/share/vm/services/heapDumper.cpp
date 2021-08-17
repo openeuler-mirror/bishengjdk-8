@@ -756,12 +756,6 @@ void DumperSupport::dump_field_value(DumpWriter* writer, char type, address addr
         o = oopDesc::load_decode_heap_oop((oop*)addr);
       }
 
-#if INCLUDE_ALL_GCS
-      if (UseShenandoahGC) {
-        o = ShenandoahBarrierSet::barrier_set()->load_reference_barrier(o);
-      }
-#endif
-
       // reflection and sun.misc.Unsafe classes may have a reference to a
       // Klass* so filter it out.
       assert(o->is_oop_or_null(), "should always be an oop");

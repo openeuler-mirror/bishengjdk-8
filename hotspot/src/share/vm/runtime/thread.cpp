@@ -96,7 +96,6 @@
 # include "os_bsd.inline.hpp"
 #endif
 #if INCLUDE_ALL_GCS
-#include "gc_implementation/shenandoah/shenandoahControlThread.hpp"
 #include "gc_implementation/concurrentMarkSweep/concurrentMarkSweepThread.hpp"
 #include "gc_implementation/g1/concurrentMarkThread.inline.hpp"
 #include "gc_implementation/g1/g1CollectedHeap.hpp"
@@ -305,41 +304,7 @@ Thread::Thread() {
            "bug in forced alignment of thread objects");
   }
 #endif /* ASSERT */
-
-  _oom_during_evac = 0;
-#if INCLUDE_ALL_GCS
-  _gc_state = _gc_state_global;
-  _worker_id = (uint)(-1); // Actually, ShenandoahWorkerSession::INVALID_WORKER_ID, but avoid dependencies.
-  _force_satb_flush = false;
-  _paced_time = 0;
-#endif
 }
-
-void Thread::set_oom_during_evac(bool oom) {
-  if (oom) {
-    _oom_during_evac |= 1;
-  } else {
-    _oom_during_evac &= ~1;
-  }
-}
-
-bool Thread::is_oom_during_evac() const {
-  return (_oom_during_evac & 1) == 1;
-}
-
-#ifdef ASSERT
-void Thread::set_evac_allowed(bool evac_allowed) {
-  if (evac_allowed) {
-    _oom_during_evac |= 2;
-  } else {
-    _oom_during_evac &= ~2;
-  }
-}
-
-bool Thread::is_evac_allowed() const {
-  return (_oom_during_evac & 2) == 2;
-}
-#endif
 
 void Thread::initialize_thread_local_storage() {
   // Note: Make sure this method only calls
@@ -1544,7 +1509,6 @@ void JavaThread::initialize() {
 #if INCLUDE_ALL_GCS
 SATBMarkQueueSet JavaThread::_satb_mark_queue_set;
 DirtyCardQueueSet JavaThread::_dirty_card_queue_set;
-char Thread::_gc_state_global = 0;
 #endif // INCLUDE_ALL_GCS
 
 JavaThread::JavaThread(bool is_attaching_via_jni) :
@@ -1948,11 +1912,8 @@ void JavaThread::exit(bool destroy_vm, ExitType exit_type) {
   // from the list of active threads. We must do this after any deferred
   // card marks have been flushed (above) so that any entries that are
   // added to the thread's dirty card queue as a result are not lost.
-  if (UseG1GC || (UseShenandoahGC)) {
+  if (UseG1GC) {
     flush_barrier_queues();
-  }
-  if (UseShenandoahGC && UseTLAB && gclab().is_initialized()) {
-    gclab().make_parsable(true);
   }
 #endif // INCLUDE_ALL_GCS
 
@@ -1987,27 +1948,6 @@ void JavaThread::initialize_queues() {
   // The dirty card queue should have been constructed with its
   // active field set to true.
   assert(dirty_queue.is_active(), "dirty card queue should be active");
-
-  _gc_state = _gc_state_global;
-}
-
-void JavaThread::set_gc_state(char in_prog) {
-  _gc_state = in_prog;
-}
-
-void JavaThread::set_gc_state_all_threads(char in_prog) {
-  assert_locked_or_safepoint(Threads_lock);
-  _gc_state_global = in_prog;
-  for (JavaThread* t = Threads::first(); t != NULL; t = t->next()) {
-    t->set_gc_state(in_prog);
-  }
-}
-
-void JavaThread::set_force_satb_flush_all_threads(bool value) {
-  assert_locked_or_safepoint(Threads_lock);
-  for (JavaThread* t = Threads::first(); t != NULL; t = t->next()) {
-    t->set_force_satb_flush(value);
-  }
 }
 #endif // INCLUDE_ALL_GCS
 
@@ -2038,11 +1978,8 @@ void JavaThread::cleanup_failed_attach_current_thread() {
   }
 
 #if INCLUDE_ALL_GCS
-  if (UseG1GC || (UseShenandoahGC)) {
+  if (UseG1GC) {
     flush_barrier_queues();
-  }
-  if (UseShenandoahGC && UseTLAB && gclab().is_initialized()) {
-    gclab().make_parsable(true);
   }
 #endif // INCLUDE_ALL_GCS
 
@@ -3348,13 +3285,6 @@ bool        Threads::_vm_complete = false;
 // All JavaThreads
 #define ALL_JAVA_THREADS(X) for (JavaThread* X = _thread_list; X; X = X->next())
 
-void Threads::java_threads_do(ThreadClosure* tc) {
-  assert_locked_or_safepoint(Threads_lock);
-  ALL_JAVA_THREADS(p) {
-    tc->do_thread(p);
-  }
-}
-
 // All JavaThreads + all non-JavaThreads (i.e., every thread in the system)
 void Threads::threads_do(ThreadClosure* tc) {
   assert_locked_or_safepoint(Threads_lock);
@@ -3684,11 +3614,9 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   // Support for ConcurrentMarkSweep. This should be cleaned up
   // and better encapsulated. The ugly nested if test would go away
   // once things are properly refactored. XXX YSR
-  if (UseConcMarkSweepGC || UseG1GC || UseShenandoahGC) {
+  if (UseConcMarkSweepGC || UseG1GC) {
     if (UseConcMarkSweepGC) {
       ConcurrentMarkSweepThread::makeSurrogateLockerThread(THREAD);
-    } else if (UseShenandoahGC) {
-      ShenandoahControlThread::makeSurrogateLockerThread(THREAD);
     } else {
       ConcurrentMarkThread::makeSurrogateLockerThread(THREAD);
       G1CollectedHeap::heap()->init_periodic_gc_thread();
@@ -4282,8 +4210,7 @@ void Threads::possibly_parallel_oops_do(OopClosure* f, CLDClosure* cld_f, CodeBl
   bool is_par = sh->n_par_threads() > 0;
   assert(!is_par ||
          (SharedHeap::heap()->n_par_threads() ==
-          SharedHeap::heap()->workers()->active_workers()
-	  || UseShenandoahGC), "Mismatch");
+          SharedHeap::heap()->workers()->active_workers()), "Mismatch");
   int cp = SharedHeap::heap()->strong_roots_parity();
   ALL_JAVA_THREADS(p) {
     if (p->claim_oops_do(is_par, cp)) {

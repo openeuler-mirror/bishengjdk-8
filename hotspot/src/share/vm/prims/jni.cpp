@@ -2630,7 +2630,7 @@ JNI_ENTRY(jobject, jni_GetObjectField(JNIEnv *env, jobject obj, jfieldID fieldID
   // If G1 is enabled and we are accessing the value of the referent
   // field in a reference object then we need to register a non-null
   // referent with the SATB barrier.
-  if (UseG1GC || (UseShenandoahGC && ShenandoahSATBBarrier)) {
+  if (UseG1GC) {
     bool needs_barrier = false;
 
     if (ret != NULL &&
@@ -4251,24 +4251,6 @@ JNI_ENTRY(void, jni_GetStringUTFRegion(JNIEnv *env, jstring string, jsize start,
   }
 JNI_END
 
-static oop lock_gc_or_pin_object(JavaThread* thread, jobject obj) {
-  if (Universe::heap()->supports_object_pinning()) {
-    const oop o = JNIHandles::resolve_non_null(obj);
-    return Universe::heap()->pin_object(thread, o);
-  } else {
-    GC_locker::lock_critical(thread);
-    return JNIHandles::resolve_non_null(obj);
-  }
-}
-
-static void unlock_gc_or_unpin_object(JavaThread* thread, jobject obj) {
-  if (Universe::heap()->supports_object_pinning()) {
-    const oop o = JNIHandles::resolve_non_null(obj);
-    return Universe::heap()->unpin_object(thread, o);
-  } else {
-    GC_locker::unlock_critical(thread);
-  }
-}
 
 JNI_ENTRY(void*, jni_GetPrimitiveArrayCritical(JNIEnv *env, jarray array, jboolean *isCopy))
   JNIWrapper("GetPrimitiveArrayCritical");
@@ -4278,10 +4260,11 @@ JNI_ENTRY(void*, jni_GetPrimitiveArrayCritical(JNIEnv *env, jarray array, jboole
  HOTSPOT_JNI_GETPRIMITIVEARRAYCRITICAL_ENTRY(
                                              env, array, (uintptr_t *) isCopy);
 #endif /* USDT2 */
+  GC_locker::lock_critical(thread);
   if (isCopy != NULL) {
     *isCopy = JNI_FALSE;
   }
-  oop a = lock_gc_or_pin_object(thread, array);
+  oop a = JNIHandles::resolve_non_null(array);
   assert(a->is_array(), "just checking");
   BasicType type;
   if (a->is_objArray()) {
@@ -4309,7 +4292,7 @@ JNI_ENTRY(void, jni_ReleasePrimitiveArrayCritical(JNIEnv *env, jarray array, voi
                                                   env, array, carray, mode);
 #endif /* USDT2 */
   // The array, carray and mode arguments are ignored
-  unlock_gc_or_unpin_object(thread, array);
+  GC_locker::unlock_critical(thread);
 #ifndef USDT2
   DTRACE_PROBE(hotspot_jni, ReleasePrimitiveArrayCritical__return);
 #else /* USDT2 */
@@ -4327,10 +4310,11 @@ JNI_ENTRY(const jchar*, jni_GetStringCritical(JNIEnv *env, jstring string, jbool
   HOTSPOT_JNI_GETSTRINGCRITICAL_ENTRY(
                                       env, string, (uintptr_t *) isCopy);
 #endif /* USDT2 */
+  GC_locker::lock_critical(thread);
   if (isCopy != NULL) {
     *isCopy = JNI_FALSE;
   }
-  oop s = lock_gc_or_pin_object(thread, string);
+  oop s = JNIHandles::resolve_non_null(string);
   int s_len = java_lang_String::length(s);
   typeArrayOop s_value = java_lang_String::value(s);
   int s_offset = java_lang_String::offset(s);
@@ -4359,7 +4343,7 @@ JNI_ENTRY(void, jni_ReleaseStringCritical(JNIEnv *env, jstring str, const jchar 
                                           env, str, (uint16_t *) chars);
 #endif /* USDT2 */
   // The str and chars arguments are ignored
-  unlock_gc_or_unpin_object(thread, str);
+  GC_locker::unlock_critical(thread);
 #ifndef USDT2
   DTRACE_PROBE(hotspot_jni, ReleaseStringCritical__return);
 #else /* USDT2 */

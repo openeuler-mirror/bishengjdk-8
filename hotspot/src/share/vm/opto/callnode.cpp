@@ -37,9 +37,6 @@
 #include "opto/regmask.hpp"
 #include "opto/rootnode.hpp"
 #include "opto/runtime.hpp"
-#if INCLUDE_ALL_GCS
-#include "gc_implementation/shenandoah/c2/shenandoahBarrierSetC2.hpp"
-#endif
 
 // Portions of code courtesy of Clifford Click
 
@@ -810,7 +807,7 @@ Node *CallNode::result_cast() {
 }
 
 
-void CallNode::extract_projections(CallProjections* projs, bool separate_io_proj, bool do_asserts) {
+void CallNode::extract_projections(CallProjections* projs, bool separate_io_proj) {
   projs->fallthrough_proj      = NULL;
   projs->fallthrough_catchproj = NULL;
   projs->fallthrough_ioproj    = NULL;
@@ -873,18 +870,17 @@ void CallNode::extract_projections(CallProjections* projs, bool separate_io_proj
     }
   }
 
-  // The resproj may not exist because the result could be ignored
+  // The resproj may not exist because the result couuld be ignored
   // and the exception object may not exist if an exception handler
   // swallows the exception but all the other must exist and be found.
   assert(projs->fallthrough_proj      != NULL, "must be found");
-  do_asserts = do_asserts && !Compile::current()->inlining_incrementally();
-  assert(!do_asserts || projs->fallthrough_catchproj != NULL, "must be found");
-  assert(!do_asserts || projs->fallthrough_memproj   != NULL, "must be found");
-  assert(!do_asserts || projs->fallthrough_ioproj    != NULL, "must be found");
-  assert(!do_asserts || projs->catchall_catchproj    != NULL, "must be found");
+  assert(Compile::current()->inlining_incrementally() || projs->fallthrough_catchproj != NULL, "must be found");
+  assert(Compile::current()->inlining_incrementally() || projs->fallthrough_memproj   != NULL, "must be found");
+  assert(Compile::current()->inlining_incrementally() || projs->fallthrough_ioproj    != NULL, "must be found");
+  assert(Compile::current()->inlining_incrementally() || projs->catchall_catchproj    != NULL, "must be found");
   if (separate_io_proj) {
-    assert(!do_asserts || projs->catchall_memproj    != NULL, "must be found");
-    assert(!do_asserts || projs->catchall_ioproj     != NULL, "must be found");
+    assert(Compile::current()->inlining_incrementally() || projs->catchall_memproj    != NULL, "must be found");
+    assert(Compile::current()->inlining_incrementally() || projs->catchall_ioproj     != NULL, "must be found");
   }
 }
 
@@ -909,6 +905,7 @@ Node *CallNode::Ideal(PhaseGVN *phase, bool can_reshape) {
   }
   return SafePointNode::Ideal(phase, can_reshape);
 }
+
 
 //=============================================================================
 uint CallJavaNode::size_of() const { return sizeof(*this); }
@@ -1001,13 +998,6 @@ void CallRuntimeNode::calling_convention( BasicType* sig_bt, VMRegPair *parm_reg
   Matcher::c_calling_convention( sig_bt, parm_regs, argcnt );
 }
 
-bool CallRuntimeNode::is_call_to_arraycopystub() const {
-  if (_name != NULL && strstr(_name, "arraycopy") != 0) {
-    return true;
-  }
-  return false;
-}
-
 //=============================================================================
 //------------------------------calling_convention-----------------------------
 
@@ -1020,37 +1010,6 @@ void CallLeafNode::dump_spec(outputStream *st) const {
   CallNode::dump_spec(st);
 }
 #endif
-
-Node *CallLeafNode::Ideal(PhaseGVN *phase, bool can_reshape) {
-  if (UseShenandoahGC && is_g1_wb_pre_call()) {
-    uint cnt = OptoRuntime::g1_wb_pre_Type()->domain()->cnt();
-    if (req() > cnt) {
-      Node* addp = in(cnt);
-      if (has_only_g1_wb_pre_uses(addp)) {
-        del_req(cnt);
-        if (can_reshape) {
-          phase->is_IterGVN()->_worklist.push(addp);
-        }
-        return this;
-      }
-    }
-  }
-
-  return CallNode::Ideal(phase, can_reshape);
-}
-
-bool CallLeafNode::has_only_g1_wb_pre_uses(Node* n) {
-  if (UseShenandoahGC) {
-    return false;
-  }
-  for (DUIterator_Fast imax, i = n->fast_outs(imax); i < imax; i++) {
-    Node* u = n->fast_out(i);
-    if (!u->is_g1_wb_pre_call()) {
-      return false;
-    }
-  }
-  return n->outcnt() > 0;
-}
 
 //=============================================================================
 
@@ -1581,15 +1540,7 @@ bool AbstractLockNode::find_matching_unlock(const Node* ctrl, LockNode* lock,
     Node *n = ctrl_proj->in(0);
     if (n != NULL && n->is_Unlock()) {
       UnlockNode *unlock = n->as_Unlock();
-      Node* lock_obj = lock->obj_node();
-      Node* unlock_obj = unlock->obj_node();
-#if INCLUDE_ALL_GCS
-      if (UseShenandoahGC) {
-        lock_obj = ShenandoahBarrierSetC2::bsc2()->step_over_gc_barrier(lock_obj);
-        unlock_obj = ShenandoahBarrierSetC2::bsc2()->step_over_gc_barrier(unlock_obj);
-      }
-#endif
-      if (lock_obj->eqv_uncast(unlock_obj) &&
+      if (lock->obj_node()->eqv_uncast(unlock->obj_node()) &&
           BoxLockNode::same_slot(lock->box_node(), unlock->box_node()) &&
           !unlock->is_eliminated()) {
         lock_ops.append(unlock);
@@ -1634,15 +1585,7 @@ LockNode *AbstractLockNode::find_matching_lock(UnlockNode* unlock) {
   }
   if (ctrl->is_Lock()) {
     LockNode *lock = ctrl->as_Lock();
-    Node* lock_obj = lock->obj_node();
-    Node* unlock_obj = unlock->obj_node();
-#if INCLUDE_ALL_GCS
-    if (UseShenandoahGC) {
-      lock_obj = ShenandoahBarrierSetC2::bsc2()->step_over_gc_barrier(lock_obj);
-      unlock_obj = ShenandoahBarrierSetC2::bsc2()->step_over_gc_barrier(unlock_obj);
-    }
-#endif
-    if (lock_obj->eqv_uncast(unlock_obj) &&
+    if (lock->obj_node()->eqv_uncast(unlock->obj_node()) &&
         BoxLockNode::same_slot(lock->box_node(), unlock->box_node())) {
       lock_result = lock;
     }
@@ -1673,15 +1616,7 @@ bool AbstractLockNode::find_lock_and_unlock_through_if(Node* node, LockNode* loc
       }
       if (lock1_node != NULL && lock1_node->is_Lock()) {
         LockNode *lock1 = lock1_node->as_Lock();
-        Node* lock_obj = lock->obj_node();
-        Node* lock1_obj = lock1->obj_node();
-#if INCLUDE_ALL_GCS
-        if (UseShenandoahGC) {
-          lock_obj = ShenandoahBarrierSetC2::bsc2()->step_over_gc_barrier(lock_obj);
-          lock1_obj = ShenandoahBarrierSetC2::bsc2()->step_over_gc_barrier(lock1_obj);
-        }
-#endif
-        if (lock_obj->eqv_uncast(lock1_obj) &&
+        if (lock->obj_node()->eqv_uncast(lock1->obj_node()) &&
             BoxLockNode::same_slot(lock->box_node(), lock1->box_node()) &&
             !lock1->is_eliminated()) {
           lock_ops.append(lock1);
@@ -1877,11 +1812,6 @@ bool LockNode::is_nested_lock_region(Compile * c) {
     return false;
   }
 
-#if INCLUDE_ALL_GCS
-  if (UseShenandoahGC) {
-    obj = ShenandoahBarrierSetC2::bsc2()->step_over_gc_barrier(obj);
-  }
-#endif
   // Look for external lock for the same object.
   SafePointNode* sfn = this->as_SafePoint();
   JVMState* youngest_jvms = sfn->jvms();
@@ -1892,11 +1822,6 @@ bool LockNode::is_nested_lock_region(Compile * c) {
     // Loop over monitors
     for (int idx = 0; idx < num_mon; idx++) {
       Node* obj_node = sfn->monitor_obj(jvms, idx);
-#if INCLUDE_ALL_GCS
-      if (UseShenandoahGC) {
-        obj_node = ShenandoahBarrierSetC2::bsc2()->step_over_gc_barrier(obj_node);
-      }
-#endif
       BoxLockNode* box_node = sfn->monitor_box(jvms, idx)->as_BoxLock();
       if ((box_node->stack_slot() < stk_slot) && obj_node->eqv_uncast(obj)) {
         return true;

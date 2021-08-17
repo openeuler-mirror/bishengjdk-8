@@ -27,7 +27,7 @@
  * @bug 8189131 8198240 8191844 8189949 8191031 8196141 8204923 8195774 8199779
  *      8209452 8209506 8210432 8195793 8216577 8222089 8222133 8222137 8222136
  *      8223499 8225392 8232019 8234245 8233223 8225068 8225069 8243321 8243320
- *      8225072 8258630 8259312
+ *      8225072 8258630 8259312 8243559 8256421 8225081
  * @summary Check root CA entries in cacerts file
  */
 import java.io.ByteArrayInputStream;
@@ -53,12 +53,12 @@ public class VerifyCACerts {
             + File.separator + "security" + File.separator + "cacerts";
 
     // The numbers of certs now.
-    private static final int COUNT = 89;
+    private static final int COUNT = 86;
 
     // SHA-256 of cacerts, can be generated with
     // shasum -a 256 cacerts | sed -e 's/../&:/g' | tr '[:lower:]' '[:upper:]' | cut -c1-95
     private static final String CHECKSUM
-            = "E6:F5:ED:92:CE:E2:35:5C:84:56:78:C7:72:29:29:A9:83:99:19:D9:54:F4:FF:7F:F7:D4:DB:2D:34:36:20:B5";
+            = "A5:00:71:02:B4:8B:AC:BE:64:34:0A:F2:DF:9D:F7:75:9D:05:84:7E:F6:EA:48:F0:64:36:29:8C:E7:A2:2D:63";
 
     // map of cert alias to SHA-256 fingerprint
     @SuppressWarnings("serial")

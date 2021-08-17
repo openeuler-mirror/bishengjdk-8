@@ -26,9 +26,6 @@
 #include "gc_interface/collectedHeap.hpp"
 #include "opto/machnode.hpp"
 #include "opto/regalloc.hpp"
-#if INCLUDE_ALL_GCS
-#include "gc_implementation/shenandoah/c2/shenandoahSupport.hpp"
-#endif
 
 //=============================================================================
 // Return the value requested
@@ -786,12 +783,6 @@ void MachCallRuntimeNode::dump_spec(outputStream *st) const {
 JVMState jvms_for_throw(0);
 JVMState *MachHaltNode::jvms() const {
   return &jvms_for_throw;
-}
-
-uint MachMemBarNode::size_of() const { return sizeof(*this); }
-
-const TypePtr *MachMemBarNode::adr_type() const {
-  return _adr_type;
 }
 
 //=============================================================================

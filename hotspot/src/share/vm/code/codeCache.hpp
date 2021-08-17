@@ -42,11 +42,9 @@
 
 class OopClosure;
 class DepChange;
-class ShenandoahParallelCodeCacheIterator;
 
 class CodeCache : AllStatic {
   friend class VMStructs;
-  friend class ShenandoahParallelCodeCacheIterator;
  private:
   // CodeHeap is malloc()'ed at startup and never deleted during shutdown,
   // so that the generated assembly code is always there when it's needed.

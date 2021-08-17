@@ -746,21 +746,6 @@ address InterpreterGenerator::generate_accessor_entry(void) {
     __ jmp(xreturn_path);
 
     __ bind(notChar);
-
-#if INCLUDE_ALL_GCS
-    if (UseShenandoahGC) {
-      Label notObj;
-
-      // Needs GC barriers
-      __ cmpl(rdx, atos);
-      __ jcc(Assembler::notEqual, notObj);
-      __ load_heap_oop(rax, field_address);
-      __ jmp(xreturn_path);
-
-      __ bind(notObj);
-    }
-#endif
-
 #ifdef ASSERT
     Label okay;
     __ cmpl(rdx, atos);
@@ -829,7 +814,7 @@ address InterpreterGenerator::generate_Reference_get_entry(void) {
   const int referent_offset = java_lang_ref_Reference::referent_offset;
   guarantee(referent_offset > 0, "referent offset not initialized");
 
-  if (UseG1GC || UseShenandoahGC) {
+  if (UseG1GC) {
     Label slow_path;
 
     // Check if local 0 != NULL
@@ -853,17 +838,10 @@ address InterpreterGenerator::generate_Reference_get_entry(void) {
 
     // Load the value of the referent field.
     const Address field_address(rax, referent_offset);
-#if INCLUDE_ALL_GCS
-    if (UseShenandoahGC) {
-      // Needs GC barriers
-      __ load_heap_oop(rax, field_address);
-    } else
-#endif
     __ movptr(rax, field_address);
 
     // Generate the G1 pre-barrier code to log the value of
     // the referent field in an SATB buffer.
-    if (!UseShenandoahGC || ShenandoahSATBBarrier) {
     __ get_thread(rcx);
     __ g1_write_barrier_pre(noreg /* obj */,
                             rax /* pre_val */,
@@ -871,7 +849,6 @@ address InterpreterGenerator::generate_Reference_get_entry(void) {
                             rbx /* tmp */,
                             true /* tosca_save */,
                             true /* expand_call */);
-    }
 
     // _areturn
     __ pop(rsi);                // get sender sp

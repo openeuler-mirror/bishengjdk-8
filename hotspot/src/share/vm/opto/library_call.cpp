@@ -42,11 +42,6 @@
 #include "prims/nativeLookup.hpp"
 #include "runtime/sharedRuntime.hpp"
 #include "utilities/macros.hpp"
-#if INCLUDE_ALL_GCS
-#include "gc_implementation/shenandoah/shenandoahRuntime.hpp"
-#include "gc_implementation/shenandoah/c2/shenandoahBarrierSetC2.hpp"
-#include "gc_implementation/shenandoah/c2/shenandoahSupport.hpp"
-#endif
 
 class LibraryIntrinsic : public InlineCallGenerator {
   // Extend the set of intrinsics known to the runtime:
@@ -2450,7 +2445,7 @@ void LibraryCallKit::insert_pre_barrier(Node* base_oop, Node* offset,
   // runtime filters that guard the pre-barrier code.
   // Also add memory barrier for non volatile load from the referent field
   // to prevent commoning of loads across safepoint.
-  if (!(UseG1GC || UseShenandoahGC) && !need_mem_bar)
+  if (!UseG1GC && !need_mem_bar)
     return;
 
   // Some compile time checks.
@@ -2707,14 +2702,6 @@ bool LibraryCallKit::inline_unsafe_access(bool is_native_ptr, bool is_store, Bas
   // or Compile::must_alias will throw a diagnostic assert.)
   bool need_mem_bar = (alias_type->adr_type() == TypeOopPtr::BOTTOM);
 
-#if INCLUDE_ALL_GCS
-  // Work around JDK-8220714 bug. This is done for Shenandoah only, until
-  // the shared code fix is upstreamed and properly tested there.
-  if (UseShenandoahGC) {
-    need_mem_bar |= is_native_ptr;
-  }
-#endif
-
   // If we are reading the value of the referent field of a Reference
   // object (either by using Unsafe directly or through reflection)
   // then, if G1 is enabled, we need to record the referent in an
@@ -2774,11 +2761,6 @@ bool LibraryCallKit::inline_unsafe_access(bool is_native_ptr, bool is_store, Bas
     // To be valid, unsafe loads may depend on other conditions than
     // the one that guards them: pin the Load node
     load = make_load(control(), adr, value_type, type, adr_type, mo, LoadNode::Pinned, is_volatile, unaligned, mismatched);
-#if INCLUDE_ALL_GCS
-    if (UseShenandoahGC && (type == T_OBJECT || type == T_ARRAY)) {
-      load = ShenandoahBarrierSetC2::bsc2()->load_reference_barrier(this, load);
-    }
-#endif
     // load value
     switch (type) {
     case T_BOOLEAN:
@@ -2832,11 +2814,6 @@ bool LibraryCallKit::inline_unsafe_access(bool is_native_ptr, bool is_store, Bas
 
   if (is_volatile) {
     if (!is_store) {
-#if INCLUDE_ALL_GCS
-      if (UseShenandoahGC) {
-        load = ShenandoahBarrierSetC2::bsc2()->step_over_gc_barrier(load);
-      }
-#endif
       Node* mb = insert_mem_bar(Op_MemBarAcquire, load);
       mb->as_MemBar()->set_trailing_load();
     } else {
@@ -3148,11 +3125,6 @@ bool LibraryCallKit::inline_unsafe_load_store(BasicType type, LoadStoreKind kind
     if (adr->bottom_type()->is_ptr_to_narrowoop()) {
       load_store = _gvn.transform(new (C) DecodeNNode(load_store, load_store->get_ptr_type()));
     }
-#endif
-#if INCLUDE_ALL_GCS
-  if (UseShenandoahGC) {
-    load_store = ShenandoahBarrierSetC2::bsc2()->load_reference_barrier(this, load_store);
-  }
 #endif
     if (can_move_pre_barrier()) {
       // Don't need to load pre_val. The old value is returned by load_store.
@@ -4589,20 +4561,6 @@ void LibraryCallKit::copy_to_clone(Node* obj, Node* alloc_obj, Node* obj_size, b
   countx = _gvn.transform(new (C) SubXNode(countx, MakeConX(base_off)));
   countx = _gvn.transform(new (C) URShiftXNode(countx, intcon(LogBytesPerLong) ));
 
-#if INCLUDE_ALL_GCS
-  if (UseShenandoahGC && ShenandoahCloneBarrier) {
-    assert (src->is_AddP(), "for clone the src should be the interior ptr");
-    assert (dest->is_AddP(), "for clone the dst should be the interior ptr");
-
-    // Make sure that references in the cloned object are updated for Shenandoah.
-    make_runtime_call(RC_LEAF|RC_NO_FP,
-                      OptoRuntime::shenandoah_clone_barrier_Type(),
-                      CAST_FROM_FN_PTR(address, ShenandoahRuntime::shenandoah_clone_barrier),
-                      "shenandoah_clone_barrier", TypePtr::BOTTOM,
-                      src->in(AddPNode::Base));
-  }
-#endif
-
   const TypePtr* raw_adr_type = TypeRawPtr::BOTTOM;
   bool disjoint_bases = true;
   generate_unchecked_arraycopy(raw_adr_type, T_LONG, disjoint_bases,
@@ -5339,7 +5297,7 @@ LibraryCallKit::generate_arraycopy(const TypePtr* adr_type,
     // At this point we know we do not need type checks on oop stores.
 
     // Let's see if we need card marks:
-    if (alloc != NULL && use_ReduceInitialCardMarks() && ! UseShenandoahGC) {
+    if (alloc != NULL && use_ReduceInitialCardMarks()) {
       // If we do not need card marks, copy using the jint or jlong stub.
       copy_type = LP64_ONLY(UseCompressedOops ? T_INT : T_LONG) NOT_LP64(T_INT);
       assert(type2aelembytes(basic_elem_type) == type2aelembytes(copy_type),
@@ -6555,12 +6513,6 @@ bool LibraryCallKit::inline_reference_get() {
   Node* no_ctrl = NULL;
   Node* result = make_load(no_ctrl, adr, object_type, T_OBJECT, MemNode::unordered);
 
-#if INCLUDE_ALL_GCS
-  if (UseShenandoahGC) {
-    result = ShenandoahBarrierSetC2::bsc2()->load_reference_barrier(this, result);
-  }
-#endif
-
   // Use the pre-barrier to record the value in the referent field
   pre_barrier(false /* do_load */,
               control(),
@@ -6617,12 +6569,6 @@ Node * LibraryCallKit::load_field_from_object(Node * fromObj, const char * field
   // Build the load.
   MemNode::MemOrd mo = is_vol ? MemNode::acquire : MemNode::unordered;
   Node* loadedField = make_load(NULL, adr, type, bt, adr_type, mo, LoadNode::DependsOnlyOnTest, is_vol);
-#if INCLUDE_ALL_GCS
-  if (UseShenandoahGC && (bt == T_OBJECT || bt == T_ARRAY)) {
-    loadedField = ShenandoahBarrierSetC2::bsc2()->load_reference_barrier(this, loadedField);
-  }
-#endif
-
   // If reference is volatile, prevent following memory ops from
   // floating up past the volatile read.  Also prevents commoning
   // another volatile read.

@@ -32,9 +32,6 @@
 #include "opto/phaseX.hpp"
 #include "opto/regmask.hpp"
 #include "opto/type.hpp"
-#if INCLUDE_ALL_GCS
-#include "gc_implementation/shenandoah/c2/shenandoahSupport.hpp"
-#endif
 
 //=============================================================================
 //------------------------------MultiNode--------------------------------------
@@ -151,62 +148,59 @@ uint ProjNode::ideal_reg() const {
 }
 
 //-------------------------------is_uncommon_trap_proj----------------------------
-// Return uncommon trap call node if proj is for "proj->[region->..]call_uct"
-// NULL otherwise
-CallStaticJavaNode* ProjNode::is_uncommon_trap_proj(Deoptimization::DeoptReason reason) {
+// Return true if proj is the form of "proj->[region->..]call_uct"
+bool ProjNode::is_uncommon_trap_proj(Deoptimization::DeoptReason reason) {
   int path_limit = 10;
   Node* out = this;
   for (int ct = 0; ct < path_limit; ct++) {
     out = out->unique_ctrl_out();
     if (out == NULL)
-      return NULL;
+      return false;
     if (out->is_CallStaticJava()) {
-      CallStaticJavaNode* call = out->as_CallStaticJava();
-      int req = call->uncommon_trap_request();
+      int req = out->as_CallStaticJava()->uncommon_trap_request();
       if (req != 0) {
         Deoptimization::DeoptReason trap_reason = Deoptimization::trap_request_reason(req);
         if (trap_reason == reason || reason == Deoptimization::Reason_none) {
-          return call;
+           return true;
         }
       }
-      return NULL; // don't do further after call
+      return false; // don't do further after call
     }
     if (out->Opcode() != Op_Region)
-      return NULL;
+      return false;
   }
-  return NULL;
+  return false;
 }
 
 //-------------------------------is_uncommon_trap_if_pattern-------------------------
-// Return uncommon trap call node for    "if(test)-> proj -> ...
-//                                                 |
-//                                                 V
-//                                             other_proj->[region->..]call_uct"
-// NULL otherwise
+// Return true  for "if(test)-> proj -> ...
+//                          |
+//                          V
+//                      other_proj->[region->..]call_uct"
+//
 // "must_reason_predicate" means the uct reason must be Reason_predicate
-CallStaticJavaNode* ProjNode::is_uncommon_trap_if_pattern(Deoptimization::DeoptReason reason) {
+bool ProjNode::is_uncommon_trap_if_pattern(Deoptimization::DeoptReason reason) {
   Node *in0 = in(0);
-  if (!in0->is_If()) return NULL;
+  if (!in0->is_If()) return false;
   // Variation of a dead If node.
-  if (in0->outcnt() < 2)  return NULL;
+  if (in0->outcnt() < 2)  return false;
   IfNode* iff = in0->as_If();
 
   // we need "If(Conv2B(Opaque1(...)))" pattern for reason_predicate
   if (reason != Deoptimization::Reason_none) {
     if (iff->in(1)->Opcode() != Op_Conv2B ||
        iff->in(1)->in(1)->Opcode() != Op_Opaque1) {
-      return NULL;
+      return false;
     }
   }
 
   ProjNode* other_proj = iff->proj_out(1-_con);
   if (other_proj == NULL) // Should never happen, but make Parfait happy.
-      return NULL;
-  CallStaticJavaNode* call = other_proj->is_uncommon_trap_proj(reason);
-  if (call != NULL) {
+      return false;
+  if (other_proj->is_uncommon_trap_proj(reason)) {
     assert(reason == Deoptimization::Reason_none ||
            Compile::current()->is_predicate_opaq(iff->in(1)->in(1)), "should be on the list");
-    return call;
+    return true;
   }
-  return NULL;
+  return false;
 }

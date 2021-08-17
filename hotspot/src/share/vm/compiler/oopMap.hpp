@@ -43,7 +43,6 @@
 class frame;
 class RegisterMap;
 class DerivedPointerEntry;
-class OopClosure;
 
 class OopMapValue: public StackObj {
   friend class VMStructs;

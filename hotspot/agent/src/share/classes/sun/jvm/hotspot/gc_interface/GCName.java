@@ -36,7 +36,6 @@ public enum GCName {
   G1New ("G1New"),
   ConcurrentMarkSweep ("ConcurrentMarkSweep"),
   G1Old ("G1Old"),
-  Shenandoah ("Shenandoah"),
   GCNameEndSentinel ("GCNameEndSentinel");
 
   private final String value;

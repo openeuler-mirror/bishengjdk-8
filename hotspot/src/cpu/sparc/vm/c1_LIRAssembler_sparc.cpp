@@ -683,9 +683,6 @@ void LIR_Assembler::emit_opBranch(LIR_OpBranch* op) {
   // The peephole pass fills the delay slot
 }
 
-void LIR_Assembler::emit_opShenandoahWriteBarrier(LIR_OpShenandoahWriteBarrier* op) {
-  Unimplemented();
-}
 
 void LIR_Assembler::emit_opConvert(LIR_OpConvert* op) {
   Bytecodes::Code code = op->bytecode();
@@ -3486,7 +3483,7 @@ void LIR_Assembler::unpack64(LIR_Opr src, LIR_Opr dst) {
 }
 
 
-void LIR_Assembler::leal(LIR_Opr addr_opr, LIR_Opr dest, LIR_PatchCode patch_code, CodeEmitInfo* info) {
+void LIR_Assembler::leal(LIR_Opr addr_opr, LIR_Opr dest) {
   LIR_Address* addr = addr_opr->as_address_ptr();
   assert(addr->index()->is_illegal() && addr->scale() == LIR_Address::times_1, "can't handle complex addresses yet");
 

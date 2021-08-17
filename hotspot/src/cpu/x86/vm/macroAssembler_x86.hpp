@@ -1278,8 +1278,6 @@ public:
 
 #undef VIRTUAL
 
-  void save_vector_registers();
-  void restore_vector_registers();
 };
 
 /**

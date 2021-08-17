@@ -25,12 +25,7 @@
 #ifndef SHARE_VM_OOPS_OBJARRAYOOP_HPP
 #define SHARE_VM_OOPS_OBJARRAYOOP_HPP
 
-#include "memory/barrierSet.hpp"
 #include "oops/arrayOop.hpp"
-
-#if INCLUDE_ALL_GCS
-#include "gc_implementation/shenandoah/shenandoahBarrierSet.hpp"
-#endif
 
 // An objArrayOop is an array containing oops.
 // Evaluating "String arg[10]" will create an objArrayOop.
@@ -84,20 +79,13 @@ private:
 
   // Accessing
   oop obj_at(int index) const {
-    oop obj;
     // With UseCompressedOops decode the narrow oop in the objArray to an
     // uncompressed oop.  Otherwise this is simply a "*" operator.
     if (UseCompressedOops) {
-      obj = load_decode_heap_oop(obj_at_addr<narrowOop>(index));
+      return load_decode_heap_oop(obj_at_addr<narrowOop>(index));
     } else {
-      obj = load_decode_heap_oop(obj_at_addr<oop>(index));
+      return load_decode_heap_oop(obj_at_addr<oop>(index));
     }
-#if INCLUDE_ALL_GCS
-    if (UseShenandoahGC) {
-      obj = ShenandoahBarrierSet::barrier_set()->load_reference_barrier(obj);
-    }
-#endif
-    return obj;
   }
 
   void obj_at_put(int index, oop value) {

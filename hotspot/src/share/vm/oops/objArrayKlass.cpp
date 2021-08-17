@@ -56,8 +56,6 @@
 #include "gc_implementation/parallelScavenge/psCompactionManager.hpp"
 #include "gc_implementation/parallelScavenge/psPromotionManager.inline.hpp"
 #include "gc_implementation/parallelScavenge/psScavenge.inline.hpp"
-#include "gc_implementation/shenandoah/shenandoahBarrierSet.inline.hpp"
-#include "gc_implementation/shenandoah/shenandoahOopClosures.inline.hpp"
 #include "oops/oop.pcgc.inline.hpp"
 #endif // INCLUDE_ALL_GCS
 
@@ -244,12 +242,6 @@ template <class T> void ObjArrayKlass::do_copy(arrayOop s, T* src,
   // of the asserts below will fail if this is not the case.
   assert(bs->has_write_ref_array_opt(), "Barrier set must have ref array opt");
   assert(bs->has_write_ref_array_pre_opt(), "For pre-barrier as well.");
-
-#if INCLUDE_ALL_GCS
-  if (UseShenandoahGC) {
-    ShenandoahBarrierSet::barrier_set()->arraycopy_barrier(src, dst, length);
-  }
-#endif
 
   if (s == d) {
     // since source and destination are equal we do not need conversion checks.

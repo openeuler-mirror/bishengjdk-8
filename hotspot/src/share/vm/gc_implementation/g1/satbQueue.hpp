@@ -49,9 +49,6 @@ private:
   // Filter out unwanted entries from the buffer.
   void filter();
 
-  template <class HeapType>
-  void filter_impl();
-
 public:
   ObjPtrQueue(PtrQueueSet* qset, bool perm = false) :
     // SATB queues are only active during marking cycles. We create

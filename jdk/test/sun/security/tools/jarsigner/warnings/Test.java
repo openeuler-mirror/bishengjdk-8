@@ -245,4 +245,21 @@ public abstract class Test {
         }
         analyzer.shouldContain(JAR_SIGNED);
     }
+
+    protected OutputAnalyzer keytool(String... cmd) throws Throwable {
+        return tool(KEYTOOL, cmd);
+    }
+
+    protected OutputAnalyzer jarsigner(String... cmd) throws Throwable {
+        return tool(JARSIGNER, cmd);
+    }
+
+    private OutputAnalyzer tool(String tool, String... args) throws Throwable {
+        List<String> cmd = new ArrayList<>();
+        cmd.add(tool);
+        cmd.add("-J-Duser.language=en");
+        cmd.add("-J-Duser.country=US");
+        cmd.addAll(Arrays.asList(args));
+        return ProcessTools.executeCommand(cmd.toArray(new String[cmd.size()]));
+    }
 }

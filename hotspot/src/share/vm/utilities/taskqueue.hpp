@@ -472,9 +472,7 @@ int GenericTaskQueue<E, F, N>::next_random_queue_id() {
 }
 
 template<class E, MEMFLAGS F, unsigned int N>
-GenericTaskQueue<E, F, N>::~GenericTaskQueue() {
-  FREE_C_HEAP_ARRAY(E, _elems, F);
-}
+GenericTaskQueue<E, F, N>::~GenericTaskQueue() {}
 
 // OverflowTaskQueue is a TaskQueue that also includes an overflow stack for
 // elements that do not fit in the TaskQueue.

@@ -35,9 +35,6 @@
 #include "opto/regmask.hpp"
 #include "opto/type.hpp"
 #include "utilities/copy.hpp"
-#if INCLUDE_ALL_GCS
-#include "gc_implementation/shenandoah/c2/shenandoahSupport.hpp"
-#endif
 
 class RegMask;
 // #include "phase.hpp"
@@ -532,10 +529,6 @@ Node *Node::clone() const {
     C->add_macro_node(n);
   if (is_expensive())
     C->add_expensive_node(n);
-
-  if (Opcode() == Op_ShenandoahLoadReferenceBarrier) {
-    C->add_shenandoah_barrier(reinterpret_cast<ShenandoahLoadReferenceBarrierNode*>(n));
-  }
   // If the cloned node is a range check dependent CastII, add it to the list.
   CastIINode* cast = n->isa_CastII();
   if (cast != NULL && cast->has_range_check()) {
@@ -668,9 +661,6 @@ void Node::destruct() {
   }
   if (is_expensive()) {
     compile->remove_expensive_node(this);
-  }
-  if (Opcode() == Op_ShenandoahLoadReferenceBarrier) {
-    compile->remove_shenandoah_barrier(reinterpret_cast<ShenandoahLoadReferenceBarrierNode*>(this));
   }
   CastIINode* cast = isa_CastII();
   if (cast != NULL && cast->has_range_check()) {
@@ -985,11 +975,6 @@ Node* Node::uncast_helper(const Node* p) {
     }
   }
   return (Node*) p;
-}
-
-// Return true if the current node has an out that matches opcode.
-bool Node::has_out_with(int opcode) {
-  return (find_out_with(opcode) != NULL);
 }
 
 //------------------------------add_prec---------------------------------------
@@ -1398,9 +1383,6 @@ static void kill_dead_code( Node *dead, PhaseIterGVN *igvn ) {
       if (dead->is_expensive()) {
         igvn->C->remove_expensive_node(dead);
       }
-      if (dead->Opcode() == Op_ShenandoahLoadReferenceBarrier) {
-        igvn->C->remove_shenandoah_barrier(reinterpret_cast<ShenandoahLoadReferenceBarrierNode*>(dead));
-      }
       CastIINode* cast = dead->isa_CastII();
       if (cast != NULL && cast->has_range_check()) {
         igvn->C->remove_range_check_cast(cast);
@@ -1423,8 +1405,6 @@ static void kill_dead_code( Node *dead, PhaseIterGVN *igvn ) {
             // The restriction (outcnt() <= 2) is the same as in set_req_X()
             // and remove_globally_dead_node().
             igvn->add_users_to_worklist( n );
-          } else if (n->Opcode() == Op_AddP && CallLeafNode::has_only_g1_wb_pre_uses(n)) {
-            igvn->add_users_to_worklist(n);
           }
         }
       }

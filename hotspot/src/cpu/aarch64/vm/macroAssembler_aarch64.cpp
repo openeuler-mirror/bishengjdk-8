@@ -1,4 +1,5 @@
 /*
+/*
  * Copyright (c) 2013, Red Hat Inc.
  * Copyright (c) 1997, 2012, Oracle and/or its affiliates.
  * All rights reserved.
@@ -32,7 +33,6 @@
 #include "interpreter/interpreter.hpp"
 
 #include "compiler/disassembler.hpp"
-#include "gc_interface/collectedHeap.inline.hpp"
 #include "memory/resourceArea.hpp"
 #include "runtime/biasedLocking.hpp"
 #include "runtime/interfaceSupport.hpp"
@@ -53,7 +53,6 @@
 #include "gc_implementation/g1/g1CollectedHeap.inline.hpp"
 #include "gc_implementation/g1/g1SATBCardTableModRefBS.hpp"
 #include "gc_implementation/g1/heapRegion.hpp"
-#include "shenandoahBarrierSetAssembler_aarch64.hpp"
 #endif
 
 #ifdef COMPILER2
@@ -644,6 +643,11 @@ void MacroAssembler::call_VM_base(Register oop_result,
 
   // do the call, remove parameters
   MacroAssembler::call_VM_leaf_base(entry_point, number_of_arguments, &l);
+
+  // lr could be poisoned with PAC signature during throw_pending_exception
+  // if it was tail-call optimized by compiler, since lr is not callee-saved
+  // reload it with proper value
+  adr(lr, l);
 
   // reset last Java frame
   // Only interpreter should have to clear fp
@@ -1268,7 +1272,7 @@ void MacroAssembler::verify_oop(Register reg, const char* s) {
   stp(rscratch2, lr, Address(pre(sp, -2 * wordSize)));
 
   mov(r0, reg);
-  mov(rscratch1, (address)b);
+  movptr(rscratch1, (uintptr_t)(address)b);
 
   // call indirectly to solve generation ordering problem
   lea(rscratch2, ExternalAddress(StubRoutines::verify_oop_subroutine_entry_address()));
@@ -1304,7 +1308,7 @@ void MacroAssembler::verify_oop_addr(Address addr, const char* s) {
   } else {
     ldr(r0, addr);
   }
-  mov(rscratch1, (address)b);
+  movptr(rscratch1, (uintptr_t)(address)b);
 
   // call indirectly to solve generation ordering problem
   lea(rscratch2, ExternalAddress(StubRoutines::verify_oop_subroutine_entry_address()));
@@ -1643,12 +1647,6 @@ void MacroAssembler::mov_immediate32(Register dst, u_int32_t imm32)
       movkw(dst, imm_h[1], 16);
     }
   }
-}
-
-void MacroAssembler::mov(Register dst, address addr) {
-  assert(Universe::heap() == NULL
-         || !Universe::heap()->is_in(addr), "use movptr for oop pointers");
-    mov_immediate64(dst, (uintptr_t)addr);
 }
 
 // Form an address from base + offset in Rd.  Rd may or may
@@ -2019,8 +2017,8 @@ void MacroAssembler::verify_heapbase(const char* msg) {
 void MacroAssembler::stop(const char* msg) {
   address ip = pc();
   pusha();
-  mov(c_rarg0, (address)msg);
-  mov(c_rarg1, (address)ip);
+  movptr(c_rarg0, (uintptr_t)(address)msg);
+  movptr(c_rarg1, (uintptr_t)(address)ip);
   mov(c_rarg2, sp);
   mov(c_rarg3, CAST_FROM_FN_PTR(address, MacroAssembler::debug64));
   blr(c_rarg3);
@@ -2388,7 +2386,9 @@ void MacroAssembler::debug64(char* msg, int64_t pc, int64_t regs[])
   }
 }
 
-void MacroAssembler::push_call_clobbered_fp_registers() {
+void MacroAssembler::push_call_clobbered_registers() {
+  push(RegSet::range(r0, r18) - RegSet::of(rscratch1, rscratch2), sp);
+
   // Push v0-v7, v16-v31.
   for (int i = 30; i >= 0; i -= 2) {
     if (i <= v7->encoding() || i >= v16->encoding()) {
@@ -2398,7 +2398,7 @@ void MacroAssembler::push_call_clobbered_fp_registers() {
   }
 }
 
-void MacroAssembler::pop_call_clobbered_fp_registers() {
+void MacroAssembler::pop_call_clobbered_registers() {
 
   for (int i = 0; i < 32; i += 2) {
     if (i <= v7->encoding() || i >= v16->encoding()) {
@@ -2406,17 +2406,6 @@ void MacroAssembler::pop_call_clobbered_fp_registers() {
            Address(post(sp, 2 * wordSize)));
     }
   }
-}
-
-void MacroAssembler::push_call_clobbered_registers() {
-  push(RegSet::range(r0, r18) - RegSet::of(rscratch1, rscratch2), sp);
-
-  push_call_clobbered_fp_registers();
-}
-
-void MacroAssembler::pop_call_clobbered_registers() {
-
-  pop_call_clobbered_fp_registers();
 
   pop(RegSet::range(r0, r18) - RegSet::of(rscratch1, rscratch2), sp);
 }
@@ -3619,13 +3608,6 @@ void  MacroAssembler::set_narrow_klass(Register dst, Klass* k) {
 
 void MacroAssembler::load_heap_oop(Register dst, Address src)
 {
-#if INCLUDE_ALL_GCS
-  if (UseShenandoahGC) {
-    ShenandoahBarrierSetAssembler::bsasm()->load_heap_oop(this, dst, src);
-    return;
-  }
-#endif
-
   if (UseCompressedOops) {
     ldrw(dst, src);
     decode_heap_oop(dst);
@@ -3636,13 +3618,6 @@ void MacroAssembler::load_heap_oop(Register dst, Address src)
 
 void MacroAssembler::load_heap_oop_not_null(Register dst, Address src)
 {
-#if INCLUDE_ALL_GCS
-  if (UseShenandoahGC) {
-    ShenandoahBarrierSetAssembler::bsasm()->load_heap_oop(this, dst, src);
-    return;
-  }
-#endif
-
   if (UseCompressedOops) {
     ldrw(dst, src);
     decode_heap_oop_not_null(dst);
@@ -3785,13 +3760,6 @@ void MacroAssembler::g1_write_barrier_post(Register store_addr,
                              rscratch1);
   assert(store_addr != noreg && new_val != noreg && tmp != noreg
          && tmp2 != noreg, "expecting a register");
-
-  if (UseShenandoahGC) {
-    // No need for this in Shenandoah.
-    return;
-  }
-
-  assert(UseG1GC, "expect G1 GC");
 
   Address queue_index(thread, in_bytes(JavaThread::dirty_card_queue_offset() +
                                        PtrQueue::byte_offset_of_index()));

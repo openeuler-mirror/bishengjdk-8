@@ -43,9 +43,7 @@
 #include "runtime/vframeArray.hpp"
 #include "vmreg_aarch64.inline.hpp"
 #if INCLUDE_ALL_GCS
-#include "gc_implementation/shenandoah/shenandoahBarrierSet.hpp"
 #include "gc_implementation/g1/g1SATBCardTableModRefBS.hpp"
-#include "gc_implementation/shenandoah/shenandoahRuntime.hpp"
 #endif
 
 
@@ -145,9 +143,9 @@ int StubAssembler::call_RT(Register oop_result1, Register metadata_result, addre
 int StubAssembler::call_RT(Register oop_result1, Register metadata_result, address entry, Register arg1, Register arg2, Register arg3) {
   // if there is any conflict use the stack
   if (arg1 == c_rarg2 || arg1 == c_rarg3 ||
-      arg2 == c_rarg1 || arg1 == c_rarg3 ||
-      arg3 == c_rarg1 || arg1 == c_rarg2) {
-    stp(arg3, arg2, Address(pre(sp, 2 * wordSize)));
+      arg2 == c_rarg1 || arg2 == c_rarg3 ||
+      arg3 == c_rarg1 || arg3 == c_rarg2) {
+    stp(arg3, arg2, Address(pre(sp, -2 * wordSize)));
     stp(arg1, zr, Address(pre(sp, -2 * wordSize)));
     ldp(c_rarg1, zr, Address(post(sp, 2 * wordSize)));
     ldp(c_rarg3, c_rarg2, Address(post(sp, 2 * wordSize)));
@@ -1181,7 +1179,7 @@ OopMapSet* Runtime1::generate_code_for(StubID id, StubAssembler* sasm) {
         // arg0 : previous value of memory
 
         BarrierSet* bs = Universe::heap()->barrier_set();
-        if (bs->kind() != BarrierSet::G1SATBCTLogging && bs->kind() != BarrierSet::ShenandoahBarrierSet) {
+        if (bs->kind() != BarrierSet::G1SATBCTLogging) {
           __ mov(r0, (int)id);
           __ call_RT(noreg, noreg, CAST_FROM_FN_PTR(address, unimplemented_entry), r0);
           __ should_not_reach_here();
@@ -1231,13 +1229,6 @@ OopMapSet* Runtime1::generate_code_for(StubID id, StubAssembler* sasm) {
         Address store_addr(rfp, 2*BytesPerWord);
 
         BarrierSet* bs = Universe::heap()->barrier_set();
-        if (bs->kind() == BarrierSet::ShenandoahBarrierSet) {
-          __ movptr(r0, (int)id);
-          __ call_RT(noreg, noreg, CAST_FROM_FN_PTR(address, unimplemented_entry), r0);
-          __ should_not_reach_here();
-          break;
-        }
-
         CardTableModRefBS* ct = (CardTableModRefBS*)bs;
         assert(sizeof(*ct->byte_map_base) == sizeof(jbyte), "adjust this code");
 
@@ -1299,25 +1290,6 @@ OopMapSet* Runtime1::generate_code_for(StubID id, StubAssembler* sasm) {
         __ pop_call_clobbered_registers();
         __ bind(done);
 
-      }
-      break;
-    case shenandoah_lrb_slow_id:
-      {
-        StubFrame f(sasm, "shenandoah_load_reference_barrier", dont_gc_arguments);
-        // arg0 : object to be resolved
-        
-        __ push_call_clobbered_registers();
-        f.load_argument(0, r0);
-        f.load_argument(1, r1);
-        if (UseCompressedOops) {
-          __ mov(lr, CAST_FROM_FN_PTR(address, ShenandoahRuntime::load_reference_barrier_narrow));
-        } else {
-          __ mov(lr, CAST_FROM_FN_PTR(address, ShenandoahRuntime::load_reference_barrier));
-        }
-        __ blr(lr);
-        __ mov(rscratch1, r0);
-        __ pop_call_clobbered_registers();
-        __ mov(r0, rscratch1);
       }
       break;
 #endif

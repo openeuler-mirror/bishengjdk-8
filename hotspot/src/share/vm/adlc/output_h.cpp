@@ -2002,6 +2002,10 @@ void ArchDesc::declareClasses(FILE *fp) {
 
     // Analyze machine instructions that either USE or DEF memory.
     int memory_operand = instr->memory_operand(_globalNames);
+    // Some guys kill all of memory
+    if ( instr->is_wide_memory_kill(_globalNames) ) {
+      memory_operand = InstructForm::MANY_MEMORY_OPERANDS;
+    }
     if ( memory_operand != InstructForm::NO_MEMORY_OPERAND ) {
       if( memory_operand == InstructForm::MANY_MEMORY_OPERANDS ) {
         fprintf(fp,"  virtual const TypePtr *adr_type() const;\n");
@@ -2158,7 +2162,9 @@ class OutputMachOpcodes : public OutputMap {
 public:
   OutputMachOpcodes(FILE *hpp, FILE *cpp, FormDict &globals, ArchDesc &AD)
     : OutputMap(hpp, cpp, globals, AD, "MachOpcodes"),
-      begin_inst_chain_rule(-1), end_inst_chain_rule(-1), end_instructions(-1)
+      begin_inst_chain_rule(-1), end_inst_chain_rule(-1),
+      begin_rematerialize(-1), end_rematerialize(-1),
+      end_instructions(-1)
   {};
 
   void declaration() { }
