@@ -58,8 +58,8 @@ private:
 
   AdaptiveWeightedAverage _allocation_fraction;  // fraction of eden allocated in tlabs
 
-  bool _gclab;
-  bool _initialized;
+  void accumulate_statistics();
+  void initialize_statistics();
 
   void set_start(HeapWord* start)                { _start = start; }
   void set_end(HeapWord* end)                    { _end = end; }
@@ -77,6 +77,9 @@ private:
 
   // Make parsable and release it.
   void reset();
+
+  // Resize based on amount of allocation, etc.
+  void resize();
 
   void invariants() const { assert(top() >= start() && top() <= end(), "invalid tlab"); }
 
@@ -98,11 +101,9 @@ private:
   static GlobalTLABStats* global_stats() { return _global_stats; }
 
 public:
-  ThreadLocalAllocBuffer() : _allocation_fraction(TLABAllocationWeight), _allocated_before_last_gc(0), _initialized(false), _gclab(false) {
+  ThreadLocalAllocBuffer() : _allocation_fraction(TLABAllocationWeight), _allocated_before_last_gc(0) {
     // do nothing.  tlabs must be inited by initialize() calls
   }
-
-  bool is_initialized() const { return _initialized; };
 
   static const size_t min_size()                 { return align_object_size(MinTLABSize / HeapWordSize) + alignment_reserve(); }
   static const size_t max_size()                 { assert(_max_size != 0, "max_size not set up"); return _max_size; }
@@ -130,16 +131,6 @@ public:
     int reserve_size = typeArrayOopDesc::header_size(T_INT);
     return MAX2(reserve_size, VM_Version::reserve_for_allocation_prefetch());
   }
-
-  // Resize based on amount of allocation, etc.
-  void resize();
-
-  void accumulate_statistics();
-  void initialize_statistics();
-
-  // Rolls back a single allocation of the given size.
-  void rollback(size_t size);
-
   static size_t alignment_reserve()              { return align_object_size(end_reserve()); }
   static size_t alignment_reserve_in_bytes()     { return alignment_reserve() * HeapWordSize; }
 
@@ -167,7 +158,7 @@ public:
   static void resize_all_tlabs();
 
   void fill(HeapWord* start, HeapWord* top, size_t new_size);
-  void initialize(bool gclab);
+  void initialize();
 
   static size_t refill_waste_limit_increment()   { return TLABWasteIncrement; }
 

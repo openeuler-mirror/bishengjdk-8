@@ -328,7 +328,6 @@ public:
     possibly_parallel_unlink_or_oops_do(cl, NULL, processed, removed);
   }
   static void possibly_parallel_oops_do(OopClosure* f);
-  static void possibly_parallel_oops_do_shenandoah(OopClosure* f);
 
   // Hashing algorithm, used as the hash value used by the
   //     StringTable for bucket selection and comparison (stored in the

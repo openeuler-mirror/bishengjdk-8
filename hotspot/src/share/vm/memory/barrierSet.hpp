@@ -40,7 +40,6 @@ public:
     CardTableExtension,
     G1SATBCT,
     G1SATBCTLogging,
-    ShenandoahBarrierSet,
     Other,
     Uninit
   };
@@ -138,7 +137,7 @@ public:
                                    bool dest_uninitialized = false) {}
   // Below count is the # array elements being written, starting
   // at the address "start", which may not necessarily be HeapWord-aligned
-  virtual void write_ref_array(HeapWord* start, size_t count);
+  inline void write_ref_array(HeapWord* start, size_t count);
 
   // Static versions, suitable for calling from generated code;
   // count is # array elements being written, starting with "start",

@@ -116,7 +116,7 @@ oop JNIHandles::resolve_jweak(jweak handle) {
   oop result = jweak_ref(handle);
   result = guard_value<external_guard>(result);
 #if INCLUDE_ALL_GCS
-  if (result != NULL && (UseG1GC || (UseShenandoahGC && ShenandoahSATBBarrier))) {
+  if (result != NULL && UseG1GC) {
     G1SATBCardTableModRefBS::enqueue(result);
   }
 #endif // INCLUDE_ALL_GCS

@@ -39,10 +39,6 @@
 #include "runtime/stubRoutines.hpp"
 #include "vmreg_aarch64.inline.hpp"
 
-#if INCLUDE_ALL_GCS
-#include "gc_implementation/shenandoah/c1/shenandoahBarrierSetC1.hpp"
-#endif
-
 #ifdef ASSERT
 #define __ gen()->lir(__FILE__, __LINE__)->
 #else
@@ -834,17 +830,18 @@ void LIRGenerator::do_CompareAndSwap(Intrinsic* x, ValueType* type) {
   LIR_Opr result = rlock_result(x);
 
   LIR_Opr ill = LIR_OprFact::illegalOpr;  // for convenience
-
-  if (type == objectType) {
+  if (type == objectType)
     __ cas_obj(addr, cmp.result(), val.result(), new_register(T_INT), new_register(T_INT),
                result);
-  } else if (type == intType)
-    __ cas_int(addr, cmp.result(), val.result(), ill, ill, result);
+  else if (type == intType)
+    __ cas_int(addr, cmp.result(), val.result(), ill, ill);
   else if (type == longType)
-    __ cas_long(addr, cmp.result(), val.result(), ill, ill, result);
+    __ cas_long(addr, cmp.result(), val.result(), ill, ill);
   else {
     ShouldNotReachHere();
   }
+
+  __ logical_xor(FrameMap::r8_opr, LIR_OprFact::intConst(1), result);
 
   if (type == objectType) {   // Write-barrier needed for Object fields.
     // Seems to be precise
@@ -1667,12 +1664,6 @@ void LIRGenerator::do_UnsafeGetAndSetObject(UnsafeGetAndSetObject* x) {
                   true /* do_load */, false /* patch */, NULL);
     }
     __ xchg(LIR_OprFact::address(addr), data, dst, tmp);
-#if INCLUDE_ALL_GCS
-    if (UseShenandoahGC && is_obj) {
-      LIR_Opr tmp = ShenandoahBarrierSet::barrier_set()->bsc1()->load_reference_barrier(this, dst, LIR_OprFact::addressConst(0));
-      __ move(tmp, dst);
-    }
-#endif
     if (is_obj) {
       post_barrier(ptr, data);
     }

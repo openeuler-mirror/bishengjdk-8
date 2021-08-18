@@ -34,7 +34,6 @@
  * @run main/othervm TestUseCompressedOopsErgo -XX:+UseParallelGC -XX:-UseParallelOldGC
  * @run main/othervm TestUseCompressedOopsErgo -XX:+UseConcMarkSweepGC
  * @run main/othervm TestUseCompressedOopsErgo -XX:+UseSerialGC
- * @run main/othervm TestUseCompressedOopsErgo -XX:+UnlockExperimentalVMOptions -XX:+UseShenandoahGC
  */
 
 public class TestUseCompressedOopsErgo {

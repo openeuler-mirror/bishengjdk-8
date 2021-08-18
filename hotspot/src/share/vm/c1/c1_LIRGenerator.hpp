@@ -154,7 +154,7 @@ class PhiResolver: public CompilationResourceObj {
 
 // only the classes below belong in the same file
 class LIRGenerator: public InstructionVisitor, public BlockClosure {
-  friend class ShenandoahBarrierSetC1;
+
  private:
   Compilation*  _compilation;
   ciMethod*     _method;    // method that we are compiling

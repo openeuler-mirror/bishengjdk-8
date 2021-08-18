@@ -25,7 +25,6 @@
 #include "precompiled.hpp"
 #include "gc_implementation/g1/g1CollectedHeap.inline.hpp"
 #include "gc_implementation/g1/satbQueue.hpp"
-#include "gc_implementation/shenandoah/shenandoahHeap.inline.hpp"
 #include "memory/allocation.inline.hpp"
 #include "memory/sharedHeap.hpp"
 #include "oops/oop.inline.hpp"
@@ -77,19 +76,21 @@ void ObjPtrQueue::flush() {
 // processing must be somewhat circumspect and not assume entries
 // in an unfiltered buffer refer to valid objects.
 
-template <class HeapType>
-inline bool requires_marking(const void* entry, HeapType* heap) {
-  return heap->requires_marking(entry);
-}
+inline bool requires_marking(const void* entry, G1CollectedHeap* heap) {
+  // Includes rejection of NULL pointers.
+  assert(heap->is_in_reserved(entry),
+         err_msg("Non-heap pointer in SATB buffer: " PTR_FORMAT, p2i(entry)));
 
-void ObjPtrQueue::filter() {
-  if (UseG1GC) {
-    filter_impl<G1CollectedHeap>();
-  } else if (UseShenandoahGC) {
-    filter_impl<ShenandoahHeap>();
-  } else {
-    ShouldNotReachHere();
+  HeapRegion* region = heap->heap_region_containing_raw(entry);
+  assert(region != NULL, err_msg("No region for " PTR_FORMAT, p2i(entry)));
+  if (entry >= region->next_top_at_mark_start()) {
+    return false;
   }
+
+  assert(((oop)entry)->is_oop(true /* ignore mark word */),
+         err_msg("Invalid oop in SATB buffer: " PTR_FORMAT, p2i(entry)));
+
+  return true;
 }
 
 // This method removes entries from a SATB buffer that will not be
@@ -97,9 +98,8 @@ void ObjPtrQueue::filter() {
 // they require marking and are not already marked. Retained entries
 // are compacted toward the top of the buffer.
 
-template <class HeapType>
-void ObjPtrQueue::filter_impl() {
-  HeapType* heap = (HeapType*) Universe::heap();
+void ObjPtrQueue::filter() {
+  G1CollectedHeap* g1h = G1CollectedHeap::heap();
   void** buf = _buf;
   size_t sz = _sz;
 
@@ -126,7 +126,7 @@ void ObjPtrQueue::filter_impl() {
     // far, we'll just end up copying it to the same place.
     *p = NULL;
 
-    if (requires_marking(entry, heap)) {
+    if (requires_marking(entry, g1h) && !g1h->isMarkedNext((oop)entry)) {
       assert(new_index > 0, "we should not have already filled up the buffer");
       new_index -= oopSize;
       assert(new_index >= i,
@@ -177,22 +177,6 @@ bool ObjPtrQueue::should_enqueue_buffer() {
   size_t retained_entries = (sz - _index) / oopSize;
   size_t perc = retained_entries * 100 / all_entries;
   bool should_enqueue = perc > (size_t) G1SATBBufferEnqueueingThresholdPercent;
-
-  if (UseShenandoahGC) {
-    Thread* t = Thread::current();
-    if (t->is_force_satb_flush()) {
-      if (!should_enqueue && sz != _index) {
-        // Non-empty buffer is compacted, and we decided not to enqueue it.
-        // Shenandoah still wants to know about leftover work in that buffer eventually.
-        // This avoid dealing with these leftovers during the final-mark, after the buffers
-        // are drained completely.
-        // TODO: This can be extended to handle G1 too
-        should_enqueue = true;
-      }
-      t->set_force_satb_flush(false);
-    }
-  }
-
   return should_enqueue;
 }
 

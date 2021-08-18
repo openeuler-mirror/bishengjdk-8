@@ -46,7 +46,7 @@ static void ensure_klass_alive(oop o) {
   // to get notified about this potential resurrection, otherwise the marking
   // might not find the object.
 #if INCLUDE_ALL_GCS
-  if ((o != NULL) && (UseG1GC || (UseShenandoahGC && ShenandoahSATBBarrier))) {
+  if (UseG1GC && o != NULL) {
     G1SATBCardTableModRefBS::enqueue(o);
   }
 #endif

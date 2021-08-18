@@ -46,7 +46,6 @@
 #include "gc_implementation/parNew/parOopClosures.inline.hpp"
 #include "gc_implementation/parallelScavenge/psPromotionManager.inline.hpp"
 #include "gc_implementation/parallelScavenge/psScavenge.inline.hpp"
-#include "gc_implementation/shenandoah/shenandoahOopClosures.inline.hpp"
 #include "oops/oop.pcgc.inline.hpp"
 #endif // INCLUDE_ALL_GCS
 

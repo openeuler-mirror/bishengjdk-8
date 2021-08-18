@@ -364,8 +364,6 @@ public:
   // Returns NULL is it couldn't improve the type.
   static const TypeInt* filtered_int_type(PhaseGVN* phase, Node* val, Node* if_proj);
 
-  bool is_shenandoah_marking_if(PhaseTransform *phase) const;
-
 #ifndef PRODUCT
   virtual void dump_spec(outputStream *st) const;
 #endif

@@ -43,10 +43,6 @@
 #define __ gen()->lir()->
 #endif
 
-#if INCLUDE_ALL_GCS
-#include "gc_implementation/shenandoah/c1/shenandoahBarrierSetC1.hpp"
-#endif
-
 // Item will be loaded into a byte register; Intel only
 void LIRItem::load_byte_item() {
   load_item();
@@ -790,19 +786,8 @@ void LIRGenerator::do_CompareAndSwap(Intrinsic* x, ValueType* type) {
   }
 
   LIR_Opr ill = LIR_OprFact::illegalOpr;  // for convenience
-  if (type == objectType) {
-#if INCLUDE_ALL_GCS
-    if (UseShenandoahGC && ShenandoahCASBarrier) {
-      LIR_Opr result = rlock_result(x);
-      __ cas_obj(addr, cmp.result(), val.result(), new_register(T_OBJECT), new_register(T_OBJECT), result);
-      // Shenandoah C1 barrier would do all result management itself, shortcut here.
-      return;
-    } else
-#endif
-    {
+  if (type == objectType)
     __ cas_obj(addr, cmp.result(), val.result(), ill, ill);
-    }
-  }
   else if (type == intType)
     __ cas_int(addr, cmp.result(), val.result(), ill, ill);
   else if (type == longType)
@@ -1507,14 +1492,6 @@ void LIRGenerator::do_UnsafeGetAndSetObject(UnsafeGetAndSetObject* x) {
                   true /* do_load */, false /* patch */, NULL);
     }
     __ xchg(LIR_OprFact::address(addr), dst, dst, LIR_OprFact::illegalOpr);
-
-#if INCLUDE_ALL_GCS
-    if (UseShenandoahGC && is_obj) {
-      LIR_Opr tmp = ShenandoahBarrierSet::barrier_set()->bsc1()->load_reference_barrier(this, dst, LIR_OprFact::addressConst(0));
-      __ move(tmp, dst);
-    }
-#endif
-
     if (is_obj) {
       // Seems to be a precise address
       post_barrier(LIR_OprFact::address(addr), data);

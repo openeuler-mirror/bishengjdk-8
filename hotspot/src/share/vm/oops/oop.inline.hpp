@@ -61,10 +61,6 @@
 # include "bytes_ppc.hpp"
 #endif
 
-#if INCLUDE_ALL_GCS
-#include "gc_implementation/shenandoah/shenandoahBarrierSet.hpp"
-#endif
-
 // Implementation of all inlined member functions defined in oop.hpp
 // We need a separate file to avoid circular references
 
@@ -327,39 +323,23 @@ inline void oopDesc::release_encode_store_heap_oop(
 // These functions are only used to exchange oop fields in instances,
 // not headers.
 inline oop oopDesc::atomic_exchange_oop(oop exchange_value, volatile HeapWord *dest) {
-  oop result;
   if (UseCompressedOops) {
     // encode exchange value from oop to T
     narrowOop val = encode_heap_oop(exchange_value);
     narrowOop old = (narrowOop)Atomic::xchg(val, (narrowOop*)dest);
     // decode old from T to oop
-    result = decode_heap_oop(old);
+    return decode_heap_oop(old);
   } else {
-    result = (oop)Atomic::xchg_ptr(exchange_value, (oop*)dest);
+    return (oop)Atomic::xchg_ptr(exchange_value, (oop*)dest);
   }
-#if INCLUDE_ALL_GCS
-  if (UseShenandoahGC) {
-    if (exchange_value != NULL) {
-      ShenandoahBarrierSet::barrier_set()->storeval_barrier(exchange_value);
-    }
-    result = ShenandoahBarrierSet::barrier_set()->load_reference_barrier(result);
-  }
-#endif
-  return result;
 }
 
 // In order to put or get a field out of an instance, must first check
 // if the field has been compressed and uncompress it.
 inline oop oopDesc::obj_field(int offset) const {
-  oop obj = UseCompressedOops ?
+  return UseCompressedOops ?
     load_decode_heap_oop(obj_field_addr<narrowOop>(offset)) :
     load_decode_heap_oop(obj_field_addr<oop>(offset));
-#if INCLUDE_ALL_GCS
-  if (UseShenandoahGC) {
-    obj = ShenandoahBarrierSet::barrier_set()->load_reference_barrier(obj);
-  }
-#endif
-  return obj;
 }
 inline volatile oop oopDesc::obj_field_volatile(int offset) const {
   volatile oop value = obj_field(offset);
@@ -422,17 +402,11 @@ inline address oopDesc::address_field(int offset) const              { return *a
 inline void oopDesc::address_field_put(int offset, address contents) { *address_field_addr(offset) = contents; }
 
 inline oop oopDesc::obj_field_acquire(int offset) const {
-  oop obj = UseCompressedOops ?
+  return UseCompressedOops ?
              decode_heap_oop((narrowOop)
                OrderAccess::load_acquire(obj_field_addr<narrowOop>(offset)))
            : decode_heap_oop((oop)
                OrderAccess::load_ptr_acquire(obj_field_addr<oop>(offset)));
-#if INCLUDE_ALL_GCS
-  if (UseShenandoahGC) {
-    obj = ShenandoahBarrierSet::barrier_set()->load_reference_barrier(obj);
-  }
-#endif
-  return obj;
 }
 inline void oopDesc::release_obj_field_put(int offset, oop value) {
   UseCompressedOops ?
@@ -609,11 +583,6 @@ inline oop oopDesc::atomic_compare_exchange_oop(oop exchange_value,
                                                 volatile HeapWord *dest,
                                                 oop compare_value,
                                                 bool prebarrier) {
-#if INCLUDE_ALL_GCS
-  if (UseShenandoahGC && ShenandoahCASBarrier) {
-    return ShenandoahBarrierSet::barrier_set()->oop_atomic_cmpxchg_in_heap(exchange_value, dest, compare_value);
-  }
-#endif
   if (UseCompressedOops) {
     if (prebarrier) {
       update_barrier_set_pre((narrowOop*)dest, exchange_value);

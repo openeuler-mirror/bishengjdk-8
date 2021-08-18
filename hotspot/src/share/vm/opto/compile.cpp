@@ -83,11 +83,6 @@
 # include "adfiles/ad_ppc_64.hpp"
 #endif
 
-#if INCLUDE_ALL_GCS
-#include "gc_implementation/shenandoah/shenandoahForwarding.hpp"
-#include "gc_implementation/shenandoah/c2/shenandoahSupport.hpp"
-#endif
-
 // -------------------- Compile::mach_constant_base_node -----------------------
 // Constant table base node singleton.
 MachConstantBaseNode* Compile::mach_constant_base_node() {
@@ -410,11 +405,6 @@ void Compile::remove_useless_nodes(Unique_Node_List &useful) {
     if (n->outcnt() == 1 && n->has_special_unique_user()) {
       record_for_igvn(n->unique_out());
     }
-    if (n->Opcode() == Op_AddP && CallLeafNode::has_only_g1_wb_pre_uses(n)) {
-      for (DUIterator_Fast imax, i = n->fast_outs(imax); i < imax; i++) {
-        record_for_igvn(n->fast_out(i));
-      }
-    }
   }
   // Remove useless macro and predicate opaq nodes
   for (int i = C->macro_count()-1; i >= 0; i--) {
@@ -435,12 +425,6 @@ void Compile::remove_useless_nodes(Unique_Node_List &useful) {
     Node* n = C->expensive_node(i);
     if (!useful.member(n)) {
       remove_expensive_node(n);
-    }
-  }
-  for (int i = C->shenandoah_barriers_count()-1; i >= 0; i--) {
-    ShenandoahLoadReferenceBarrierNode* n = C->shenandoah_barrier(i);
-    if (!useful.member(n)) {
-      remove_shenandoah_barrier(n);
     }
   }
   // clean up the late inline lists
@@ -786,7 +770,7 @@ Compile::Compile( ciEnv* ci_env, C2Compiler* compiler, ciMethod* target, int osr
       StartNode* s = new (this) StartNode(root(), tf()->domain());
       initial_gvn()->set_type_bottom(s);
       init_start(s);
-      if (method()->intrinsic_id() == vmIntrinsics::_Reference_get && (UseG1GC || UseShenandoahGC)) {
+      if (method()->intrinsic_id() == vmIntrinsics::_Reference_get && UseG1GC) {
         // With java.lang.ref.reference.get() we must go through the
         // intrinsic when G1 is enabled - even when get() is the root
         // method of the compile - so that, if necessary, the value in
@@ -1179,7 +1163,6 @@ void Compile::Init(int aliaslevel) {
   _predicate_opaqs = new(comp_arena()) GrowableArray<Node*>(comp_arena(), 8,  0, NULL);
   _expensive_nodes = new(comp_arena()) GrowableArray<Node*>(comp_arena(), 8,  0, NULL);
   _range_check_casts = new(comp_arena()) GrowableArray<Node*>(comp_arena(), 8,  0, NULL);
-  _shenandoah_barriers = new(comp_arena()) GrowableArray<ShenandoahLoadReferenceBarrierNode*>(comp_arena(), 8,  0, NULL);
   register_library_intrinsics();
 #ifdef ASSERT
   _type_verify_symmetry = true;
@@ -2101,13 +2084,16 @@ void Compile::inline_incrementally(PhaseIterGVN& igvn) {
 // They were inserted during parsing (see add_safepoint()) to make
 // infinite loops without calls or exceptions visible to root, i.e.,
 // useful.
-void Compile::remove_root_to_sfpts_edges() {
+void Compile::remove_root_to_sfpts_edges(PhaseIterGVN& igvn) {
   Node *r = root();
   if (r != NULL) {
     for (uint i = r->req(); i < r->len(); ++i) {
       Node *n = r->in(i);
       if (n != NULL && n->is_SafePoint()) {
         r->rm_prec(i);
+        if (n->outcnt() == 0) {
+          igvn.remove_dead_node(n);
+        }
         --i;
       }
     }
@@ -2171,7 +2157,7 @@ void Compile::Optimize() {
 
   // Now that all inlining is over, cut edge from root to loop
   // safepoints
-  remove_root_to_sfpts_edges();
+  remove_root_to_sfpts_edges(igvn);
 
   // Remove the speculative part of types and clean up the graph from
   // the extra CastPP nodes whose only purpose is to carry them. Do
@@ -2314,12 +2300,6 @@ void Compile::Optimize() {
     igvn.optimize();
   }
 
-#ifdef ASSERT
-  if (UseShenandoahGC && ShenandoahVerifyOptoBarriers) {
-    ShenandoahBarrierC2Support::verify(C->root());
-  }
-#endif
-
   {
     NOT_PRODUCT( TracePhase t2("macroExpand", &_t_macroExpand, TimeCompiler); )
     PhaseMacroExpand  mex(igvn);
@@ -2328,12 +2308,6 @@ void Compile::Optimize() {
       return;
     }
   }
-
-#if INCLUDE_ALL_GCS
-  if (UseShenandoahGC) {
-    ShenandoahBarrierC2Support::expand(this, igvn);
-  }
-#endif
 
  } // (End scope of igvn; run destructor if necessary for asserts.)
 
@@ -2769,15 +2743,6 @@ void Compile::final_graph_reshaping_impl( Node *n, Final_Reshape_Counts &frc) {
   case Op_CallLeafNoFP: {
     assert( n->is_Call(), "" );
     CallNode *call = n->as_Call();
-    if (UseShenandoahGC && call->is_g1_wb_pre_call()) {
-      uint cnt = OptoRuntime::g1_wb_pre_Type()->domain()->cnt();
-      if (call->req() > cnt) {
-        assert(call->req() == cnt+1, "only one extra input");
-        Node* addp = call->in(cnt);
-        assert(!CallLeafNode::has_only_g1_wb_pre_uses(addp), "useless address computation?");
-        call->del_req(cnt);
-      }
-    }
     // Count call sites where the FP mode bit would have to be flipped.
     // Do not count uncommon runtime calls:
     // uncommon_trap, _complete_monitor_locking, _complete_monitor_unlocking,
@@ -2935,7 +2900,7 @@ void Compile::final_graph_reshaping_impl( Node *n, Final_Reshape_Counts &frc) {
         Node *m = wq.at(next);
         for (DUIterator_Fast imax, i = m->fast_outs(imax); i < imax; i++) {
           Node* use = m->fast_out(i);
-          if (use->is_Mem() || use->is_EncodeNarrowPtr() || use->Opcode() == Op_ShenandoahLoadReferenceBarrier) {
+          if (use->is_Mem() || use->is_EncodeNarrowPtr()) {
             use->ensure_control_or_add_prec(n->in(0));
           } else if (use->in(0) == NULL) {
             switch(use->Opcode()) {
@@ -3260,9 +3225,6 @@ void Compile::final_graph_reshaping_impl( Node *n, Final_Reshape_Counts &frc) {
     if (n->req() > MemBarNode::Precedent) {
       n->set_req(MemBarNode::Precedent, top());
     }
-    break;
-  case Op_ShenandoahLoadReferenceBarrier:
-    assert(false, "should have been expanded already");
     break;
   default:
     assert( !n->is_Call(), "" );
@@ -3630,7 +3592,7 @@ void Compile::verify_graph_edges(bool no_dead_code) {
 // Currently supported:
 // - G1 pre-barriers (see GraphKit::g1_write_barrier_pre())
 void Compile::verify_barriers() {
-  if (UseG1GC || UseShenandoahGC) {
+  if (UseG1GC) {
     // Verify G1 pre-barriers
     const int marking_offset = in_bytes(JavaThread::satb_mark_queue_offset() + PtrQueue::byte_offset_of_active());
 
@@ -4157,7 +4119,7 @@ void Compile::remove_speculative_types(PhaseIterGVN &igvn) {
         const Type* t_no_spec = t->remove_speculative();
         if (t_no_spec != t) {
           bool in_hash = igvn.hash_delete(n);
-          assert(in_hash || n->hash() == Node::NO_HASH, "node should be in igvn hash table");
+          assert(in_hash, "node should be in igvn hash table");
           tn->set_type(t_no_spec);
           igvn.hash_insert(n);
           igvn._worklist.push(n); // give it a chance to go away
@@ -4251,25 +4213,4 @@ Node* Compile::constrained_convI2L(PhaseGVN* phase, Node* value, const TypeInt* 
 bool Compile::randomized_select(int count) {
   assert(count > 0, "only positive");
   return (os::random() & RANDOMIZED_DOMAIN_MASK) < (RANDOMIZED_DOMAIN / count);
-}
-
-void Compile::shenandoah_eliminate_g1_wb_pre(Node* call, PhaseIterGVN* igvn) {
-  assert(UseShenandoahGC && call->is_g1_wb_pre_call(), "");
-  Node* c = call->as_Call()->proj_out(TypeFunc::Control);
-  c = c->unique_ctrl_out();
-  assert(c->is_Region() && c->req() == 3, "where's the pre barrier control flow?");
-  c = c->unique_ctrl_out();
-  assert(c->is_Region() && c->req() == 3, "where's the pre barrier control flow?");
-  Node* iff = c->in(1)->is_IfProj() ? c->in(1)->in(0) : c->in(2)->in(0);
-  assert(iff->is_If(), "expect test");
-  if (!iff->is_shenandoah_marking_if(igvn)) {
-    c = c->unique_ctrl_out();
-    assert(c->is_Region() && c->req() == 3, "where's the pre barrier control flow?");
-    iff = c->in(1)->is_IfProj() ? c->in(1)->in(0) : c->in(2)->in(0);
-    assert(iff->is_shenandoah_marking_if(igvn), "expect marking test");
-  }
-  Node* cmpx = iff->in(1)->in(1);
-  igvn->replace_node(cmpx, igvn->makecon(TypeInt::CC_EQ));
-  igvn->rehash_node_delayed(call);
-  call->del_req(call->req()-1);
 }

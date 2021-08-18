@@ -721,7 +721,7 @@ static void ensure_string_alive(oop string) {
   // considered dead. The SATB part of G1 needs to get notified about this
   // potential resurrection, otherwise the marking might not find the object.
 #if INCLUDE_ALL_GCS
-  if ((UseG1GC || (UseShenandoahGC && ShenandoahSATBBarrier)) && string != NULL) {
+  if (UseG1GC && string != NULL) {
     G1SATBCardTableModRefBS::enqueue(string);
   }
 #endif
@@ -922,28 +922,6 @@ void StringTable::possibly_parallel_oops_do(OopClosure* f) {
     }
 
     int end_idx = MIN2(limit, start_idx + ClaimChunkSize);
-    buckets_oops_do(f, start_idx, end_idx);
-  }
-}
-
-void StringTable::possibly_parallel_oops_do_shenandoah(OopClosure* f) {
-  const int limit = the_table()->table_size();
-
-  // ClaimChunkSize is too small for processing a String table during the pause
-  // efficiently: the atomic add costs dominate on many reasonable string tables.
-  // Recast the chunk size to give each GC worker about 10 chunks.
-  assert(UseShenandoahGC, "Only for Shenandoah");
-  const int chunk_size = MAX2<int>(ClaimChunkSize, limit / (ParallelGCThreads * 10));
-
-  for (;;) {
-    // Grab next set of buckets to scan
-    int start_idx = Atomic::add(chunk_size, &_parallel_claimed_idx) - chunk_size;
-    if (start_idx >= limit) {
-      // End of table
-      break;
-    }
-
-    int end_idx = MIN2(limit, start_idx + chunk_size);
     buckets_oops_do(f, start_idx, end_idx);
   }
 }

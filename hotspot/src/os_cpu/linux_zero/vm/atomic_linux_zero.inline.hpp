@@ -169,10 +169,6 @@ inline void Atomic::store_ptr(intptr_t store_value, intptr_t* dest) {
   *dest = store_value;
 }
 
-inline void Atomic::store_ptr(intptr_t store_value, volatile intptr_t* dest) {
-  *dest = store_value;
-}
-
 inline jint Atomic::add(jint add_value, volatile jint* dest) {
 #ifdef ARM
   return arm_add_and_fetch(dest, add_value);

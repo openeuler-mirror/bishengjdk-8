@@ -40,10 +40,6 @@
 #include "runtime/deoptimization.hpp"
 #include "runtime/sharedRuntime.hpp"
 
-#if INCLUDE_ALL_GCS
-#include "gc_implementation/shenandoah/c2/shenandoahBarrierSetC2.hpp"
-#endif
-
 extern int explicit_null_checks_inserted,
            explicit_null_checks_elided;
 
@@ -55,11 +51,6 @@ void Parse::array_load(BasicType elem_type) {
   dec_sp(2);                  // Pop array and index
   const TypeAryPtr* adr_type = TypeAryPtr::get_array_body_type(elem_type);
   Node* ld = make_load(control(), adr, elem, elem_type, adr_type, MemNode::unordered);
-#if INCLUDE_ALL_GCS
-  if (UseShenandoahGC && (elem_type == T_OBJECT || elem_type == T_ARRAY)) {
-    ld = ShenandoahBarrierSetC2::bsc2()->load_reference_barrier(this, ld);
-  }
-#endif
   push(ld);
 }
 

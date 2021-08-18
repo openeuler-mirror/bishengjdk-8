@@ -790,7 +790,7 @@ address InterpreterGenerator::generate_Reference_get_entry(void) {
   const int referent_offset = java_lang_ref_Reference::referent_offset;
   guarantee(referent_offset > 0, "referent offset not initialized");
 
-  if (UseG1GC || UseShenandoahGC) {
+  if (UseG1GC) {
     Label slow_path;
     // rbx: method
 
@@ -815,16 +815,12 @@ address InterpreterGenerator::generate_Reference_get_entry(void) {
 
     // Generate the G1 pre-barrier code to log the value of
     // the referent field in an SATB buffer.
-    if (!UseShenandoahGC || ShenandoahSATBBarrier) {
-      if (UseShenandoahGC) __ push_IU_state();
     __ g1_write_barrier_pre(noreg /* obj */,
                             rax /* pre_val */,
                             r15_thread /* thread */,
                             rbx /* tmp */,
                             true /* tosca_live */,
                             true /* expand_call */);
-      if (UseShenandoahGC) __ pop_IU_state();
-    }
 
     // _areturn
     __ pop(rdi);                // get return address

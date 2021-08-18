@@ -40,17 +40,9 @@
 #include "runtime/stubCodeGenerator.hpp"
 #include "runtime/stubRoutines.hpp"
 #include "runtime/thread.inline.hpp"
-#include "utilities/macros.hpp"
 #include "utilities/top.hpp"
-
-#include "stubRoutines_aarch64.hpp"
-
-
 #ifdef COMPILER2
 #include "opto/runtime.hpp"
-#endif
-#if INCLUDE_ALL_GCS
-#include "shenandoahBarrierSetAssembler_aarch64.hpp"
 #endif
 
 // Declaration and definition of StubGenerator (no .hpp file).
@@ -605,12 +597,12 @@ class StubGenerator: public StubCodeGenerator {
   //
   //     Destroy no registers except rscratch1 and rscratch2
   //
-  void  gen_write_ref_array_pre_barrier(Register src, Register addr, Register count, bool dest_uninitialized) {
+  void  gen_write_ref_array_pre_barrier(Register addr, Register count, bool dest_uninitialized) {
     BarrierSet* bs = Universe::heap()->barrier_set();
     switch (bs->kind()) {
     case BarrierSet::G1SATBCT:
     case BarrierSet::G1SATBCTLogging:
-      // Don't generate the call if we statically know that the target is uninitialized
+      // With G1, don't generate the call if we statically know that the target in uninitialized
       if (!dest_uninitialized) {
         __ push_call_clobbered_registers();
         if (count == c_rarg0) {
@@ -634,11 +626,6 @@ class StubGenerator: public StubCodeGenerator {
       case BarrierSet::CardTableExtension:
       case BarrierSet::ModRef:
         break;
-#if INCLUDE_ALL_GCS
-      case BarrierSet::ShenandoahBarrierSet:
-        ShenandoahBarrierSetAssembler::bsasm()->arraycopy_prologue(_masm, dest_uninitialized, src, addr, count);
-        break;
-#endif
       default:
         ShouldNotReachHere();
 
@@ -707,10 +694,6 @@ class StubGenerator: public StubCodeGenerator {
           __ br(Assembler::GE, L_loop);
         }
         break;
-#if INCLUDE_ALL_GCS
-      case BarrierSet::ShenandoahBarrierSet:
-        break;
-#endif
       default:
         ShouldNotReachHere();
 
@@ -1384,10 +1367,10 @@ class StubGenerator: public StubCodeGenerator {
       __ ldr(temp, Address(a, rscratch2, Address::lsl(exact_log2(size))));
       __ verify_oop(temp);
     } else {
-      __ ldrw(r16, Address(a, rscratch2, Address::lsl(exact_log2(size))));
+      __ ldrw(temp, Address(a, rscratch2, Address::lsl(exact_log2(size))));
       __ decode_heap_oop(temp); // calls verify_oop
     }
-    __ add(rscratch2, rscratch2, size);
+    __ add(rscratch2, rscratch2, 1);
     __ b(loop);
     __ bind(end);
   }
@@ -1428,7 +1411,7 @@ class StubGenerator: public StubCodeGenerator {
     if (is_oop) {
       __ push(RegSet::of(d, count), sp);
       // no registers are destroyed by this call
-      gen_write_ref_array_pre_barrier(s, d, count, dest_uninitialized);
+      gen_write_ref_array_pre_barrier(d, count, dest_uninitialized);
     }
     copy_memory(aligned, s, d, count, rscratch1, size);
     if (is_oop) {
@@ -1484,7 +1467,7 @@ class StubGenerator: public StubCodeGenerator {
     if (is_oop) {
       __ push(RegSet::of(d, count), sp);
       // no registers are destroyed by this call
-      gen_write_ref_array_pre_barrier(s, d, count, dest_uninitialized);
+      gen_write_ref_array_pre_barrier(d, count, dest_uninitialized);
     }
     copy_memory(aligned, s, d, count, rscratch1, -size);
     if (is_oop) {
@@ -1618,7 +1601,7 @@ class StubGenerator: public StubCodeGenerator {
   //   used by generate_conjoint_int_oop_copy().
   //
   address generate_disjoint_int_copy(bool aligned, address *entry,
-                                        const char *name) {
+                                         const char *name, bool dest_uninitialized = false) {
     const bool not_oop = false;
     return generate_disjoint_copy(sizeof (jint), aligned, not_oop, entry, name);
   }
@@ -1826,7 +1809,7 @@ class StubGenerator: public StubCodeGenerator {
     }
 #endif //ASSERT
 
-    gen_write_ref_array_pre_barrier(from, to, count, dest_uninitialized);
+    gen_write_ref_array_pre_barrier(to, count, dest_uninitialized);
 
     // save the original count
     __ mov(count_save, count);
@@ -3221,77 +3204,6 @@ class StubGenerator: public StubCodeGenerator {
     return start;
   }
 
-  address load_BLAS_library() {
-    // Try to load BLAS library.
-    const char library_name[] = "openblas";
-    char err_buf[1024] = {0};
-    char path[JVM_MAXPATHLEN] = {0};
-    os::jvm_path(path, sizeof(path));
-    int jvm_offset = -1;
-
-    // Match "jvm[^/]*" in jvm_path.
-    const char* last_name = strrchr(path, '/');
-    last_name = last_name ? last_name : path;
-    const char* last_lib_name = strstr(last_name, "jvm");
-    if (last_lib_name != NULL) {
-      jvm_offset = last_lib_name - path;
-    }
-
-    address library = NULL;
-    // Find the BLAS shared library.
-    // Search path: <home>/jre/lib/<arch>/<vm>/libopenblas.so
-    if (jvm_offset >= 0) {
-      if (jvm_offset + strlen(library_name) + strlen(os::dll_file_extension()) < JVM_MAXPATHLEN) {
-        strncpy(&path[jvm_offset], library_name, strlen(library_name));
-        strncat(&path[jvm_offset], os::dll_file_extension(), strlen(os::dll_file_extension()));
-        library = (address)os::dll_load(path, err_buf, sizeof(err_buf));
-      }
-    }
-    return library;
-  }
-
-  address get_BLAS_func_entry(address library, const char* func_name) {
-    if (library == NULL) {
-        return NULL;
-    }
-
-    // Try to find BLAS function entry.
-    return (address)os::dll_lookup((void*)library, func_name);
-  }
-
-  /**
-   *  Arguments:
-   *
-   * Inputs:
-   *   c_rarg0   - int n
-   *   c_rarg1   - double[] dx
-   *   c_rarg2   - int incx
-   *   c_rarg3   - double[] dy
-   *   c_rarg4   - int incy
-   *
-   * Output:
-   *       d0   - ddot result
-   *
-   */
-  address generate_ddotF2jBLAS() {
-    __ align(CodeEntryAlignment);
-    StubCodeMark mark(this, "StubRoutines", "f2jblas_ddot");
-
-    address start = __ pc();
-
-    const Register n    = c_rarg0;
-    const Register dx   = c_rarg1;
-    const Register incx = c_rarg2;
-    const Register dy   = c_rarg3;
-    const Register incy = c_rarg4;
-
-    BLOCK_COMMENT("Entry:");
-
-    __ f2j_ddot(n, dx, incx, dy, incy, rscratch2);
-
-    return start;
-  }
-
   // Parameter conversion from JVM to native BLAS
   //
   // Register:
@@ -3503,6 +3415,77 @@ class StubGenerator: public StubCodeGenerator {
   }
 
 
+
+  /**
+   *  Arguments:
+   *
+   * Inputs:
+   *   c_rarg0   - int n
+   *   c_rarg1   - double[] dx
+   *   c_rarg2   - int incx
+   *   c_rarg3   - double[] dy
+   *   c_rarg4   - int incy
+   *
+   * Output:
+   *       d0   - ddot result
+   *
+   */
+  address generate_ddotF2jBLAS() {
+    __ align(CodeEntryAlignment);
+    StubCodeMark mark(this, "StubRoutines", "f2jblas_ddot");
+
+    address start = __ pc();
+
+    const Register n    = c_rarg0;
+    const Register dx   = c_rarg1;
+    const Register incx = c_rarg2;
+    const Register dy   = c_rarg3;
+    const Register incy = c_rarg4;
+
+    BLOCK_COMMENT("Entry:");
+
+    __ f2j_ddot(n, dx, incx, dy, incy, rscratch2);
+
+    return start;
+  }
+
+  address load_BLAS_library() {
+    // Try to load BLAS library.
+    const char library_name[] = "openblas";
+    char err_buf[1024] = {0};
+    char path[JVM_MAXPATHLEN] = {0};
+    os::jvm_path(path, sizeof(path));
+    int jvm_offset = -1;
+
+    // Match "jvm[^/]*" in jvm_path.
+    const char* last_name = strrchr(path, '/');
+    last_name = last_name ? last_name : path;
+    const char* last_lib_name = strstr(last_name, "jvm");
+    if (last_lib_name != NULL) {
+      jvm_offset = last_lib_name - path;
+    }
+
+    address library = NULL;
+    // Find the BLAS shared library.
+    // Search path: <home>/jre/lib/<arch>/<vm>/libopenblas.so
+    if (jvm_offset >= 0) {
+      if (jvm_offset + strlen(library_name) + strlen(os::dll_file_extension()) < JVM_MAXPATHLEN) {
+        strncpy(&path[jvm_offset], library_name, strlen(library_name));
+        strncat(&path[jvm_offset], os::dll_file_extension(), strlen(os::dll_file_extension()));
+        library = (address)os::dll_load(path, err_buf, sizeof(err_buf));
+      }
+    }
+    return library;
+  }
+
+  address get_BLAS_func_entry(address library, const char* func_name) {
+    if (library == NULL) {
+        return NULL;
+    }
+
+    // Try to find BLAS function entry.
+    return (address)os::dll_lookup((void*)library, func_name);
+  }
 
   /**
    *  Arguments:

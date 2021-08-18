@@ -102,16 +102,6 @@ class WorkerThread;
 
 class Thread: public ThreadShadow {
   friend class VMStructs;
-
-#if INCLUDE_ALL_GCS
-protected:
-  // Support for Shenandoah barriers. This is only accessible from JavaThread,
-  // but we really want to keep this field at lower Thread offset (below first
-  // 128 bytes), because that makes barrier fastpaths optimally encoded.
-  char _gc_state;
-  static char _gc_state_global;
-#endif
-
  private:
   // Exception handling
   // (Note: _pending_exception and friends are in ThreadShadow)
@@ -267,15 +257,8 @@ protected:
   friend class GC_locker;
 
   ThreadLocalAllocBuffer _tlab;                 // Thread-local eden
-  ThreadLocalAllocBuffer _gclab;                // Thread-local allocation buffer for GC (e.g. evacuation)
-  uint _worker_id;                              // Worker ID
-  bool _force_satb_flush;                       // Force SATB flush
-  double _paced_time;                           // Accumulated paced time
-
   jlong _allocated_bytes;                       // Cumulative number of bytes allocated on
                                                 // the Java heap
-  jlong _allocated_bytes_gclab;                 // Cumulative number of bytes allocated on
-                                                // the Java heap, in GCLABs
 
   // Thread-local buffer used by MetadataOnStackMark.
   MetadataOnStackBuffer* _metadata_on_stack_buffer;
@@ -286,8 +269,6 @@ protected:
 
   int   _vm_operation_started_count;            // VM_Operation support
   int   _vm_operation_completed_count;          // VM_Operation support
-
-  char _oom_during_evac;
 
   ObjectMonitor* _current_pending_monitor;      // ObjectMonitor this thread
                                                 // is waiting to lock
@@ -405,14 +386,6 @@ protected:
     clear_suspend_flag(_critical_native_unlock);
   }
 
-  bool is_oom_during_evac() const;
-  void set_oom_during_evac(bool oom);
-
-#ifdef ASSERT
-  bool is_evac_allowed() const;
-  void set_evac_allowed(bool evac_allowed);
-#endif
-
   // Support for Unhandled Oop detection
 #ifdef CHECK_UNHANDLED_OOPS
  private:
@@ -462,39 +435,14 @@ protected:
   ThreadLocalAllocBuffer& tlab()                 { return _tlab; }
   void initialize_tlab() {
     if (UseTLAB) {
-      tlab().initialize(false);
-      if (UseShenandoahGC && (is_Java_thread() || is_Worker_thread())) {
-        gclab().initialize(true);
-      }
+      tlab().initialize();
     }
   }
-
-  // Thread-Local GC Allocation Buffer (GCLAB) support
-  ThreadLocalAllocBuffer& gclab()                {
-    assert (UseShenandoahGC, "Only for Shenandoah");
-    assert (!_gclab.is_initialized() || (is_Java_thread() || is_Worker_thread()),
-            "Only Java and GC worker threads are allowed to get GCLABs");
-    return _gclab;
-  }
-
-  void set_worker_id(uint id)           { _worker_id = id; }
-  uint worker_id()                      { return _worker_id; }
-
-  void set_force_satb_flush(bool value) { _force_satb_flush = value; }
-  bool is_force_satb_flush()            { return _force_satb_flush; }
-
-  void add_paced_time(double v)         { _paced_time += v; }
-  double paced_time()                   { return _paced_time; }
-  void reset_paced_time()               { _paced_time = 0; }
 
   jlong allocated_bytes()               { return _allocated_bytes; }
   void set_allocated_bytes(jlong value) { _allocated_bytes = value; }
   void incr_allocated_bytes(jlong size) { _allocated_bytes += size; }
   inline jlong cooked_allocated_bytes();
-
-  jlong allocated_bytes_gclab()                { return _allocated_bytes_gclab; }
-  void set_allocated_bytes_gclab(jlong value)  { _allocated_bytes_gclab = value; }
-  void incr_allocated_bytes_gclab(jlong size)  { _allocated_bytes_gclab += size; }
 
   JFR_ONLY(DEFINE_THREAD_LOCAL_ACCESSOR_JFR;)
   JFR_ONLY(DEFINE_TRACE_SUSPEND_FLAG_METHODS)
@@ -679,10 +627,6 @@ protected:
   TLAB_FIELD_OFFSET(slow_allocations)
 
 #undef TLAB_FIELD_OFFSET
-
-  static ByteSize gclab_start_offset()         { return byte_offset_of(Thread, _gclab) + ThreadLocalAllocBuffer::start_offset(); }
-  static ByteSize gclab_top_offset()           { return byte_offset_of(Thread, _gclab) + ThreadLocalAllocBuffer::top_offset(); }
-  static ByteSize gclab_end_offset()           { return byte_offset_of(Thread, _gclab) + ThreadLocalAllocBuffer::end_offset(); }
 
   static ByteSize allocated_bytes_offset()       { return byte_offset_of(Thread, _allocated_bytes ); }
 
@@ -1430,9 +1374,6 @@ class JavaThread: public Thread {
 #if INCLUDE_ALL_GCS
   static ByteSize satb_mark_queue_offset()       { return byte_offset_of(JavaThread, _satb_mark_queue); }
   static ByteSize dirty_card_queue_offset()      { return byte_offset_of(JavaThread, _dirty_card_queue); }
-
-  static ByteSize gc_state_offset()              { return byte_offset_of(JavaThread, _gc_state); }
-
 #endif // INCLUDE_ALL_GCS
 
   // Returns the jni environment for this thread
@@ -1731,15 +1672,6 @@ public:
   static DirtyCardQueueSet& dirty_card_queue_set() {
     return _dirty_card_queue_set;
   }
-
-  inline char gc_state() const;
-
-private:
-  void set_gc_state(char in_prog);
-
-public:
-  static void set_gc_state_all_threads(char in_prog);
-  static void set_force_satb_flush_all_threads(bool value);
 #endif // INCLUDE_ALL_GCS
 
   // This method initializes the SATB and dirty card queues before a
@@ -1981,7 +1913,6 @@ class Threads: AllStatic {
   static bool includes(JavaThread* p);
   static JavaThread* first()                     { return _thread_list; }
   static void threads_do(ThreadClosure* tc);
-  static void java_threads_do(ThreadClosure* tc);
 
   // Initializes the vm and creates the vm thread
   static jint create_vm(JavaVMInitArgs* args, bool* canTryAgain);

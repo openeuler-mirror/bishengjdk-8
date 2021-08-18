@@ -39,10 +39,7 @@
 #include "oops/objArrayKlass.hpp"
 #include "runtime/sharedRuntime.hpp"
 #include "vmreg_x86.inline.hpp"
-#include "utilities/macros.hpp"
-#if INCLUDE_ALL_GCS
-#include "shenandoahBarrierSetAssembler_x86.hpp"
-#endif
+
 
 // These masks are used to provide 128-bit aligned bitmasks to the XMM
 // instructions, to allow sign-masking or sign-bit flipping.  They allow
@@ -2001,44 +1998,21 @@ void LIR_Assembler::emit_compare_and_swap(LIR_OpCompareAndSwap* op) {
     if ( op->code() == lir_cas_obj) {
 #ifdef _LP64
       if (UseCompressedOops) {
-#if INCLUDE_ALL_GCS
-        if (UseShenandoahGC && ShenandoahCASBarrier) {
-          Register tmp1 = op->tmp1()->as_register();
-          Register tmp2 = op->tmp2()->as_register();
-          Register res  = op->result_opr()->as_register();
-          __ encode_heap_oop(cmpval);
-          __ mov(rscratch1, newval);
-          __ encode_heap_oop(rscratch1);
-          ShenandoahBarrierSetAssembler::bsasm()->cmpxchg_oop(_masm, res, Address(addr, 0), cmpval, rscratch1, false, tmp1, tmp2);
-        } else
-#endif
-        {
-          __ encode_heap_oop(cmpval);
-          __ mov(rscratch1, newval);
-          __ encode_heap_oop(rscratch1);
-          if (os::is_MP()) {
-            __ lock();
-          }
-          // cmpval (rax) is implicitly used by this instruction
-          __ cmpxchgl(rscratch1, Address(addr, 0));
+        __ encode_heap_oop(cmpval);
+        __ mov(rscratch1, newval);
+        __ encode_heap_oop(rscratch1);
+        if (os::is_MP()) {
+          __ lock();
         }
+        // cmpval (rax) is implicitly used by this instruction
+        __ cmpxchgl(rscratch1, Address(addr, 0));
       } else
 #endif
       {
-#if INCLUDE_ALL_GCS
-        if (UseShenandoahGC && ShenandoahCASBarrier) {
-          Register tmp1 = op->tmp1()->as_register();
-          Register tmp2 = op->tmp2()->as_register();
-          Register res  = op->result_opr()->as_register();
-          ShenandoahBarrierSetAssembler::bsasm()->cmpxchg_oop(_masm, res, Address(addr, 0), cmpval, newval, false, tmp1, tmp2);
-        } else
-#endif
-        {
-          if (os::is_MP()) {
-            __ lock();
-          }
-          __ cmpxchgptr(newval, Address(addr, 0));
-	}
+        if (os::is_MP()) {
+          __ lock();
+        }
+        __ cmpxchgptr(newval, Address(addr, 0));
       }
     } else {
       assert(op->code() == lir_cas_int, "lir_cas_int expected");
@@ -3911,27 +3885,11 @@ void LIR_Assembler::negate(LIR_Opr left, LIR_Opr dest) {
 }
 
 
-void LIR_Assembler::leal(LIR_Opr src, LIR_Opr dest, LIR_PatchCode patch_code, CodeEmitInfo* info) {
-  assert(src->is_address(), "must be an address");
-  assert(dest->is_register(), "must be a register");
-
-  if (!UseShenandoahGC) {
-    Register reg = dest->as_pointer_register();
-    __ lea(reg, as_Address(src->as_address_ptr()));
-  } else {
-    PatchingStub* patch = NULL;
-    if (patch_code != lir_patch_none) {
-      patch = new PatchingStub(_masm, PatchingStub::access_field_id);
-    }
-
-    Register reg = dest->as_pointer_register();
-    LIR_Address* addr = src->as_address_ptr();
-    __ lea(reg, as_Address(addr));
-
-    if (patch != NULL) {
-      patching_epilog(patch, patch_code, addr->base()->as_register(), info);
-    }
-  }
+void LIR_Assembler::leal(LIR_Opr addr, LIR_Opr dest) {
+  assert(addr->is_address() && dest->is_register(), "check");
+  Register reg;
+  reg = dest->as_pointer_register();
+  __ lea(reg, as_Address(addr->as_address_ptr()));
 }
 
 

@@ -34,9 +34,6 @@
 #include "opto/escape.hpp"
 #include "opto/phaseX.hpp"
 #include "opto/rootnode.hpp"
-#if INCLUDE_ALL_GCS
-#include "gc_implementation/shenandoah/c2/shenandoahSupport.hpp"
-#endif
 
 ConnectionGraph::ConnectionGraph(Compile * C, PhaseIterGVN *igvn) :
   _nodes(C->comp_arena(), C->unique(), C->unique(), NULL),
@@ -526,7 +523,7 @@ void ConnectionGraph::add_node_to_connection_graph(Node *n, Unique_Node_List *de
           // Pointer stores in G1 barriers looks like unsafe access.
           // Ignore such stores to be able scalar replace non-escaping
           // allocations.
-          if ((UseG1GC || UseShenandoahGC) && adr->is_AddP()) {
+          if (UseG1GC && adr->is_AddP()) {
             Node* base = get_addp_base(adr);
             if (base->Opcode() == Op_LoadP &&
                 base->in(MemNode::Address)->is_AddP()) {
@@ -568,11 +565,6 @@ void ConnectionGraph::add_node_to_connection_graph(Node *n, Unique_Node_List *de
       add_java_object(n, PointsToNode::ArgEscape);
       break;
     }
-#if INCLUDE_ALL_GCS
-    case Op_ShenandoahLoadReferenceBarrier:
-      add_local_var_and_edge(n, PointsToNode::NoEscape, n->in(ShenandoahLoadReferenceBarrierNode::ValueIn), delayed_worklist);
-      break;
-#endif
     default:
       ; // Do nothing for nodes not related to EA.
   }
@@ -767,12 +759,7 @@ void ConnectionGraph::add_final_edges(Node *n) {
       }
       break;
     }
-#if INCLUDE_ALL_GCS
-    case Op_ShenandoahLoadReferenceBarrier:
-      add_local_var_and_edge(n, PointsToNode::NoEscape, n->in(ShenandoahLoadReferenceBarrierNode::ValueIn), NULL);
-      break;
-#endif
-  default: {
+    default: {
       // This method should be called only for EA specific nodes which may
       // miss some edges when they were created.
 #ifdef ASSERT
@@ -960,8 +947,6 @@ void ConnectionGraph::process_call_arguments(CallNode *call) {
                 (call->as_CallLeaf()->_name != NULL &&
                  (strcmp(call->as_CallLeaf()->_name, "g1_wb_pre")  == 0 ||
                   strcmp(call->as_CallLeaf()->_name, "g1_wb_post") == 0 ||
-                  strcmp(call->as_CallLeaf()->_name, "shenandoah_clone_barrier")  == 0 ||
-                  strcmp(call->as_CallLeaf()->_name, "shenandoah_cas_obj")  == 0 ||
                   strcmp(call->as_CallLeaf()->_name, "updateBytesCRC32") == 0 ||
                   strcmp(call->as_CallLeaf()->_name, "aescrypt_encryptBlock") == 0 ||
                   strcmp(call->as_CallLeaf()->_name, "aescrypt_decryptBlock") == 0 ||
@@ -2297,9 +2282,7 @@ Node* ConnectionGraph::get_addp_base(Node *addp) {
     assert(opcode == Op_ConP || opcode == Op_ThreadLocal ||
            opcode == Op_CastX2P || uncast_base->is_DecodeNarrowPtr() ||
            (uncast_base->is_Mem() && (uncast_base->bottom_type()->isa_rawptr() != NULL)) ||
-           (uncast_base->is_Proj() && uncast_base->in(0)->is_Allocate()) ||
-           (uncast_base->is_Phi() && (uncast_base->bottom_type()->isa_rawptr() != NULL)) ||
-           uncast_base->Opcode() == Op_ShenandoahLoadReferenceBarrier, "sanity");
+           (uncast_base->is_Proj() && uncast_base->in(0)->is_Allocate()), "sanity");
   }
   return base;
 }

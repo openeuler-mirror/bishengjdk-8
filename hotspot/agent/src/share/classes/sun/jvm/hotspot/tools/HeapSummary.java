@@ -27,7 +27,6 @@ package sun.jvm.hotspot.tools;
 import java.util.*;
 import sun.jvm.hotspot.gc_interface.*;
 import sun.jvm.hotspot.gc_implementation.g1.*;
-import sun.jvm.hotspot.gc_implementation.shenandoah.*;
 import sun.jvm.hotspot.gc_implementation.parallelScavenge.*;
 import sun.jvm.hotspot.gc_implementation.shared.*;
 import sun.jvm.hotspot.debugger.JVMDebugger;
@@ -77,11 +76,7 @@ public class HeapSummary extends Tool {
       printValMB("MetaspaceSize            = ", getFlagValue("MetaspaceSize", flagMap));
       printValMB("CompressedClassSpaceSize = ", getFlagValue("CompressedClassSpaceSize", flagMap));
       printValMB("MaxMetaspaceSize         = ", getFlagValue("MaxMetaspaceSize", flagMap));
-      if (heap instanceof ShenandoahHeap) {
-         printValMB("ShenandoahRegionSize     = ", ShenandoahHeapRegion.regionSizeBytes());
-      } else {
-         printValMB("G1HeapRegionSize         = ", HeapRegion.grainBytes());
-      }
+      printValMB("G1HeapRegionSize         = ", HeapRegion.grainBytes());
 
       System.out.println();
       System.out.println("Heap Usage:");
@@ -145,14 +140,6 @@ public class HeapSummary extends Tool {
          printValMB("used     = ", oldGen.used());
          printValMB("free     = ", oldFree);
          System.out.println(alignment + (double)oldGen.used() * 100.0 / oldGen.capacity() + "% used");
-      } else if (heap instanceof ShenandoahHeap) {
-         ShenandoahHeap sh = (ShenandoahHeap) heap;
-         long num_regions = sh.numOfRegions();
-         System.out.println("Shenandoah Heap:");
-         System.out.println("   regions   = " + num_regions);
-         printValMB("capacity  = ", num_regions * ShenandoahHeapRegion.regionSizeBytes());
-         printValMB("used      = ", sh.used());
-         printValMB("committed = ", sh.committed());
       } else {
          throw new RuntimeException("unknown CollectedHeap type : " + heap.getClass());
       }
@@ -192,14 +179,6 @@ public class HeapSummary extends Tool {
        l = getFlagValue("UseG1GC", flagMap);
        if (l == 1L) {
            System.out.print("Garbage-First (G1) GC ");
-           l = getFlagValue("ParallelGCThreads", flagMap);
-           System.out.println("with " + l + " thread(s)");
-           return;
-       }
-
-       l = getFlagValue("UseShenandoahGC", flagMap);
-       if (l == 1L) {
-           System.out.print("Shenandoah GC ");
            l = getFlagValue("ParallelGCThreads", flagMap);
            System.out.println("with " + l + " thread(s)");
            return;

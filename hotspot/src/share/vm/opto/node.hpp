@@ -71,7 +71,6 @@ class EncodePKlassNode;
 class FastLockNode;
 class FastUnlockNode;
 class IfNode;
-class IfProjNode;
 class IfFalseNode;
 class IfTrueNode;
 class InitializeNode;
@@ -101,7 +100,6 @@ class MachSafePointNode;
 class MachSpillCopyNode;
 class MachTempNode;
 class MachMergeNode;
-class MachMemBarNode;
 class Matcher;
 class MemBarNode;
 class MemBarStoreStoreNode;
@@ -133,7 +131,6 @@ class RegionNode;
 class RootNode;
 class SafePointNode;
 class SafePointScalarObjectNode;
-class ShenandoahBarrierNode;
 class StartNode;
 class State;
 class StoreNode;
@@ -456,8 +453,6 @@ protected:
   bool eqv_uncast(const Node* n) const {
     return (this->uncast() == n->uncast());
   }
-  // Return true if the current node has an out that matches opcode.
-  bool has_out_with(int opcode);
 
   // Find out of current node that matches opcode.
   Node* find_out_with(int opcode);
@@ -641,7 +636,6 @@ public:
       DEFINE_CLASS_ID(MachConstantBase, Mach, 4)
       DEFINE_CLASS_ID(MachConstant,     Mach, 5)
       DEFINE_CLASS_ID(MachMerge,        Mach, 6)
-      DEFINE_CLASS_ID(MachMemBar,       Mach, 7)
 
     DEFINE_CLASS_ID(Type,  Node, 2)
       DEFINE_CLASS_ID(Phi,   Type, 0)
@@ -656,14 +650,12 @@ public:
       DEFINE_CLASS_ID(EncodeNarrowPtr, Type, 6)
         DEFINE_CLASS_ID(EncodeP, EncodeNarrowPtr, 0)
         DEFINE_CLASS_ID(EncodePKlass, EncodeNarrowPtr, 1)
-      DEFINE_CLASS_ID(ShenandoahBarrier, Type, 7)
 
     DEFINE_CLASS_ID(Proj,  Node, 3)
       DEFINE_CLASS_ID(CatchProj, Proj, 0)
       DEFINE_CLASS_ID(JumpProj,  Proj, 1)
-      DEFINE_CLASS_ID(IfProj,    Proj, 2)
-        DEFINE_CLASS_ID(IfTrue,    IfProj, 0)
-        DEFINE_CLASS_ID(IfFalse,   IfProj, 1)
+      DEFINE_CLASS_ID(IfTrue,    Proj, 2)
+      DEFINE_CLASS_ID(IfFalse,   Proj, 3)
       DEFINE_CLASS_ID(Parm,      Proj, 4)
       DEFINE_CLASS_ID(MachProj,  Proj, 5)
 
@@ -789,7 +781,6 @@ public:
   DEFINE_CLASS_QUERY(FastLock)
   DEFINE_CLASS_QUERY(FastUnlock)
   DEFINE_CLASS_QUERY(If)
-  DEFINE_CLASS_QUERY(IfProj)
   DEFINE_CLASS_QUERY(IfFalse)
   DEFINE_CLASS_QUERY(IfTrue)
   DEFINE_CLASS_QUERY(Initialize)
@@ -817,7 +808,6 @@ public:
   DEFINE_CLASS_QUERY(MachSafePoint)
   DEFINE_CLASS_QUERY(MachSpillCopy)
   DEFINE_CLASS_QUERY(MachTemp)
-  DEFINE_CLASS_QUERY(MachMemBar)
   DEFINE_CLASS_QUERY(MachMerge)
   DEFINE_CLASS_QUERY(Mem)
   DEFINE_CLASS_QUERY(MemBar)
@@ -834,7 +824,6 @@ public:
   DEFINE_CLASS_QUERY(Root)
   DEFINE_CLASS_QUERY(SafePoint)
   DEFINE_CLASS_QUERY(SafePointScalarObject)
-  DEFINE_CLASS_QUERY(ShenandoahBarrier)
   DEFINE_CLASS_QUERY(Start)
   DEFINE_CLASS_QUERY(Store)
   DEFINE_CLASS_QUERY(Sub)
@@ -932,10 +921,6 @@ public:
 
   // Check if 'this' node dominates or equal to 'sub'.
   bool dominates(Node* sub, Node_List &nlist);
-
-  virtual bool is_g1_wb_pre_call() const { return false; }
-  virtual bool is_shenandoah_state_load() const { return false; }
-  virtual bool is_shenandoah_marking_if(PhaseTransform *phase) const { return false; }
 
 protected:
   bool remove_dead_region(PhaseGVN *phase, bool can_reshape);

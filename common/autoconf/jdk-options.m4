@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2011, 2020, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2011, 2021, Oracle and/or its affiliates. All rights reserved.
 # DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
 #
 # This code is free software; you can redistribute it and/or modify it
@@ -627,6 +627,17 @@ AC_DEFUN_ONCE([JDKOPT_SETUP_JDK_VERSION_NUMBERS],
   fi
   AC_SUBST(COPYRIGHT_YEAR)
 
+  AC_ARG_WITH(internal-version, [AS_HELP_STRING([--with-internal-version],
+      [Sets the internal version which will be displayed in the release file @<:@not specified@:>@])])
+  if test "x$with_internal_version" = xyes; then
+    AC_MSG_ERROR([--with-internal-version must have a value])
+  elif [ ! [[ $with_internal_version =~ ^[[:print:]]*$ ]] ]; then
+    AC_MSG_ERROR([--with-internal-version contains non-printing characters: $with_internal_version])
+  else
+    INTERNAL_VERSION="$with_internal_version"
+  fi
+  AC_SUBST(INTERNAL_VERSION)
+
   if test "x$JDK_UPDATE_VERSION" != x; then
     JDK_VERSION="${JDK_MAJOR_VERSION}.${JDK_MINOR_VERSION}.${JDK_MICRO_VERSION}_${JDK_UPDATE_VERSION}"
   else
@@ -685,8 +696,8 @@ AC_DEFUN_ONCE([JDKOPT_SETUP_DEBUG_SYMBOLS],
     # Default is on if objcopy is found
     if test "x$OBJCOPY" != x; then
       ENABLE_DEBUG_SYMBOLS=true
-    # MacOS X and Windows don't use objcopy but default is on for those OSes
-    elif test "x$OPENJDK_TARGET_OS" = xmacosx || test "x$OPENJDK_TARGET_OS" = xwindows; then
+    # AIX, MacOS X and Windows don't use objcopy but default is on for those OSes
+    elif test "x$OPENJDK_TARGET_OS" = xaix || test "x$OPENJDK_TARGET_OS" = xmacosx || test "x$OPENJDK_TARGET_OS" = xwindows; then
       ENABLE_DEBUG_SYMBOLS=true
     else
       ENABLE_DEBUG_SYMBOLS=false
@@ -724,11 +735,6 @@ AC_DEFUN_ONCE([JDKOPT_SETUP_DEBUG_SYMBOLS],
       [AS_HELP_STRING([--with-native-debug-symbols],
       [set the native debug symbol configuration (none, internal, external, zipped) @<:@varying@:>@])],
       [
-        if test "x$OPENJDK_TARGET_OS" = xaix; then
-          if test "x$with_native_debug_symbols" = xexternal || test "x$with_native_debug_symbols" = xzipped; then
-            AC_MSG_ERROR([AIX only supports the parameters 'none' and 'internal' for --with-native-debug-symbols])
-          fi
-        fi
       ],
       [
         # Default to unset for backwards compatibility

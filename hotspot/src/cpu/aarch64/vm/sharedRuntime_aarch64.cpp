@@ -1946,7 +1946,7 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
     __ ldr(r0, Address(r0, -JNIHandles::weak_tag_value));
     __ verify_oop(r0);
 #if INCLUDE_ALL_GCS
-    if (UseG1GC || (UseShenandoahGC && ShenandoahSATBBarrier)) {
+    if (UseG1GC) {
       __ g1_write_barrier_pre(noreg /* obj */,
                               r0 /* pre_val */,
                               rthread /* thread */,

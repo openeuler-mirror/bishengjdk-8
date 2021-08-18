@@ -22,11 +22,11 @@
  */
 #ifndef SHARE_VM_GC_SHARED_OWSTTASKTERMINATOR_HPP
 #define SHARE_VM_GC_SHARED_OWSTTASKTERMINATOR_HPP
- 
+
 #include "runtime/mutex.hpp"
 #include "runtime/thread.hpp"
 #include "utilities/taskqueue.hpp"
- 
+
 /*
  * OWST stands for Optimized Work Stealing Threads
  *
@@ -42,40 +42,40 @@
  * The intention of above enhancement is to reduce spin-master's latency on detecting new tasks
  * for stealing and termination condition.
  */
- 
+
 class OWSTTaskTerminator: public ParallelTaskTerminator {
 private:
   Monitor*    _blocker;
   Thread*     _spin_master;
- 
+
 public:
   OWSTTaskTerminator(uint n_threads, TaskQueueSetSuper* queue_set) :
     ParallelTaskTerminator(n_threads, queue_set), _spin_master(NULL) {
     _blocker = new Monitor(Mutex::leaf, "OWSTTaskTerminator", false);
   }
- 
+
   virtual ~OWSTTaskTerminator() {
     assert(_spin_master == NULL, "Should have been reset");
     assert(_blocker != NULL, "Can not be NULL");
     delete _blocker;
   }
- 
+
   bool offer_termination(TerminatorTerminator* terminator);
- 
+
 protected:
   // If should exit current termination protocol
   virtual bool exit_termination(size_t tasks, TerminatorTerminator* terminator);
- 
+
 private:
   size_t tasks_in_queue_set() { return _queue_set->tasks(); }
- 
+
   /*
    * Perform spin-master task.
    * Return true if termination condition is detected, otherwise return false
    */
   bool do_spin_master_work(TerminatorTerminator* terminator);
 };
- 
- 
+
+
 #endif // SHARE_VM_GC_SHARED_OWSTTASKTERMINATOR_HPP
 

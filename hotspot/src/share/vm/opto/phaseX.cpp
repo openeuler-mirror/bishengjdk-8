@@ -35,9 +35,6 @@
 #include "opto/phaseX.hpp"
 #include "opto/regalloc.hpp"
 #include "opto/rootnode.hpp"
-#if INCLUDE_ALL_GCS
-#include "gc_implementation/shenandoah/c2/shenandoahSupport.hpp"
-#endif
 
 //=============================================================================
 #define NODE_HASH_MINIMUM_SIZE    255
@@ -1285,9 +1282,7 @@ void PhaseIterGVN::remove_globally_dead_node( Node *dead ) {
                   i++;
                 }
                 assert(!(i < imax), "sanity");
-	      }              
-            } else if (in->Opcode() == Op_AddP && CallLeafNode::has_only_g1_wb_pre_uses(in)) {
-              add_users_to_worklist(in);
+              }
             }
             if (ReduceFieldZeroing && dead->is_Load() && i == MemNode::Memory &&
                 in->is_Proj() && in->in(0) != NULL && in->in(0)->is_Initialize()) {
@@ -1334,9 +1329,6 @@ void PhaseIterGVN::remove_globally_dead_node( Node *dead ) {
       }
       if (dead->is_expensive()) {
         C->remove_expensive_node(dead);
-      }
-      if (dead->Opcode() == Op_ShenandoahLoadReferenceBarrier) {
-        C->remove_shenandoah_barrier(reinterpret_cast<ShenandoahLoadReferenceBarrierNode*>(dead));
       }
       CastIINode* cast = dead->isa_CastII();
       if (cast != NULL && cast->has_range_check()) {
@@ -1554,13 +1546,6 @@ void PhaseIterGVN::add_users_to_worklist( Node *n ) {
       Node* imem = use->as_Initialize()->proj_out(TypeFunc::Memory);
       if (imem != NULL)  add_users_to_worklist0(imem);
     }
-
-    if (use->Opcode() == Op_ShenandoahLoadReferenceBarrier) {
-      Node* cmp = use->find_out_with(Op_CmpP);
-      if (cmp != NULL) {
-        _worklist.push(cmp);
-      }
-    }
   }
 }
 
@@ -1684,25 +1669,6 @@ void PhaseCCP::analyze() {
               // Got a CmpU which might need the new type information from node n.
               if(p->bottom_type() != type(p)) { // If not already bottomed out
                 worklist.push(p); // Propagate change to user
-              }
-            }
-          }
-        }
-        if (m->Opcode() == Op_ShenandoahLoadReferenceBarrier) {
-          for (DUIterator_Fast i2max, i2 = m->fast_outs(i2max); i2 < i2max; i2++) {
-            Node* p = m->fast_out(i2);
-            if (p->Opcode() == Op_CmpP) {
-              if(p->bottom_type() != type(p)) {
-                worklist.push(p);
-              }
-            } else if (p->Opcode() == Op_AddP) {
-              for (DUIterator_Fast i3max, i3 = p->fast_outs(i3max); i3 < i3max; i3++) {
-                Node* q = p->fast_out(i3);
-                if (q->is_Load()) {
-                  if(q->bottom_type() != type(q)) {
-                    worklist.push(q);
-                  }
-                }
               }
             }
           }
@@ -1975,9 +1941,6 @@ void Node::set_req_X( uint i, Node *n, PhaseIterGVN *igvn ) {
       break;
     default:
       break;
-    }
-    if (old->Opcode() == Op_AddP && CallLeafNode::has_only_g1_wb_pre_uses(old)) {
-      igvn->add_users_to_worklist(old);
     }
   }
 

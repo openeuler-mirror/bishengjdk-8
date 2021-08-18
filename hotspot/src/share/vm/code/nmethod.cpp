@@ -491,7 +491,7 @@ void nmethod::init_defaults() {
   _oops_do_mark_link       = NULL;
   _jmethod_id              = NULL;
   _osr_link                = NULL;
-  if (UseG1GC || UseShenandoahGC) {
+  if (UseG1GC) {
     _unloading_next        = NULL;
   } else {
     _scavenge_root_link    = NULL;
@@ -2612,6 +2612,7 @@ address nmethod::continuation_for_implicit_exception(address pc) {
     ResourceMark rm(thread);
     CodeBlob* cb = CodeCache::find_blob(pc);
     assert(cb != NULL && cb == this, "");
+    ttyLocker ttyl;
     tty->print_cr("implicit exception happened at " INTPTR_FORMAT, pc);
     print();
     method()->print_codes();
@@ -2836,7 +2837,7 @@ public:
 };
 
 void nmethod::verify_scavenge_root_oops() {
-  if (UseG1GC || UseShenandoahGC) {
+  if (UseG1GC) {
     return;
   }
 
@@ -2932,13 +2933,6 @@ void nmethod::print() const {
                                               nul_chk_table_end(),
                                               nul_chk_table_size());
 }
-
-void nmethod::print_code() {
-  HandleMark hm;
-  ResourceMark m;
-  Disassembler::decode(this);
-}
-
 
 #ifndef PRODUCT
 

@@ -692,13 +692,12 @@ address InterpreterGenerator::generate_Reference_get_entry(void) {
   const int referent_offset = java_lang_ref_Reference::referent_offset;
   guarantee(referent_offset > 0, "referent offset not initialized");
 
-  if (UseG1GC || (UseShenandoahGC && ShenandoahSATBBarrier)) {
+  if (UseG1GC) {
     Label slow_path;
     const Register local_0 = c_rarg0;
     // Check if local 0 != NULL
     // If the receiver is null then it is OK to jump to the slow path.
     __ ldr(local_0, Address(esp, 0));
-    __ mov(r19, r13); // First call-saved register
     __ cbz(local_0, slow_path);
 
     // Load the value of the referent field.
@@ -709,18 +708,12 @@ address InterpreterGenerator::generate_Reference_get_entry(void) {
     // Generate the G1 pre-barrier code to log the value of
     // the referent field in an SATB buffer.
     __ enter(); // g1_write may call runtime
-    if (UseShenandoahGC) {
-      __ push_call_clobbered_registers();
-    }
     __ g1_write_barrier_pre(noreg /* obj */,
                             local_0 /* pre_val */,
                             rthread /* thread */,
                             rscratch2 /* tmp */,
                             true /* tosca_live */,
                             true /* expand_call */);
-    if (UseShenandoahGC) {
-      __ pop_call_clobbered_registers();
-    }
     __ leave();
     // areturn
     __ andr(sp, r19, -16);  // done with stack
@@ -1439,7 +1432,7 @@ address InterpreterGenerator::generate_native_entry(bool synchronized) {
     // Resolve jweak.
     __ ldr(r0, Address(r0, -JNIHandles::weak_tag_value));
 #if INCLUDE_ALL_GCS
-    if (UseG1GC || (UseShenandoahGC && ShenandoahSATBBarrier)) {
+    if (UseG1GC) {
       __ enter();                   // Barrier may call runtime.
       __ g1_write_barrier_pre(noreg /* obj */,
                               r0 /* pre_val */,

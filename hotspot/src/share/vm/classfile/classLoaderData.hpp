@@ -29,7 +29,6 @@
 #include "memory/memRegion.hpp"
 #include "memory/metaspace.hpp"
 #include "memory/metaspaceCounters.hpp"
-#include "runtime/handles.hpp"
 #include "runtime/mutex.hpp"
 #include "utilities/growableArray.hpp"
 #include "utilities/macros.hpp"

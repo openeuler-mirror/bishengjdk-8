@@ -36,16 +36,24 @@ class ObjectMonitor;
 
 class ObjectSynchronizer : AllStatic {
   friend class VMStructs;
-#if INCLUDE_ALL_GCS
-  friend class ShenandoahSynchronizerIterator;
-#endif
-
-public:
+ public:
   typedef enum {
     owner_self,
     owner_none,
     owner_other
   } LockOwnership;
+
+  typedef enum {
+    inflate_cause_vm_internal = 0,
+    inflate_cause_monitor_enter = 1,
+    inflate_cause_wait = 2,
+    inflate_cause_notify = 3,
+    inflate_cause_hash_code = 4,
+    inflate_cause_jni_enter = 5,
+    inflate_cause_jni_exit = 6,
+    inflate_cause_nof = 7 // Number of causes
+  } InflateCause;
+
   // exit must be implemented non-blocking, since the compiler cannot easily handle
   // deoptimization at monitor exit. Hence, it does not take a Handle argument.
 
@@ -94,9 +102,10 @@ public:
   static void omFlush   (Thread * Self) ;
 
   // Inflate light weight monitor to heavy weight monitor
-  static ObjectMonitor* inflate(Thread * Self, oop obj);
+  static ObjectMonitor* inflate(Thread * Self, oop obj, const InflateCause cause);
   // This version is only for internal use
   static ObjectMonitor* inflate_helper(oop obj);
+  static const char* inflate_cause_name(const InflateCause cause);
 
   // Returns the identity hash value for an oop
   // NOTE: It may cause monitor inflation

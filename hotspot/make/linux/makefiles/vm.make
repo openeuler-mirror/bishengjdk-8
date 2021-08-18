@@ -168,7 +168,6 @@ CORE_PATHS+=$(GENERATED)/jvmtifiles $(GENERATED)/jfrfiles
 
 COMPILER1_PATHS := $(call altsrc,$(HS_COMMON_SRC)/share/vm/c1)
 COMPILER1_PATHS += $(HS_COMMON_SRC)/share/vm/c1
-COMPILER1_PATHS += $(HS_COMMON_SRC)/share/vm/gc_implementation/shenandoah/c1
 
 COMPILER2_PATHS := $(call altsrc,$(HS_COMMON_SRC)/share/vm/opto)
 COMPILER2_PATHS += $(call altsrc,$(HS_COMMON_SRC)/share/vm/libadt)
@@ -187,8 +186,8 @@ Src_Dirs/ZERO      := $(CORE_PATHS)
 Src_Dirs/SHARK     := $(CORE_PATHS) $(SHARK_PATHS)
 Src_Dirs := $(Src_Dirs/$(TYPE))
 
-COMPILER2_SPECIFIC_FILES := opto libadt bcEscapeAnalyzer.cpp c2_\* runtime_\* shenandoahBarrierSetC2.cpp shenandoahSupport.cpp
-COMPILER1_SPECIFIC_FILES := c1_\* shenandoahBarrierSetC1.cpp
+COMPILER2_SPECIFIC_FILES := opto libadt bcEscapeAnalyzer.cpp c2_\* runtime_\*
+COMPILER1_SPECIFIC_FILES := c1_\*
 SHARK_SPECIFIC_FILES     := shark
 ZERO_SPECIFIC_FILES      := zero
 
@@ -222,7 +221,7 @@ endif
 # Locate all source files in the given directory, excluding files in Src_Files_EXCLUDE.
 define findsrc
 	$(notdir $(shell find $(1)/. ! -name . -prune \
-		-a \( -name \*.c -o -name \*.cpp -o -name \*.s -o -name \*.S \) \
+		-a \( -name \*.c -o -name \*.cpp -o -name \*.s \) \
 		-a ! \( -name DUMMY $(addprefix -o -name ,$(Src_Files_EXCLUDE)) \)))
 endef
 

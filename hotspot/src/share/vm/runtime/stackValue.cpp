@@ -102,15 +102,8 @@ StackValue* StackValue::create_stack_value(const frame* fr, const RegisterMap* r
       } else {
         value.noop = *(narrowOop*) value_addr;
       }
-      // Decode narrowoop
-      oop val = oopDesc::decode_heap_oop(value.noop);
-      // Deoptimization must make sure all oops have passed load barriers
-#if INCLUDE_ALL_GCS
-      if (UseShenandoahGC) {
-        val = ShenandoahBarrierSet::barrier_set()->load_reference_barrier(val);
-      }
-#endif
-      Handle h(val); // Wrap a handle around the oop
+      // Decode narrowoop and wrap a handle around the oop
+      Handle h(oopDesc::decode_heap_oop(value.noop));
       return new StackValue(h);
     }
 #endif
@@ -123,12 +116,6 @@ StackValue* StackValue::create_stack_value(const frame* fr, const RegisterMap* r
          // The narrow_oop_base could be NULL or be the address
          // of the page below heap. Use NULL value for both cases.
          val = (oop)NULL;
-      }
-#endif
-      // Deoptimization must make sure all oops have passed load barriers
-#if INCLUDE_ALL_GCS
-      if (UseShenandoahGC) {
-        val = ShenandoahBarrierSet::barrier_set()->load_reference_barrier(val);
       }
 #endif
       Handle h(val); // Wrap a handle around the oop

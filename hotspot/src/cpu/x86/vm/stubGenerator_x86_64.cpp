@@ -38,13 +38,9 @@
 #include "runtime/stubCodeGenerator.hpp"
 #include "runtime/stubRoutines.hpp"
 #include "runtime/thread.inline.hpp"
-#include "utilities/macros.hpp"
 #include "utilities/top.hpp"
 #ifdef COMPILER2
 #include "opto/runtime.hpp"
-#endif
-#if INCLUDE_ALL_GCS
-#include "shenandoahBarrierSetAssembler_x86.hpp"
 #endif
 
 // Declaration and definition of StubGenerator (no .hpp file).
@@ -1182,7 +1178,7 @@ class StubGenerator: public StubCodeGenerator {
   //
   //     Destroy no registers!
   //
-  void  gen_write_ref_array_pre_barrier(Register src, Register addr, Register count, bool dest_uninitialized) {
+  void  gen_write_ref_array_pre_barrier(Register addr, Register count, bool dest_uninitialized) {
     BarrierSet* bs = Universe::heap()->barrier_set();
     switch (bs->kind()) {
       case BarrierSet::G1SATBCT:
@@ -1210,11 +1206,6 @@ class StubGenerator: public StubCodeGenerator {
       case BarrierSet::CardTableExtension:
       case BarrierSet::ModRef:
         break;
-#if INCLUDE_ALL_GCS
-      case BarrierSet::ShenandoahBarrierSet:
-        ShenandoahBarrierSetAssembler::bsasm()->arraycopy_prologue(_masm, dest_uninitialized, src, addr, count);
-        break;
-#endif
       default:
         ShouldNotReachHere();
 
@@ -1276,10 +1267,6 @@ class StubGenerator: public StubCodeGenerator {
           __ jcc(Assembler::greaterEqual, L_loop);
         }
         break;
-#if INCLUDE_ALL_GCS
-      case BarrierSet::ShenandoahBarrierSet:
-        break;
-#endif
       default:
         ShouldNotReachHere();
 
@@ -1897,7 +1884,7 @@ class StubGenerator: public StubCodeGenerator {
                       // r9 and r10 may be used to save non-volatile registers
     if (is_oop) {
       __ movq(saved_to, to);
-      gen_write_ref_array_pre_barrier(from, to, count, dest_uninitialized);
+      gen_write_ref_array_pre_barrier(to, count, dest_uninitialized);
     }
 
     // 'from', 'to' and 'count' are now valid
@@ -1985,7 +1972,7 @@ class StubGenerator: public StubCodeGenerator {
 
     if (is_oop) {
       // no registers are destroyed by this call
-      gen_write_ref_array_pre_barrier(from, to, count, dest_uninitialized);
+      gen_write_ref_array_pre_barrier(to, count, dest_uninitialized);
     }
 
     assert_clean_int(count, rax); // Make sure 'count' is clean int.
@@ -2083,7 +2070,7 @@ class StubGenerator: public StubCodeGenerator {
       // Save to and count for store barrier
       __ movptr(saved_count, qword_count);
       // no registers are destroyed by this call
-      gen_write_ref_array_pre_barrier(from, to, qword_count, dest_uninitialized);
+      gen_write_ref_array_pre_barrier(to, qword_count, dest_uninitialized);
     }
 
     // Copy from low to high addresses.  Use 'to' as scratch.
@@ -2170,7 +2157,7 @@ class StubGenerator: public StubCodeGenerator {
       // Save to and count for store barrier
       __ movptr(saved_count, qword_count);
       // No registers are destroyed by this call
-      gen_write_ref_array_pre_barrier(from, to, saved_count, dest_uninitialized);
+      gen_write_ref_array_pre_barrier(to, saved_count, dest_uninitialized);
     }
 
     __ jmp(L_copy_bytes);
@@ -2344,7 +2331,7 @@ class StubGenerator: public StubCodeGenerator {
     Address from_element_addr(end_from, count, TIMES_OOP, 0);
     Address   to_element_addr(end_to,   count, TIMES_OOP, 0);
 
-    gen_write_ref_array_pre_barrier(from, to, count, dest_uninitialized);
+    gen_write_ref_array_pre_barrier(to, count, dest_uninitialized);
 
     // Copy from low to high addresses, indexed from the end of each array.
     __ lea(end_from, end_from_addr);

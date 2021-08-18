@@ -35,7 +35,6 @@
 #include "utilities/sizes.hpp"
 #if INCLUDE_ALL_GCS
 #include "gc_implementation/g1/g1_globals.hpp"
-#include "gc_implementation/shenandoah/shenandoah_globals.hpp"
 #endif // INCLUDE_ALL_GCS
 #ifdef COMPILER1
 #include "c1/c1_globals.hpp"

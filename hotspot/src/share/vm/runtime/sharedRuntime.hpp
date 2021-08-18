@@ -490,10 +490,6 @@ class SharedRuntime: AllStatic {
   static void get_utf(oopDesc* src, address dst);
 #endif // def HAVE_DTRACE_H
 
-  // Pin/Unpin object
-  static oopDesc* pin_object(JavaThread* thread, oopDesc* obj);
-  static void unpin_object(JavaThread* thread, oopDesc* obj);
-
   // A compiled caller has just called the interpreter, but compiled code
   // exists.  Patch the caller so he no longer calls into the interpreter.
   static void fixup_callers_callsite(Method* moop, address ret_pc);

@@ -56,7 +56,6 @@ public enum VMOps {
   G1CollectFull,
   G1CollectForAllocation,
   G1IncCollectionPause,
-  ShenandoahOperation,
   EnableBiasedLocking,
   RevokeBias,
   BulkRevokeBias,

@@ -53,9 +53,6 @@
 #elif defined TARGET_ARCH_MODEL_ppc_64
 # include "adfiles/ad_ppc_64.hpp"
 #endif
-#if INCLUDE_ALL_GCS
-#include "gc_implementation/shenandoah/c2/shenandoahSupport.hpp"
-#endif
 
 OptoReg::Name OptoReg::c_frame_pointer;
 
@@ -1027,9 +1024,6 @@ Node *Matcher::xform( Node *n, int max_stack ) {
             m = n->is_SafePoint() ? match_sfpt(n->as_SafePoint()):match_tree(n);
             if (C->failing())  return NULL;
             if (m == NULL) { Matcher::soft_match_failure(); return NULL; }
-            if (n->is_MemBar() && UseShenandoahGC) {
-              m->as_MachMemBar()->set_adr_type(n->adr_type());
-            }
           } else {                  // Nothing the matcher cares about
             if (n->is_Proj() && n->in(0) != NULL && n->in(0)->is_Multi()) {       // Projections?
               // Convert to machine-dependent projection

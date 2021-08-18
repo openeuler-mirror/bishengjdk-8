@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998, 2014, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1998, 2019, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -640,6 +640,22 @@ bool InstructForm::needs_anti_dependence_check(FormDict &globals) const {
 }
 
 
+bool InstructForm::is_wide_memory_kill(FormDict &globals) const {
+  if( _matrule == NULL ) return false;
+  if( !_matrule->_opType ) return false;
+
+  if( strcmp(_matrule->_opType,"MemBarRelease") == 0 ) return true;
+  if( strcmp(_matrule->_opType,"MemBarAcquire") == 0 ) return true;
+  if( strcmp(_matrule->_opType,"MemBarReleaseLock") == 0 ) return true;
+  if( strcmp(_matrule->_opType,"MemBarAcquireLock") == 0 ) return true;
+  if( strcmp(_matrule->_opType,"MemBarStoreStore") == 0 ) return true;
+  if( strcmp(_matrule->_opType,"MemBarVolatile") == 0 ) return true;
+  if( strcmp(_matrule->_opType,"StoreFence") == 0 ) return true;
+  if( strcmp(_matrule->_opType,"LoadFence") == 0 ) return true;
+
+  return false;
+}
+
 int InstructForm::memory_operand(FormDict &globals) const {
   // Machine independent loads must be checked for anti-dependences
   // Check if instruction has a USE of a memory operand class, or a def.
@@ -1143,9 +1159,6 @@ const char *InstructForm::mach_base_class(FormDict &globals)  const {
   }
   else if (is_ideal_nop()) {
     return "MachNopNode";
-  }
-  else if (is_ideal_membar()) {
-    return "MachMemBarNode";
   }
   else if (is_mach_constant()) {
     return "MachConstantNode";
@@ -3383,7 +3396,7 @@ const char *MatchNode::reduce_left(FormDict &globals) const {
 // Count occurrences of operands names in the leaves of the instruction
 // match rule.
 void MatchNode::count_instr_names( Dict &names ) {
-  if( !this ) return;
+  if( this == NULL ) return;
   if( _lChild ) _lChild->count_instr_names(names);
   if( _rChild ) _rChild->count_instr_names(names);
   if( !_lChild && !_rChild ) {
@@ -3474,7 +3487,6 @@ int MatchNode::needs_ideal_memory_edge(FormDict &globals) const {
     "LoadPLocked",
     "StorePConditional", "StoreIConditional", "StoreLConditional",
     "CompareAndSwapI", "CompareAndSwapL", "CompareAndSwapP", "CompareAndSwapN",
-    "ShenandoahCompareAndSwapN", "ShenandoahCompareAndSwapP",
     "StoreCM",
     "ClearArray",
     "GetAndAddI", "GetAndSetI", "GetAndSetP",
@@ -3957,39 +3969,12 @@ bool MatchRule::is_chain_rule(FormDict &globals) const {
 }
 
 int MatchRule::is_ideal_copy() const {
-  if( _rChild ) {
-    const char  *opType = _rChild->_opType;
-#if 1
-    if( strcmp(opType,"CastIP")==0 )
-      return 1;
-#else
-    if( strcmp(opType,"CastII")==0 )
-      return 1;
-    // Do not treat *CastPP this way, because it
-    // may transfer a raw pointer to an oop.
-    // If the register allocator were to coalesce this
-    // into a single LRG, the GC maps would be incorrect.
-    //if( strcmp(opType,"CastPP")==0 )
-    //  return 1;
-    //if( strcmp(opType,"CheckCastPP")==0 )
-    //  return 1;
-    //
-    // Do not treat CastX2P or CastP2X this way, because
-    // raw pointers and int types are treated differently
-    // when saving local & stack info for safepoints in
-    // Output().
-    //if( strcmp(opType,"CastX2P")==0 )
-    //  return 1;
-    //if( strcmp(opType,"CastP2X")==0 )
-    //  return 1;
-#endif
-  }
-  if( is_chain_rule(_AD.globalNames()) &&
-      _lChild && strncmp(_lChild->_opType,"stackSlot",9)==0 )
+  if (is_chain_rule(_AD.globalNames()) &&
+      _lChild && strncmp(_lChild->_opType, "stackSlot", 9) == 0) {
     return 1;
+  }
   return 0;
 }
-
 
 int MatchRule::is_expensive() const {
   if( _rChild ) {

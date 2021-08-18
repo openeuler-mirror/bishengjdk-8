@@ -74,10 +74,4 @@ inline void JavaThread::set_done_attaching_via_jni() {
   OrderAccess::fence();
 }
 
-#if INCLUDE_ALL_GCS
-char JavaThread::gc_state() const {
-  return _gc_state;
-}
-#endif
-
 #endif // SHARE_VM_RUNTIME_THREAD_INLINE_HPP

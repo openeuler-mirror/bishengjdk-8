@@ -571,12 +571,10 @@ class PhaseIdealLoop : public PhaseTransform {
   // Mark as post visited
   void set_postvisited( Node *n ) { assert( !is_postvisited( n ), "" ); _preorders[n->_idx] |= 1; }
 
-public:
   // Set/get control node out.  Set lower bit to distinguish from IdealLoopTree
   // Returns true if "n" is a data node, false if it's a control node.
   bool has_ctrl( Node *n ) const { return ((intptr_t)_nodes[n->_idx]) & 1; }
 
-private:
   // clear out dead code after build_loop_late
   Node_List _deadlist;
 
@@ -752,7 +750,6 @@ private:
     }
     return n;
   }
-public:
   Node *idom(Node* d) const {
     uint didx = d->_idx;
     Node *n = idom_no_update(d);
@@ -765,8 +762,6 @@ public:
     return _dom_depth[d->_idx];
   }
   void set_idom(Node* d, Node* n, uint dom_depth);
-
-private:
   // Locally compute IDOM using dom_lca call
   Node *compute_idom( Node *region ) const;
   // Recompute dom_depth
@@ -1050,7 +1045,6 @@ public:
   Node *split_thru_region( Node *n, Node *region );
   // Split Node 'n' through merge point if there is enough win.
   Node *split_thru_phi( Node *n, Node *region, int policy );
-
   // Found an If getting its condition-code input from a Phi in the
   // same block.  Split thru the Region.
   void do_split_if( Node *iff );
@@ -1087,11 +1081,11 @@ public:
 #ifdef ASSERT
   void dump_bad_graph(const char* msg, Node* n, Node* early, Node* LCA);
 #endif
-  void rpo( Node *start, Node_Stack &stk, VectorSet &visited, Node_List &rpo_list ) const;
 
 #ifndef PRODUCT
   void dump( ) const;
   void dump( IdealLoopTree *loop, uint rpo_idx, Node_List &rpo_list ) const;
+  void rpo( Node *start, Node_Stack &stk, VectorSet &visited, Node_List &rpo_list ) const;
   void verify() const;          // Major slow  :-)
   void verify_compare( Node *n, const PhaseIdealLoop *loop_verify, VectorSet &visited ) const;
   IdealLoopTree *get_loop_idx(Node* n) const {
@@ -1103,9 +1097,6 @@ public:
   static int _loop_invokes;     // Count of PhaseIdealLoop invokes
   static int _loop_work;        // Sum of PhaseIdealLoop x _unique
 #endif
-
-  PhaseIterGVN& igvn() { return _igvn; }
-  IdealLoopTree* ltree_root() const { return _ltree_root; }
 };
 
 inline Node* IdealLoopTree::tail() {

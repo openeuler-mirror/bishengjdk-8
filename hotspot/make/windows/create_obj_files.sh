@@ -78,10 +78,6 @@ BASE_PATHS="${BASE_PATHS} `$FIND ${COMMONSRC}/share/vm/jfr -type d`"
 fi
 
 BASE_PATHS="${BASE_PATHS} ${COMMONSRC}/share/vm/prims/wbtestmethods"
-BASE_PATHS="${BASE_PATHS} ${COMMONSRC}/share/vm/gc_implementation/shenandoah/c1"
-BASE_PATHS="${BASE_PATHS} ${COMMONSRC}/share/vm/gc_implementation/shenandoah/c2"
-BASE_PATHS="${BASE_PATHS} ${COMMONSRC}/share/vm/gc_implementation/shenandoah/heuristics"
-BASE_PATHS="${BASE_PATHS} ${COMMONSRC}/share/vm/gc_implementation/shenandoah/mode"
 
 # shared is already in BASE_PATHS. Should add vm/memory but that one is also in BASE_PATHS.
 if [ -d "${ALTSRC}/share/vm/gc_implementation" ]; then
