@@ -589,9 +589,6 @@ public class AlgorithmId implements Serializable, DerEncoder {
             || name.equalsIgnoreCase("SHA1/RSA")) {
             return AlgorithmId.sha1WithRSAEncryption_oid;
         }
-        if (name.equalsIgnoreCase("SHA224WithRSA")) {
-            return AlgorithmId.sha224WithRSAEncryption_oid;
-        }
         if (name.equalsIgnoreCase("SHA256WithRSA")) {
             return AlgorithmId.sha256WithRSAEncryption_oid;
         }
@@ -600,12 +597,6 @@ public class AlgorithmId implements Serializable, DerEncoder {
         }
         if (name.equalsIgnoreCase("SHA512WithRSA")) {
             return AlgorithmId.sha512WithRSAEncryption_oid;
-        }
-        if (name.equalsIgnoreCase("SHA512/224withRSA")) {
-            return AlgorithmId.sha512_224WithRSAEncryption_oid;
-        }
-        if (name.equalsIgnoreCase("SHA512/256withRSA")) {
-            return AlgorithmId.sha512_256WithRSAEncryption_oid;
         }
         if (name.equalsIgnoreCase("SHA1withECDSA")
                 || name.equalsIgnoreCase("ECDSA")) {
