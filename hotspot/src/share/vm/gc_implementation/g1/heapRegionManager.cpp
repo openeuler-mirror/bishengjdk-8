@@ -241,8 +241,8 @@ uint HeapRegionManager::expand_at(uint start, uint num_regions) {
 uint HeapRegionManager::expand_on_preferred_node(uint preferred_index) {
   uint expand_candidate = UINT_MAX;
   for (uint i = 0; i < max_length(); i++) {
-    if (is_available(i)) {
-      // Already in use continue
+    if (!can_expand(i)) {
+      // Already in use or in uncommit list continue
       continue;
     }
     // Always save the candidate so we can expand later on.
