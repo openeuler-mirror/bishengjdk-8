@@ -559,8 +559,10 @@ class JdepsTask {
                         a.addClass(d.getOrigin());
                     }
                 }
-                for (String name : a.reader().skippedEntries()) {
-                    warning("warn.skipped.entry", name, a.getPathName());
+                if (!options.nowarning) {
+                    for (String name : a.reader().skippedEntries()) {
+                        warning("warn.skipped.entry", name, a.getPathName());
+                    }
                 }
             }
         }
