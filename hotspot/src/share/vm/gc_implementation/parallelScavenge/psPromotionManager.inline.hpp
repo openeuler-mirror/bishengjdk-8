@@ -203,15 +203,17 @@ oop PSPromotionManager::copy_to_survivor_space(oop o) {
 
     assert(new_obj != NULL, "allocation should have succeeded");
 
+    Prefetch::write(new_obj, PrefetchCopyIntervalInBytes);
     // Copy obj
     Copy::aligned_disjoint_words((HeapWord*)o, (HeapWord*)new_obj, new_obj_size);
 
     // Now we have to CAS in the header.
-#ifdef AARCH64
+
     // CAS with memory fence cost a lot within copy_to_survivor_space on aarch64.
-    // To minimize the cost, we use a normal CAS to do object forwarding, plus a
+    // To minimize the cost, we can use a normal CAS to do object forwarding, plus a
     // memory fence only upon CAS succeeds. To further reduce the fence insertion,
     // we can skip the fence insertion for leaf objects (objects don't have reference fields).
+#if defined(AARCH64) && defined(PRODUCT)
     if (o->relax_cas_forward_to(new_obj, test_mark)) {
 #else
     if (o->cas_forward_to(new_obj, test_mark)) {
@@ -271,6 +273,10 @@ oop PSPromotionManager::copy_to_survivor_space(oop o) {
 #ifndef PRODUCT
   // This code must come after the CAS test, or it will print incorrect
   // information.
+  // When UsePSRelaxedForwardee is true or object o is gc leaf, CAS failed threads can't access forwardee's content,
+  // as relaxed CAS cann't gurantee new obj's content visible for these CAS failed threads.The below log output is
+  // dangerous. So we just support UsePSRelaxedForwardee and gc leaf in product.
+  // Everywhere access forwardee's content must be careful.
   if (TraceScavenge) {
     gclog_or_tty->print_cr("{%s %s " PTR_FORMAT " -> " PTR_FORMAT " (%d)}",
        PSScavenge::should_scavenge(&new_obj) ? "copying" : "tenuring",
