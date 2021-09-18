@@ -43,7 +43,12 @@ typedef enum ECDHParamIndex {
     ecdhCofactor
 } ECDHParamIndex;
 
-static const char* ecdhParamNames[] = {"p", "a", "b", "x", "y", "order", "cofactor"};
+// ECDH Key index.
+typedef enum ECDHKeyIndex {
+    ecdhWX = 0,
+    ecdhWY,
+    ecdhS
+} ECDHKeyIndex;
 
 static void FreeECDHCurveParam(JNIEnv* env, BIGNUM* p, BIGNUM* a, BIGNUM* b, jbyteArray paramP,
     jbyteArray paramA, jbyteArray paramB)
@@ -69,7 +74,7 @@ static void FreeECDHCurveParam(JNIEnv* env, BIGNUM* p, BIGNUM* a, BIGNUM* b, jby
 }
 
 // Set p, a, b in group to params.
-static bool SetECDHCurve(JNIEnv* env, EC_GROUP* group, jobjectArray params, ECDHParamIndex ecdhParamIndex)
+static bool SetECDHCurve(JNIEnv* env, EC_GROUP* group, jobjectArray params)
 {
     BIGNUM* p = NULL;
     BIGNUM* a = NULL;
@@ -86,25 +91,22 @@ static bool SetECDHCurve(JNIEnv* env, EC_GROUP* group, jobjectArray params, ECDH
     }
 
     // Set p.
-    const char* ecdhParamName = ecdhParamNames[ecdhParamIndex];
-    if ((paramP = KAE_GetByteArrayFromBigNum(env, p, ecdhParamName)) == NULL) {
+    if ((paramP = KAE_GetByteArrayFromBigNum(env, p)) == NULL) {
         goto cleanup;
     }
-    (*env)->SetObjectArrayElement(env, params, ecdhParamIndex, paramP);
+    (*env)->SetObjectArrayElement(env, params, ecdhP, paramP);
 
     // Set a.
-    ecdhParamName = ecdhParamNames[++ecdhParamIndex];
-    if ((paramA = KAE_GetByteArrayFromBigNum(env, a, ecdhParamName)) == NULL) {
+    if ((paramA = KAE_GetByteArrayFromBigNum(env, a)) == NULL) {
         goto cleanup;
     }
-    (*env)->SetObjectArrayElement(env, params, ecdhParamIndex, paramA);
+    (*env)->SetObjectArrayElement(env, params, ecdhA, paramA);
 
     // Set b.
-    ecdhParamName = ecdhParamNames[++ecdhParamIndex];
-    if ((paramB = KAE_GetByteArrayFromBigNum(env, b, ecdhParamName)) == NULL) {
+    if ((paramB = KAE_GetByteArrayFromBigNum(env, b)) == NULL) {
         goto cleanup;
     }
-    (*env)->SetObjectArrayElement(env, params, ecdhParamIndex, paramB);
+    (*env)->SetObjectArrayElement(env, params, ecdhB, paramB);
     FreeECDHCurveParam(env, p, a, b, paramP, paramA, paramB);
     return true;
 
@@ -114,7 +116,7 @@ cleanup:
 }
 
 // Set generator(x, y) in group to params.
-static bool SetECDHPoint(JNIEnv* env, EC_GROUP* group, jobjectArray params, ECDHParamIndex ecdhParamIndex)
+static bool SetECDHPoint(JNIEnv* env, EC_GROUP* group, jobjectArray params)
 {
     BIGNUM* x = NULL;
     BIGNUM* y = NULL;
@@ -135,18 +137,16 @@ static bool SetECDHPoint(JNIEnv* env, EC_GROUP* group, jobjectArray params, ECDH
     }
 
     // Set x.
-    const char* ecdhParamName = ecdhParamNames[ecdhParamIndex];
-    if ((paramX = KAE_GetByteArrayFromBigNum(env, x, ecdhParamName)) == NULL) {
+    if ((paramX = KAE_GetByteArrayFromBigNum(env, x)) == NULL) {
         goto cleanup;
     }
-    (*env)->SetObjectArrayElement(env, params, ecdhParamIndex, paramX);
+    (*env)->SetObjectArrayElement(env, params, ecdhX, paramX);
 
     // Set y.
-    ecdhParamName = ecdhParamNames[++ecdhParamIndex];
-    if ((paramY = KAE_GetByteArrayFromBigNum(env, y, ecdhParamName)) == NULL) {
+    if ((paramY = KAE_GetByteArrayFromBigNum(env, y)) == NULL) {
         goto cleanup;
     }
-    (*env)->SetObjectArrayElement(env, params, ecdhParamIndex, paramY);
+    (*env)->SetObjectArrayElement(env, params, ecdhY, paramY);
     BN_free(x);
     BN_free(y);
     (*env)->DeleteLocalRef(env, paramX);
@@ -170,7 +170,7 @@ cleanup:
 }
 
 // Set order, cofactor in group to params.
-static bool SetECDHOrderAndCofactor(JNIEnv* env, EC_GROUP* group, jobjectArray params, ECDHParamIndex ecdhParamIndex)
+static bool SetECDHOrderAndCofactor(JNIEnv* env, EC_GROUP* group, jobjectArray params)
 {
     BIGNUM* order = NULL;
     BIGNUM* cofactor = NULL;
@@ -184,21 +184,19 @@ static bool SetECDHOrderAndCofactor(JNIEnv* env, EC_GROUP* group, jobjectArray p
     }
 
     // Set order.
-    const char* ecdhParamName = ecdhParamNames[ecdhParamIndex];
-    if ((paramOrder = KAE_GetByteArrayFromBigNum(env, order, ecdhParamName)) == NULL) {
+    if ((paramOrder = KAE_GetByteArrayFromBigNum(env, order)) == NULL) {
         goto cleanup;
     }
-    (*env)->SetObjectArrayElement(env, params, ecdhParamIndex, paramOrder);
+    (*env)->SetObjectArrayElement(env, params, ecdhOrder, paramOrder);
     if (!EC_GROUP_get_cofactor(group, cofactor, NULL)) {
         goto cleanup;
     }
 
     // Set cofactor.
-    ecdhParamName = ecdhParamNames[++ecdhParamIndex];
-    if ((paramCofactor = KAE_GetByteArrayFromBigNum(env, cofactor, ecdhParamName)) == NULL) {
+    if ((paramCofactor = KAE_GetByteArrayFromBigNum(env, cofactor)) == NULL) {
         goto cleanup;
     }
-    (*env)->SetObjectArrayElement(env, params, ecdhParamIndex, paramCofactor);
+    (*env)->SetObjectArrayElement(env, params, ecdhCofactor, paramCofactor);
     BN_free(order);
     BN_free(cofactor);
     (*env)->DeleteLocalRef(env, paramOrder);
@@ -222,7 +220,7 @@ cleanup:
 }
 
 static void FreeECDHKeyParam(JNIEnv* env,
-    BIGNUM* wX, BIGNUM* wY, jbyteArray paramWX, jbyteArray paramWY, jbyteArray paramS)
+    BIGNUM* wX, BIGNUM* wY, jbyteArray keyWX, jbyteArray keyWY, jbyteArray keyS)
 {
     if (wX != NULL) {
         BN_free(wX);
@@ -230,28 +228,28 @@ static void FreeECDHKeyParam(JNIEnv* env,
     if (wY != NULL) {
         BN_free(wY);
     }
-    if (paramWX != NULL) {
-        (*env)->DeleteLocalRef(env, paramWX);
+    if (keyWX != NULL) {
+        (*env)->DeleteLocalRef(env, keyWX);
     }
-    if (paramWY != NULL) {
-        (*env)->DeleteLocalRef(env, paramWY);
+    if (keyWY != NULL) {
+        (*env)->DeleteLocalRef(env, keyWY);
     }
-    if (paramS != NULL) {
-        (*env)->DeleteLocalRef(env, paramS);
+    if (keyS != NULL) {
+        (*env)->DeleteLocalRef(env, keyS);
     }
 }
 
 // Set publicKey(wX, wY) and privateKey(s) in eckey to params.
 static bool SetECDHKey(JNIEnv* env, const EC_GROUP* group, jobjectArray params,
-    ECDHParamIndex ecdhKeyIndex, const EC_KEY* eckey)
+    const EC_KEY* eckey)
 {
     BIGNUM* wX = NULL;
     BIGNUM* wY = NULL;
     const EC_POINT* pub = NULL;
     const BIGNUM* s = NULL;
-    jbyteArray paramWX = NULL;
-    jbyteArray paramWY = NULL;
-    jbyteArray paramS = NULL;
+    jbyteArray keyWX = NULL;
+    jbyteArray keyWY = NULL;
+    jbyteArray keyS = NULL;
     if ((wX = BN_new()) == NULL || (wY = BN_new()) == NULL) {
         KAE_ThrowOOMException(env, "failed to allocate array");
         goto cleanup;
@@ -266,53 +264,47 @@ static bool SetECDHKey(JNIEnv* env, const EC_GROUP* group, jobjectArray params,
     }
 
     // Set wX.
-    const char* ecdhParamName = ecdhParamNames[ecdhKeyIndex];
-    if ((paramWX = KAE_GetByteArrayFromBigNum(env, wX, ecdhParamName)) == NULL) {
+    if ((keyWX = KAE_GetByteArrayFromBigNum(env, wX)) == NULL) {
         goto cleanup;
     }
-    (*env)->SetObjectArrayElement(env, params, ecdhKeyIndex, paramWX);
+    (*env)->SetObjectArrayElement(env, params, ecdhWX, keyWX);
 
     // Set wY.
-    ecdhParamName = ecdhParamNames[++ecdhKeyIndex];
-    if ((paramWY = KAE_GetByteArrayFromBigNum(env, wY, ecdhParamName)) == NULL) {
+    if ((keyWY = KAE_GetByteArrayFromBigNum(env, wY)) == NULL) {
         goto cleanup;
     }
-    (*env)->SetObjectArrayElement(env, params, ecdhKeyIndex, paramWY);
+    (*env)->SetObjectArrayElement(env, params, ecdhWY, keyWY);
 
     // Set s.
-    ecdhParamName = ecdhParamNames[++ecdhKeyIndex];
-    if ((paramS = KAE_GetByteArrayFromBigNum(env, s, ecdhParamName)) == NULL) {
+    if ((keyS = KAE_GetByteArrayFromBigNum(env, s)) == NULL) {
         goto cleanup;
     }
-    (*env)->SetObjectArrayElement(env, params, ecdhKeyIndex, paramS);
-    FreeECDHKeyParam(env, wX, wY, paramWX, paramWY, paramS);
+    (*env)->SetObjectArrayElement(env, params, ecdhS, keyS);
+    FreeECDHKeyParam(env, wX, wY, keyWX, keyWY, keyS);
     return true;
 
 cleanup:
-    FreeECDHKeyParam(env, wX, wY, paramWX, paramWY, paramS);
+    FreeECDHKeyParam(env, wX, wY, keyWX, keyWY, keyS);
     return false;
 }
 
 // Convert EC_GROUP in openssl to byte[][] in java
 static jobjectArray NewECDHParam(JNIEnv* env, EC_GROUP* group)
 {
-    jclass byteArrayClass = NULL;
-    jobjectArray params = NULL;
-
-    byteArrayClass = (*env)->FindClass(env, "[B");
-    params = (*env)->NewObjectArray(env, KAE_EC_PARAM_NUM_SIZE, byteArrayClass, NULL);
+    jclass byteArrayClass = (*env)->FindClass(env, "[B");
+    jobjectArray params = (*env)->NewObjectArray(env, KAE_EC_PARAM_NUM_SIZE, byteArrayClass, NULL);
     if (params == NULL) {
         KAE_ThrowOOMException(env, "failed to allocate array");
         goto cleanup;
     }
 
-    if (!SetECDHCurve(env, group, params, ecdhP)) {
+    if (!SetECDHCurve(env, group, params)) {
         goto cleanup;
     }
-    if (!SetECDHPoint(env, group, params, ecdhX)) {
+    if (!SetECDHPoint(env, group, params)) {
         goto cleanup;
     }
-    if (!SetECDHOrderAndCofactor(env, group, params, ecdhOrder)) {
+    if (!SetECDHOrderAndCofactor(env, group, params)) {
         goto cleanup;
     }
 
@@ -332,16 +324,13 @@ cleanup:
 // Convert EC_KEY in openssl to byte[][] in java
 static jobjectArray NewECDHKey(JNIEnv* env, const EC_GROUP* group, const EC_KEY* eckey)
 {
-    jclass byteArrayClass = NULL;
-    jobjectArray params = NULL;
-
-    byteArrayClass = (*env)->FindClass(env, "[B");
-    params = (*env)->NewObjectArray(env, KAE_EC_KEY_NUM_SIZE, byteArrayClass, NULL);
+    jclass byteArrayClass = (*env)->FindClass(env, "[B");
+    jobjectArray params = (*env)->NewObjectArray(env, KAE_EC_KEY_NUM_SIZE, byteArrayClass, NULL);
     if (params == NULL) {
         KAE_ThrowOOMException(env, "failed to allocate array");
         goto cleanup;
     }
-    if (!SetECDHKey(env, group, params, 0, eckey)) {
+    if (!SetECDHKey(env, group, params, eckey)) {
         goto cleanup;
     }
 
@@ -435,6 +424,7 @@ JNIEXPORT jobjectArray JNICALL Java_org_openeuler_security_openssl_KAEECKeyPairG
     JNIEnv* env, jclass cls, jstring curveName)
 {
     EC_GROUP* group = NULL;
+    jobjectArray ecdhParam = NULL;
 
     const char *curve = (*env)->GetStringUTFChars(env, curveName, 0);
     KAE_TRACE("KAEECKeyPairGenerator_nativeGenerateParam(curveName = %s)", curve);
@@ -447,7 +437,7 @@ JNIEXPORT jobjectArray JNICALL Java_org_openeuler_security_openssl_KAEECKeyPairG
     if ((group = EC_GROUP_new_by_curve_name(nid)) == NULL) {
         goto cleanup;
     }
-    jobjectArray ecdhParam = NewECDHParam(env, group);
+    ecdhParam = NewECDHParam(env, group);
 
     if (group != NULL) {
         EC_GROUP_free(group);
@@ -476,6 +466,7 @@ JNIEXPORT jobjectArray JNICALL Java_org_openeuler_security_openssl_KAEECKeyPairG
 {
     EC_GROUP* group = NULL;
     EC_KEY* eckey = NULL;
+    jobjectArray ecdhKey = NULL;
 
     if ((group = GetGroupByParam(env, pArr, aArr, bArr, xArr, yArr, orderArr, cofactorInt)) == NULL) {
         goto cleanup;
@@ -492,7 +483,7 @@ JNIEXPORT jobjectArray JNICALL Java_org_openeuler_security_openssl_KAEECKeyPairG
         goto cleanup;
     }
 
-    jobjectArray ecdhKey = NewECDHKey(env, group, eckey);
+    ecdhKey = NewECDHKey(env, group, eckey);
 
     EC_KEY_free(eckey);
     EC_GROUP_free(group);

@@ -97,13 +97,13 @@ JNIEXPORT jobjectArray JNICALL Java_org_openeuler_security_openssl_KAEDHKeyPairG
     pri_key_bn = DH_get0_priv_key(dh);
     pub_key_bn = DH_get0_pub_key(dh);
 
-    pub_key = KAE_GetByteArrayFromBigNum(env, pub_key_bn, NULL);
+    pub_key = KAE_GetByteArrayFromBigNum(env, pub_key_bn);
     if (pub_key == NULL) {
         KAE_ThrowOOMException(env, "PublicKey allocate failed in nativeGenerateKeyPair.");
         goto cleanup;
     }
 
-    pri_key = KAE_GetByteArrayFromBigNum(env, pri_key_bn, NULL);
+    pri_key = KAE_GetByteArrayFromBigNum(env, pri_key_bn);
     if (pri_key == NULL) {
         KAE_ThrowRuntimeException(env, "GetByteArrayFromBigNum failed in nativeGenerateKeyPair.");
         goto cleanup;

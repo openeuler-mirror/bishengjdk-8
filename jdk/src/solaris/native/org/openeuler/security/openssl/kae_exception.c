@@ -23,7 +23,6 @@
  
 #include <openssl/evp.h>
 #include <openssl/err.h>
-#include "kae_util.h"
 #include "kae_log.h"
 #include "kae_exception.h"
 
@@ -58,6 +57,8 @@ void KAE_ThrowEvpException(JNIEnv* env, int reason, const char* msg, void (* def
         case EVP_R_BAD_DECRYPT:
         case EVP_R_DATA_NOT_MULTIPLE_OF_BLOCK_LENGTH:
         case EVP_F_EVP_PKEY_DECRYPT:
+        case EVP_R_PUBLIC_KEY_NOT_RSA:
+        case EVP_R_CTRL_NOT_IMPLEMENTED:
             KAE_ThrowByName(env, "javax/crypto/BadPaddingException", msg);
             break;
         default:

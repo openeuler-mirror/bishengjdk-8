@@ -27,9 +27,6 @@
 #include "kae_exception.h"
 #include "org_openeuler_security_openssl_KAERSAKeyPairGenerator.h"
 #define KAE_RSA_PARAM_SIZE 8
-#define SUCCESS 1
-#define FAILED -1
-
 
 // rsa param index
 typedef enum RSAParamIndex {
@@ -102,15 +99,11 @@ static void ReleaseRSA(RSA* rsa) {
 
 /*
  * Set rsa key param, follow the steps below
- * step 1. Get rsa param name
- * step 2. Get rsa param value
- * step 3. Convert paramValue (BIGNUM) to jbyteArray
- * step 4. Set the rsa param to the param array
+ * step 1. Get rsa param value
+ * step 2. Convert paramValue (BIGNUM) to jbyteArray
+ * step 3. Set the rsa param to the param array
  */
 static bool SetRSAKeyParam(JNIEnv* env, RSA* rsa, jobjectArray params, RSAParamIndex rsaParamIndex) {
-    // get rsa param name
-    const char* rsaParamName = rsaParamNames[rsaParamIndex];
-
     // get rsa param value
     const BIGNUM* rsaParamValue = GetRSAParamFunctionList[rsaParamIndex](rsa);
     if (rsaParamValue == NULL) {
@@ -118,7 +111,7 @@ static bool SetRSAKeyParam(JNIEnv* env, RSA* rsa, jobjectArray params, RSAParamI
     }
 
     // Convert paramValue to jbyteArray
-    jbyteArray param = KAE_GetByteArrayFromBigNum(env, rsaParamValue, rsaParamName);
+    jbyteArray param = KAE_GetByteArrayFromBigNum(env, rsaParamValue);
     if (param == NULL) {
         return false;
     }
@@ -156,8 +149,8 @@ static jobjectArray NewRSAKeyParams(JNIEnv* env, RSA* rsa) {
  * Method:    nativeGenerateKeyPair
  * Signature: (I[B)[[B
  */
-JNIEXPORT jobjectArray JNICALL Java_org_openeuler_security_openssl_KAERSAKeyPairGenerator_nativeGenerateKeyPair
-        (JNIEnv* env, jclass cls, jint keySize, jbyteArray publicExponent) {
+JNIEXPORT jobjectArray JNICALL Java_org_openeuler_security_openssl_KAERSAKeyPairGenerator_nativeGenerateKeyPair (
+    JNIEnv* env, jclass cls, jint keySize, jbyteArray publicExponent) {
     if (publicExponent == NULL) {
         return NULL;
     }

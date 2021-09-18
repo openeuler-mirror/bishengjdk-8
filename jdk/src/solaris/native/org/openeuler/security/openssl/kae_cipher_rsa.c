@@ -47,7 +47,7 @@ static int RSACryptNotOAEPPadding(JNIEnv* env, jlong keyAddress, jint inLen, jby
     int resultSize = 0;
 
     // get RSA
-    EVP_PKEY* pkey = (EVP_PKEY*)keyAddress;
+    EVP_PKEY* pkey = (EVP_PKEY*) keyAddress;
 
     // rsa = pkey->rsa
     RSA* rsa = EVP_PKEY_get1_RSA(pkey);
@@ -198,8 +198,8 @@ static int RSACryptOAEPPadding(JNIEnv* env, jlong keyAddress, jint inLen, jbyteA
      * set rsa mgf1 md
      * set rsa oaep md
      */
-    if(!SetRSAPadding(env, pkeyCtx, paddingType) || !SetRSAMgf1Md(env, pkeyCtx, mgf1MdAlgoUTF) ||
-       !SetRSAOaepMd(env, pkeyCtx, oaepMdAlgoUTF)) {
+    if (!SetRSAPadding(env, pkeyCtx, paddingType) || !SetRSAMgf1Md(env, pkeyCtx, mgf1MdAlgoUTF) ||
+        !SetRSAOaepMd(env, pkeyCtx, oaepMdAlgoUTF)) {
         goto cleanup;
     }
 
@@ -213,7 +213,7 @@ static int RSACryptOAEPPadding(JNIEnv* env, jlong keyAddress, jint inLen, jbyteA
             goto cleanup;
         }
         (*env)->GetByteArrayRegion(env, label, 0, labelSize, labelBytes);
-        if(!SetRSAOaepLabel(env, pkeyCtx, labelBytes, labelSize)) {
+        if (!SetRSAOaepLabel(env, pkeyCtx, labelBytes, labelSize)) {
             free(labelBytes);
             goto cleanup;
         }
@@ -434,7 +434,7 @@ JNIEXPORT jint JNICALL Java_org_openeuler_security_openssl_KAERSACipher_nativeRS
  */
 JNIEXPORT jint JNICALL Java_org_openeuler_security_openssl_KAERSACipher_nativeRSAEncryptOAEPPadding(JNIEnv* env,
     jclass cls, jlong keyAddress, jint inLen, jbyteArray in, jbyteArray out,
-    jint paddingType,jstring oaepMdAlgo, jstring mgf1MdAlgo, jbyteArray label) {
+    jint paddingType, jstring oaepMdAlgo, jstring mgf1MdAlgo, jbyteArray label) {
     return RSACryptOAEPPadding(env, keyAddress, inLen, in, out, paddingType, oaepMdAlgo, mgf1MdAlgo, label,
                                EVP_PKEY_encrypt_init, "EVP_PKEY_encrypt_init",
                                EVP_PKEY_encrypt, "EVP_PKEY_encrypt");

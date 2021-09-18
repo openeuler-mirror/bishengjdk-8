@@ -170,7 +170,7 @@ Java_org_openeuler_security_openssl_KAESymmetricCipherBase_nativeInit(JNIEnv* en
     }
 
     if (!EVP_CipherInit_ex(ctx, cipher, kaeEngine, (const unsigned char*)keyBytes,
-                (const unsigned char*)ivBytes, encrypt ? 1 : 0)) {
+            (const unsigned char*)ivBytes, encrypt ? 1 : 0)) {
         KAE_ThrowFromOpenssl(env, "EVP_CipherInit_ex failed", KAE_ThrowRuntimeException);
         goto cleanup;
     }

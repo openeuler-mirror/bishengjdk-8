@@ -34,7 +34,7 @@ BIGNUM* KAE_GetBigNumFromByteArray(JNIEnv* env, jbyteArray byteArray);
 void KAE_ReleaseBigNumFromByteArray(BIGNUM* bn);
 
 /* BIGNUM convert to jbyteArray */
-jbyteArray KAE_GetByteArrayFromBigNum(JNIEnv* env, const BIGNUM* bn, const char* sourceName);
+jbyteArray KAE_GetByteArrayFromBigNum(JNIEnv* env, const BIGNUM* bn);
 
 void SetKaeEngine(ENGINE* engine);
 
