@@ -51,12 +51,12 @@ public class ExecuteOOMApp {
         OutputAnalyzer out = AppExecutorHelper.executeAndRecord(settings, jfrFilename, additionalVmFlagsList.toArray(new String[0]),
                                                                 OOMApp.class.getName(), String.valueOf(bytesToAllocate));
 
-        if ((out.getExitValue() == 1 && out.getOutput().contains("Exception: java.lang.OutOfMemoryError"))) {
+        if ((out.getExitValue() != 0 && out.getOutput().contains("java.lang.OutOfMemoryError"))) {
             return false;
         }
 
-        out.shouldHaveExitValue(0);
         System.out.println(out.getOutput());
+        out.shouldHaveExitValue(0);
 
         return true;
     }

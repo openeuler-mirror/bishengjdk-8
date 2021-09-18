@@ -44,6 +44,21 @@ class ReferenceProcessor;
 //
 // Class unloading will only occur when a full gc is invoked.
 class G1PrepareCompactClosure;
+class G1FullGCCompactionPoints;
+class G1FullGCCompactionPoint;
+
+class G1RePrepareClosure : public StackObj {
+  G1FullGCCompactionPoint* _cp;
+  HeapRegion* _current;
+
+  public:
+  G1RePrepareClosure(G1FullGCCompactionPoint* hrcp,
+                     HeapRegion* hr) :
+      _cp(hrcp),
+      _current(hr) { }
+
+  size_t apply(oop obj);
+};
 
 class G1MarkSweep : AllStatic {
   friend class VM_G1MarkSweep;
@@ -58,42 +73,24 @@ class G1MarkSweep : AllStatic {
   static SerialOldTracer* gc_tracer() { return GenMarkSweep::_gc_tracer; }
 
  private:
+  static bool _parallel_prepare_compact;
+  static bool _parallel_adjust;
+
+ private:
 
   // Mark live objects
   static void mark_sweep_phase1(bool& marked_for_deopt,
                                 bool clear_all_softrefs);
   // Calculate new addresses
-  static void mark_sweep_phase2();
+  static void mark_sweep_phase2(G1FullGCCompactionPoints* cps);
   // Update pointers
   static void mark_sweep_phase3();
   // Move objects to new positions
-  static void mark_sweep_phase4();
+  static void mark_sweep_phase4(G1FullGCCompactionPoints* cps);
 
   static void allocate_stacks();
   static void prepare_compaction();
   static void prepare_compaction_work(G1PrepareCompactClosure* blk);
-};
-
-class G1PrepareCompactClosure : public HeapRegionClosure {
- protected:
-  G1CollectedHeap* _g1h;
-  ModRefBarrierSet* _mrbs;
-  CompactPoint _cp;
-  HeapRegionSetCount _humongous_regions_removed;
-
-  virtual void prepare_for_compaction(HeapRegion* hr, HeapWord* end);
-  void prepare_for_compaction_work(CompactPoint* cp, HeapRegion* hr, HeapWord* end);
-  void free_humongous_region(HeapRegion* hr);
-  bool is_cp_initialized() const { return _cp.space != NULL; }
-
- public:
-  G1PrepareCompactClosure() :
-    _g1h(G1CollectedHeap::heap()),
-    _mrbs(_g1h->g1_barrier_set()),
-    _humongous_regions_removed() { }
-
-  void update_sets();
-  bool doHeapRegion(HeapRegion* hr);
 };
 
 #endif // SHARE_VM_GC_IMPLEMENTATION_G1_G1MARKSWEEP_HPP

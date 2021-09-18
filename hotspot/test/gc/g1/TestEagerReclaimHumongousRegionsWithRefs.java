@@ -45,7 +45,7 @@ class RefHolder {
   Object ref;
 }
 
-class ReclaimRegionFast {
+class ReclaimRegionWithRefsFast {
 
     public static final int M = 1024*1024;
 
@@ -93,7 +93,7 @@ public class TestEagerReclaimHumongousRegionsWithRefs {
             "-Xmx128M",
             "-Xmn16M",
             "-XX:+PrintGC",
-            ReclaimRegionFast.class.getName());
+            ReclaimRegionWithRefsFast.class.getName());
 
         Pattern p = Pattern.compile("Full GC");
 

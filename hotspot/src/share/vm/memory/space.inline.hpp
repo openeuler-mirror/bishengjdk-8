@@ -156,6 +156,67 @@ inline HeapWord* Space::block_start(const void* p) {
   cp->space->set_compaction_top(compact_top);                                \
 }
 
+#define SCAN_AND_REPREPARE(re_prepare) {                                        \
+  HeapWord* q = bottom();                                                       \
+  HeapWord* t = _end_of_live;  /* Established by "prepare_for_compaction". */   \
+                                                                                \
+  assert(_first_dead <= _end_of_live, "Stands to reason, no?");                 \
+                                                                                \
+  if (q < t && _first_dead > q &&                                               \
+      !oop(q)->is_gc_marked()) {                                                \
+    /* we have a chunk of the space which hasn't moved and we've                \
+     * reinitialized the mark word during the previous pass, so we can't        \
+     * use is_gc_marked for the traversal. */                                   \
+    HeapWord* end = _first_dead;                                                \
+                                                                                \
+    while (q < end) {                                                           \
+      /* I originally tried to conjoin "block_start(q) == q" to the             \
+       * assertion below, but that doesn't work, because you can't              \
+       * accurately traverse previous objects to get to the current one         \
+       * after their pointers have been                                         \
+       * updated, until the actual compaction is done.  dld, 4/00 */            \
+      assert(block_is_obj(q),                                                   \
+             "should be at block boundaries, and should be looking at objs");   \
+                                                                                \
+      /* point all the oops to the new location */                              \
+      size_t size = re_prepare->apply(oop(q));                                  \
+                                                                                \
+      q += size;                                                                \
+    }                                                                           \
+                                                                                \
+    if (_first_dead == t) {                                                     \
+      q = t;                                                                    \
+    } else {                                                                    \
+      /* $$$ This is funky.  Using this to read the previously written          \
+       * LiveRange.  See also use below. */                                     \
+      q = (HeapWord*)oop(_first_dead)->mark()->decode_pointer();                \
+    }                                                                           \
+  }                                                                             \
+                                                                                \
+  const intx interval = PrefetchScanIntervalInBytes;                            \
+                                                                                \
+  debug_only(HeapWord* prev_q = NULL);                                          \
+  while (q < t) {                                                               \
+    /* prefetch beyond q */                                                     \
+    Prefetch::write(q, interval);                                               \
+    if (oop(q)->is_gc_marked()) {                                               \
+      /* q is alive */                                                          \
+      /* point all the oops to the new location */                              \
+      size_t size = re_prepare->apply(oop(q));                                  \
+      debug_only(prev_q = q);                                                   \
+      q += size;                                                                \
+    } else {                                                                    \
+      /* q is not a live object, so its mark should point at the next           \
+       * live object */                                                         \
+      debug_only(prev_q = q);                                                   \
+      q = (HeapWord*) oop(q)->mark()->decode_pointer();                         \
+      assert(q > prev_q, "we should be moving forward through memory");         \
+    }                                                                           \
+  }                                                                             \
+                                                                                \
+  assert(q == t, "just checking");                                              \
+}
+
 #define SCAN_AND_ADJUST_POINTERS(adjust_obj_size) {                             \
   /* adjust all the interior pointers to point at the new locations of objects  \
    * Used by MarkSweep::mark_sweep_phase3() */                                  \

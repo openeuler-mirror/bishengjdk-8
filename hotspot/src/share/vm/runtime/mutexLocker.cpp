@@ -127,6 +127,8 @@ Monitor* Service_lock                 = NULL;
 Monitor* PeriodicTask_lock            = NULL;
 Monitor* RedefineClasses_lock         = NULL;
 
+Mutex*   FreeHumongousRegions_lock    = NULL;
+
 #ifdef INCLUDE_JFR
 Mutex*   JfrStacktrace_lock           = NULL;
 Monitor* JfrMsg_lock                  = NULL;
@@ -285,6 +287,8 @@ void mutex_init() {
   def(CompileThread_lock           , Monitor, nonleaf+5,   false );
   def(PeriodicTask_lock            , Monitor, nonleaf+5,   true);
   def(RedefineClasses_lock         , Monitor, nonleaf+5,   true);
+
+  def(FreeHumongousRegions_lock    , Mutex  , nonleaf,     false);
 
 #if INCLUDE_JFR
   def(JfrMsg_lock                  , Monitor, leaf,        true);
