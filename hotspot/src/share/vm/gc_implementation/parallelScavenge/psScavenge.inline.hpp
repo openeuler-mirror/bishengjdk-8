@@ -78,7 +78,7 @@ inline void PSScavenge::copy_and_push_safe_barrier(PSPromotionManager* pm,
 #ifndef PRODUCT
   // This code must come after the CAS test, or it will print incorrect
   // information.
-  if (TraceScavenge &&  o->is_forwarded()) {
+  if (TraceScavenge && o->is_forwarded()) {
     gclog_or_tty->print_cr("{%s %s " PTR_FORMAT " -> " PTR_FORMAT " (%d)}",
        "forwarding",
        new_obj->klass()->internal_name(), p2i((void *)o), p2i((void *)new_obj), new_obj->size());

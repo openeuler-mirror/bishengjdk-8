@@ -1441,6 +1441,10 @@ class CommandLineFlags {
   product(bool, UseParallelGC, false,                                       \
           "Use the Parallel Scavenge garbage collector")                    \
                                                                             \
+  experimental(bool, UsePSRelaxedForwardee, false,                          \
+          "Use the UsePSRelaxedForwardee to enable ps use relaxed"          \
+          "during young gc copying object")                                 \
+                                                                            \
   product(bool, UseParallelOldGC, false,                                    \
           "Use the Parallel Old garbage collector")                         \
                                                                             \

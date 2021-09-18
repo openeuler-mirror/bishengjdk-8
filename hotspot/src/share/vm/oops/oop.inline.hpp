@@ -705,7 +705,7 @@ inline bool oopDesc::relax_cas_forward_to(oop p, markOop compare) {
   if (old_markoop == compare) {
     // Once the CAS succeeds, leaf object never needs to be visible to other threads (finished
     // collection by current thread), so we can save the fence.
-    if (!p->klass()->oop_is_gc_leaf()) {
+    if (!(UsePSRelaxedForwardee || p->klass()->oop_is_gc_leaf())) {
       OrderAccess::fence();
     }
     return true;
