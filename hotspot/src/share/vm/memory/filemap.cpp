@@ -379,16 +379,20 @@ void FileMapInfo::open_for_write() {
       if (realpath(filePath, buf) == NULL) {
         fail_stop("A risky filePath:%s, buf:%s, length:%d", filePath, buf, length);
       }
+      // Appcds lock file's path doesn't support "%p". Check it here.
+      const char* pts = strstr(AppCDSLockFile, "%p");
+      if (pts != NULL) {
+        fail_stop("Invalid appcds lock file path name, %s.", AppCDSLockFile);
+      }
       _appcds_file_lock_path = os::strdup(AppCDSLockFile, mtInternal);
       if (_appcds_file_lock_path == NULL) {
         fail_stop("Failed to create appcds file lock.");
       }
       int lock_fd = open(_appcds_file_lock_path, O_CREAT | O_WRONLY | O_EXCL, S_IRUSR | S_IWUSR);
       if (lock_fd < 0) {
-        tty->print_cr("The lock path is: %s", _appcds_file_lock_path);
         tty->print_cr("Failed to create jsa file !\n Please check: \n 1. The directory exists.\n "
 		      "2. You have the permission.\n 3. Make sure no other process using the same lock file.\n");
-        JVM_Exit(0);
+        fail_stop("Failed to create appcds lock file, the lock path is: %s.", _appcds_file_lock_path);
       }
       tty->print_cr("You are using file lock %s in concurrent mode", AppCDSLockFile);
     }
