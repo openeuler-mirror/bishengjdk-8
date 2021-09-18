@@ -226,7 +226,13 @@ void JfrDumpFlightRecordingDCmd::execute(DCmdSource source, TRAPS) {
 
   jstring filepath = NULL;
   if (_filename.is_set() && _filename.value() != NULL) {
-    filepath = JfrJavaSupport::new_string(_filename.value(), CHECK);
+    const char* extended_path = make_log_name(_filename.value(), NULL);
+    if (extended_path != NULL) {
+      filepath = JfrJavaSupport::new_string(extended_path, CHECK);
+      FREE_C_HEAP_ARRAY(char, extended_path, mtInternal);
+    } else {
+      filepath = JfrJavaSupport::new_string(_filename.value(), CHECK);
+    }
   }
 
   jobject maxage = NULL;
@@ -394,7 +400,13 @@ void JfrStartFlightRecordingDCmd::execute(DCmdSource source, TRAPS) {
 
   jstring filename = NULL;
   if (_filename.is_set() && _filename.value() != NULL) {
-    filename = JfrJavaSupport::new_string(_filename.value(), CHECK);
+    const char* dumpPath = make_log_name(_filename.value(), NULL);
+    if (dumpPath != NULL) {
+      filename = JfrJavaSupport::new_string(dumpPath, CHECK);
+      FREE_C_HEAP_ARRAY(char, dumpPath, mtInternal);
+    } else {
+      filename = JfrJavaSupport::new_string(_filename.value(), CHECK);
+    }
   }
 
   jobject maxage = NULL;

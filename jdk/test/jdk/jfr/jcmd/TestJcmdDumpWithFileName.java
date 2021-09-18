@@ -48,6 +48,7 @@ public class TestJcmdDumpWithFileName {
         testDumpAll();
         testDumpNamed();
         testDumpNamedWithFilename();
+        testDumpNamedWithFilenameExpansion();
     }
 
     private static void testDumpAll() throws Exception {
@@ -93,6 +94,21 @@ public class TestJcmdDumpWithFileName {
             Asserts.assertFalse(namedFile(p), "Unexpected file: " + p.toString());
             Asserts.assertTrue(namedFile(override), "Expected file: " + override.toString());
             Asserts.assertFalse(generatedFile(), "Unexpected generated file");
+        }
+        cleanup();
+    }
+    
+    private static void testDumpNamedWithFilenameExpansion() throws Exception {
+        long pid = ProcessTools.getProcessId();
+        Path dumpPath = Paths.get("dumpPath-%p-%t.jfr").toAbsolutePath();
+        try (Recording r = new Recording()) {
+            r.setName("testDumpNamedWithFilenameExpansion");
+            r.setDestination(dumpPath);
+            r.start();
+            JcmdHelper.jcmd("JFR.dump", "name=testDumpNamedWithFilenameExpansion", "filename=" + dumpPath.toString());
+            Stream<Path> stream = Files.find(Paths.get("."), 1, (s, a) -> s.toString()
+                .matches("^.*dumpPath-pid" + pid + ".\\d{4}.\\d{2}.\\d{2}.\\d{2}.\\d{2}.\\d{2}" + ".jfr") && (a.size() > 0L));
+            Asserts.assertTrue(stream.findAny().isPresent());
         }
         cleanup();
     }
