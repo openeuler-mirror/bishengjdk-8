@@ -425,6 +425,14 @@ void Universe::genesis(TRAPS) {
   // Initialize dependency array for null class loader
   ClassLoaderData::the_null_class_loader_data()->init_dependencies(CHECK);
 
+  // Patch the BLAS Interpreter intrinsics with java.lang.String
+  // offset after java.lang.String has been loaded.
+#if defined(TARGET_OS_ARCH_linux_aarch64) && !defined(CC_INTERP)
+  if (UseF2jBLASIntrinsics) {
+    Interpreter::patch_method(Interpreter::org_netlib_blas_Dgemm_dgemm);
+    Interpreter::patch_method(Interpreter::org_netlib_blas_Dgemv_dgemv);
+  }
+#endif
 }
 
 // CDS support for patching vtables in metadata in the shared archive.

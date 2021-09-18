@@ -50,8 +50,6 @@ void generate_transcendental_entry(AbstractInterpreter::MethodKind kind, int fpa
   address generate_CRC32_updateBytes_entry(AbstractInterpreter::MethodKind kind);
   void lock_method(void);
   void generate_stack_overflow_check(void);
-  void load_String_value(Register src, Register dst);
-  void load_String_offset(Register src, Register dst);
   void emit_array_address(Register src, Register idx, Register dst, BasicType type);
   address generate_Dgemm_dgemm_entry();
   address generate_Dgemv_dgemv_entry();
