@@ -322,9 +322,10 @@ define GetSourceTips
             fi; \
           done >> $@), \
           $(if $(and $(GIT), $(wildcard $(TOPDIR)/.git)), \
+            $$($(CD) $(SRC_ROOT) ; \
             $(PRINTF) ".:git:%s%s\n" \
                 "$$(git log -n1 --format=%H | cut -c1-12)" \
-                "$$(if test -n "$$(git status --porcelain)"; then printf '+'; fi)" >> $@, ))
+                "$$(if test -n "$$(git status --porcelain)"; then printf '+'; fi)" >> $@), ))
 	$(PRINTF) "\n" >> $@
 endef
 
