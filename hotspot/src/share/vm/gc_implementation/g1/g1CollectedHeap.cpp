@@ -2577,6 +2577,12 @@ void G1CollectedHeap::collect(GCCause::Cause cause) {
         }
 
         if (retry_gc) {
+          if (cause == GCCause::_g1_periodic_collection && G1PeriodGCNotRetry) {
+            gclog_or_tty->date_stamp(PrintGCDateStamps);
+            gclog_or_tty->stamp(PrintGCTimeStamps);
+            gclog_or_tty->print_cr("Periodic GC is denied and not try !");
+            return;
+          }
           if (GC_locker::is_active_and_needs_gc()) {
             GC_locker::stall_until_clear();
           }

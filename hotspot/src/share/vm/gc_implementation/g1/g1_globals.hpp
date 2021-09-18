@@ -333,6 +333,9 @@
   product(bool, G1Uncommit, false,                                          \
           "Allow G1 to uncommit unused memory.")                            \
                                                                             \
+  product(bool, G1PeriodGCNotRetry, true,                                   \
+          "Not allow denied G1 Periodic GC try again.")                     \
+                                                                            \
   product(bool, G1UncommitLog, false,                                       \
           "Enable G1 uncommit logs.")                                       \
                                                                             \
