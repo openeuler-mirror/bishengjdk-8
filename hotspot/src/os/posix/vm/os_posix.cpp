@@ -44,6 +44,8 @@ PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 #endif
 #define IS_VALID_PID(p) (p > 0 && p < MAX_PID)
 
+#define ROOT_UID 0
+
 // Check core dump limit and report possible place where core can be found
 void os::check_or_create_dump(void* exceptionRecord, void* contextRecord, char* buffer, size_t bufferSize) {
   int n;
@@ -856,6 +858,18 @@ void os::Posix::print_siginfo_brief(outputStream* os, const siginfo_t* si) {
   } else if (sig == SIGCHLD) {
     os->print_cr(", si_pid: %d, si_uid: %d, si_status: %d", (int) si->si_pid, si->si_uid, si->si_status);
   }
+}
+
+bool os::Posix::is_root(uid_t uid){
+    return ROOT_UID == uid;
+}
+
+bool os::Posix::matches_effective_uid_or_root(uid_t uid) {
+    return is_root(uid) || geteuid() == uid;
+}
+
+bool os::Posix::matches_effective_uid_and_gid_or_root(uid_t uid, gid_t gid) {
+    return is_root(uid) || (geteuid() == uid && getegid() == gid);
 }
 
 Thread* os::ThreadCrashProtection::_protected_thread = NULL;
