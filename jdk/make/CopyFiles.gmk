@@ -609,14 +609,16 @@ endif
 
 ##########################################################################################
 
-ifeq ($(OPENJDK_TARGET_CPU_ARCH), aarch64)
+ifeq ($(ENABLE_KAE), true)
+  ifeq ($(OPENJDK_TARGET_CPU_ARCH), aarch64)
   
-  KAE_CONF_PATH= $(JDK_OUTPUTDIR)/lib/ext
-  $(KAE_CONF_PATH)/kaeprovider.conf: $(JDK_TOPDIR)/src/share/lib/security/kaeprovider.conf
+    KAE_CONF_PATH= $(JDK_OUTPUTDIR)/lib/ext
+    $(KAE_CONF_PATH)/kaeprovider.conf: $(JDK_TOPDIR)/src/share/lib/security/kaeprovider.conf
 	$(call install-file)
 
-  COPY_FILES += $(KAE_CONF_PATH)/kaeprovider.conf
+    COPY_FILES += $(KAE_CONF_PATH)/kaeprovider.conf
 
+  endif
 endif
 
 ##########################################################################################

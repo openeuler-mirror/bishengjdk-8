@@ -43,9 +43,13 @@ public class DHKeyAgreementBenchMark extends BenchmarkBase {
     @Param({"512", "1024", "2048", "3072", "4096"})
     private int keySize;
 
-    private KeyPairGenerator aliceKpairGen, bobKpairGen, carolKpairGen;
+    private KeyPairGenerator aliceKpairGen;
+    private KeyPairGenerator bobKpairGen;
+    private KeyPairGenerator carolKpairGen;
 
-    private KeyPair aliceKpair, bobKpair, carolKpair;
+    private KeyPair aliceKpair;
+    private KeyPair bobKpair;
+    private KeyPair carolKpair;
 
     private DHParameterSpec dhSkipParamSpec;
 

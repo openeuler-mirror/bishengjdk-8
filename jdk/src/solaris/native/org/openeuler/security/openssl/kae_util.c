@@ -77,7 +77,7 @@ void KAE_ReleaseBigNumFromByteArray(BIGNUM* bn) {
     }
 }
 
-jbyteArray KAE_GetByteArrayFromBigNum(JNIEnv* env, const BIGNUM* bn, const char* sourceName) {
+jbyteArray KAE_GetByteArrayFromBigNum(JNIEnv* env, const BIGNUM* bn) {
     if (bn == NULL) {
         return NULL;
     }
@@ -89,12 +89,12 @@ jbyteArray KAE_GetByteArrayFromBigNum(JNIEnv* env, const BIGNUM* bn, const char*
     bnSize += 1;
     jbyteArray javaBytes = (*env)->NewByteArray(env, bnSize);
     if (javaBytes == NULL) {
-        KAE_ThrowOOMException(env, "new byte array failed");
+        KAE_ThrowOOMException(env, "New byte array failed.");
         return NULL;
     }
     jbyte* bytes = (*env)->GetByteArrayElements(env, javaBytes, NULL);
     if (bytes == NULL) {
-        KAE_ThrowNullPointerException(env,"GetByteArrayElements failed");
+        KAE_ThrowNullPointerException(env, "GetByteArrayElements failed.");
         return NULL;
     }
     unsigned char* tmp = (unsigned char*) bytes;

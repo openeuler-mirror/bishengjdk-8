@@ -97,7 +97,7 @@ public class KAEECDHKeyAgreement extends KeyAgreementSpi {
 
         curveName = KAEUtils.getCurveBySize(keyLenBits);
         if (curveName == null) {
-            throw new InvalidParameterException("unknown keyLenBits" + keyLenBits);
+            throw new InvalidParameterException("unknown keyLenBits " + keyLenBits);
         }
         if (KAEUtils.getCurveByAlias(curveName) != null) {
             curveName = KAEUtils.getCurveByAlias(curveName);
