@@ -1606,19 +1606,19 @@ class ParKnownGarbageTask: public AbstractGangTask {
   CollectionSetChooser* _hrSorted;
   uint _chunk_size;
   G1CollectedHeap* _g1;
+  HeapRegionClaimer _hrclaimer;
+
 public:
-  ParKnownGarbageTask(CollectionSetChooser* hrSorted, uint chunk_size) :
+  ParKnownGarbageTask(CollectionSetChooser* hrSorted, uint chunk_size, uint n_workers) :
     AbstractGangTask("ParKnownGarbageTask"),
     _hrSorted(hrSorted), _chunk_size(chunk_size),
-    _g1(G1CollectedHeap::heap()) { }
+    _g1(G1CollectedHeap::heap()), _hrclaimer(n_workers) { }
 
   void work(uint worker_id) {
     ParKnownGarbageHRClosure parKnownGarbageCl(_hrSorted, _chunk_size);
 
     // Back to zero for the claim value.
-    _g1->heap_region_par_iterate_chunked(&parKnownGarbageCl, worker_id,
-                                         _g1->workers()->active_workers(),
-                                         HeapRegion::InitialClaimValue);
+    _g1->heap_region_par_iterate_chunked(&parKnownGarbageCl, worker_id, &_hrclaimer);
   }
 };
 
@@ -1650,11 +1650,9 @@ G1CollectorPolicy::record_concurrent_mark_cleanup_end(int no_of_gc_threads) {
     _collectionSetChooser->prepare_for_par_region_addition(_g1->num_regions(),
                                                            WorkUnit);
     ParKnownGarbageTask parKnownGarbageTask(_collectionSetChooser,
-                                            (int) WorkUnit);
+                                            (int) WorkUnit,
+                                            no_of_gc_threads);
     _g1->workers()->run_task(&parKnownGarbageTask);
-
-    assert(_g1->check_heap_region_claim_values(HeapRegion::InitialClaimValue),
-           "sanity check");
   } else {
     KnownGarbageClosure knownGarbagecl(_collectionSetChooser);
     _g1->heap_region_iterate(&knownGarbagecl);

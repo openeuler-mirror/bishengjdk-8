@@ -34,6 +34,7 @@
 #include "gc_implementation/g1/g1RootProcessor.hpp"
 #include "gc_implementation/g1/g1StringDedup.hpp"
 #include "gc_implementation/shared/gcHeapSummary.hpp"
+#include "gc_implementation/shared/liveRange.hpp"
 #include "gc_implementation/shared/gcTimer.hpp"
 #include "gc_implementation/shared/gcTrace.hpp"
 #include "gc_implementation/shared/gcTraceTime.hpp"
@@ -58,9 +59,173 @@
 
 class HeapRegion;
 
+
+class G1FullGCCompactionPoint : public CompactPoint {
+  HeapRegion*  _current_region;
+  HeapWord*   _threshold;
+  HeapWord*   _compaction_top;
+  GrowableArray<HeapRegion*>* _compaction_regions;
+  GrowableArrayIterator<HeapRegion*> _compaction_region_iterator;
+  GrowableArray<HeapRegion*>* _marked_huge_regions;
+
+  virtual HeapRegion* next_compaction_space() {
+    HeapRegion* next = *(++_compaction_region_iterator);
+    assert(next != NULL, "Must return valid region");
+    return next;
+  }
+
+public:
+  G1FullGCCompactionPoint() :
+    _current_region(NULL),
+    _threshold(NULL),
+    _compaction_top(NULL),
+    _compaction_regions(new (ResourceObj::C_HEAP, mtGC)
+                          GrowableArray<HeapRegion*>(32/* initial size */, true, mtGC)),
+    _compaction_region_iterator(_compaction_regions->begin()),
+    _marked_huge_regions(new (ResourceObj::C_HEAP, mtGC)
+                           GrowableArray<HeapRegion*>(32/* initial size */, true, mtGC)) {
+  }
+  virtual ~G1FullGCCompactionPoint() {
+    delete _compaction_regions;
+    delete _marked_huge_regions;
+  }
+
+  bool is_initialized() {
+    return _current_region != NULL;
+  }
+
+  void initialize(HeapRegion* hr, bool init_threshold) {
+    _current_region = hr;
+    initialize_values(init_threshold);
+  }
+
+  void initialize_values(bool init_threshold) {
+    _compaction_top = _current_region->compaction_top();
+    if (init_threshold) {
+      _threshold = _current_region->initialize_threshold();
+    }
+  }
+
+  void update() {
+    if (is_initialized()) {
+      _current_region->set_compaction_top(_compaction_top);
+    }
+  }
+
+  bool object_will_fit(size_t size) {
+    size_t space_left = pointer_delta(_current_region->end(), _compaction_top);
+    return size <= space_left;
+  }
+
+  void switch_region() {
+    // Save compaction top in the region.
+    _current_region->set_compaction_top(_compaction_top);
+    // Get the next region and re-initialize the values.
+    _current_region = next_compaction_space();
+    initialize_values(true);
+  }
+
+  void forward(oop object, size_t size) {
+    assert(_current_region != NULL, "Must have been initialized");
+
+    // Ensure the object fit in the current region.
+    while (!object_will_fit(size)) {
+      switch_region();
+    }
+
+    if ((HeapWord*)object != _compaction_top) {
+      object->forward_to(oop(_compaction_top));
+    } else {
+      object->init_mark();
+    }
+
+    // Update compaction values.
+    _compaction_top += size;
+    if (_compaction_top > _threshold) {
+      _threshold = _current_region->cross_threshold(_compaction_top - size, _compaction_top);
+    }
+  }
+
+  void add(HeapRegion* hr) {
+    _compaction_regions->append(hr);
+  }
+  void add_huge(HeapRegion* hr) {
+    _marked_huge_regions->append(hr);
+  }
+  HeapRegion* current_region() {
+    return *_compaction_region_iterator;
+  }
+  const GrowableArray<HeapRegion*>* regions() const {
+    return _compaction_regions;
+  }
+  const GrowableArray<HeapRegion*>* huge_regions() const {
+    return _marked_huge_regions;
+  }
+
+  HeapRegion* remove_last() {
+    return _compaction_regions->pop();
+  }
+
+  bool has_region() {
+    return !_compaction_regions->is_empty();
+  }
+};
+
+class G1FullGCCompactionPoints : StackObj {
+private:
+  G1FullGCCompactionPoint** _cps;
+  uint _num_workers;
+  G1FullGCCompactionPoint* _serial_compaction_point;
+public:
+  G1FullGCCompactionPoints(uint num_workers) : _num_workers(num_workers) {
+    _cps = NEW_C_HEAP_ARRAY(G1FullGCCompactionPoint*, _num_workers, mtGC);
+    for (uint i = 0; i < _num_workers; i++) {
+      _cps[i] = new G1FullGCCompactionPoint();
+    }
+    _serial_compaction_point = new G1FullGCCompactionPoint();
+  }
+  ~G1FullGCCompactionPoints() {
+    for (uint i = 0; i < _num_workers; i++) {
+      delete _cps[i];
+    }
+    FREE_C_HEAP_ARRAY(G1FullGCCompactionPoint*, _cps, mtGC);
+    delete _serial_compaction_point;
+  }
+
+  G1FullGCCompactionPoint* cp_at(uint i) { return _cps[i]; }
+  uint num_workers() { return _num_workers; }
+
+  G1FullGCCompactionPoint* serial_compaction_point() { return _serial_compaction_point; }
+};
+
+size_t G1RePrepareClosure::apply(oop obj) {
+    // We only re-prepare objects forwarded within the current region, so
+    // skip objects that are already forwarded to another region.
+    oop forwarded_to = obj->forwardee();
+
+    if (forwarded_to != NULL && !_current->is_in(forwarded_to)) {
+      return obj->size();
+    }
+
+    // Get size and forward.
+    size_t size = obj->size();
+    _cp->forward(obj, size);
+
+    return size;
+}
+
+bool G1MarkSweep::_parallel_prepare_compact = false;
+bool G1MarkSweep::_parallel_adjust = false;
+
 void G1MarkSweep::invoke_at_safepoint(ReferenceProcessor* rp,
                                       bool clear_all_softrefs) {
   assert(SafepointSynchronize::is_at_safepoint(), "must be at a safepoint");
+  uint active_workers = G1CollectedHeap::heap()->workers()->active_workers();
+
+  if (G1ParallelFullGC) {
+    _parallel_prepare_compact = true;
+    _parallel_adjust = true;
+  }
 
   SharedHeap* sh = SharedHeap::heap();
 #ifdef ASSERT
@@ -89,16 +254,20 @@ void G1MarkSweep::invoke_at_safepoint(ReferenceProcessor* rp,
   // The marking doesn't preserve the marks of biased objects.
   BiasedLocking::preserve_marks();
 
-  mark_sweep_phase1(marked_for_unloading, clear_all_softrefs);
+  {
+    G1FullGCCompactionPoints cps(active_workers);
 
-  mark_sweep_phase2();
+    mark_sweep_phase1(marked_for_unloading, clear_all_softrefs);
 
-  // Don't add any more derived pointers during phase3
-  COMPILER2_PRESENT(DerivedPointerTable::set_active(false));
+    mark_sweep_phase2(&cps);
 
-  mark_sweep_phase3();
+    // Don't add any more derived pointers during phase3
+    COMPILER2_PRESENT(DerivedPointerTable::set_active(false));
 
-  mark_sweep_phase4();
+    mark_sweep_phase3();
+
+    mark_sweep_phase4(&cps);
+  }
 
   GenMarkSweep::restore_marks();
   BiasedLocking::restore_marks();
@@ -209,7 +378,170 @@ void G1MarkSweep::mark_sweep_phase1(bool& marked_for_unloading,
 }
 
 
-void G1MarkSweep::mark_sweep_phase2() {
+class G1ParallelPrepareCompactClosure : public HeapRegionClosure {
+protected:
+  G1CollectedHeap* _g1h;
+  ModRefBarrierSet* _mrbs;
+  G1FullGCCompactionPoint* _cp;
+  GrowableArray<HeapRegion*>* _start_humongous_regions_to_be_freed;
+
+protected:
+  virtual void prepare_for_compaction(HeapRegion* hr, HeapWord* end) {
+    if (_cp->space == NULL) {
+      _cp->space = hr;
+      _cp->threshold = hr->initialize_threshold();
+    }
+    _cp->add(hr);
+    hr->prepare_for_compaction(_cp);
+    // Also clear the part of the card table that will be unused after compaction.
+    _mrbs->clear(MemRegion(hr->compaction_top(), end));
+  }
+
+public:
+  G1ParallelPrepareCompactClosure(G1FullGCCompactionPoint* cp) :
+    _g1h(G1CollectedHeap::heap()),
+    _mrbs(_g1h->g1_barrier_set()),
+    _cp(cp),
+    _start_humongous_regions_to_be_freed(
+      new (ResourceObj::C_HEAP, mtGC) GrowableArray<HeapRegion*>(32, true, mtGC)) {
+  }
+
+  ~G1ParallelPrepareCompactClosure() {
+    delete _start_humongous_regions_to_be_freed;
+  }
+
+  const GrowableArray<HeapRegion*>* start_humongous_regions_to_be_freed() const {
+    return _start_humongous_regions_to_be_freed;
+  }
+
+  bool doHeapRegion(HeapRegion* hr) {
+    if (hr->isHumongous()) {
+      if (hr->startsHumongous()) {
+        oop obj = oop(hr->bottom());
+        if (obj->is_gc_marked()) {
+          obj->forward_to(obj);
+          _cp->add_huge(hr);
+        } else  {
+          _start_humongous_regions_to_be_freed->append(hr);
+        }
+      } else {
+        assert(hr->continuesHumongous(), "Invalid humongous.");
+      }
+    } else {
+      prepare_for_compaction(hr, hr->end());
+    }
+    return false;
+  }
+
+  bool freed_regions() {
+    if (_start_humongous_regions_to_be_freed->length() != 0) {
+      return true;
+    }
+
+    if (!_cp->has_region()) {
+      return false;
+    }
+
+    if (_cp->current_region() != _cp->regions()->top()) {
+      return true;
+    }
+
+    return false;
+  }
+};
+
+class G1FullGCPrepareTask : public AbstractGangTask {
+protected:
+  HeapRegionClaimer _hrclaimer;
+  G1FullGCCompactionPoints* _cps;
+  GrowableArray<HeapRegion*>* _all_start_humongous_regions_to_be_freed;
+  HeapRegionSetCount _humongous_regions_removed;
+  bool _freed_regions;
+
+protected:
+  void free_humongous_region(HeapRegion* hr) {
+    FreeRegionList dummy_free_list("Dummy Free List for G1MarkSweep");
+    assert(hr->startsHumongous(),
+           "Only the start of a humongous region should be freed.");
+    hr->set_containing_set(NULL);
+    _humongous_regions_removed.increment(1u, hr->capacity());
+    G1CollectedHeap::heap()->free_humongous_region(hr, &dummy_free_list, false);
+    dummy_free_list.remove_all();
+  }
+
+  void update_sets() {
+    // We'll recalculate total used bytes and recreate the free list
+    // at the end of the GC, so no point in updating those values here.
+    HeapRegionSetCount empty_set;
+    G1CollectedHeap::heap()->remove_from_old_sets(empty_set, _humongous_regions_removed);
+  }
+
+public:
+  G1FullGCPrepareTask(G1FullGCCompactionPoints* cps) :
+    AbstractGangTask("G1 Prepare Task"),
+    _hrclaimer(G1CollectedHeap::heap()->workers()->active_workers()),
+    _cps(cps),
+    _all_start_humongous_regions_to_be_freed(
+      new (ResourceObj::C_HEAP, mtGC) GrowableArray<HeapRegion*>(32, true, mtGC)),
+    _humongous_regions_removed(),
+    _freed_regions(false) { }
+
+  virtual ~G1FullGCPrepareTask() {
+    delete _all_start_humongous_regions_to_be_freed;
+  }
+
+  void work(uint worker_id) {
+    Ticks start = Ticks::now();
+    G1ParallelPrepareCompactClosure closure(_cps->cp_at(worker_id));
+    G1CollectedHeap::heap()->heap_region_par_iterate_chunked(&closure, worker_id, &_hrclaimer);
+    {
+      MutexLockerEx mu(FreeHumongousRegions_lock, Mutex::_no_safepoint_check_flag);
+      _all_start_humongous_regions_to_be_freed->appendAll(closure.start_humongous_regions_to_be_freed());
+      if (closure.freed_regions()) {
+        _freed_regions = true;
+      }
+    }
+  }
+
+  void free_humongous_regions() {
+    for (GrowableArrayIterator<HeapRegion*> it = _all_start_humongous_regions_to_be_freed->begin();
+         it != _all_start_humongous_regions_to_be_freed->end();
+         ++it) {
+      free_humongous_region(*it);
+    }
+    update_sets();
+  }
+
+  bool freed_regions() {
+    return _freed_regions;
+  }
+
+  void prepare_serial_compaction() {
+    for (uint i = 0; i < _cps->num_workers(); i++) {
+      G1FullGCCompactionPoint* cp = _cps->cp_at(i);
+      if (cp->has_region()) {
+        _cps->serial_compaction_point()->add(cp->remove_last());
+      }
+    }
+
+    G1FullGCCompactionPoint* cp = _cps->serial_compaction_point();
+    for (GrowableArrayIterator<HeapRegion*> it = cp->regions()->begin(); it != cp->regions()->end(); ++it) {
+      HeapRegion* current = *it;
+      if (!cp->is_initialized()) {
+        // Initialize the compaction point. Nothing more is needed for the first heap region
+        // since it is already prepared for compaction.
+        cp->initialize(current, false);
+      } else {
+        G1RePrepareClosure re_prepare(cp, current);
+        current->set_compaction_top(current->bottom());
+        current->apply_to_marked_objects(&re_prepare);
+      }
+    }
+    cp->update();
+  }
+};
+
+void G1MarkSweep::mark_sweep_phase2(G1FullGCCompactionPoints* cps) {
   // Now all live objects are marked, compute the new object addresses.
 
   // It is not required that we traverse spaces in the same order in
@@ -219,8 +551,20 @@ void G1MarkSweep::mark_sweep_phase2() {
   GCTraceTime tm("phase 2", G1Log::fine() && Verbose, true, gc_timer(), gc_tracer()->gc_id());
   GenMarkSweep::trace("2");
 
-  prepare_compaction();
+  if (!_parallel_prepare_compact) {
+    prepare_compaction();
+  } else {
+    G1FullGCPrepareTask task(cps);
+    FlexibleWorkGang* flexible = G1CollectedHeap::heap()->workers();
+    flexible->run_task(&task);
+    task.free_humongous_regions();
+
+    if (!task.freed_regions()) {
+      task.prepare_serial_compaction();
+    }
+  }
 }
+
 
 class G1AdjustPointersClosure: public HeapRegionClosure {
  public:
@@ -240,6 +584,25 @@ class G1AdjustPointersClosure: public HeapRegionClosure {
   }
 };
 
+class G1FullGCAdjustTask : public AbstractGangTask {
+  HeapRegionClaimer         _hrclaimer;
+  G1AdjustPointersClosure   _adjust;
+
+public:
+  G1FullGCAdjustTask() :
+    AbstractGangTask("G1 Adjust Task"),
+    _hrclaimer(G1CollectedHeap::heap()->workers()->active_workers()),
+    _adjust() {
+  }
+  virtual ~G1FullGCAdjustTask() { }
+
+  void work(uint worker_id) {
+    Ticks start = Ticks::now();
+    G1AdjustPointersClosure blk;
+    G1CollectedHeap::heap()->heap_region_par_iterate_chunked(&blk, worker_id, &_hrclaimer);
+  }
+};
+
 void G1MarkSweep::mark_sweep_phase3() {
   G1CollectedHeap* g1h = G1CollectedHeap::heap();
 
@@ -250,7 +613,8 @@ void G1MarkSweep::mark_sweep_phase3() {
   // Need cleared claim bits for the roots processing
   ClassLoaderDataGraph::clear_claimed_marks();
 
-  CodeBlobToOopClosure adjust_code_closure(&GenMarkSweep::adjust_pointer_closure, CodeBlobToOopClosure::FixRelocations);
+  CodeBlobToOopClosure adjust_code_closure(&GenMarkSweep::adjust_pointer_closure,
+                                           CodeBlobToOopClosure::FixRelocations);
   {
     G1RootProcessor root_processor(g1h);
     root_processor.process_all_roots(&GenMarkSweep::adjust_pointer_closure,
@@ -272,13 +636,19 @@ void G1MarkSweep::mark_sweep_phase3() {
 
   GenMarkSweep::adjust_marks();
 
-  G1AdjustPointersClosure blk;
-  g1h->heap_region_iterate(&blk);
+  if (!_parallel_adjust) {
+    G1AdjustPointersClosure blk;
+    g1h->heap_region_iterate(&blk);
+  } else {
+    G1FullGCAdjustTask task;
+    FlexibleWorkGang* flexible = G1CollectedHeap::heap()->workers();
+    flexible->run_task(&task);
+  }
 }
+
 
 class G1SpaceCompactClosure: public HeapRegionClosure {
 public:
-  G1SpaceCompactClosure() {}
 
   bool doHeapRegion(HeapRegion* hr) {
     if (hr->isHumongous()) {
@@ -298,7 +668,60 @@ public:
   }
 };
 
-void G1MarkSweep::mark_sweep_phase4() {
+class G1FullGCCompactTask : public AbstractGangTask {
+  HeapRegionClaimer _hrclaimer;
+  G1FullGCCompactionPoints* _cps;
+
+  void compact_region(HeapRegion* hr) {
+    hr->compact();
+
+    hr->reset_after_compaction();
+    if (hr->used_region().is_empty()) {
+      hr->reset_bot();
+    }
+  }
+
+public:
+  G1FullGCCompactTask(G1FullGCCompactionPoints* cps) :
+    AbstractGangTask("G1 Compact Task"),
+    _hrclaimer(G1CollectedHeap::heap()->workers()->active_workers()),
+    _cps(cps) {
+  }
+  virtual ~G1FullGCCompactTask() { }
+
+  void work(uint worker_id) {
+    Ticks start = Ticks::now();
+    const GrowableArray<HeapRegion*>* compaction_queue = _cps->cp_at(worker_id)->regions();
+    for (GrowableArrayIterator<HeapRegion*> it = compaction_queue->begin();
+         it != compaction_queue->end();
+         ++it) {
+      HeapRegion* hr = *it;
+      compact_region(hr);
+    }
+
+    const GrowableArray<HeapRegion*>* marked_huge_regions = _cps->cp_at(worker_id)->huge_regions();
+    for (GrowableArrayIterator<HeapRegion*> it = marked_huge_regions->begin();
+         it != marked_huge_regions->end();
+         ++it) {
+      HeapRegion* hr = *it;
+      oop obj = oop(hr->bottom());
+      assert(obj->is_gc_marked(), "Must be");
+      obj->init_mark();
+      hr->reset_during_compaction();
+    }
+  }
+
+  void serial_compaction() {
+    const GrowableArray<HeapRegion*>* compaction_queue = _cps->serial_compaction_point()->regions();
+    for (GrowableArrayIterator<HeapRegion*> it = compaction_queue->begin();
+         it != compaction_queue->end();
+         ++it) {
+      compact_region(*it);
+    }
+  }
+};
+
+void G1MarkSweep::mark_sweep_phase4(G1FullGCCompactionPoints* cps) {
   // All pointers are now adjusted, move objects accordingly
 
   // The ValidateMarkSweep live oops tracking expects us to traverse spaces
@@ -310,72 +733,100 @@ void G1MarkSweep::mark_sweep_phase4() {
   GCTraceTime tm("phase 4", G1Log::fine() && Verbose, true, gc_timer(), gc_tracer()->gc_id());
   GenMarkSweep::trace("4");
 
-  G1SpaceCompactClosure blk;
-  g1h->heap_region_iterate(&blk);
+  if (!_parallel_prepare_compact) {
+    G1SpaceCompactClosure blk;
+    g1h->heap_region_iterate(&blk);
+  } else {
+    G1FullGCCompactTask task(cps);
+    FlexibleWorkGang* flexible = G1CollectedHeap::heap()->workers();
+    flexible->run_task(&task);
 
+    if (cps->serial_compaction_point()->has_region()) {
+      task.serial_compaction();
+    }
+  }
+}
+
+class G1PrepareCompactClosure : public HeapRegionClosure {
+protected:
+  G1CollectedHeap* _g1h;
+  ModRefBarrierSet* _mrbs;
+  CompactPoint _cp;
+  HeapRegionSetCount _humongous_regions_removed;
+
+  virtual void prepare_for_compaction(HeapRegion* hr, HeapWord* end) {
+    // If this is the first live region that we came across which we can compact,
+    // initialize the CompactPoint.
+    if (!is_cp_initialized()) {
+      _cp.space = hr;
+      _cp.threshold = hr->initialize_threshold();
+    }
+    prepare_for_compaction_work(&_cp, hr, end);
+  }
+
+  void prepare_for_compaction_work(CompactPoint* cp, HeapRegion* hr, HeapWord* end) {
+    hr->prepare_for_compaction(cp);
+    // Also clear the part of the card table that will be unused after
+    // compaction.
+    _mrbs->clear(MemRegion(hr->compaction_top(), end));
+  }
+
+  void free_humongous_region(HeapRegion* hr) {
+    HeapWord* end = hr->end();
+    FreeRegionList dummy_free_list("Dummy Free List for G1MarkSweep");
+
+    assert(hr->startsHumongous(),
+           "Only the start of a humongous region should be freed.");
+
+    hr->set_containing_set(NULL);
+    _humongous_regions_removed.increment(1u, hr->capacity());
+
+    _g1h->free_humongous_region(hr, &dummy_free_list, false /* par */);
+    prepare_for_compaction(hr, end);
+    dummy_free_list.remove_all();
+  }
+
+  bool is_cp_initialized() const { return _cp.space != NULL; }
+
+public:
+  G1PrepareCompactClosure() :
+    _g1h(G1CollectedHeap::heap()),
+    _mrbs(_g1h->g1_barrier_set()),
+    _humongous_regions_removed() { }
+  ~G1PrepareCompactClosure() { }
+
+  void update_sets() {
+    // We'll recalculate total used bytes and recreate the free list
+    // at the end of the GC, so no point in updating those values here.
+    HeapRegionSetCount empty_set;
+    _g1h->remove_from_old_sets(empty_set, _humongous_regions_removed);
+  }
+  bool doHeapRegion(HeapRegion* hr) {
+    if (hr->isHumongous()) {
+      if (hr->startsHumongous()) {
+        oop obj = oop(hr->bottom());
+        if (obj->is_gc_marked()) {
+          obj->forward_to(obj);
+        } else  {
+          free_humongous_region(hr);
+        }
+      } else {
+        assert(hr->continuesHumongous(), "Invalid humongous.");
+      }
+    } else {
+      prepare_for_compaction(hr, hr->end());
+    }
+    return false;
+  }
+};
+
+void G1MarkSweep::prepare_compaction() {
+  G1PrepareCompactClosure blk;
+  G1MarkSweep::prepare_compaction_work(&blk);
 }
 
 void G1MarkSweep::prepare_compaction_work(G1PrepareCompactClosure* blk) {
   G1CollectedHeap* g1h = G1CollectedHeap::heap();
   g1h->heap_region_iterate(blk);
   blk->update_sets();
-}
-
-void G1PrepareCompactClosure::free_humongous_region(HeapRegion* hr) {
-  HeapWord* end = hr->end();
-  FreeRegionList dummy_free_list("Dummy Free List for G1MarkSweep");
-
-  assert(hr->startsHumongous(),
-         "Only the start of a humongous region should be freed.");
-
-  hr->set_containing_set(NULL);
-  _humongous_regions_removed.increment(1u, hr->capacity());
-
-  _g1h->free_humongous_region(hr, &dummy_free_list, false /* par */);
-  prepare_for_compaction(hr, end);
-  dummy_free_list.remove_all();
-}
-
-void G1PrepareCompactClosure::prepare_for_compaction(HeapRegion* hr, HeapWord* end) {
-  // If this is the first live region that we came across which we can compact,
-  // initialize the CompactPoint.
-  if (!is_cp_initialized()) {
-    _cp.space = hr;
-    _cp.threshold = hr->initialize_threshold();
-  }
-  prepare_for_compaction_work(&_cp, hr, end);
-}
-
-void G1PrepareCompactClosure::prepare_for_compaction_work(CompactPoint* cp,
-                                                          HeapRegion* hr,
-                                                          HeapWord* end) {
-  hr->prepare_for_compaction(cp);
-  // Also clear the part of the card table that will be unused after
-  // compaction.
-  _mrbs->clear(MemRegion(hr->compaction_top(), end));
-}
-
-void G1PrepareCompactClosure::update_sets() {
-  // We'll recalculate total used bytes and recreate the free list
-  // at the end of the GC, so no point in updating those values here.
-  HeapRegionSetCount empty_set;
-  _g1h->remove_from_old_sets(empty_set, _humongous_regions_removed);
-}
-
-bool G1PrepareCompactClosure::doHeapRegion(HeapRegion* hr) {
-  if (hr->isHumongous()) {
-    if (hr->startsHumongous()) {
-      oop obj = oop(hr->bottom());
-      if (obj->is_gc_marked()) {
-        obj->forward_to(obj);
-      } else  {
-        free_humongous_region(hr);
-      }
-    } else {
-      assert(hr->continuesHumongous(), "Invalid humongous.");
-    }
-  } else {
-    prepare_for_compaction(hr, hr->end());
-  }
-  return false;
 }

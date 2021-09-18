@@ -39,6 +39,28 @@ class G1HeapRegionTable : public G1BiasedMappedArray<HeapRegion*> {
   virtual HeapRegion* default_value() const { return NULL; }
 };
 
+class HeapRegionClaimer : public StackObj {
+  uint           _n_workers;
+  uint           _n_regions;
+  volatile uint* _claims;
+  static const uint Unclaimed = 0;
+  static const uint Claimed   = 1;
+public:
+  HeapRegionClaimer(uint n_workers = 0);
+  ~HeapRegionClaimer();
+  inline void set_workers(uint n_workers) {
+    assert(n_workers > 0, "Need at least one worker.");
+    _n_workers = n_workers;
+  }
+  // Calculate the starting region for given worker so
+  // that they do not all start from the same region.
+  uint offset_for_worker(uint worker_id) const;
+  // Check if region has been claimed with this HRClaimer.
+  bool is_region_claimed(uint region_index) const;
+  // Claim the given region, returns true if successfully claimed.
+  bool claim_region(uint region_index);
+};
+
 // This class keeps track of the actual heap memory, auxiliary data
 // and its metadata (i.e., HeapRegion instances) and the list of free regions.
 //
@@ -68,6 +90,7 @@ class G1HeapRegionTable : public G1BiasedMappedArray<HeapRegion*> {
 class HeapRegionManager: public CHeapObj<mtGC> {
   friend class VMStructs;
   friend class FreeRegionList;
+  friend class HeapRegionClaimer;
 
   G1HeapRegionTable _regions;
 
@@ -239,7 +262,7 @@ public:
   // terminating the iteration early if doHeapRegion() returns true.
   void iterate(HeapRegionClosure* blk) const;
 
-  void par_iterate(HeapRegionClosure* blk, uint worker_id, uint no_of_par_workers, jint claim_value) const;
+  void par_iterate(HeapRegionClosure* blk, uint worker_id, HeapRegionClaimer* hrclaimer) const;
 
   // Uncommit up to num_regions_to_remove regions that are completely free.
   // Return the actual number of uncommitted regions.

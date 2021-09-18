@@ -56,23 +56,27 @@ public class TestG1ConcurrentModeFailureEvent {
     private final static int BYTES_TO_ALLOCATE = 1024 * 512;
 
     public static void main(String[] args) throws Exception {
-        String[] vmFlags = {"-Xmx512m", "-Xms512m", "-XX:MaxTenuringThreshold=0", "-Xloggc:testG1GC.log", "-verbose:gc",
-            "-XX:+UseG1GC", "-XX:+UnlockExperimentalVMOptions", "-XX:-UseFastUnorderedTimeStamps"};
+        String[][] vmFlags = {
+            {"-Xmx512m", "-Xms512m", "-XX:MaxTenuringThreshold=0", "-Xloggc:testG1GC.log", "-verbose:gc",
+                "-XX:+UseG1GC", "-XX:+UnlockExperimentalVMOptions", "-XX:-UseFastUnorderedTimeStamps"},
+            {"-Xmx512m", "-Xms512m", "-XX:MaxTenuringThreshold=0", "-Xloggc:testG1GC.log", "-verbose:gc",
+                "-XX:+UseG1GC", "-XX:+G1ParallelFullGC", "-XX:+UnlockExperimentalVMOptions", "-XX:-UseFastUnorderedTimeStamps"}};
+        for (int i = 0; i < vmFlags.length; i++) {
+            if (!ExecuteOOMApp.execute(EVENT_SETTINGS_FILE, JFR_FILE, vmFlags[i], BYTES_TO_ALLOCATE)) {
+                System.out.println("OOM happened in the other thread(not test thread). Skip test.");
+                // Skip test, process terminates due to the OOME error in the different thread
+                return;
+            }
 
-        if (!ExecuteOOMApp.execute(EVENT_SETTINGS_FILE, JFR_FILE, vmFlags, BYTES_TO_ALLOCATE)) {
-            System.out.println("OOM happened in the other thread(not test thread). Skip test.");
-            // Skip test, process terminates due to the OOME error in the different thread
-            return;
-        }
-
-        Optional<RecordedEvent> event = RecordingFile.readAllEvents(Paths.get(JFR_FILE)).stream().findFirst();
-        if (event.isPresent()) {
-            Asserts.assertEquals(EVENT_NAME, event.get().getEventType().getName(), "Wrong event type");
-        } else {
-            // No event received. Check if test did trigger the event.
-            boolean isEventTriggered = fileContainsString("testG1GC.log", "concurrent-mark-abort");
-            System.out.println("isEventTriggered=" +isEventTriggered);
-            Asserts.assertFalse(isEventTriggered, "Event found in log, but not in JFR");
+            Optional<RecordedEvent> event = RecordingFile.readAllEvents(Paths.get(JFR_FILE)).stream().findFirst();
+            if (event.isPresent()) {
+                Asserts.assertEquals(EVENT_NAME, event.get().getEventType().getName(), "Wrong event type");
+            } else {
+                // No event received. Check if test did trigger the event.
+                boolean isEventTriggered = fileContainsString("testG1GC.log", "concurrent-mark-abort");
+                System.out.println("isEventTriggered=" +isEventTriggered);
+                Asserts.assertFalse(isEventTriggered, "Event found in log, but not in JFR");
+            }
         }
     }
 

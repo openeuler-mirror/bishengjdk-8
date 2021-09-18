@@ -45,7 +45,7 @@ class ObjectWithSomeRefs {
     public ObjectWithSomeRefs other4;
 }
 
-class ReclaimRegionFast {
+class ReclaimRegionClearMarkBitsFast {
     public static final long MAX_MILLIS_FOR_RUN = 50 * 1000; // The maximum runtime for the actual test.
 
     public static final int M = 1024*1024;
@@ -123,7 +123,7 @@ public class TestEagerReclaimHumongousRegionsClearMarkBits {
             "-XX:ConcGCThreads=1", // Want to make marking as slow as possible.
             "-XX:+IgnoreUnrecognizedVMOptions", // G1VerifyBitmaps is develop only.
             "-XX:+G1VerifyBitmaps",
-            ReclaimRegionFast.class.getName());
+            ReclaimRegionClearMarkBitsFast.class.getName());
         OutputAnalyzer output = new OutputAnalyzer(pb.start());
         output.shouldHaveExitValue(0);
     }

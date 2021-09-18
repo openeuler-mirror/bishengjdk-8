@@ -216,6 +216,7 @@ class G1CollectedHeap : public SharedHeap {
   friend class CountRCClosure;
   friend class EvacPopObjClosure;
   friend class G1ParCleanupCTTask;
+  friend class HeapRegionClaimer;
 
   friend class G1FreeHumongousRegionClosure;
   friend class FreeRegionList;
@@ -1294,7 +1295,7 @@ public:
   void cleanUpCardTable();
 
   // Iteration functions.
-  void object_iterate_parallel(ObjectClosure* cl, uint worker_id, uint num_workers);
+  void object_iterate_parallel(ObjectClosure* cl, uint worker_id, HeapRegionClaimer* claimer);
 
   // Iterate over all the ref-containing fields of all objects, calling
   // "cl.do_oop" on each.
@@ -1338,23 +1339,7 @@ public:
   // i.e., that a closure never attempt to abort a traversal.
   void heap_region_par_iterate_chunked(HeapRegionClosure* cl,
                                        uint worker_id,
-                                       uint num_workers,
-                                       jint claim_value) const;
-
-  // It resets all the region claim values to the default.
-  void reset_heap_region_claim_values();
-
-  // Resets the claim values of regions in the current
-  // collection set to the default.
-  void reset_cset_heap_region_claim_values();
-
-#ifdef ASSERT
-  bool check_heap_region_claim_values(jint claim_value);
-
-  // Same as the routine above but only checks regions in the
-  // current collection set.
-  bool check_cset_heap_region_claim_values(jint claim_value);
-#endif // ASSERT
+                                       HeapRegionClaimer *hrclaimer) const;
 
   // Clear the cached cset start regions and (more importantly)
   // the time stamps. Called when we reset the GC time stamp.

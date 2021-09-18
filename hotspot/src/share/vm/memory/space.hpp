@@ -325,7 +325,7 @@ public:
 
 // A structure to represent a point at which objects are being copied
 // during compaction.
-class CompactPoint : public StackObj {
+class CompactPoint : public CHeapObj<mtGC> {
 public:
   Generation* gen;
   CompactibleSpace* space;
@@ -333,6 +333,8 @@ public:
 
   CompactPoint(Generation* g = NULL) :
     gen(g), space(NULL), threshold(0) {}
+
+  virtual CompactibleSpace* next_compaction_space() { return NULL; }
 };
 
 // A space that supports compaction operations.  This is usually, but not
@@ -349,7 +351,7 @@ private:
 
 public:
   CompactibleSpace() :
-   _compaction_top(NULL), _next_compaction_space(NULL) {}
+   _compaction_top(NULL), _next_compaction_space(NULL), _end_of_live(NULL), _first_dead(NULL)  {}
 
   virtual void initialize(MemRegion mr, bool clear_space, bool mangle_space);
   virtual void clear(bool mangle_space);

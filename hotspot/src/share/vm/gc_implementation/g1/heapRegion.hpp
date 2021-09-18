@@ -52,6 +52,7 @@ class HeapRegionRemSetIterator;
 class HeapRegion;
 class HeapRegionSetBase;
 class nmethod;
+class G1RePrepareClosure;
 
 #define HR_FORMAT "%u:(%s)[" PTR_FORMAT "," PTR_FORMAT "," PTR_FORMAT "]"
 #define HR_FORMAT_PARAMS(_hr_) \
@@ -152,7 +153,7 @@ class G1OffsetTableContigSpace: public CompactibleSpace {
 
   void object_iterate(ObjectClosure* blk);
   void safe_object_iterate(ObjectClosure* blk);
-
+  void apply_to_marked_objects(G1RePrepareClosure* closure);
   void set_bottom(HeapWord* value);
   void set_end(HeapWord* value);
 
@@ -255,9 +256,6 @@ class HeapRegion: public G1OffsetTableContigSpace {
   HeapRegionSetBase* _containing_set;
 #endif // ASSERT
 
-  // For parallel heapRegion traversal.
-  jint _claimed;
-
   // We use concurrent marking to determine the amount of live data
   // in each heap region.
   size_t _prev_marked_bytes;    // Bytes known to be live via last completed marking.
@@ -280,15 +278,6 @@ class HeapRegion: public G1OffsetTableContigSpace {
   HeapWord* _next_top_at_mark_start;
   // If a collection pause is in progress, this is the top at the start
   // of that pause.
-
-  void init_top_at_mark_start() {
-    assert(_prev_marked_bytes == 0 &&
-           _next_marked_bytes == 0,
-           "Must be called after zero_marked_bytes.");
-    HeapWord* bot = bottom();
-    _prev_top_at_mark_start = bot;
-    _next_top_at_mark_start = bot;
-  }
 
   // Cached attributes used in the collection set policy information
 
@@ -315,6 +304,15 @@ class HeapRegion: public G1OffsetTableContigSpace {
   // there's clearing to be done ourselves. We also always mangle the space.
   virtual void initialize(MemRegion mr, bool clear_space = false, bool mangle_space = SpaceDecorator::Mangle);
 
+  void init_top_at_mark_start() {
+    assert(_prev_marked_bytes == 0 &&
+           _next_marked_bytes == 0,
+           "Must be called after zero_marked_bytes.");
+    HeapWord* bot = bottom();
+    _prev_top_at_mark_start = bot;
+    _next_top_at_mark_start = bot;
+  }
+
   static int    LogOfHRGrainBytes;
   static int    LogOfHRGrainWords;
 
@@ -336,20 +334,6 @@ class HeapRegion: public G1OffsetTableContigSpace {
   // throughout the JVM's execution, therefore they should only be set
   // up once during initialization time.
   static void setup_heap_region_size(size_t initial_heap_size, size_t max_heap_size);
-
-  enum ClaimValues {
-    InitialClaimValue          = 0,
-    FinalCountClaimValue       = 1,
-    NoteEndClaimValue          = 2,
-    ScrubRemSetClaimValue      = 3,
-    ParVerifyClaimValue        = 4,
-    RebuildRSClaimValue        = 5,
-    ParEvacFailureClaimValue   = 6,
-    AggregateCountClaimValue   = 7,
-    VerifyCountClaimValue      = 8,
-    ParMarkRootClaimValue      = 9,
-    ParInspectClaimValue       = 10
-  };
 
   // All allocated blocks are occupied by objects in a HeapRegion
   bool block_is_obj(const HeapWord* p) const;
@@ -696,12 +680,6 @@ class HeapRegion: public G1OffsetTableContigSpace {
   bool obj_allocated_since_next_marking(oop obj) const {
     return (HeapWord *) obj >= next_top_at_mark_start();
   }
-
-  // For parallel heapRegion traversal.
-  bool claimHeapRegion(int claimValue);
-  jint claim_value() { return _claimed; }
-  // Use this carefully: only when you're sure no one is claiming...
-  void set_claim_value(int claimValue) { _claimed = claimValue; }
 
   // Returns the "evacuation_failed" property of the region.
   bool evacuation_failed() { return _evacuation_failed; }

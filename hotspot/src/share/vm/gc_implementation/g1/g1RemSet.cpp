@@ -410,12 +410,9 @@ void G1RemSet::scrub(BitMap* region_bm, BitMap* card_bm) {
 }
 
 void G1RemSet::scrub_par(BitMap* region_bm, BitMap* card_bm,
-                                uint worker_num, int claim_val) {
+                         uint worker_num, HeapRegionClaimer *hrclaimer) {
   ScrubRSClosure scrub_cl(region_bm, card_bm);
-  _g1->heap_region_par_iterate_chunked(&scrub_cl,
-                                       worker_num,
-                                       n_workers(),
-                                       claim_val);
+  _g1->heap_region_par_iterate_chunked(&scrub_cl, worker_num, hrclaimer);
 }
 
 G1TriggerClosure::G1TriggerClosure() :

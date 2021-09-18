@@ -131,7 +131,7 @@ public:
   // parallel thread id of the current thread, and "claim_val" is the
   // value that should be used to claim heap regions.
   void scrub_par(BitMap* region_bm, BitMap* card_bm,
-                 uint worker_num, int claim_val);
+                 uint worker_num, HeapRegionClaimer *hrclaimer);
 
   // Refine the card corresponding to "card_ptr".
   // If check_for_refs_into_cset is true, a true result is returned

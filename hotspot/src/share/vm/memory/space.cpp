@@ -386,7 +386,14 @@ HeapWord* CompactibleSpace::forward(oop q, size_t size,
   while (size > compaction_max_size) {
     // switch to next compaction space
     cp->space->set_compaction_top(compact_top);
-    cp->space = cp->space->next_compaction_space();
+
+    CompactibleSpace* tmp = cp->next_compaction_space();
+    if (tmp == NULL) {
+      cp->space = cp->space->next_compaction_space();
+    } else {
+      cp->space = tmp;
+    }
+
     if (cp->space == NULL) {
       cp->gen = GenCollectedHeap::heap()->prev_gen(cp->gen);
       assert(cp->gen != NULL, "compaction must succeed");
