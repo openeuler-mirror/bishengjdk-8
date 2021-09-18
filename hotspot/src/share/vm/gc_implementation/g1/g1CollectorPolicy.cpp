@@ -1504,6 +1504,11 @@ bool G1CollectorPolicy::force_initial_mark_if_outside_cycle(
   }
 }
 
+void G1CollectorPolicy::initiate_conc_mark() {
+  set_during_initial_mark_pause();
+  clear_initiate_conc_mark_if_possible();
+}
+
 void
 G1CollectorPolicy::decide_on_conc_mark_initiation() {
   // We are about to decide on whether this pause will be an
@@ -1523,15 +1528,19 @@ G1CollectorPolicy::decide_on_conc_mark_initiation() {
     if (!about_to_start_mixed_phase() && gcs_are_young()) {
       // Initiate a new initial mark only if there is no marking or reclamation going
       // on.
-      set_during_initial_mark_pause();
-
-      // And we can now clear initiate_conc_mark_if_possible() as
-      // we've already acted on it.
-      clear_initiate_conc_mark_if_possible();
-
+      initiate_conc_mark();
       ergo_verbose0(ErgoConcCycles,
                   "initiate concurrent cycle",
                   ergo_format_reason("concurrent cycle initiation requested"));
+    } else if (_g1->is_user_requested_concurrent_full_gc(_g1->gc_cause())) {
+      // Initiate a user requested initial mark. An initial mark must be young only
+      // GC, so the collector state must be updated to reflect this.
+      set_gcs_are_young(true);
+      _last_young_gc = false;
+      initiate_conc_mark();
+      ergo_verbose0(ErgoConcCycles,
+                  "initiate concurrent cycle",
+                  ergo_format_reason("user requested concurrent cycle"));
     } else {
       // The concurrent marking thread is still finishing up the
       // previous cycle. If we start one right now the two cycles

@@ -715,6 +715,8 @@ public:
     _in_cset_fast_test.clear();
   }
 
+  bool is_user_requested_concurrent_full_gc(GCCause::Cause cause);
+
   // This is called at the start of either a concurrent cycle or a Full
   // GC to update the number of old marking cycles started.
   void increment_old_marking_cycles_started();
