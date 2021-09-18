@@ -61,10 +61,12 @@ static char *isFileIdentical(char* buf, size_t size, char *pathname);
 static const char *ETC_TIMEZONE_FILE = "/etc/timezone";
 static const char *ZONEINFO_DIR = "/usr/share/zoneinfo";
 static const char *DEFAULT_ZONEINFO_FILE = "/etc/localtime";
+static const char *DEFAULT_ZONEINFO_FILE_DIRNAME = "/etc";
 #else
 static const char *SYS_INIT_FILE = "/etc/default/init";
 static const char *ZONEINFO_DIR = "/usr/share/lib/zoneinfo";
 static const char *DEFAULT_ZONEINFO_FILE = "/usr/share/lib/zoneinfo/localtime";
+static const char *DEFAULT_ZONEINFO_FILE_DIRNAME = "/usr/share/lib/zoneinfo";
 #endif /* defined(__linux__) || defined(_ALLBSD_SOURCE) */
 
 static const char popularZones[][4] = {"UTC", "GMT"};
@@ -317,7 +319,36 @@ getPlatformTimeZoneID()
             return NULL;
         }
         linkbuf[len] = '\0';
-        tz = getZoneName(linkbuf);
+
+        /* linkbuf may be a relative symlink or has more than one characters, like '.' and '/' ,
+         * which will cause the function call getZoneName return to an abnormal timeZone name.
+         * For example, linkbuf is "../usr/share/zoneinfo//Asia/Shanghai", then the call of
+         * getZoneName(linkbuf) will get "/Asia/Shanghai", not "Asia/Shanghai".
+         * So we covert it to an absolute path by adding the file's (which is define by macro
+         * DEFAULT_ZONEINFO_FILE) dirname and then call glibc's realpath API to canonicalize
+         * the path.
+         */
+        char abslinkbuf[2 * (PATH_MAX + 1)];
+        if (linkbuf[0] != '/') {
+            if (sprintf(abslinkbuf, "%s/%s", DEFAULT_ZONEINFO_FILE_DIRNAME, linkbuf) < 0) {
+                jio_fprintf(stderr, (const char *) "failed to generate absolute path\n");
+                return NULL;
+            }
+        } else {
+            strncpy(abslinkbuf, linkbuf, len + 1);
+        }
+
+        /* canonicalize the path */
+        char resolvedpath[PATH_MAX + 1];
+        resolvedpath[PATH_MAX] = '\0';
+        char *path = realpath(abslinkbuf, resolvedpath);
+        if (path == NULL) {
+            jio_fprintf(stderr, (const char *) "failed to get real path, symlink is %s\n",
+                        abslinkbuf);
+            return NULL;
+        }
+
+        tz = getZoneName(resolvedpath);
         if (tz != NULL) {
             tz = strdup(tz);
             return tz;
