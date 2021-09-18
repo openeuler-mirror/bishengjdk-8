@@ -849,27 +849,6 @@ address InterpreterGenerator::generate_CRC32_updateBytes_entry(AbstractInterpret
   return generate_native_entry(false);
 }
 
-// Access the char-array of String
-void InterpreterGenerator::load_String_value(Register src, Register dst) {
-  //  Need to cooperate with JDK-8243996
-  int value_offset = java_lang_String::value_offset_in_bytes();
-
-  __ add(src, src, value_offset);
-  __ load_heap_oop(dst, Address(src));
-}
-
-void InterpreterGenerator::load_String_offset(Register src, Register dst) {
-  __ mov(dst, 0);
-
-  // Get String value offset, because of order of initialization for Interpreter,
-  // we have to hardcode the offset for String value. (JDK-8243996)
-  if (java_lang_String::has_offset_field()) {
-    int offset_offset = java_lang_String::offset_offset_in_bytes();
-    __ add(src, src, offset_offset);
-    __ ldrw(dst, Address(src));
-  }
-}
-
 void InterpreterGenerator::emit_array_address(Register src, Register idx,
                                               Register dst, BasicType type) {
   int offset_in_bytes = arrayOopDesc::base_offset_in_bytes(type);
@@ -900,7 +879,7 @@ void InterpreterGenerator::emit_array_address(Register src, Register idx,
  *
  */
 address InterpreterGenerator::generate_Dgemm_dgemm_entry() {
-  if (!UseF2jBLASIntrinsics || (StubRoutines::dgemmDgemm() == NULL)) return NULL;
+  if (StubRoutines::dgemmDgemm() == NULL) return NULL;
 
   address entry = __ pc();
 
@@ -917,19 +896,29 @@ address InterpreterGenerator::generate_Dgemm_dgemm_entry() {
   const Register lda        = c_rarg6;
   const Register B          = c_rarg7;
   const FloatRegister beta  = c_farg1;
-  const Register tmp1       = rscratch1;
-  const Register tmp2       = rscratch2;
 
-  // trana
-  __ ldr(ta, Address(esp, 17 * wordSize));
-  load_String_value(ta, tmp1);
-  load_String_offset(ta, tmp2);
-  emit_array_address(tmp1, tmp2, ta, T_CHAR);
-  // tranb
-  __ ldr(tb, Address(esp, 16 * wordSize));
-  load_String_value(tb, tmp1);
-  load_String_offset(tb, tmp2);
-  emit_array_address(tmp1, tmp2, tb, T_CHAR);
+  // trana/tranb
+  __ ldr(r0, Address(esp, 17 * wordSize));
+  __ ldr(r1, Address(esp, 16 * wordSize));
+
+  // Get String value offset, because of order of initialization for Interpreter,
+  // we have to hardcode the offset for String value and offset. These instructions
+  // generated there will be patched in interpreter_patch after java.lang.String has
+  // been loaded.
+  // load String offset
+  __ mov(r2, 0);    // __ ldrw(r2, Address(r0, java_lang_String::offset_offset_in_bytes()))
+  __ mov(r3, 0);    // __ ldrw(r3, Address(r1, java_lang_String::offset_offset_in_bytes()))
+
+  // load String value
+  __ mov(r4, 0xc);  // __ mov(r4, java_lang_String::value_offset_in_bytes())
+  __ add(r0, r0, r4);
+  __ load_heap_oop(r0, Address(r0));
+  __ add(r1, r1, r4);
+  __ load_heap_oop(r1, Address(r1));
+
+  emit_array_address(r0, r2, ta, T_CHAR);
+  emit_array_address(r1, r3, tb, T_CHAR);
+
   // m, n, k
   __ ldrw(m, Address(esp, 15 * wordSize));
   __ ldrw(n, Address(esp, 14 * wordSize));
@@ -937,16 +926,15 @@ address InterpreterGenerator::generate_Dgemm_dgemm_entry() {
   // alpha
   __ ldrd(alpha, Address(esp, 11 * wordSize));
   // A
-  __ ldr(tmp1, Address(esp, 10 * wordSize));
-  __ mov(tmp2, 0);
-  __ ldrw(tmp2, Address(esp, 9 * wordSize));
-  emit_array_address(tmp1, tmp2, A, T_DOUBLE);
+  __ ldr(r5, Address(esp, 10 * wordSize));
+  __ ldrw(r6, Address(esp, 9 * wordSize));
+  emit_array_address(r5, r6, A, T_DOUBLE);
   // lda
   __ ldrw(lda, Address(esp, 8 * wordSize));
   // B
-  __ ldr(tmp1, Address(esp, 7 * wordSize));
-  __ ldrw(tmp2, Address(esp, 6 * wordSize));
-  emit_array_address(tmp1, tmp2, B, T_DOUBLE);
+  __ ldr(rscratch1, Address(esp, 7 * wordSize));
+  __ ldrw(rscratch2, Address(esp, 6 * wordSize));
+  emit_array_address(rscratch1, rscratch2, B, T_DOUBLE);
   // beta
   __ ldrd(beta, Address(esp, 3 * wordSize));
   // Start pushing arguments to machine stack.
@@ -960,22 +948,22 @@ address InterpreterGenerator::generate_Dgemm_dgemm_entry() {
   __ andr(sp, r13, -16);
   __ str(lr, Address(sp, -wordSize));
   // ldc
-  __ ldrw(tmp1, Address(esp, 0x0));
-  __ strw(tmp1, Address(sp, 2 * -wordSize));
+  __ ldrw(rscratch1, Address(esp, 0x0));
+  __ strw(rscratch1, Address(sp, 2 * -wordSize));
   // C
-  __ ldr(tmp1, Address(esp, 2 * wordSize));
-  __ ldrw(tmp2, Address(esp, wordSize));
-  emit_array_address(tmp1, tmp2, tmp1, T_DOUBLE);
-  __ str(tmp1, Address(sp, 3 * -wordSize));
+  __ ldr(rscratch1, Address(esp, 2 * wordSize));
+  __ ldrw(rscratch2, Address(esp, wordSize));
+  emit_array_address(rscratch1, rscratch2, rscratch1, T_DOUBLE);
+  __ str(rscratch1, Address(sp, 3 * -wordSize));
   // ldb
-  __ ldrw(tmp2, Address(esp, 5 * wordSize));
-  __ strw(tmp2, Address(sp, 4 * -wordSize));
+  __ ldrw(rscratch2, Address(esp, 5 * wordSize));
+  __ strw(rscratch2, Address(sp, 4 * -wordSize));
 
   // Call function
   __ add(sp, sp, 4 * -wordSize);
   address fn = CAST_FROM_FN_PTR(address, StubRoutines::dgemmDgemm());
-  __ mov(tmp1, fn);
-  __ blr(tmp1);
+  __ mov(rscratch1, fn);
+  __ blr(rscratch1);
 
   __ ldr(lr, Address(sp, 3 * wordSize));
   // For assert(Rd != sp || imm % 16 == 0)
@@ -1000,9 +988,6 @@ address InterpreterGenerator::generate_Dgemv_dgemv_entry() {
 
   const FloatRegister alpha = v0;              // alpha
   const FloatRegister beta = v1;               // beta
-
-  const Register tmp1 = rscratch1;
-  const Register tmp2 = rscratch2;
 
   // esp: expression stack of caller
   // dgemv parameter ---> the position in stack ---> move to register
@@ -1032,10 +1017,21 @@ address InterpreterGenerator::generate_Dgemv_dgemv_entry() {
 
 
   // trans
-  __ ldr(trans, Address(esp, 15 * wordSize));
-  load_String_value(trans, tmp1);
-  load_String_offset(trans, tmp2);
-  emit_array_address(tmp1, tmp2, trans, T_CHAR);
+  __ ldr(r0, Address(esp, 15 * wordSize));
+
+  // Get String value offset, because of order of initialization for Interpreter,
+  // we have to hardcode the offset for String value and offset. These instructions
+  // generated there will be patched in interpreter_patch after java.lang.String has
+  // been loaded.
+  // load String offset
+  __ mov(r1, 0);       // __ ldrw(r1, Address(r0, java_lang_String::offset_offset_in_bytes()))
+
+  // load String value
+  __ mov(r2, 0xc);     // __ mov(r2, java_lang_String::value_offset_in_bytes())
+  __ add(r0, r0, r2);
+  __ load_heap_oop(r0, Address(r0));
+  emit_array_address(r0, r1, trans, T_CHAR);
+
   // m, n
   __ ldrw(m, Address(esp, 14 * wordSize));
   __ ldrw(n, Address(esp, 13 * wordSize));
@@ -1044,19 +1040,17 @@ address InterpreterGenerator::generate_Dgemv_dgemv_entry() {
   __ ldrd(alpha, Address(esp, 11 * wordSize));
 
   // a
-  __ ldr(tmp1, Address(esp, 10 * wordSize));
-  __ mov(tmp2, zr);
-  __ ldrw(tmp2, Address(esp, 9 * wordSize));
-  emit_array_address(tmp1, tmp2, a, T_DOUBLE);
+  __ ldr(r3, Address(esp, 10 * wordSize));
+  __ ldrw(r4, Address(esp, 9 * wordSize));
+  emit_array_address(r3, r4, a, T_DOUBLE);
 
   // lda
   __ ldrw(lda, Address(esp, 8 * wordSize));
 
   // x
-  __ ldr(tmp1, Address(esp, 7 * wordSize));
-  __ mov(tmp2, zr);
-  __ ldrw(tmp2, Address(esp, 6 * wordSize));
-  emit_array_address(tmp1, tmp2, x, T_DOUBLE);
+  __ ldr(r5, Address(esp, 7 * wordSize));
+  __ ldrw(r6, Address(esp, 6 * wordSize));
+  emit_array_address(r5, r6, x, T_DOUBLE);
 
   // incx
   __ ldrw(incx, Address(esp, 5 * wordSize));
@@ -1065,25 +1059,24 @@ address InterpreterGenerator::generate_Dgemv_dgemv_entry() {
   __ ldrd(beta, Address(esp, 3 * wordSize));
 
   // y
-  __ ldr(tmp1, Address(esp, 2 * wordSize));
-  __ mov(tmp2, zr);
-  __ ldrw(tmp2, Address(esp, wordSize));
-  emit_array_address(tmp1, tmp2, y, T_DOUBLE);
+  __ ldr(rscratch1, Address(esp, 2 * wordSize));
+  __ ldrw(rscratch2, Address(esp, wordSize));
+  emit_array_address(rscratch1, rscratch2, y, T_DOUBLE);
 
   // resume sp, restore lr
   __ andr(sp, r13, -16);
   __ str(lr, Address(sp, -wordSize));
 
   // incy, push on stack
-  __ ldrw(tmp1, Address(esp, 0));
-  __ strw(tmp1, Address(sp, 2 * -wordSize));
+  __ ldrw(rscratch1, Address(esp, 0));
+  __ strw(rscratch1, Address(sp, 2 * -wordSize));
 
   __ add(sp, sp, -2 * wordSize);
 
   // call function
   address fn = CAST_FROM_FN_PTR(address, StubRoutines::dgemvDgemv());
-  __ mov(tmp1, fn);
-  __ blr(tmp1);
+  __ mov(rscratch1, fn);
+  __ blr(rscratch1);
 
   // resume lr
   __ ldr(lr, Address(sp, wordSize));
@@ -1959,7 +1952,6 @@ void AbstractInterpreter::layout_activation(Method* method,
   *interpreter_frame->interpreter_frame_cache_addr() =
     method->constants()->cache();
 }
-
 
 //-----------------------------------------------------------------------------
 // Exceptions

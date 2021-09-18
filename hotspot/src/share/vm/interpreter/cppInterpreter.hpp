@@ -54,8 +54,7 @@ class CppInterpreter: public AbstractInterpreter {
 
  public:
   // Initialization/debugging
-  static void       initialize_stub();
-  static void       initialize_code();
+  static void       initialize();
   // this only returns whether a pc is within generated code for the interpreter.
 
   // This is a moderately dubious interface for the c++ interpreter. Only
