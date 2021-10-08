@@ -8,7 +8,7 @@ User Guide && Installation Guide, see [wiki](https://gitee.com/openeuler/bisheng
 
 ## Platform
 
-Bisheng JDK currentyly supports `Linux/AArch64`.
+Bisheng JDK currentyly supports `Linux/AArch64、Linux/x86_64`.
 
 ## Build platforms
 
