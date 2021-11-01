@@ -88,9 +88,9 @@ abstract class KAEDigest extends MessageDigestSpi implements Cloneable {
     private static class DigestContextRef extends PhantomReference<KAEDigest>
         implements Comparable<DigestContextRef> {
 
-        private static final ReferenceQueue<KAEDigest> referenceQueue = new ReferenceQueue<>();
-        private static final Set<DigestContextRef> referenceList = new ConcurrentSkipListSet<>();
-        private static final boolean disableKaeDispose = Boolean.getBoolean("kae.disableKaeDispose");
+        private static ReferenceQueue<KAEDigest> referenceQueue = new ReferenceQueue<>();
+        private static Set<DigestContextRef> referenceList = new ConcurrentSkipListSet<>();
+        private static boolean disableKaeDispose = Boolean.getBoolean("kae.disableKaeDispose");
 
         private final long ctxAddress;
 

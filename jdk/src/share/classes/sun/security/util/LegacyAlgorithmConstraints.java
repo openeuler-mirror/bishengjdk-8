@@ -28,7 +28,6 @@ package sun.security.util;
 import java.security.AlgorithmParameters;
 import java.security.CryptoPrimitive;
 import java.security.Key;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -41,19 +40,12 @@ public class LegacyAlgorithmConstraints extends AbstractAlgorithmConstraints {
     public final static String PROPERTY_TLS_LEGACY_ALGS =
             "jdk.tls.legacyAlgorithms";
 
-    private final Set<String> legacyAlgorithms;
+    private final List<String> legacyAlgorithms;
 
     public LegacyAlgorithmConstraints(String propertyName,
             AlgorithmDecomposer decomposer) {
         super(decomposer);
-        List<String> legacyAlgorithmsList = getAlgorithms(propertyName);
-        legacyAlgorithms = new HashSet<String>();
-        for (String algorithm : legacyAlgorithmsList) {
-            if (algorithm == null || algorithm.isEmpty()) {
-                continue;
-            }
-            legacyAlgorithms.add(algorithm.toLowerCase());
-        }
+        legacyAlgorithms = getAlgorithms(propertyName);
     }
 
     @Override

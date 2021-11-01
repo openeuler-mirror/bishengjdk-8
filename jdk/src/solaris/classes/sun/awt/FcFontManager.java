@@ -79,9 +79,9 @@ public class FcFontManager extends SunFontManager {
                 info[0] = fontConfigFonts[i].firstFont.familyName;
                 info[1] = fontConfigFonts[i].firstFont.fontFile;
                 break;
-	    }
-	}
-	/* Absolute last ditch attempt in the face of fontconfig problems.
+            }
+        }
+        /* Absolute last ditch attempt in the face of fontconfig problems.
          * If we didn't match, pick the first, or just make something
          * up so we don't NPE.
          */

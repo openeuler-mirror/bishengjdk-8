@@ -831,7 +831,6 @@ COPYRIGHT_YEAR
 VENDOR_URL_VM_BUG
 VENDOR_URL_BUG
 VENDOR_URL
-INTERNAL_VERSION
 COMPANY_NAME
 MACOSX_BUNDLE_ID_BASE
 MACOSX_BUNDLE_NAME_BASE
@@ -1075,7 +1074,6 @@ with_vendor_url
 with_vendor_bug_url
 with_vendor_vm_bug_url
 with_copyright_year
-with_internal_version
 with_boot_jdk
 with_boot_jdk_jvmargs
 with_add_source_root
@@ -1933,9 +1931,6 @@ Optional Packages:
   --with-vendor-vm-bug-url
                           Sets the bug URL which will be displayed when the VM
                           crashes [not specified]
-  --with-internal-version
-                          Sets the internal version which will be
-                          displayed in the release file [not specified]
   --with-copyright-year   Set copyright year value for build [current year]
   --with-boot-jdk         path to Boot JDK (used to bootstrap build) [probed]
   --with-boot-jdk-jvmargs specify JVM arguments to be passed to all
@@ -3508,6 +3503,9 @@ ac_configure="$SHELL $ac_aux_dir/configure"  # Please don't use this var.
 
 
 
+# Code to run after AC_OUTPUT
+
+
 #
 # Copyright (c) 2011, 2012, Oracle and/or its affiliates. All rights reserved.
 # DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
@@ -3933,6 +3931,8 @@ pkgadd_help() {
 # printing --help. If so, we will print out additional information that can
 # only be extracted within the autoconf script, and then exit. This must be
 # called at the very beginning in configure.ac.
+
+
 
 
 
@@ -4417,7 +4417,7 @@ VS_SDK_PLATFORM_NAME_2019=
 #CUSTOM_AUTOCONF_INCLUDE
 
 # Do not change or remove the following line, it is needed for consistency checks:
-DATE_WHEN_GENERATED=1624896904
+DATE_WHEN_GENERATED=1625670527
 
 ###############################################################################
 #
@@ -15211,9 +15211,9 @@ $as_echo "in current directory" >&6; }
       # is performed.
       filtered_files=`$ECHO "$files_present" \
           | $SED -e 's/config.log//g' \
-	      -e 's/confdefs.h//g' \
-	      -e 's/fixpath.exe//g' \
-	      -e 's/ //g' \
+              -e 's/configure.log//g' \
+              -e 's/confdefs.h//g' \
+              -e 's/ //g' \
           | $TR -d '\n'`
       if test "x$filtered_files" != x; then
         { $as_echo "$as_me:${as_lineno-$LINENO}: Current directory is $CURDIR." >&5
@@ -20070,18 +20070,6 @@ fi
     COPYRIGHT_YEAR=`date +'%Y'`
   fi
 
-# Check whether --with-internal-version was given.
-if test "${with_internal_version+set}" = set; then :
-  withval=$with_internal_version;
-fi
-
-  if test "x$with_internal_version" = xyes; then
-    as_fn_error $? "--with-internal-version must have a value" "$LINENO" 5
-  elif  ! [[ $with_internal_version =~ ^[[:print:]]*$ ]] ; then
-    as_fn_error $? "--with-internal-version contains non-printing characters: $with_internal_version" "$LINENO" 5
-  else
-    INTERNAL_VERSION="$with_internal_version"
-  fi
 
   if test "x$JDK_UPDATE_VERSION" != x; then
     JDK_VERSION="${JDK_MAJOR_VERSION}.${JDK_MINOR_VERSION}.${JDK_MICRO_VERSION}_${JDK_UPDATE_VERSION}"
@@ -42849,7 +42837,11 @@ $as_echo "$supports" >&6; }
       LDFLAGS_JDKEXE="$LDFLAGS_JDKEXE -Xlinker --allow-shlib-undefined"
     fi
     if test "x$TOOLCHAIN_TYPE" = xgcc; then
-      LDFLAGS_JDKEXE="$LDFLAGS_JDKEXE -pie"
+      # Enabling pie on 32 bit builds prevents the JVM from allocating a continuous
+      # java heap.
+      if test "x$OPENJDK_TARGET_CPU_BITS" != "x32"; then
+        LDFLAGS_JDKEXE="$LDFLAGS_JDKEXE -pie"
+      fi
     fi
   fi
 
@@ -54725,14 +54717,31 @@ $as_echo "$as_me: WARNING: unrecognized options: $ac_unrecognized_opts" >&2;}
 fi
 
 
+# After AC_OUTPUT, we need to do final work
 
-# Try to move the config.log file to the output directory.
-if test -e ./config.log; then
-  $MV -f ./config.log "$OUTPUT_ROOT/config.log" 2> /dev/null
-fi
 
-# Make the compare script executable
-$CHMOD +x $OUTPUT_ROOT/compare.sh
+  # Try to move the config.log file to the output directory.
+  if test -e ./config.log; then
+    $MV -f ./config.log "$OUTPUT_ROOT/config.log" 2> /dev/null
+  fi
+
+  # Rotate our log file (configure.log)
+  if test -e "$OUTPUT_ROOT/configure.log.old"; then
+    $RM -f "$OUTPUT_ROOT/configure.log.old"
+  fi
+  if test -e "$OUTPUT_ROOT/configure.log"; then
+    $MV -f "$OUTPUT_ROOT/configure.log" "$OUTPUT_ROOT/configure.log.old" 2> /dev/null
+  fi
+
+  # Move configure.log from current directory to the build output root
+  if test -e ./configure.log; then
+    echo found it
+    $MV -f ./configure.log "$OUTPUT_ROOT/configure.log" 2> /dev/null
+  fi
+
+  # Make the compare script executable
+  $CHMOD +x $OUTPUT_ROOT/compare.sh
+
 
 # Finally output some useful information to the user
 
@@ -54807,5 +54816,21 @@ $CHMOD +x $OUTPUT_ROOT/compare.sh
     printf "WARNING: The toolchain version used is known to have issues. Please\n"
     printf "consider using a supported version unless you know what you are doing.\n"
     printf "\n"
+  fi
+
+
+  # Locate config.log.
+  if test -e "./config.log"; then
+    CONFIG_LOG_PATH="."
+  fi
+
+  if test -e "$CONFIG_LOG_PATH/config.log"; then
+    $GREP '^configure:.*: WARNING:' "$CONFIG_LOG_PATH/config.log" > /dev/null 2>&1
+    if test $? -eq 0; then
+      printf "The following warnings were produced. Repeated here for convenience:\n"
+      # We must quote sed expression (using []) to stop m4 from eating the [].
+      $GREP '^configure:.*: WARNING:' "$CONFIG_LOG_PATH/config.log" | $SED -e  's/^configure:[0-9]*: //'
+      printf "\n"
+    fi
   fi
 

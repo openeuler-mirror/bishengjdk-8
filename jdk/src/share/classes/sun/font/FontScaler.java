@@ -99,7 +99,7 @@ public abstract class FontScaler implements DisposerRecord {
             } else {
                 scalerClass = Class.forName("sun.font.T2KFontScaler");
             }
-	} catch (ClassNotFoundException e) {
+        } catch (ClassNotFoundException e) {
                 scalerClass = NullFontScaler.class;
         }
 

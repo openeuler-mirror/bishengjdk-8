@@ -63,11 +63,6 @@
 #include "sun_nio_ch_FileDispatcherImpl.h"
 #include "java_lang_Long.h"
 
-#if defined(aarch64)
-  __asm__(".symver fcntl64,fcntl@GLIBC_2.17");
-#elif defined(amd64)
-  __asm__(".symver fcntl64,fcntl@GLIBC_2.2.5");
-#endif
 static int preCloseFD = -1;     /* File descriptor to which we dup other fd's
                                    before closing them for real */
 

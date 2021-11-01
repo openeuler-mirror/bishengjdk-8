@@ -226,16 +226,10 @@ VtableStub* VtableStubs::create_itable_stub(int itable_index) {
 
 
 int VtableStub::pd_code_size_limit(bool is_vtable_stub) {
-  int size = DebugVtables ? 216 : 0;
-  if (CountCompiledCalls)
-    size += 6 * 4;
-  // FIXME: vtable stubs only need 36 bytes
-  if (is_vtable_stub) {
-    size += 52;
-  } else {
-    // itable code size limit.
-    size += 192;
+  if (TraceJumps || DebugVtables || CountCompiledCalls || VerifyOops) {
+    return 1000;
   }
+  int size = is_vtable_stub ? 60 : 192; // Plain + safety
   return size;
 
   // In order to tune these parameters, run the JVM with VM options

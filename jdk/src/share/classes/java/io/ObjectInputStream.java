@@ -768,7 +768,7 @@ public class ObjectInputStream
      * Cache the class meta during serialization.
      * Only used in FastSerilizer.
      */
-    private static ConcurrentHashMap<String,Class<?>> nameToClass = new ConcurrentHashMap<>();
+    protected static ConcurrentHashMap<String,Class<?>> nameToClass = new ConcurrentHashMap<>();
 
     /**
      * Load the local class equivalent of the specified stream class
@@ -1013,7 +1013,7 @@ public class ObjectInputStream
 
                 if (s0 != STREAM_MAGIC) {
                     throw new StreamCorruptedException(
-                            String.format("invalid stream header: %04X%04X", s0, s1));
+                            String.format("invalid stream header: %04X%04X, and FastSerializer is activated", s0, s1));
                 }
 
                 if (!fastSerializerEscapeMode) {
