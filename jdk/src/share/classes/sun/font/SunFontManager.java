@@ -444,6 +444,7 @@ public abstract class SunFontManager implements FontSupport, FontManagerForSGE {
                             defaultFontName = fontInfo[0];
                             defaultFontFileName = fontInfo[1];
                         }
+
                         String extraFontPath = fontConfig.getExtraFontPath();
 
                         /* In prior releases the debugging font path replaced

@@ -608,7 +608,7 @@ void LIRGenerator::do_ArithmeticOp_Int(ArithmeticOp* x) {
         right_arg->dont_load_item();
       } else {
         // Cannot use constant op.
-	right_arg->load_item();
+        right_arg->load_item();
       }
     } else {
       right.load_item();

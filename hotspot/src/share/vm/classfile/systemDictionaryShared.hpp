@@ -72,13 +72,13 @@ public:
   static bool check_verification_dependencies(Klass* k, Handle class_loader,
                                               Handle protection_domain,
                                               char** message_buffer, TRAPS) {
-    if (EnableSplitVerifierForAppCDS) {	  	
+    if (EnableSplitVerifierForAppCDS) {
       ClassVerifier split_verifier(k, THREAD);
       split_verifier.verify_class(THREAD);
       if (HAS_PENDING_EXCEPTION) {
         return false; // use the existing exception
       }
-    }   
+    }
     return true;
   }
 };
