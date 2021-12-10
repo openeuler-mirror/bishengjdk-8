@@ -41,6 +41,7 @@
 
 #include "jvm.h"
 #include "TimeZone_md.h"
+#include "path_util.h"
 
 static char *isFileIdentical(char* buf, size_t size, char *pathname);
 
@@ -76,6 +77,33 @@ static const char *ETC_ENVIRONMENT_FILE = "/etc/environment";
 #endif
 
 #if defined(__linux__) || defined(MACOSX) || defined(__solaris__)
+
+/*
+ * remove repeated path separators ('/') in the given 'path'.
+ */
+static void
+removeDuplicateSlashes(char *path)
+{
+    char *left = path;
+    char *right = path;
+    char *end = path + strlen(path);
+
+    for (; right < end; right++) {
+        // Skip sequence of multiple path-separators.
+        while (*right == '/' && *(right + 1) == '/') {
+            right++;
+        }
+
+        while (*right != '\0' && !(*right == '/' && *(right + 1) == '/')) {
+            *left++ = *right++;
+        }
+
+        if (*right == '\0') {
+            *left = '\0';
+            break;
+        }
+    }
+}
 
 /*
  * Returns a pointer to the zone ID portion of the given zoneinfo file
@@ -319,36 +347,9 @@ getPlatformTimeZoneID()
             return NULL;
         }
         linkbuf[len] = '\0';
-
-        /* linkbuf may be a relative symlink or has more than one characters, like '.' and '/' ,
-         * which will cause the function call getZoneName return to an abnormal timeZone name.
-         * For example, linkbuf is "../usr/share/zoneinfo//Asia/Shanghai", then the call of
-         * getZoneName(linkbuf) will get "/Asia/Shanghai", not "Asia/Shanghai".
-         * So we covert it to an absolute path by adding the file's (which is define by macro
-         * DEFAULT_ZONEINFO_FILE) dirname and then call glibc's realpath API to canonicalize
-         * the path.
-         */
-        char abslinkbuf[2 * (PATH_MAX + 1)];
-        if (linkbuf[0] != '/') {
-            if (sprintf(abslinkbuf, "%s/%s", DEFAULT_ZONEINFO_FILE_DIRNAME, linkbuf) < 0) {
-                jio_fprintf(stderr, (const char *) "failed to generate absolute path\n");
-                return NULL;
-            }
-        } else {
-            strncpy(abslinkbuf, linkbuf, len + 1);
-        }
-
-        /* canonicalize the path */
-        char resolvedpath[PATH_MAX + 1];
-        resolvedpath[PATH_MAX] = '\0';
-        char *path = realpath(abslinkbuf, resolvedpath);
-        if (path == NULL) {
-            jio_fprintf(stderr, (const char *) "failed to get real path, symlink is %s\n",
-                        abslinkbuf);
-            return NULL;
-        }
-
-        tz = getZoneName(resolvedpath);
+        removeDuplicateSlashes(linkbuf);
+        collapse(linkbuf);
+        tz = getZoneName(linkbuf);
         if (tz != NULL) {
             tz = strdup(tz);
             return tz;
