@@ -89,7 +89,6 @@ G1CollectorPolicy::G1CollectorPolicy() :
   _concurrent_mark_cleanup_times_ms(new TruncatedSeq(NumPrevPausesForHeuristics)),
 
   _alloc_rate_ms_seq(new TruncatedSeq(TruncatedSeqLength)),
-  _heap_size_seq(new TruncatedSeq(TruncatedSeqLength)),
   _os_load_seq(new TruncatedSeq(TruncatedSeqLength)),
   _gc_count_seq(new TruncatedSeq(TruncatedSeqLength)),
   _prev_collection_pause_end_ms(0.0),
@@ -112,11 +111,9 @@ G1CollectorPolicy::G1CollectorPolicy() :
   _pause_time_target_ms((double) MaxGCPauseMillis),
 
   _gcs_are_young(true),
-  _periodic_gc(false),
   _last_uncommit_attempt_s(0.0),
   _os_load(-1.0),
   _uncommit_start_time(0),
-  _gc_count_cancel_extract(false),
   _gc_count(0),
   _gc_count_minute(0),
 
@@ -160,7 +157,6 @@ G1CollectorPolicy::G1CollectorPolicy() :
   _inc_cset_predicted_elapsed_time_ms(0.0),
   _inc_cset_predicted_elapsed_time_ms_diffs(0.0),
   _collection_pause_end_millis(os::javaTimeNanos() / NANOSECS_PER_MILLISEC),
-  _extract_uncommit_list(0),
 #ifdef _MSC_VER // the use of 'this' below gets a warning, make it go away
 #pragma warning( disable:4355 ) // 'this' : used in base member initializer list
 #endif // _MSC_VER
@@ -1211,8 +1207,6 @@ void G1CollectorPolicy::record_heap_size_info_at_start(bool full) {
   _heap_capacity_bytes_before_gc = _g1->capacity();
   _heap_used_bytes_before_gc = _g1->used();
   _cur_collection_pause_used_regions_at_start = _g1->num_used_regions();
-  _heap_size_seq->add(_cur_collection_pause_used_regions_at_start);
-
   _eden_capacity_bytes_before_gc =
          (_young_list_target_length * HeapRegion::GrainBytes) - _survivor_used_bytes_before_gc;
 
@@ -1255,13 +1249,6 @@ void G1CollectorPolicy::print_detailed_heap_transition(bool full) {
     EXT_SIZE_PARAMS(heap_used_bytes_after_gc),
     EXT_SIZE_PARAMS(heap_capacity_bytes_after_gc));
 
-  if (_extract_uncommit_list) {
-    gclog_or_tty->print(" [Uncommit list " UINT32_FORMAT ", remaining " UINT32_FORMAT ", free list " UINT32_FORMAT "]",
-                        _extract_uncommit_list,
-                        _g1->_hrm.length(),
-                        _g1->_hrm.num_free_regions());
-    _extract_uncommit_list = 0;
-  }
   if (full) {
     MetaspaceAux::print_metaspace_change(_metaspace_used_bytes_before_gc);
   }
@@ -2173,53 +2160,6 @@ void G1CollectorPolicy::finalize_cset(double target_pause_time_ms, EvacuationInf
   double non_young_end_time_sec = os::elapsedTime();
   phase_times()->record_non_young_cset_choice_time_ms((non_young_end_time_sec - non_young_start_time_sec) * 1000.0);
   evacuation_info.set_collectionset_regions(cset_region_length());
-}
-
-void G1CollectorPolicy::record_gc_start(double curr_sec) {
-  if (_uncommit_start_time == 0) {
-    _uncommit_start_time = curr_sec + G1UncommitDelay;
-  }
-  long curr = curr_sec / 60;
-  if (curr > _gc_count_minute) {
-    int diff = curr - _gc_count_minute;
-    _gc_count_seq->add(_gc_count);
-    for (int i = 1; i < diff; i++) {
-      _gc_count_seq->add(0.0);
-    }
-    _gc_count_minute = curr;
-    double gc_count_expected = get_new_prediction(_gc_count_seq);
-    // Considering the test result, 15000 is an appropriate value for G1PeriodicGCInterval.
-    _gc_count_cancel_extract = gc_count_expected > MIN2(4.0, 60000.0 / G1PeriodicGCInterval);
-    _gc_count = 0;
-  }
-  _gc_count++;
-}
-
-bool G1CollectorPolicy::should_trigger_periodic_gc() {
-  if (G1PeriodicGCLoadThreshold && _os_load > G1PeriodicGCLoadThreshold) {
-    _periodic_gc = false;
-  } else if (_periodic_gc) {
-    _periodic_gc = false;
-    return true;
-  }
-  return false;
-}
-
-bool G1CollectorPolicy::can_extract_uncommit_list() {
-  double now = os::elapsedTime();
-  if (G1Uncommit && now > _uncommit_start_time) {
-    if (G1PeriodicGCLoadThreshold && _os_load > G1PeriodicGCLoadThreshold) {
-      return false;
-    }
-    G1CollectedHeap* g1h = G1CollectedHeap::heap();
-    if (!_gc_count_cancel_extract || now >= (g1h->millis_since_last_gc() + G1PeriodicGCInterval) / 1000.0) {
-      if (now - _last_uncommit_attempt_s >= G1PeriodicGCInterval / 1000.0) {
-        _last_uncommit_attempt_s = now;
-        return true;
-      }
-    }
-  }
-  return false;
 }
 
 void TraceGen0TimeData::record_start_collection(double time_to_stop_the_world_ms) {

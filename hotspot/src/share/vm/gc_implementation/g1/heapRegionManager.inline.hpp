@@ -40,8 +40,8 @@ inline HeapRegion* HeapRegionManager::addr_to_region(HeapWord* addr) const {
 }
 
 inline HeapRegion* HeapRegionManager::at(uint index) const {
-  assert(is_available(index), "pre-condition");
   HeapRegion* hr = _regions.get_by_index(index);
+  assert(hr->in_uncommit_list() || is_available(index), "pre-condition");
   assert(hr != NULL, "sanity");
   assert(hr->hrm_index() == index, "sanity");
   return hr;

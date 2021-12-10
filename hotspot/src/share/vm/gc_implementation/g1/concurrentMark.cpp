@@ -1354,7 +1354,7 @@ void ConcurrentMark::checkpointRootsFinal(bool clear_all_soft_refs) {
     satb_mq_set.set_active_all_threads(false, /* new active value */
                                        true /* expected_active */);
 
-    g1h->extract_uncommit_list();
+    g1h->shrink_heap_at_remark();
     if (VerifyDuringGC) {
       HandleMark hm;  // handle scope
       Universe::heap()->prepare_for_verify();

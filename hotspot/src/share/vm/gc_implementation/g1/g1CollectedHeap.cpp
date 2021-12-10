@@ -1565,6 +1565,19 @@ void G1CollectedHeap::do_full_collection(bool clear_all_soft_refs) {
 void
 G1CollectedHeap::
 resize_if_necessary_after_full_collection(size_t word_size) {
+  bool should_expand;
+  size_t resize_amount = full_collection_resize_amount(should_expand);
+
+  if (resize_amount == 0) {
+    return;
+  } else if (should_expand) {
+    expand(resize_amount);
+  } else {
+    shrink(resize_amount);
+  }
+}
+
+size_t G1CollectedHeap::full_collection_resize_amount(bool& expand) {
   // Include the current allocation, if any, and bytes that will be
   // pre-allocated to support collections, as "used".
   const size_t capacity_after_gc = capacity();
@@ -1630,8 +1643,8 @@ resize_if_necessary_after_full_collection(size_t word_size) {
                   ergo_format_byte_perc("min desired capacity"),
                   capacity_after_gc, used_after_gc,
                   minimum_desired_capacity, (double) MinHeapFreeRatio);
-    expand(expand_bytes);
-
+    expand = true;
+    return expand_bytes;
     // No expansion, now see if we want to shrink
   } else if (capacity_after_gc > maximum_desired_capacity) {
     // Capacity too large, compute shrinking size
@@ -1645,10 +1658,13 @@ resize_if_necessary_after_full_collection(size_t word_size) {
                   ergo_format_byte_perc("max desired capacity"),
                   capacity_after_gc, used_after_gc,
                   maximum_desired_capacity, (double) MaxHeapFreeRatio);
-    shrink(shrink_bytes);
+    expand = false;
+    return shrink_bytes;
   }
-}
 
+  expand = true;
+  return 0;
+}
 
 HeapWord*
 G1CollectedHeap::satisfy_failed_allocation(size_t word_size,
@@ -2185,12 +2201,6 @@ void G1CollectedHeap::stop() {
   }
 }
 
-void G1CollectedHeap::check_trigger_periodic_gc() {
-  if (g1_policy()->should_trigger_periodic_gc()) {
-    collect(GCCause::_g1_periodic_collection);
-  }
-}
-
 void G1CollectedHeap::init_periodic_gc_thread() {
   if (_uncommit_thread == NULL && G1Uncommit) {
     PeriodicGC::start();
@@ -2198,10 +2208,22 @@ void G1CollectedHeap::init_periodic_gc_thread() {
   }
 }
 
-void G1CollectedHeap::extract_uncommit_list() {
-  if (g1_policy()->can_extract_uncommit_list()) {
-    uint count = _hrm.extract_uncommit_list();
-    g1_policy()->record_extract_uncommit_list(count);
+void G1CollectedHeap::shrink_heap_at_remark() {
+  if (!G1Uncommit) {
+    return;
+  }
+
+  bool should_expand;
+  size_t resize_amount = full_collection_resize_amount(should_expand);
+  uint length = _hrm.length();
+
+  if (resize_amount > 0 && !should_expand) {
+    uint num_candidate_to_remove = (uint)(resize_amount / HeapRegion::GrainBytes);
+    uint count = _hrm.extract_uncommit_list(num_candidate_to_remove);
+
+    gclog_or_tty->print(" [G1Uncommit list " UINT32_FORMAT ", remaining " UINT32_FORMAT
+                        ", free list " UINT32_FORMAT "]",
+                        count, length - count, _hrm.num_free_regions());
   }
 }
 
@@ -4037,7 +4059,6 @@ G1CollectedHeap::do_collection_pause_at_safepoint(double target_pause_time_ms) {
 
 
     double pause_start_sec = os::elapsedTime();
-    g1_policy()->record_gc_start(pause_start_sec);
     g1_policy()->phase_times()->note_gc_start(active_workers, mark_in_progress());
     log_gc_header();
 

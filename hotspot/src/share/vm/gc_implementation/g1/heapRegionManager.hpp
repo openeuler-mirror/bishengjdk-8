@@ -175,7 +175,7 @@ public:
                   G1RegionToSpaceMapper* cardtable,
                   G1RegionToSpaceMapper* card_counts);
 
-  uint extract_uncommit_list();
+  uint extract_uncommit_list(uint num_candidate_to_remove);
   void free_uncommit_list_memory();
 
   // Return the "dummy" region used for G1AllocRegion. This is currently a hardwired

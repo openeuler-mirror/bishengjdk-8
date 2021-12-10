@@ -626,6 +626,8 @@ protected:
   // and will be considered part of the used portion of the heap.
   void resize_if_necessary_after_full_collection(size_t word_size);
 
+  size_t full_collection_resize_amount(bool& expand);
+
   // Callback from VM_G1CollectForAllocation operation.
   // This function does everything necessary/possible to satisfy a
   // failed allocation request (including collection, expansion, etc.)
@@ -1026,9 +1028,8 @@ public:
 
   void set_refine_cte_cl_concurrency(bool concurrent);
 
-  void check_trigger_periodic_gc();
   void init_periodic_gc_thread();
-  void extract_uncommit_list();
+  void shrink_heap_at_remark();
 
   RefToScanQueue *task_queue(int i) const;
 

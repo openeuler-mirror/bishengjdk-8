@@ -40,6 +40,8 @@ public:
   static void         start();
   static void         stop();
   static bool         has_error(TRAPS, const char* error);
+  static bool         check_for_periodic_gc();
+  static bool         should_start_periodic_gc();
 };
 
 class G1UncommitThread: public ConcurrentGCThread {

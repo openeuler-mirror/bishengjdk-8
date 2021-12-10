@@ -26,6 +26,9 @@
 
 #include "gc_implementation/g1/g1UncommitThread.hpp"
 #include "gc_implementation/g1/g1_globals.hpp"
+#include "gc_implementation/g1/g1Log.hpp"
+#include "gc_implementation/g1/g1CollectorPolicy.hpp"
+#include "gc_implementation/g1/concurrentMarkThread.hpp"
 #include "runtime/javaCalls.hpp"
 #include "runtime/os.hpp"
 
@@ -104,9 +107,12 @@ void PeriodicGC::start() {
 }
 
 void PeriodicGC::timer_thread_entry(JavaThread* thread, TRAPS) {
+  G1CollectedHeap* g1h = G1CollectedHeap::heap();
   while(!_should_terminate) {
     assert(!SafepointSynchronize::is_at_safepoint(), "PeriodicGC timer thread is a JavaThread");
-    G1CollectedHeap::heap()->check_trigger_periodic_gc();
+    if (check_for_periodic_gc()) {
+      g1h->collect(GCCause::_g1_periodic_collection);
+    }
 
     MutexLockerEx x(_monitor);
     if (_should_terminate) {
@@ -114,6 +120,78 @@ void PeriodicGC::timer_thread_entry(JavaThread* thread, TRAPS) {
     }
     _monitor->wait(false /* no_safepoint_check */, 200);
   }
+}
+
+bool PeriodicGC::check_for_periodic_gc() {
+  if (!G1Uncommit) {
+    return false;
+  }
+
+  return should_start_periodic_gc();
+}
+
+bool PeriodicGC::should_start_periodic_gc() {
+  G1CollectedHeap* g1h = G1CollectedHeap::heap();
+  G1CollectorPolicy* g1p = g1h->g1_policy();
+  // If we are currently in a concurrent mark we are going to uncommit memory soon.
+  if (g1h->concurrent_mark()->cmThread()->during_cycle()) {
+    if (G1UncommitLog && G1Log::finest()) {
+      gclog_or_tty->date_stamp(PrintGCDateStamps);
+      gclog_or_tty->stamp(PrintGCTimeStamps);
+      gclog_or_tty->print_cr("[G1Uncommit] Concurrent cycle in progress. Skipping.");
+    }
+    return false;
+  }
+
+  // Check if enough time has passed since the last GC.
+  uintx time_since_last_gc = (uintx)Universe::heap()->millis_since_last_gc();
+  if (time_since_last_gc < G1PeriodicGCInterval) {
+    if (G1UncommitLog && G1Log::finest()) {
+      gclog_or_tty->date_stamp(PrintGCDateStamps);
+      gclog_or_tty->stamp(PrintGCTimeStamps);
+      gclog_or_tty->print_cr("[G1Uncommit] Last GC occurred " UINTX_FORMAT "ms before which is below threshold"
+                              UINTX_FORMAT "ms. Skipping.", time_since_last_gc, G1PeriodicGCInterval);
+    }
+    return false;
+  }
+
+  // Collect load need G1PeriodicGCInterval time after previous GC's end
+  assert(G1PeriodicGCInterval > 0, "just checking");
+  double recent_load = -1.0;
+
+  if (G1PeriodicGCLoadThreshold) {
+    // Sample process load and store it
+    if (G1PeriodicGCProcessLoad) {
+      recent_load = os::get_process_load() * 100;
+    }
+    if (recent_load < 0) {
+      // Fallback to os load
+      G1PeriodicGCProcessLoad = false;
+      if (os::loadavg(&recent_load, 1) != -1) {
+        static int cpu_count = os::active_processor_count();
+        assert(cpu_count > 0, "just checking");
+        recent_load = recent_load * 100 / cpu_count;
+      }
+    }
+    if (recent_load >= 0) {
+      g1p->add_os_load(recent_load);
+    }
+  }
+
+  if (G1UncommitLog) {
+    gclog_or_tty->date_stamp(PrintGCDateStamps);
+    gclog_or_tty->stamp(PrintGCTimeStamps);
+    recent_load < 0 ? gclog_or_tty->print_cr("[G1Uncommit] Checking for periodic GC.")
+                    : gclog_or_tty->print_cr("[G1Uncommit] Checking for periodic GC. Current load %1.2f. "
+                                             "total regions: " UINT32_FORMAT" free regions: " UINT32_FORMAT,
+                                            recent_load, g1h->num_regions(), g1h->num_free_regions());
+  }
+
+  if (g1p->os_load() < G1PeriodicGCLoadThreshold || !G1PeriodicGCLoadThreshold) {
+    return true;
+  }
+  gclog_or_tty->print_cr("[G1Uncommit] Periodic GC request denied, skipping!");
+  return false;
 }
 
 void PeriodicGC::stop() {
@@ -139,7 +217,7 @@ G1UncommitThread::G1UncommitThread() :
     }
   }
   if (G1UncommitLog) {
-    gclog_or_tty->print_cr("Periodic GC Thread start");
+    gclog_or_tty->print_cr("[G1Uncommit] Periodic GC Thread start");
   }
 }
 
