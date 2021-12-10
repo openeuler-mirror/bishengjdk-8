@@ -93,6 +93,7 @@ class klassVtable;
 class ParCompactionManager;
 class KlassSizeStats;
 class fieldDescriptor;
+class MarkSweep;
 
 class Klass : public Metadata {
   friend class VMStructs;
@@ -538,7 +539,7 @@ protected:
   virtual const char* signature_name() const;
 
   // garbage collection support
-  virtual void oop_follow_contents(oop obj) = 0;
+  virtual void oop_follow_contents(oop obj, MarkSweep* mark) = 0;
   virtual int  oop_adjust_pointers(oop obj) = 0;
 
   // Parallel Scavenge and Parallel Old

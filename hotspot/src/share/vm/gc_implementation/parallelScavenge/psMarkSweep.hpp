@@ -34,34 +34,36 @@ class PSYoungGen;
 class PSOldGen;
 
 class PSMarkSweep : public MarkSweep {
+  friend void marksweep_init();
  private:
   static elapsedTimer        _accumulated_time;
   static jlong               _time_of_last_gc;   // ms
   static CollectorCounters*  _counters;
+  static MarkSweep*        _the_ps_mark;
 
   // Closure accessors
-  static OopClosure* mark_and_push_closure()   { return &MarkSweep::mark_and_push_closure; }
-  static VoidClosure* follow_stack_closure()   { return (VoidClosure*)&MarkSweep::follow_stack_closure; }
-  static CLDClosure* follow_cld_closure()      { return &MarkSweep::follow_cld_closure; }
-  static OopClosure* adjust_pointer_closure()  { return (OopClosure*)&MarkSweep::adjust_pointer_closure; }
-  static CLDClosure* adjust_cld_closure()      { return &MarkSweep::adjust_cld_closure; }
-  static BoolObjectClosure* is_alive_closure() { return (BoolObjectClosure*)&MarkSweep::is_alive; }
+  OopClosure* mark_and_push_closure()   { return &(MarkSweep::mark_and_push_closure); }
+  VoidClosure* follow_stack_closure()   { return (VoidClosure*)&(MarkSweep::follow_stack_closure); }
+  CLDClosure* follow_cld_closure()      { return &(MarkSweep::follow_cld_closure); }
+  OopClosure* adjust_pointer_closure()  { return (OopClosure*)&(MarkSweep::adjust_pointer_closure); }
+  CLDClosure* adjust_cld_closure()      { return &(MarkSweep::adjust_cld_closure); }
+  BoolObjectClosure* is_alive_closure() { return (BoolObjectClosure*)&(MarkSweep::is_alive); }
 
  debug_only(public:)  // Used for PSParallelCompact debugging
   // Mark live objects
-  static void mark_sweep_phase1(bool clear_all_softrefs);
+  void mark_sweep_phase1(bool clear_all_softrefs);
   // Calculate new addresses
-  static void mark_sweep_phase2();
+  void mark_sweep_phase2();
  debug_only(private:) // End used for PSParallelCompact debugging
   // Update pointers
-  static void mark_sweep_phase3();
+  void mark_sweep_phase3();
   // Move objects to new positions
-  static void mark_sweep_phase4();
+  void mark_sweep_phase4();
 
  debug_only(public:)  // Used for PSParallelCompact debugging
   // Temporary data structures for traversal and storing/restoring marks
-  static void allocate_stacks();
-  static void deallocate_stacks();
+  void allocate_stacks();
+  void deallocate_stacks();
   static void set_ref_processor(ReferenceProcessor* rp) {  // delete this method
     _ref_processor = rp;
   }
@@ -75,10 +77,13 @@ class PSMarkSweep : public MarkSweep {
 
   // Reset time since last full gc
   static void reset_millis_since_last_gc();
+  static void ps_marksweep_init();
 
  public:
-  static void invoke(bool clear_all_softrefs);
-  static bool invoke_no_policy(bool clear_all_softrefs);
+  static inline PSMarkSweep* the_ps_mark() { return (PSMarkSweep*)_the_ps_mark; }
+
+  void invoke(bool clear_all_softrefs);
+  bool invoke_no_policy(bool clear_all_softrefs);
 
   static void initialize();
 

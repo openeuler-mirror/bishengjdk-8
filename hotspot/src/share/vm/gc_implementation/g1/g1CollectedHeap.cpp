@@ -1371,7 +1371,7 @@ bool G1CollectedHeap::do_collection(bool explicit_gc,
       // how reference processing currently works in G1.
 
       // Temporarily make discovery by the STW ref processor single threaded (non-MT).
-      ReferenceProcessorMTDiscoveryMutator stw_rp_disc_ser(ref_processor_stw(), false);
+      ReferenceProcessorMTDiscoveryMutator stw_rp_disc_ser(ref_processor_stw(), G1ParallelFullGC);
 
       // Temporarily clear the STW ref processor's _is_alive_non_header field.
       ReferenceProcessorIsAliveMutator stw_rp_is_alive_null(ref_processor_stw(), NULL);

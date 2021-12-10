@@ -49,43 +49,55 @@ class STWGCTimer;
 // declared at end
 class PreservedMark;
 
-class MarkSweep : AllStatic {
+class MarkSweep : public ResourceObj {
   //
   // Inline closure decls
   //
   class FollowRootClosure: public OopsInGenClosure {
+    MarkSweep* _mark;
    public:
+    FollowRootClosure(MarkSweep* mark) : _mark(mark) { }
     virtual void do_oop(oop* p);
     virtual void do_oop(narrowOop* p);
   };
 
   class MarkAndPushClosure: public OopClosure {
+    MarkSweep* _mark;
    public:
+    MarkAndPushClosure(MarkSweep* mark) : _mark(mark) { }
     virtual void do_oop(oop* p);
     virtual void do_oop(narrowOop* p);
   };
 
   class FollowStackClosure: public VoidClosure {
+    MarkSweep* _mark;
    public:
+    FollowStackClosure(MarkSweep* mark) : _mark(mark) { }
     virtual void do_void();
   };
 
   class AdjustPointerClosure: public OopsInGenClosure {
+    MarkSweep* _mark;
    public:
+    AdjustPointerClosure(MarkSweep* mark) : _mark(mark) { }
     virtual void do_oop(oop* p);
     virtual void do_oop(narrowOop* p);
   };
 
   // Used for java/lang/ref handling
   class IsAliveClosure: public BoolObjectClosure {
+    MarkSweep* _mark;
    public:
+    IsAliveClosure(MarkSweep* mark) : _mark(mark) { }
     virtual bool do_object_b(oop p);
   };
 
   class KeepAliveClosure: public OopClosure {
+    MarkSweep* _mark;
    protected:
     template <class T> void do_oop_work(T* p);
    public:
+    KeepAliveClosure(MarkSweep* mark) : _mark(mark) { }
     virtual void do_oop(oop* p);
     virtual void do_oop(narrowOop* p);
   };
@@ -106,37 +118,49 @@ class MarkSweep : AllStatic {
   static uint _total_invocations;
 
   // Traversal stacks used during phase1
-  static Stack<oop, mtGC>                      _marking_stack;
-  static Stack<ObjArrayTask, mtGC>             _objarray_stack;
+  Stack<oop, mtGC>                      _marking_stack;
+  Stack<ObjArrayTask, mtGC>             _objarray_stack;
 
   // Space for storing/restoring mark word
-  static Stack<markOop, mtGC>                  _preserved_mark_stack;
-  static Stack<oop, mtGC>                      _preserved_oop_stack;
-  static size_t                          _preserved_count;
-  static size_t                          _preserved_count_max;
-  static PreservedMark*                  _preserved_marks;
+  Stack<markOop, mtGC>                  _preserved_mark_stack;
+  Stack<oop, mtGC>                      _preserved_oop_stack;
+  size_t                          _preserved_count;
+  size_t                          _preserved_count_max;
+  PreservedMark*                  _preserved_marks;
 
+  uint _worker_id;
   // Reference processing (used in ...follow_contents)
   static ReferenceProcessor*             _ref_processor;
 
   static STWGCTimer*                     _gc_timer;
   static SerialOldTracer*                _gc_tracer;
 
-  // Non public closures
-  static KeepAliveClosure keep_alive;
-
   // Debugging
   static void trace(const char* msg) PRODUCT_RETURN;
+  bool par_mark(oop obj);
 
  public:
+  static MarkSweep* the_mark();
+  KeepAliveClosure keep_alive;
   // Public closures
-  static IsAliveClosure       is_alive;
-  static FollowRootClosure    follow_root_closure;
-  static MarkAndPushClosure   mark_and_push_closure;
-  static FollowStackClosure   follow_stack_closure;
-  static CLDToOopClosure      follow_cld_closure;
-  static AdjustPointerClosure adjust_pointer_closure;
-  static CLDToOopClosure      adjust_cld_closure;
+  IsAliveClosure       is_alive;
+  FollowRootClosure    follow_root_closure;
+  MarkAndPushClosure   mark_and_push_closure;
+  FollowStackClosure   follow_stack_closure;
+  CLDToOopClosure      follow_cld_closure;
+  AdjustPointerClosure adjust_pointer_closure;
+  CLDToOopClosure      adjust_cld_closure;
+
+  MarkSweep() :
+    is_alive(this),
+    follow_root_closure(this),
+    mark_and_push_closure(this),
+    follow_stack_closure(this),
+    follow_cld_closure(&mark_and_push_closure),
+    adjust_pointer_closure(this),
+    adjust_cld_closure(&adjust_pointer_closure),
+    keep_alive(this)
+    { }
 
   // Accessors
   static uint total_invocations() { return _total_invocations; }
@@ -147,26 +171,23 @@ class MarkSweep : AllStatic {
   static STWGCTimer* gc_timer() { return _gc_timer; }
   static SerialOldTracer* gc_tracer() { return _gc_tracer; }
 
+  void set_worker_id(uint worker_id) { _worker_id = worker_id; }
   // Call backs for marking
-  static void mark_object(oop obj);
+  bool mark_object(oop obj);
   // Mark pointer and follow contents.  Empty marking stack afterwards.
-  template <class T> static inline void follow_root(T* p);
+  template <class T> inline void follow_root(T* p);
 
   // Check mark and maybe push on marking stack
-  template <class T> static void mark_and_push(T* p);
+  template <class T> void mark_and_push(T* p);
 
-  static inline void push_objarray(oop obj, size_t index);
-
-  static void follow_stack();   // Empty marking stack.
-
-  static void follow_klass(Klass* klass);
-
-  static void follow_class_loader(ClassLoaderData* cld);
-
-  static void preserve_mark(oop p, markOop mark);
-                                // Save the mark word so it can be restored later
-  static void adjust_marks();   // Adjust the pointers in the preserved marks table
-  static void restore_marks();  // Restore the marks that we saved in preserve_mark
+  inline void push_objarray(oop obj, size_t index);
+  void follow_stack();   // Empty marking st
+  void follow_klass(Klass* klass);
+  void follow_class_loader(ClassLoaderData* cld);
+  void preserve_mark(oop p, markOop mark);
+                         // Save the mark word so it can be restored later
+  void adjust_marks();   // Adjust the pointers in the preserved marks table
+  void restore_marks();  // Restore the marks that we saved in preserve_mark
 
   template <class T> static inline void adjust_pointer(T* p);
 };

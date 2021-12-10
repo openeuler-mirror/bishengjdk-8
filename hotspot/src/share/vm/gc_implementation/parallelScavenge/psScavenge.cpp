@@ -248,7 +248,7 @@ bool PSScavenge::invoke() {
     if (UseParallelOldGC) {
       full_gc_done = PSParallelCompact::invoke_no_policy(clear_all_softrefs);
     } else {
-      full_gc_done = PSMarkSweep::invoke_no_policy(clear_all_softrefs);
+      full_gc_done = PSMarkSweep::the_ps_mark()->invoke_no_policy(clear_all_softrefs);
     }
   }
 

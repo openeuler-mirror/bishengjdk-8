@@ -56,6 +56,8 @@ class CMSIsAliveClosure;
 class PSPromotionManager;
 class ParCompactionManager;
 
+class MarkSweep;
+
 class oopDesc {
   friend class VMStructs;
  private:
@@ -298,7 +300,7 @@ class oopDesc {
   bool is_gc_marked() const;
   // Apply "MarkSweep::mark_and_push" to (the address of) every non-NULL
   // reference field in "this".
-  void follow_contents(void);
+  void follow_contents(MarkSweep* mark);
 
 #if INCLUDE_ALL_GCS
   // Parallel Scavenge

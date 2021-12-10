@@ -2280,12 +2280,12 @@ template <class T> void assert_nothing(T *p) {}
   }                                                                      \
 }
 
-void InstanceKlass::oop_follow_contents(oop obj) {
+void InstanceKlass::oop_follow_contents(oop obj, MarkSweep* mark) {
   assert(obj != NULL, "can't follow the content of NULL object");
-  MarkSweep::follow_klass(obj->klass());
+  mark->follow_klass(obj->klass());
   InstanceKlass_OOP_MAP_ITERATE( \
     obj, \
-    MarkSweep::mark_and_push(p), \
+    mark->mark_and_push(p), \
     assert_is_in_closed_subset)
 }
 

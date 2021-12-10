@@ -104,9 +104,9 @@ class ObjArrayKlass : public ArrayKlass {
   void initialize(TRAPS);
 
   // Garbage collection
-  void oop_follow_contents(oop obj);
-  inline void oop_follow_contents(oop obj, int index);
-  template <class T> inline void objarray_follow_contents(oop obj, int index);
+  void oop_follow_contents(oop obj, MarkSweep* mark);
+  inline void oop_follow_contents(oop obj, int index, MarkSweep* mark);
+  template <class T> inline void objarray_follow_contents(oop obj, int index, MarkSweep* mark);
 
   int  oop_adjust_pointers(oop obj);
 

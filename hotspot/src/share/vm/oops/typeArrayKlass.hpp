@@ -77,7 +77,7 @@ class TypeArrayKlass : public ArrayKlass {
   int oop_oop_iterate_m(oop obj, ExtendedOopClosure* blk, MemRegion mr);
 
   // Garbage collection
-  void oop_follow_contents(oop obj);
+  void oop_follow_contents(oop obj, MarkSweep* mark);
   int  oop_adjust_pointers(oop obj);
 
   // Parallel Scavenge and Parallel Old

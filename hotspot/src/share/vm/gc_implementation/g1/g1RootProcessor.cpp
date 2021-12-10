@@ -213,10 +213,11 @@ void G1RootProcessor::evacuate_roots(OopClosure* scan_non_heap_roots,
 
 void G1RootProcessor::process_strong_roots(OopClosure* oops,
                                            CLDClosure* clds,
-                                           CodeBlobClosure* blobs) {
+                                           CodeBlobClosure* blobs,
+                                           uint worker_id) {
 
-  process_java_roots(oops, clds, clds, NULL, blobs, NULL, 0);
-  process_vm_roots(oops, NULL, NULL, 0);
+  process_java_roots(oops, clds, clds, NULL, blobs, NULL, worker_id);
+  process_vm_roots(oops, NULL, NULL, worker_id);
 
   _process_strong_tasks.all_tasks_completed();
 }
@@ -224,23 +225,25 @@ void G1RootProcessor::process_strong_roots(OopClosure* oops,
 void G1RootProcessor::process_all_roots(OopClosure* oops,
                                         CLDClosure* clds,
                                         CodeBlobClosure* blobs,
-                                        bool process_string_table) {
+                                        bool process_string_table,
+                                        uint worker_id) {
 
-  process_java_roots(oops, NULL, clds, clds, NULL, NULL, 0);
-  process_vm_roots(oops, oops, NULL, 0);
+  process_java_roots(oops, NULL, clds, clds, NULL, NULL, worker_id);
+  process_vm_roots(oops, oops, NULL, worker_id);
 
   if (process_string_table) {
-    process_string_table_roots(oops, NULL, 0);
+    process_string_table_roots(oops, NULL, worker_id);
    }
-  process_code_cache_roots(blobs, NULL, 0);
+  process_code_cache_roots(blobs, NULL, worker_id);
 
   _process_strong_tasks.all_tasks_completed();
 }
 
 void G1RootProcessor::process_all_roots(OopClosure* oops,
                                         CLDClosure* clds,
-                                        CodeBlobClosure* blobs) {
-  process_all_roots(oops, clds, blobs, true);
+                                        CodeBlobClosure* blobs,
+                                        uint worker_id) {
+  process_all_roots(oops, clds, blobs, true, worker_id);
 }
 
 void G1RootProcessor::process_all_roots_no_string_table(OopClosure* oops,

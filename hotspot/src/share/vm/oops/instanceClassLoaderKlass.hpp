@@ -71,7 +71,7 @@ public:
 #endif // INCLUDE_ALL_GCS
 
     // Garbage collection
-  void oop_follow_contents(oop obj);
+  void oop_follow_contents(oop obj, MarkSweep* mark);
 
   // Parallel Scavenge and Parallel Old
   PARALLEL_GC_DECLS

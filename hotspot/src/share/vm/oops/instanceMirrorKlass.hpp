@@ -89,7 +89,7 @@ class InstanceMirrorKlass: public InstanceKlass {
 
   // Garbage collection
   int  oop_adjust_pointers(oop obj);
-  void oop_follow_contents(oop obj);
+  void oop_follow_contents(oop obj, MarkSweep* mark);
 
   // Parallel Scavenge and Parallel Old
   PARALLEL_GC_DECLS

@@ -49,10 +49,10 @@ void G1StringDedup::stop() {
   G1StringDedupThread::stop();
 }
 
-bool G1StringDedup::is_candidate_from_mark(oop obj) {
+bool G1StringDedup::is_candidate_from_mark(oop obj, uint age) {
   if (java_lang_String::is_instance(obj)) {
     bool from_young = G1CollectedHeap::heap()->heap_region_containing_raw(obj)->is_young();
-    if (from_young && obj->age() < StringDeduplicationAgeThreshold) {
+    if (from_young && age < StringDeduplicationAgeThreshold) {
       // Candidate found. String is being evacuated from young to old but has not
       // reached the deduplication age threshold, i.e. has not previously been a
       // candidate during its life in the young generation.
@@ -64,10 +64,10 @@ bool G1StringDedup::is_candidate_from_mark(oop obj) {
   return false;
 }
 
-void G1StringDedup::enqueue_from_mark(oop java_string) {
+void G1StringDedup::enqueue_from_mark(oop java_string, uint age, uint worker_id) {
   assert(is_enabled(), "String deduplication not enabled");
-  if (is_candidate_from_mark(java_string)) {
-    G1StringDedupQueue::push(0 /* worker_id */, java_string);
+  if (is_candidate_from_mark(java_string, age)) {
+    G1StringDedupQueue::push(worker_id /* worker_id */, java_string);
   }
 }
 

@@ -430,7 +430,7 @@ void ParallelScavengeHeap::do_full_collection(bool clear_all_soft_refs) {
     bool maximum_compaction = clear_all_soft_refs;
     PSParallelCompact::invoke(maximum_compaction);
   } else {
-    PSMarkSweep::invoke(clear_all_soft_refs);
+    PSMarkSweep::the_ps_mark()->invoke(clear_all_soft_refs);
   }
 }
 

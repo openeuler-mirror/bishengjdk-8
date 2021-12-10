@@ -114,14 +114,14 @@ ALL_OOP_OOP_ITERATE_CLOSURES_2(InstanceClassLoaderKlass_OOP_OOP_ITERATE_BACKWARD
 ALL_OOP_OOP_ITERATE_CLOSURES_1(InstanceClassLoaderKlass_OOP_OOP_ITERATE_DEFN_m)
 ALL_OOP_OOP_ITERATE_CLOSURES_2(InstanceClassLoaderKlass_OOP_OOP_ITERATE_DEFN_m)
 
-void InstanceClassLoaderKlass::oop_follow_contents(oop obj) {
-  InstanceKlass::oop_follow_contents(obj);
+void InstanceClassLoaderKlass::oop_follow_contents(oop obj, MarkSweep* mark) {
+  InstanceKlass::oop_follow_contents(obj, mark);
   ClassLoaderData * const loader_data = java_lang_ClassLoader::loader_data(obj);
 
   // We must NULL check here, since the class loader
   // can be found before the loader data has been set up.
   if(loader_data != NULL) {
-    MarkSweep::follow_class_loader(loader_data);
+    mark->follow_class_loader(loader_data);
   }
 }
 

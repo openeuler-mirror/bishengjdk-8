@@ -1013,7 +1013,7 @@ class InstanceKlass: public Klass {
 #endif // INCLUDE_JVMTI
 
   // Garbage collection
-  void oop_follow_contents(oop obj);
+  void oop_follow_contents(oop obj, MarkSweep* mark);
   int  oop_adjust_pointers(oop obj);
 
   void clean_weak_instanceklass_links(BoolObjectClosure* is_alive);

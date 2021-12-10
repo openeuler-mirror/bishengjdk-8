@@ -30,24 +30,28 @@
 class GenMarkSweep : public MarkSweep {
   friend class VM_MarkSweep;
   friend class G1MarkSweep;
+  friend void marksweep_init();
+  static GenMarkSweep* _the_gen_mark;
+  static void gen_marksweep_init();
  public:
-  static void invoke_at_safepoint(int level, ReferenceProcessor* rp,
+  static inline GenMarkSweep* the_gen_mark() { return _the_gen_mark; }
+  void invoke_at_safepoint(int level, ReferenceProcessor* rp,
                                   bool clear_all_softrefs);
 
  private:
 
   // Mark live objects
-  static void mark_sweep_phase1(int level, bool clear_all_softrefs);
+  void mark_sweep_phase1(int level, bool clear_all_softrefs);
   // Calculate new addresses
-  static void mark_sweep_phase2();
+  void mark_sweep_phase2();
   // Update pointers
-  static void mark_sweep_phase3(int level);
+  void mark_sweep_phase3(int level);
   // Move objects to new positions
-  static void mark_sweep_phase4();
+  void mark_sweep_phase4();
 
   // Temporary data structures for traversal and storing/restoring marks
-  static void allocate_stacks();
-  static void deallocate_stacks();
+  void allocate_stacks();
+  void deallocate_stacks();
 };
 
 #endif // SHARE_VM_MEMORY_GENMARKSWEEP_HPP
