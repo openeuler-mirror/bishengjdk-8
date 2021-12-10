@@ -225,6 +225,7 @@ LIBINSTRUMENT_FILES := \
     PathCharsValidator.c \
     Reentrancy.c \
     Utilities.c \
+    path_util.c \
     canonicalize_md.c
 
 LIBINSTRUMENT_DIR := $(JDK_OUTPUTDIR)/objs/libinstrument
