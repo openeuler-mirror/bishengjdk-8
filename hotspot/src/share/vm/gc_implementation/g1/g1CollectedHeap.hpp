@@ -354,9 +354,8 @@ private:
   // It decides whether an explicit GC should start a concurrent cycle
   // instead of doing a STW GC. Currently, a concurrent cycle is
   // explicitly started if:
-  // (a) cause == _gc_locker and +GCLockerInvokesConcurrent, or
-  // (b) cause == _java_lang_system_gc and +ExplicitGCInvokesConcurrent.
-  // (c) cause == _g1_humongous_allocation
+  // (a) cause == _java_lang_system_gc and +ExplicitGCInvokesConcurrent.
+  // (b) cause == _g1_humongous_allocation
   bool should_do_concurrent_full_gc(GCCause::Cause cause);
 
   // Keeps track of how many "old marking cycles" (i.e., Full GCs or

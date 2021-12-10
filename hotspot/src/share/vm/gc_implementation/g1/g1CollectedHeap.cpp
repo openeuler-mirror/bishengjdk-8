@@ -2394,7 +2394,6 @@ bool  G1CollectedHeap::is_user_requested_concurrent_full_gc(GCCause::Cause cause
 
 bool G1CollectedHeap::should_do_concurrent_full_gc(GCCause::Cause cause) {
   switch (cause) {
-    case GCCause::_gc_locker:               return GCLockerInvokesConcurrent;
     case GCCause::_g1_humongous_allocation: return true;
     case GCCause::_g1_periodic_collection:  return true;
     default:                                return is_user_requested_concurrent_full_gc(cause);
@@ -2582,9 +2581,6 @@ void G1CollectedHeap::collect(GCCause::Cause cause) {
             gclog_or_tty->stamp(PrintGCTimeStamps);
             gclog_or_tty->print_cr("Periodic GC is denied and not try !");
             return;
-          }
-          if (GC_locker::is_active_and_needs_gc()) {
-            GC_locker::stall_until_clear();
           }
         }
       }
