@@ -573,21 +573,23 @@ void HeapRegionManager::free_uncommit_list_memory() {
   }
 }
 
-uint HeapRegionManager::extract_uncommit_list()
-{
+uint HeapRegionManager::extract_uncommit_list(uint num_candidate_to_remove) {
   assert_at_safepoint(true /* should_be_vm_thread */);
-  if (!_uncommit_list_filled) {
-    G1CollectedHeap* g1h = G1CollectedHeap::heap();
-    uint dest = ((G1CollectorPolicy*)g1h->collector_policy())->predict_heap_size_seq();
+  double start_up_sec = os::elapsedTime();
+  if (start_up_sec < G1UncommitDelay) {
+    gclog_or_tty->date_stamp(PrintGCDateStamps);
+    gclog_or_tty->stamp(PrintGCTimeStamps);
+    gclog_or_tty->print_cr("start up seconds:%lf, less than G1UncommitDelay, will not uncommit.", start_up_sec);
+    return 0;
+  }
 
-    if (dest < _num_committed) {
-      uint num_regions_to_remove = (_num_committed - dest) * G1UncommitPercent;
-      if (num_regions_to_remove >= 1 && num_regions_to_remove < _free_list.length()) {
-        int count = _free_list.move_regions_to(&_uncommit_list, num_regions_to_remove);
-        OrderAccess::storestore();
-        _uncommit_list_filled = true;
-        return count;
-      }
+  if (!_uncommit_list_filled) {
+    uint num_regions_to_remove = num_candidate_to_remove * G1UncommitPercent;
+    if (num_regions_to_remove >= 1 && num_regions_to_remove < _free_list.length()) {
+      int count = _free_list.move_regions_to(&_uncommit_list, num_regions_to_remove);
+      OrderAccess::storestore();
+      _uncommit_list_filled = true;
+      return count;
     }
   }
   return 0;

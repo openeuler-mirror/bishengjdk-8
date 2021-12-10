@@ -100,69 +100,6 @@ void ConcurrentG1RefineThread::sample_young_list_rs_lengths() {
   }
 }
 
-bool ConcurrentG1RefineThread::should_start_periodic_gc() {
-  // If we are currently in a concurrent mark we are going to uncommit memory soon.
-  if (G1CollectedHeap::heap()->concurrent_mark()->cmThread()->during_cycle()) {
-    if (G1UncommitLog) {
-      gclog_or_tty->print_cr("Concurrent cycle in progress. Skipping.");
-    }
-    return false;
-  }
-
-  // Check if enough time has passed since the last GC.
-  uintx time_since_last_gc;
-  if ((time_since_last_gc = (uintx)Universe::heap()->millis_since_last_gc()) < G1PeriodicGCInterval) {
-    if (G1UncommitLog) {
-      gclog_or_tty->print_cr("Last GC occurred " UINTX_FORMAT "ms before which is below threshold " UINTX_FORMAT "ms. Skipping.",
-                            time_since_last_gc, G1PeriodicGCInterval);
-    }
-    return false;
-  }
-
-  return true;
-}
-
-void ConcurrentG1RefineThread::check_for_periodic_gc() {
-  if (!G1Uncommit) {
-    return;
-  }
-
-  assert(G1PeriodicGCInterval > 0, "just checking");
-  double recent_load = -1.0;
-  G1CollectedHeap* g1h = G1CollectedHeap::heap();
-  G1CollectorPolicy* g1p = g1h->g1_policy();
-  if (G1PeriodicGCLoadThreshold) {
-    // Sample process load and store it
-    if (G1PeriodicGCProcessLoad) {
-      recent_load = os::get_process_load() * 100;
-    }
-    if (recent_load < 0) {
-      // Fallback to os load
-      G1PeriodicGCProcessLoad = false;
-      if (os::loadavg(&recent_load, 1) != -1) {
-        static int cpu_count = os::active_processor_count();
-        assert(cpu_count > 0, "just checking");
-        recent_load = recent_load * 100 / cpu_count;
-      }
-    }
-    if (recent_load >= 0) {
-      g1p->add_os_load(recent_load);
-    }
-  }
-
-  double now = os::elapsedTime();
-  if (now - _last_periodic_gc_attempt_s > G1PeriodicGCInterval / 1000.0) {
-    if (G1UncommitLog) {
-      recent_load < 0 ? gclog_or_tty->print_cr("Checking for periodic GC.")
-                     : gclog_or_tty->print_cr("Checking for periodic GC. Current load %1.2f. Heap total " UINT32_FORMAT " free " UINT32_FORMAT, recent_load, g1h->_hrm.length(), g1h->_hrm.num_free_regions());
-    }
-    if (should_start_periodic_gc()) {
-      g1p->set_periodic_gc();
-    }
-    _last_periodic_gc_attempt_s = now;
-  }
-}
-
 void ConcurrentG1RefineThread::run_young_rs_sampling() {
   DirtyCardQueueSet& dcqs = JavaThread::dirty_card_queue_set();
   _vtime_start = os::elapsedVTime();
@@ -174,8 +111,6 @@ void ConcurrentG1RefineThread::run_young_rs_sampling() {
     } else {
       _vtime_accum = 0.0;
     }
-
-    check_for_periodic_gc();
 
     MutexLockerEx x(_monitor, Mutex::_no_safepoint_check_flag);
     if (_should_terminate) {

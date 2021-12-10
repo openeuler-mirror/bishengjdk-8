@@ -71,7 +71,6 @@ class ConcurrentG1RefineThread: public ConcurrentGCThread {
   void deactivate();
 
   void check_for_periodic_gc();
-  bool should_start_periodic_gc();
 
 public:
   virtual void run();

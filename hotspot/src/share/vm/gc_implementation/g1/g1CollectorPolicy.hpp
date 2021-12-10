@@ -244,7 +244,6 @@ private:
   TruncatedSeq* _constant_other_time_ms_seq;
   TruncatedSeq* _young_other_cost_per_region_ms_seq;
   TruncatedSeq* _non_young_other_cost_per_region_ms_seq;
-  TruncatedSeq* _heap_size_seq;
   TruncatedSeq* _os_load_seq;
   TruncatedSeq* _gc_count_seq;
 
@@ -267,8 +266,6 @@ private:
   uint old_cset_region_length()      { return _old_cset_region_length;      }
 
   uint _free_regions_at_end_of_collection;
-
-  uint _extract_uncommit_list;
 
   size_t _recorded_rs_lengths;
   size_t _max_rs_lengths;
@@ -308,19 +305,12 @@ private:
 
   size_t _gc_count;
   long _gc_count_minute;
-  bool _gc_count_cancel_extract;
 
-  volatile bool _periodic_gc;
   double _last_uncommit_attempt_s;
   volatile double _os_load;
   double _uncommit_start_time;
 public:
   // Accessors
-
-  void set_periodic_gc() { _periodic_gc = true; }
-  bool can_extract_uncommit_list();
-  bool should_trigger_periodic_gc();
-
   void set_region_eden(HeapRegion* hr, int young_index_in_cset) {
     hr->set_eden();
     hr->install_surv_rate_group(_short_lived_surv_rate_group);
@@ -346,16 +336,14 @@ public:
     _max_rs_lengths = rs_lengths;
   }
 
-  size_t predict_heap_size_seq() {
-    return (size_t) get_new_prediction(_heap_size_seq);
-  }
-
   void add_os_load(double load) {
     _os_load_seq->add(load);
     _os_load = get_new_prediction(_os_load_seq);
   }
 
-  void record_gc_start(double sec);
+  double os_load() {
+    return _os_load;
+  }
 
   size_t predict_rs_length_diff() {
     return (size_t) get_new_prediction(_rs_length_diff_seq);
@@ -738,8 +726,6 @@ public:
 
   void record_stop_world_start();
   void record_concurrent_pause();
-
-  void record_extract_uncommit_list(uint count) { _extract_uncommit_list = count; }
 
   // Record how much space we copied during a GC. This is typically
   // called when a GC alloc region is being retired.
