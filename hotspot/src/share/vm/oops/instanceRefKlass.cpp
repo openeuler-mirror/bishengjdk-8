@@ -48,7 +48,7 @@
 PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 
 template <class T>
-void specialized_oop_follow_contents(InstanceRefKlass* ref, oop obj) {
+void specialized_oop_follow_contents(InstanceRefKlass* ref, oop obj, MarkSweep* mark) {
   T* referent_addr = (T*)java_lang_ref_Reference::referent_addr(obj);
   T heap_oop = oopDesc::load_heap_oop(referent_addr);
   debug_only(
@@ -61,7 +61,7 @@ void specialized_oop_follow_contents(InstanceRefKlass* ref, oop obj) {
     if (!referent->is_gc_marked() &&
         MarkSweep::ref_processor()->discover_reference(obj, ref->reference_type())) {
       // reference was discovered, referent will be traversed later
-      ref->InstanceKlass::oop_follow_contents(obj);
+      ref->InstanceKlass::oop_follow_contents(obj, mark);
       debug_only(
         if(TraceReferenceGC && PrintGCDetails) {
           gclog_or_tty->print_cr("       Non NULL enqueued " INTPTR_FORMAT, (void *)obj);
@@ -75,7 +75,7 @@ void specialized_oop_follow_contents(InstanceRefKlass* ref, oop obj) {
           gclog_or_tty->print_cr("       Non NULL normal " INTPTR_FORMAT, (void *)obj);
         }
       )
-      MarkSweep::mark_and_push(referent_addr);
+      mark->mark_and_push(referent_addr);
     }
   }
   T* next_addr = (T*)java_lang_ref_Reference::next_addr(obj);
@@ -91,7 +91,7 @@ void specialized_oop_follow_contents(InstanceRefKlass* ref, oop obj) {
                                  INTPTR_FORMAT, discovered_addr);
         }
       )
-      MarkSweep::mark_and_push(discovered_addr);
+      mark->mark_and_push(discovered_addr);
     }
   } else {
 #ifdef ASSERT
@@ -111,15 +111,15 @@ void specialized_oop_follow_contents(InstanceRefKlass* ref, oop obj) {
       gclog_or_tty->print_cr("   Process next as normal " INTPTR_FORMAT, next_addr);
     }
   )
-  MarkSweep::mark_and_push(next_addr);
-  ref->InstanceKlass::oop_follow_contents(obj);
+  mark->mark_and_push(next_addr);
+  ref->InstanceKlass::oop_follow_contents(obj, mark);
 }
 
-void InstanceRefKlass::oop_follow_contents(oop obj) {
+void InstanceRefKlass::oop_follow_contents(oop obj, MarkSweep* mark) {
   if (UseCompressedOops) {
-    specialized_oop_follow_contents<narrowOop>(this, obj);
+    specialized_oop_follow_contents<narrowOop>(this, obj, mark);
   } else {
-    specialized_oop_follow_contents<oop>(this, obj);
+    specialized_oop_follow_contents<oop>(this, obj, mark);
   }
 }
 

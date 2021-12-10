@@ -204,7 +204,7 @@ int TypeArrayKlass::oop_size(oop obj) const {
   return t->object_size();
 }
 
-void TypeArrayKlass::oop_follow_contents(oop obj) {
+void TypeArrayKlass::oop_follow_contents(oop obj, MarkSweep* mark) {
   assert(obj->is_typeArray(),"must be a type array");
   // Performance tweak: We skip iterating over the klass pointer since we
   // know that Universe::TypeArrayKlass never moves.

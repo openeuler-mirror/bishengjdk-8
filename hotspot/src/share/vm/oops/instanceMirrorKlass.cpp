@@ -150,8 +150,8 @@ template <class T> void assert_nothing(T *p) {}
 }
 
 
-void InstanceMirrorKlass::oop_follow_contents(oop obj) {
-  InstanceKlass::oop_follow_contents(obj);
+void InstanceMirrorKlass::oop_follow_contents(oop obj, MarkSweep* mark) {
+  InstanceKlass::oop_follow_contents(obj, mark);
 
   // Follow the klass field in the mirror.
   Klass* klass = java_lang_Class::as_Klass(obj);
@@ -164,9 +164,9 @@ void InstanceMirrorKlass::oop_follow_contents(oop obj) {
     // the call to follow_class_loader is made when the class loader itself
     // is handled.
     if (klass->oop_is_instance() && InstanceKlass::cast(klass)->is_anonymous()) {
-      MarkSweep::follow_class_loader(klass->class_loader_data());
+      mark->follow_class_loader(klass->class_loader_data());
     } else {
-      MarkSweep::follow_klass(klass);
+      mark->follow_klass(klass);
     }
   } else {
     // If klass is NULL then this a mirror for a primitive type.
@@ -177,7 +177,7 @@ void InstanceMirrorKlass::oop_follow_contents(oop obj) {
 
   InstanceMirrorKlass_OOP_ITERATE(                                                    \
     start_of_static_fields(obj), java_lang_Class::static_oop_field_count(obj),        \
-    MarkSweep::mark_and_push(p),                                                      \
+    mark->mark_and_push(p),                                                           \
     assert_is_in_closed_subset)
 }
 

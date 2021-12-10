@@ -102,8 +102,8 @@ class ObjectMonitor;
 class JavaThread;
 
 class markOopDesc: public oopDesc {
- private:
   // Conversion
+ public:
   uintptr_t value() const { return (uintptr_t) this; }
 
  public:

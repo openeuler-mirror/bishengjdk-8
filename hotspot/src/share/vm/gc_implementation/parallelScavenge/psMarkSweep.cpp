@@ -59,9 +59,14 @@
 
 PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 
+MarkSweep*          PSMarkSweep::_the_ps_mark = NULL;
 elapsedTimer        PSMarkSweep::_accumulated_time;
 jlong               PSMarkSweep::_time_of_last_gc   = 0;
 CollectorCounters*  PSMarkSweep::_counters = NULL;
+
+void PSMarkSweep::ps_marksweep_init() {
+  PSMarkSweep::_the_ps_mark = new (ResourceObj::C_HEAP, mtGC) PSMarkSweep();
+}
 
 void PSMarkSweep::initialize() {
   MemRegion mr = Universe::heap()->reserved_region();

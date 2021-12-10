@@ -24,10 +24,12 @@
 
 #include "precompiled.hpp"
 #include "compiler/compileBroker.hpp"
+#include "gc_implementation/parallelScavenge/psMarkSweep.hpp"
 #include "gc_implementation/shared/gcTimer.hpp"
 #include "gc_implementation/shared/gcTrace.hpp"
 #include "gc_implementation/shared/markSweep.inline.hpp"
 #include "gc_interface/collectedHeap.inline.hpp"
+#include "memory/genMarkSweep.hpp"
 #include "oops/methodData.hpp"
 #include "oops/objArrayKlass.inline.hpp"
 #include "oops/oop.inline.hpp"
@@ -36,32 +38,22 @@ PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 
 uint                    MarkSweep::_total_invocations = 0;
 
-Stack<oop, mtGC>              MarkSweep::_marking_stack;
-Stack<ObjArrayTask, mtGC>     MarkSweep::_objarray_stack;
-
-Stack<oop, mtGC>              MarkSweep::_preserved_oop_stack;
-Stack<markOop, mtGC>          MarkSweep::_preserved_mark_stack;
-size_t                  MarkSweep::_preserved_count = 0;
-size_t                  MarkSweep::_preserved_count_max = 0;
-PreservedMark*          MarkSweep::_preserved_marks = NULL;
 ReferenceProcessor*     MarkSweep::_ref_processor   = NULL;
 STWGCTimer*             MarkSweep::_gc_timer        = NULL;
 SerialOldTracer*        MarkSweep::_gc_tracer       = NULL;
 
-MarkSweep::FollowRootClosure  MarkSweep::follow_root_closure;
+void MarkSweep::FollowRootClosure::do_oop(oop* p)       { _mark->follow_root(p); }
+void MarkSweep::FollowRootClosure::do_oop(narrowOop* p) { _mark->follow_root(p); }
 
-void MarkSweep::FollowRootClosure::do_oop(oop* p)       { follow_root(p); }
-void MarkSweep::FollowRootClosure::do_oop(narrowOop* p) { follow_root(p); }
-
-MarkSweep::MarkAndPushClosure MarkSweep::mark_and_push_closure;
-CLDToOopClosure               MarkSweep::follow_cld_closure(&mark_and_push_closure);
-CLDToOopClosure               MarkSweep::adjust_cld_closure(&adjust_pointer_closure);
-
-void MarkSweep::MarkAndPushClosure::do_oop(oop* p)       { mark_and_push(p); }
-void MarkSweep::MarkAndPushClosure::do_oop(narrowOop* p) { mark_and_push(p); }
+void MarkSweep::MarkAndPushClosure::do_oop(oop* p)       { _mark->mark_and_push(p); }
+void MarkSweep::MarkAndPushClosure::do_oop(narrowOop* p) { _mark->mark_and_push(p); }
 
 void MarkSweep::follow_class_loader(ClassLoaderData* cld) {
   MarkSweep::follow_cld_closure.do_cld(cld);
+}
+
+MarkSweep* MarkSweep::the_mark() {
+  return GenMarkSweep::the_gen_mark();
 }
 
 void MarkSweep::follow_stack() {
@@ -69,20 +61,18 @@ void MarkSweep::follow_stack() {
     while (!_marking_stack.is_empty()) {
       oop obj = _marking_stack.pop();
       assert (obj->is_gc_marked(), "p must be marked");
-      obj->follow_contents();
+      obj->follow_contents(this);
     }
     // Process ObjArrays one at a time to avoid marking stack bloat.
     if (!_objarray_stack.is_empty()) {
       ObjArrayTask task = _objarray_stack.pop();
       ObjArrayKlass* k = (ObjArrayKlass*)task.obj()->klass();
-      k->oop_follow_contents(task.obj(), task.index());
+      k->oop_follow_contents(task.obj(), task.index(), this);
     }
   } while (!_marking_stack.is_empty() || !_objarray_stack.is_empty());
 }
 
-MarkSweep::FollowStackClosure MarkSweep::follow_stack_closure;
-
-void MarkSweep::FollowStackClosure::do_void() { follow_stack(); }
+void MarkSweep::FollowStackClosure::do_void() { _mark->follow_stack(); }
 
 // We preserve the mark which should be replaced at the end and the location
 // that it will go.  Note that the object that this markOop belongs to isn't
@@ -99,8 +89,6 @@ void MarkSweep::preserve_mark(oop obj, markOop mark) {
     _preserved_oop_stack.push(obj);
   }
 }
-
-MarkSweep::AdjustPointerClosure MarkSweep::adjust_pointer_closure;
 
 void MarkSweep::AdjustPointerClosure::do_oop(oop* p)       { adjust_pointer(p); }
 void MarkSweep::AdjustPointerClosure::do_oop(narrowOop* p) { adjust_pointer(p); }
@@ -143,11 +131,7 @@ void MarkSweep::restore_marks() {
   }
 }
 
-MarkSweep::IsAliveClosure   MarkSweep::is_alive;
-
 bool MarkSweep::IsAliveClosure::do_object_b(oop p) { return p->is_gc_marked(); }
-
-MarkSweep::KeepAliveClosure MarkSweep::keep_alive;
 
 void MarkSweep::KeepAliveClosure::do_oop(oop* p)       { MarkSweep::KeepAliveClosure::do_oop_work(p); }
 void MarkSweep::KeepAliveClosure::do_oop(narrowOop* p) { MarkSweep::KeepAliveClosure::do_oop_work(p); }
@@ -155,6 +139,8 @@ void MarkSweep::KeepAliveClosure::do_oop(narrowOop* p) { MarkSweep::KeepAliveClo
 void marksweep_init() {
   MarkSweep::_gc_timer = new (ResourceObj::C_HEAP, mtGC) STWGCTimer();
   MarkSweep::_gc_tracer = new (ResourceObj::C_HEAP, mtGC) SerialOldTracer();
+  PSMarkSweep::ps_marksweep_init();
+  GenMarkSweep::gen_marksweep_init();
 }
 
 #ifndef PRODUCT

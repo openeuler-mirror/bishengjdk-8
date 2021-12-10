@@ -34,22 +34,43 @@
 #include "gc_implementation/parallelScavenge/psParallelCompact.hpp"
 #endif // INCLUDE_ALL_GCS
 
-inline void MarkSweep::mark_object(oop obj) {
+inline bool MarkSweep::par_mark(oop obj) {
+  markOop origin = obj->mark();
+  markOop target = markOopDesc::prototype()->set_marked();
+  void* res = Atomic::cmpxchg_ptr(target, obj->mark_addr(), origin);
+  if (res == origin) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+inline bool MarkSweep::mark_object(oop obj) {
+  markOop mark = obj->mark();
 #if INCLUDE_ALL_GCS
   if (G1StringDedup::is_enabled()) {
     // We must enqueue the object before it is marked
     // as we otherwise can't read the object's age.
-    G1StringDedup::enqueue_from_mark(obj);
+    uint age = 0;
+    if (mark->has_displaced_mark_helper()) {
+      age = mark->displaced_mark_helper()->age();
+    } else {
+      age = mark->age();
+    }
+
+    G1StringDedup::enqueue_from_mark(obj, age, _worker_id);
   }
 #endif
   // some marks may contain information we need to preserve so we store them away
   // and overwrite the mark.  We'll restore it at the end of markSweep.
-  markOop mark = obj->mark();
-  obj->set_mark(markOopDesc::prototype()->set_marked());
+  if (mark->is_marked() || !par_mark(obj)) {
+    return false;
+  }
 
   if (mark->must_be_preserved(obj)) {
     preserve_mark(obj, mark);
   }
+  return true;
 }
 
 inline void MarkSweep::follow_klass(Klass* klass) {
@@ -64,8 +85,9 @@ template <class T> inline void MarkSweep::follow_root(T* p) {
   if (!oopDesc::is_null(heap_oop)) {
     oop obj = oopDesc::decode_heap_oop_not_null(heap_oop);
     if (!obj->mark()->is_marked()) {
-      mark_object(obj);
-      obj->follow_contents();
+      if (mark_object(obj)) {
+        obj->follow_contents(this);
+      }
     }
   }
   follow_stack();
@@ -77,8 +99,9 @@ template <class T> inline void MarkSweep::mark_and_push(T* p) {
   if (!oopDesc::is_null(heap_oop)) {
     oop obj = oopDesc::decode_heap_oop_not_null(heap_oop);
     if (!obj->mark()->is_marked()) {
-      mark_object(obj);
-      _marking_stack.push(obj);
+      if (mark_object(obj)) {
+        _marking_stack.push(obj);
+      }
     }
   }
 }
@@ -108,7 +131,7 @@ template <class T> inline void MarkSweep::adjust_pointer(T* p) {
 }
 
 template <class T> inline void MarkSweep::KeepAliveClosure::do_oop_work(T* p) {
-  mark_and_push(p);
+  _mark->mark_and_push(p);
 }
 
 #endif // SHARE_VM_GC_IMPLEMENTATION_SHARED_MARKSWEEP_INLINE_HPP

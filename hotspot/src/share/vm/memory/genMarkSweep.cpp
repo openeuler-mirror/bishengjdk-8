@@ -52,6 +52,12 @@
 #include "utilities/copy.hpp"
 #include "utilities/events.hpp"
 
+GenMarkSweep*              GenMarkSweep::_the_gen_mark = NULL;
+
+void GenMarkSweep::gen_marksweep_init() {
+  GenMarkSweep::_the_gen_mark = new (ResourceObj::C_HEAP, mtGC) GenMarkSweep();
+}
+
 void GenMarkSweep::invoke_at_safepoint(int level, ReferenceProcessor* rp, bool clear_all_softrefs) {
   guarantee(level == 1, "We always collect both old and young.");
   assert(SafepointSynchronize::is_at_safepoint(), "must be at a safepoint");

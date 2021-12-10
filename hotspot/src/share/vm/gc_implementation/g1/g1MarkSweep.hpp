@@ -75,16 +75,19 @@ class G1MarkSweep : AllStatic {
  private:
   static bool _parallel_prepare_compact;
   static bool _parallel_adjust;
+  static bool _parallel_mark;
+  static uint _active_workers;
 
  private:
-
+  static void run_task(AbstractGangTask* task);
   // Mark live objects
   static void mark_sweep_phase1(bool& marked_for_deopt,
-                                bool clear_all_softrefs);
+                                bool clear_all_softrefs,
+                                GenMarkSweep* marks);
   // Calculate new addresses
   static void mark_sweep_phase2(G1FullGCCompactionPoints* cps);
   // Update pointers
-  static void mark_sweep_phase3();
+  static void mark_sweep_phase3(GenMarkSweep* marks);
   // Move objects to new positions
   static void mark_sweep_phase4(G1FullGCCompactionPoints* cps);
 

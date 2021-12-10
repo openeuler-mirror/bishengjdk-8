@@ -454,13 +454,13 @@ void ObjArrayKlass::initialize(TRAPS) {
       a, p, low, high, do_oop)                               \
   }
 
-void ObjArrayKlass::oop_follow_contents(oop obj) {
+void ObjArrayKlass::oop_follow_contents(oop obj, MarkSweep* mark) {
   assert (obj->is_array(), "obj must be array");
-  MarkSweep::follow_klass(obj->klass());
+  mark->follow_klass(obj->klass());
   if (UseCompressedOops) {
-    objarray_follow_contents<narrowOop>(obj, 0);
+    objarray_follow_contents<narrowOop>(obj, 0, mark);
   } else {
-    objarray_follow_contents<oop>(obj, 0);
+    objarray_follow_contents<oop>(obj, 0, mark);
   }
 }
 

@@ -216,13 +216,17 @@ size_t G1RePrepareClosure::apply(oop obj) {
 
 bool G1MarkSweep::_parallel_prepare_compact = false;
 bool G1MarkSweep::_parallel_adjust = false;
+bool G1MarkSweep::_parallel_mark = false;
+uint G1MarkSweep::_active_workers = 0;
 
 void G1MarkSweep::invoke_at_safepoint(ReferenceProcessor* rp,
                                       bool clear_all_softrefs) {
   assert(SafepointSynchronize::is_at_safepoint(), "must be at a safepoint");
-  uint active_workers = G1CollectedHeap::heap()->workers()->active_workers();
+
+  _active_workers = G1CollectedHeap::heap()->workers()->active_workers();
 
   if (G1ParallelFullGC) {
+    _parallel_mark = true;
     _parallel_prepare_compact = true;
     _parallel_adjust = true;
   }
@@ -238,6 +242,19 @@ void G1MarkSweep::invoke_at_safepoint(ReferenceProcessor* rp,
   assert(rp != NULL, "should be non-NULL");
   assert(rp == G1CollectedHeap::heap()->ref_processor_stw(), "Precondition");
 
+  GenMarkSweep* marks = new GenMarkSweep[_active_workers];
+
+  if (!_parallel_mark) {
+    allocate_stacks();
+  } else {
+    for (uint i = 0; i < _active_workers; i++) {
+      marks[i]._preserved_count_max = 0;
+      marks[i]._preserved_marks = NULL;
+      marks[i]._preserved_count = 0;
+      marks[i].set_worker_id(i);
+    }
+  }
+
   GenMarkSweep::_ref_processor = rp;
   rp->setup_policy(clear_all_softrefs);
 
@@ -248,30 +265,42 @@ void G1MarkSweep::invoke_at_safepoint(ReferenceProcessor* rp,
 
   bool marked_for_unloading = false;
 
-  allocate_stacks();
-
   // We should save the marks of the currently locked biased monitors.
   // The marking doesn't preserve the marks of biased objects.
   BiasedLocking::preserve_marks();
 
   {
-    G1FullGCCompactionPoints cps(active_workers);
+    G1FullGCCompactionPoints cps(_active_workers);
 
-    mark_sweep_phase1(marked_for_unloading, clear_all_softrefs);
+    mark_sweep_phase1(marked_for_unloading, clear_all_softrefs, marks);
 
     mark_sweep_phase2(&cps);
 
     // Don't add any more derived pointers during phase3
     COMPILER2_PRESENT(DerivedPointerTable::set_active(false));
 
-    mark_sweep_phase3();
+    mark_sweep_phase3(marks);
 
     mark_sweep_phase4(&cps);
   }
 
-  GenMarkSweep::restore_marks();
+  if (!_parallel_mark) {
+    GenMarkSweep::the_gen_mark()->restore_marks();
+  } else {
+    for (uint i = 0; i < _active_workers; i++) {
+      marks[i].restore_marks();
+    }
+  }
+
   BiasedLocking::restore_marks();
-  GenMarkSweep::deallocate_stacks();
+
+  if (!_parallel_mark) {
+    GenMarkSweep::the_gen_mark()->deallocate_stacks();
+  } else {
+    for (uint i = 0; i < _active_workers; i++) {
+      marks[i].deallocate_stacks();
+    }
+  }
 
   // "free at last gc" is calculated from these.
   // CHF: cheating for now!!!
@@ -281,20 +310,62 @@ void G1MarkSweep::invoke_at_safepoint(ReferenceProcessor* rp,
   Threads::gc_epilogue();
   CodeCache::gc_epilogue();
   JvmtiExport::gc_epilogue();
-
   // refs processing: clean slate
   GenMarkSweep::_ref_processor = NULL;
 }
 
-
-void G1MarkSweep::allocate_stacks() {
-  GenMarkSweep::_preserved_count_max = 0;
-  GenMarkSweep::_preserved_marks = NULL;
-  GenMarkSweep::_preserved_count = 0;
+void G1MarkSweep::run_task(AbstractGangTask* task) {
+  G1CollectedHeap::heap()->workers()->run_task(task);
 }
 
+void G1MarkSweep::allocate_stacks() {
+  GenMarkSweep::the_gen_mark()->_preserved_count_max = 0;
+  GenMarkSweep::the_gen_mark()->_preserved_marks = NULL;
+  GenMarkSweep::the_gen_mark()->_preserved_count = 0;
+}
+
+class G1FullGCMarkTask : public AbstractGangTask {
+protected:
+  G1RootProcessor _root_processor;
+  GenMarkSweep* _marks;
+
+public:
+  G1FullGCMarkTask(GenMarkSweep* marks, uint active_workers) :
+    AbstractGangTask("G1 mark task"),
+    _root_processor(G1CollectedHeap::heap()),
+    _marks(marks) {
+    _root_processor.set_num_workers(active_workers);
+  }
+  virtual ~G1FullGCMarkTask() { }
+
+  void work(uint worker_id) {
+    Ticks start = Ticks::now();
+
+    ResourceMark rm;
+
+    MarkingCodeBlobClosure follow_code_closure(&_marks[worker_id].follow_root_closure,
+                                               !CodeBlobToOopClosure::FixRelocations);
+    {
+
+      if (ClassUnloading) {
+        _root_processor.process_strong_roots(&_marks[worker_id].follow_root_closure,
+                                             &_marks[worker_id].follow_cld_closure,
+                                             &follow_code_closure,
+                                             worker_id);
+      } else {
+        _root_processor.process_all_roots_no_string_table(&_marks[worker_id].follow_root_closure,
+                                                          &_marks[worker_id].follow_cld_closure,
+                                                          &follow_code_closure);
+      }
+      _marks[worker_id].follow_stack();
+    }
+  }
+};
+
+
 void G1MarkSweep::mark_sweep_phase1(bool& marked_for_unloading,
-                                    bool clear_all_softrefs) {
+                                    bool clear_all_softrefs,
+                                    GenMarkSweep* marks) {
   // Recursively traverse all live objects and mark them
   GCTraceTime tm("phase 1", G1Log::fine() && Verbose, true, gc_timer(), gc_tracer()->gc_id());
   GenMarkSweep::trace(" 1");
@@ -304,52 +375,87 @@ void G1MarkSweep::mark_sweep_phase1(bool& marked_for_unloading,
   // Need cleared claim bits for the roots processing
   ClassLoaderDataGraph::clear_claimed_marks();
 
-  MarkingCodeBlobClosure follow_code_closure(&GenMarkSweep::follow_root_closure, !CodeBlobToOopClosure::FixRelocations);
-  {
-    G1RootProcessor root_processor(g1h);
-    if (ClassUnloading) {
-      root_processor.process_strong_roots(&GenMarkSweep::follow_root_closure,
-                                          &GenMarkSweep::follow_cld_closure,
-                                          &follow_code_closure);
-    } else {
-      root_processor.process_all_roots_no_string_table(
-                                          &GenMarkSweep::follow_root_closure,
-                                          &GenMarkSweep::follow_cld_closure,
-                                          &follow_code_closure);
+  if (!_parallel_mark) {
+
+    MarkingCodeBlobClosure follow_code_closure(&GenMarkSweep::the_gen_mark()->follow_root_closure,
+                                               !CodeBlobToOopClosure::FixRelocations);
+    {
+      G1RootProcessor root_processor(g1h);
+      if (ClassUnloading) {
+        root_processor.process_strong_roots(&GenMarkSweep::the_gen_mark()->follow_root_closure,
+                                            &GenMarkSweep::the_gen_mark()->follow_cld_closure,
+                                            &follow_code_closure);
+      } else {
+        root_processor.process_all_roots_no_string_table(&GenMarkSweep::the_gen_mark()->follow_root_closure,
+                                                         &GenMarkSweep::the_gen_mark()->follow_cld_closure,
+                                                         &follow_code_closure);
+      }
     }
+
+    // Process reference objects found during marking
+    ReferenceProcessor* rp = GenMarkSweep::ref_processor();
+    assert(rp == g1h->ref_processor_stw(), "Sanity");
+
+    rp->setup_policy(clear_all_softrefs);
+    const ReferenceProcessorStats& stats =
+      rp->process_discovered_references(&GenMarkSweep::the_gen_mark()->is_alive,
+                                        &GenMarkSweep::the_gen_mark()->keep_alive,
+                                        &GenMarkSweep::the_gen_mark()->follow_stack_closure,
+                                        NULL,
+                                        gc_timer(),
+                                        gc_tracer()->gc_id());
+    gc_tracer()->report_gc_reference_stats(stats);
+
+
+    // This is the point where the entire marking should have completed.
+    assert(GenMarkSweep::the_gen_mark()->_marking_stack.is_empty(), "Marking should have completed");
+
+    if (ClassUnloading) {
+      // Unload classes and purge the SystemDictionary.
+      bool purged_class = SystemDictionary::do_unloading(&GenMarkSweep::the_gen_mark()->is_alive);
+      // Unload nmethods.
+      CodeCache::do_unloading(&GenMarkSweep::the_gen_mark()->is_alive, purged_class);
+      // Prune dead klasses from subklass/sibling/implementor lists.
+      Klass::clean_weak_klass_links(&GenMarkSweep::the_gen_mark()->is_alive);
+    }
+    // Delete entries for dead interned string and clean up unreferenced symbols in symbol table.
+    G1CollectedHeap::heap()->unlink_string_and_symbol_table(&GenMarkSweep::the_gen_mark()->is_alive);
+  } else {
+    G1FullGCMarkTask task(marks, _active_workers);
+    FlexibleWorkGang* flexible = G1CollectedHeap::heap()->workers();
+    SharedHeap::heap()->set_par_threads(_active_workers);
+    flexible->run_task(&task);
+    SharedHeap::heap()->set_par_threads(0);
+
+    // Process reference objects found during marking
+    ReferenceProcessor* rp = MarkSweep::ref_processor();
+    assert(rp == g1h->ref_processor_stw(), "Sanity");
+
+    rp->setup_policy(clear_all_softrefs);
+
+    const ReferenceProcessorStats& stats =
+      rp->process_discovered_references(&marks[0].is_alive,
+                                        &marks[0].keep_alive,
+                                        &marks[0].follow_stack_closure,
+                                        NULL,
+                                        gc_timer(),
+                                        gc_tracer()->gc_id());
+    gc_tracer()->report_gc_reference_stats(stats);
+
+    if (ClassUnloading) {
+
+       // Unload classes and purge the SystemDictionary.
+       bool purged_class = SystemDictionary::do_unloading(&marks[0].is_alive);
+
+       // Unload nmethods.
+       CodeCache::do_unloading(&marks[0].is_alive, purged_class);
+
+       // Prune dead klasses from subklass/sibling/implementor lists.
+       Klass::clean_weak_klass_links(&marks[0].is_alive);
+    }
+    // Delete entries for dead interned string and clean up unreferenced symbols in symbol table.
+    G1CollectedHeap::heap()->unlink_string_and_symbol_table(&marks[0].is_alive);
   }
-
-  // Process reference objects found during marking
-  ReferenceProcessor* rp = GenMarkSweep::ref_processor();
-  assert(rp == g1h->ref_processor_stw(), "Sanity");
-
-  rp->setup_policy(clear_all_softrefs);
-  const ReferenceProcessorStats& stats =
-    rp->process_discovered_references(&GenMarkSweep::is_alive,
-                                      &GenMarkSweep::keep_alive,
-                                      &GenMarkSweep::follow_stack_closure,
-                                      NULL,
-                                      gc_timer(),
-                                      gc_tracer()->gc_id());
-  gc_tracer()->report_gc_reference_stats(stats);
-
-
-  // This is the point where the entire marking should have completed.
-  assert(GenMarkSweep::_marking_stack.is_empty(), "Marking should have completed");
-
-  if (ClassUnloading) {
-
-     // Unload classes and purge the SystemDictionary.
-     bool purged_class = SystemDictionary::do_unloading(&GenMarkSweep::is_alive);
-
-     // Unload nmethods.
-     CodeCache::do_unloading(&GenMarkSweep::is_alive, purged_class);
-
-     // Prune dead klasses from subklass/sibling/implementor lists.
-     Klass::clean_weak_klass_links(&GenMarkSweep::is_alive);
-  }
-  // Delete entries for dead interned string and clean up unreferenced symbols in symbol table.
-  G1CollectedHeap::heap()->unlink_string_and_symbol_table(&GenMarkSweep::is_alive);
 
   if (VerifyDuringGC) {
     HandleMark hm;  // handle scope
@@ -374,7 +480,7 @@ void G1MarkSweep::mark_sweep_phase1(bool& marked_for_unloading,
     }
   }
 
-  gc_tracer()->report_object_count_after_gc(&GenMarkSweep::is_alive);
+  gc_tracer()->report_object_count_after_gc(&GenMarkSweep::the_gen_mark()->is_alive);
 }
 
 
@@ -603,7 +709,7 @@ public:
   }
 };
 
-void G1MarkSweep::mark_sweep_phase3() {
+void G1MarkSweep::mark_sweep_phase3(GenMarkSweep* marks) {
   G1CollectedHeap* g1h = G1CollectedHeap::heap();
 
   // Adjust the pointers to reflect the new locations
@@ -613,33 +719,40 @@ void G1MarkSweep::mark_sweep_phase3() {
   // Need cleared claim bits for the roots processing
   ClassLoaderDataGraph::clear_claimed_marks();
 
-  CodeBlobToOopClosure adjust_code_closure(&GenMarkSweep::adjust_pointer_closure,
+  CodeBlobToOopClosure adjust_code_closure(&GenMarkSweep::the_gen_mark()->adjust_pointer_closure,
                                            CodeBlobToOopClosure::FixRelocations);
   {
     G1RootProcessor root_processor(g1h);
-    root_processor.process_all_roots(&GenMarkSweep::adjust_pointer_closure,
-                                     &GenMarkSweep::adjust_cld_closure,
+    root_processor.process_all_roots(&GenMarkSweep::the_gen_mark()->adjust_pointer_closure,
+                                     &GenMarkSweep::the_gen_mark()->adjust_cld_closure,
                                      &adjust_code_closure);
   }
 
   assert(GenMarkSweep::ref_processor() == g1h->ref_processor_stw(), "Sanity");
-  g1h->ref_processor_stw()->weak_oops_do(&GenMarkSweep::adjust_pointer_closure);
+  g1h->ref_processor_stw()->weak_oops_do(&GenMarkSweep::the_gen_mark()->adjust_pointer_closure);
 
   // Now adjust pointers in remaining weak roots.  (All of which should
   // have been cleared if they pointed to non-surviving objects.)
-  JNIHandles::weak_oops_do(&GenMarkSweep::adjust_pointer_closure);
-  JFR_ONLY(Jfr::weak_oops_do(&GenMarkSweep::adjust_pointer_closure));
+  JNIHandles::weak_oops_do(&GenMarkSweep::the_gen_mark()->adjust_pointer_closure);
+  JFR_ONLY(Jfr::weak_oops_do(&GenMarkSweep::the_gen_mark()->adjust_pointer_closure));
 
   if (G1StringDedup::is_enabled()) {
-    G1StringDedup::oops_do(&GenMarkSweep::adjust_pointer_closure);
+    G1StringDedup::oops_do(&GenMarkSweep::the_gen_mark()->adjust_pointer_closure);
   }
 
-  GenMarkSweep::adjust_marks();
-
   if (!_parallel_adjust) {
+    GenMarkSweep::the_gen_mark()->adjust_marks();
     G1AdjustPointersClosure blk;
     g1h->heap_region_iterate(&blk);
   } else {
+    if (!_parallel_mark) {
+      GenMarkSweep::the_gen_mark()->adjust_marks();
+    } else {
+      for (uint i = 0; i < _active_workers; i++) {
+        marks[i].adjust_marks();
+      }
+    }
+
     G1FullGCAdjustTask task;
     FlexibleWorkGang* flexible = G1CollectedHeap::heap()->workers();
     flexible->run_task(&task);

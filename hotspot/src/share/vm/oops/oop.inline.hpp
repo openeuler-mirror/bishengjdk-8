@@ -655,9 +655,9 @@ inline bool oopDesc::is_unlocked_oop() const {
 }
 #endif // PRODUCT
 
-inline void oopDesc::follow_contents(void) {
+inline void oopDesc::follow_contents(MarkSweep* mark) {
   assert (is_gc_marked(), "should be marked");
-  klass()->oop_follow_contents(this);
+  klass()->oop_follow_contents(this, mark);
 }
 
 // Used by scavengers

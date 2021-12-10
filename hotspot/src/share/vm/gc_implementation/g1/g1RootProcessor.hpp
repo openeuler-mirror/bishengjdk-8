@@ -75,7 +75,8 @@ class G1RootProcessor : public StackObj {
   void process_all_roots(OopClosure* oops,
                          CLDClosure* clds,
                          CodeBlobClosure* blobs,
-                         bool process_string_table);
+                         bool process_string_table,
+                         uint worker_id = 0);
 
   void process_java_roots(OopClosure* scan_non_heap_roots,
                           CLDClosure* thread_stack_clds,
@@ -114,12 +115,14 @@ public:
   // Apply oops, clds and blobs to all strongly reachable roots in the system
   void process_strong_roots(OopClosure* oops,
                             CLDClosure* clds,
-                            CodeBlobClosure* blobs);
+                            CodeBlobClosure* blobs,
+                            uint worker_id = 0);
 
   // Apply oops, clds and blobs to strongly and weakly reachable roots in the system
   void process_all_roots(OopClosure* oops,
                          CLDClosure* clds,
-                         CodeBlobClosure* blobs);
+                         CodeBlobClosure* blobs,
+                         uint worker_id = 0);
 
   // Apply scan_rs to all locations in the union of the remembered sets for all
   // regions in the collection set

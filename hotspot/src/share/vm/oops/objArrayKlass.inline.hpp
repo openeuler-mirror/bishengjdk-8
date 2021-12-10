@@ -33,16 +33,16 @@
 #include "gc_implementation/parallelScavenge/psParallelCompact.hpp"
 #endif // INCLUDE_ALL_GCS
 
-void ObjArrayKlass::oop_follow_contents(oop obj, int index) {
+void ObjArrayKlass::oop_follow_contents(oop obj, int index, MarkSweep* mark) {
   if (UseCompressedOops) {
-    objarray_follow_contents<narrowOop>(obj, index);
+    objarray_follow_contents<narrowOop>(obj, index, mark);
   } else {
-    objarray_follow_contents<oop>(obj, index);
+    objarray_follow_contents<oop>(obj, index, mark);
   }
 }
 
 template <class T>
-void ObjArrayKlass::objarray_follow_contents(oop obj, int index) {
+void ObjArrayKlass::objarray_follow_contents(oop obj, int index, MarkSweep* mark) {
   objArrayOop a = objArrayOop(obj);
   const size_t len = size_t(a->length());
   const size_t beg_index = size_t(index);
@@ -56,11 +56,11 @@ void ObjArrayKlass::objarray_follow_contents(oop obj, int index) {
 
   // Push the non-NULL elements of the next stride on the marking stack.
   for (T* e = beg; e < end; e++) {
-    MarkSweep::mark_and_push<T>(e);
+    mark->mark_and_push<T>(e);
   }
 
   if (end_index < len) {
-    MarkSweep::push_objarray(a, end_index); // Push the continuation.
+    mark->push_objarray(a, end_index); // Push the continuation.
   }
 }
 
