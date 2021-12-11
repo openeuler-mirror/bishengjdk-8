@@ -2221,9 +2221,11 @@ void G1CollectedHeap::shrink_heap_at_remark() {
     uint num_candidate_to_remove = (uint)(resize_amount / HeapRegion::GrainBytes);
     uint count = _hrm.extract_uncommit_list(num_candidate_to_remove);
 
-    gclog_or_tty->print(" [G1Uncommit list " UINT32_FORMAT ", remaining " UINT32_FORMAT
-                        ", free list " UINT32_FORMAT "]",
-                        count, length - count, _hrm.num_free_regions());
+    if (G1UncommitLog) {
+      gclog_or_tty->print(" [G1Uncommit list " UINT32_FORMAT ", remaining " UINT32_FORMAT
+                          ", free list " UINT32_FORMAT "]",
+                          count, length - count, _hrm.num_free_regions());
+    }
   }
 }
 

@@ -577,9 +577,11 @@ uint HeapRegionManager::extract_uncommit_list(uint num_candidate_to_remove) {
   assert_at_safepoint(true /* should_be_vm_thread */);
   double start_up_sec = os::elapsedTime();
   if (start_up_sec < G1UncommitDelay) {
-    gclog_or_tty->date_stamp(PrintGCDateStamps);
-    gclog_or_tty->stamp(PrintGCTimeStamps);
-    gclog_or_tty->print_cr("start up seconds:%lf, less than G1UncommitDelay, will not uncommit.", start_up_sec);
+    if (G1UncommitLog) {
+      gclog_or_tty->date_stamp(PrintGCDateStamps);
+      gclog_or_tty->stamp(PrintGCTimeStamps);
+      gclog_or_tty->print_cr("start up seconds:%lf, less than G1UncommitDelay, will not uncommit.", start_up_sec);
+    }
     return 0;
   }
 

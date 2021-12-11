@@ -190,7 +190,9 @@ bool PeriodicGC::should_start_periodic_gc() {
   if (g1p->os_load() < G1PeriodicGCLoadThreshold || !G1PeriodicGCLoadThreshold) {
     return true;
   }
-  gclog_or_tty->print_cr("[G1Uncommit] Periodic GC request denied, skipping!");
+  if (G1UncommitLog) {
+    gclog_or_tty->print_cr("[G1Uncommit] Periodic GC request denied, skipping!");
+  }
   return false;
 }
 
