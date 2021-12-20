@@ -46,6 +46,11 @@ SASRCFILES = $(SASRCDIR)/salibelf.c                   \
              $(SASRCDIR)/LinuxDebuggerLocal.c         \
              $(AGENT_DIR)/src/share/native/sadis.c
 
+# wrap memcpy
+ifeq ($(OPENJDK_TARGET_CPU_ARCH), x86)
+  SASRCFILES += $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp
+endif
+
 -include $(HS_ALT_MAKE)/linux/makefiles/saproc.make
 
 SAMAPFILE = $(SASRCDIR)/mapfile
