@@ -24,9 +24,12 @@
  */
 package javax.swing;
 
+import sun.security.action.GetPropertyAction;
+
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.beans.Transient;
+import java.security.AccessController;
 import java.util.*;
 
 import java.awt.*;
@@ -85,6 +88,16 @@ implements ItemSelectable,ListDataListener,ActionListener, Accessible {
      * @see #readObject
      */
     private static final String uiClassID = "ComboBoxUI";
+
+    /**
+     * Use legacy mode, rollback JDK-8072767 changes.
+     */
+    private static final boolean useLegacyMode;
+
+    static {
+        useLegacyMode = "true".equals(AccessController.doPrivileged(
+                new GetPropertyAction("swing.JComboBox.useLegacyMode", "true")));
+    }
 
     /**
      * This protected field is implementation specific. Do not access directly
@@ -569,7 +582,9 @@ implements ItemSelectable,ListDataListener,ActionListener, Accessible {
                     return;
                 }
 
-                getEditor().setItem(anObject);
+                if (!useLegacyMode) {
+                    getEditor().setItem(anObject);
+                }
             }
 
             // Must toggle the state of this flag since this method
@@ -1309,12 +1324,16 @@ implements ItemSelectable,ListDataListener,ActionListener, Accessible {
      * do not call or override.
      */
     public void actionPerformed(ActionEvent e) {
-        setPopupVisible(false);
-        getModel().setSelectedItem(getEditor().getItem());
-        String oldCommand = getActionCommand();
-        setActionCommand("comboBoxEdited");
-        fireActionEvent();
-        setActionCommand(oldCommand);
+        ComboBoxEditor editor = getEditor();
+        if ((!useLegacyMode) || ((editor != null) && (e != null) && (editor == e.getSource()
+                || editor.getEditorComponent() == e.getSource()))) {
+            setPopupVisible(false);
+            getModel().setSelectedItem(editor.getItem());
+            String oldCommand = getActionCommand();
+            setActionCommand("comboBoxEdited");
+            fireActionEvent();
+            setActionCommand(oldCommand);
+        }
     }
 
     /**

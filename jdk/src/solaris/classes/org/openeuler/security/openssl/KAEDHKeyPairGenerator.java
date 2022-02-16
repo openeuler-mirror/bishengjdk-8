@@ -148,6 +148,9 @@ public class KAEDHKeyPairGenerator
             throw new ProviderException("Invoke nativeGenerateKeyPair failed.", e);
         }
 
+        // check keys
+        checkKeys(keys);
+
         BigInteger pubKey = new BigInteger(keys[0]);
         BigInteger priKey = new BigInteger(keys[1]);
 
@@ -162,5 +165,21 @@ public class KAEDHKeyPairGenerator
             throw new ProviderException(ikse);
         }
     }
+
+    private void checkKeys(byte[][] keys) {
+        if (keys == null) {
+            throw new ProviderException("Invalid keys, keys is null.");
+        }
+        // The keys needs to contain at least 2 byte arrays, which are public and private keys.
+        if (keys.length < 2) {
+            throw new ProviderException("Invalid keys, keys length is less than 2.");
+        }
+        for (int i = 0; i < keys.length; i++) {
+            if (keys[i] == null) {
+                throw new ProviderException("Invalid keys, keys[" + i + "]" + "is null.");
+            }
+        }
+    }
+
     protected native static byte[][] nativeGenerateKeyPair(byte[] p, byte[] g, int lSize);
 }

@@ -182,7 +182,7 @@ JNIEXPORT jint JNICALL Java_org_openeuler_security_openssl_KAEHMac_nativeFinal
 
     // write back to output_array
     (*env)->SetByteArrayRegion(env, output, out_offset, bytesWritten, (jbyte*) temp_result);
-    KAE_TRACE("KAEHMac_nativeFinal success, output_offset = %d, bytesWritten = %d", out_offset, bytesWritten);
+    KAE_TRACE("KAEHMac_nativeFinal success, output_offset = %d, bytesWritten = %u", out_offset, bytesWritten);
 
 cleanup:
     free(temp_result);

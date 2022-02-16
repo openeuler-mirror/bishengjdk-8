@@ -136,7 +136,8 @@ static jobjectArray NewRSAKeyParams(JNIEnv* env, RSA* rsa) {
     }
 
     // set rsa key param
-    for (RSAParamIndex paramIndex = rsaN; paramIndex <= rsaIqmp; paramIndex++) {
+    RSAParamIndex paramIndex;
+    for (paramIndex = rsaN; paramIndex <= rsaIqmp; paramIndex++) {
         if (!SetRSAKeyParam(env, rsa, params, paramIndex)) {
             return NULL;
         }

@@ -3307,6 +3307,77 @@ class StubGenerator: public StubCodeGenerator {
     return start;
   }
 
+  address load_BLAS_library() {
+    // Try to load BLAS library.
+    const char library_name[] = "openblas";
+    char err_buf[1024] = {0};
+    char path[JVM_MAXPATHLEN] = {0};
+    os::jvm_path(path, sizeof(path));
+    int jvm_offset = -1;
+
+    // Match "jvm[^/]*" in jvm_path.
+    const char* last_name = strrchr(path, '/');
+    last_name = last_name ? last_name : path;
+    const char* last_lib_name = strstr(last_name, "jvm");
+    if (last_lib_name != NULL) {
+      jvm_offset = last_lib_name - path;
+    }
+
+    address library = NULL;
+    // Find the BLAS shared library.
+    // Search path: <home>/jre/lib/<arch>/<vm>/libopenblas.so
+    if (jvm_offset >= 0) {
+      if (jvm_offset + strlen(library_name) + strlen(os::dll_file_extension()) < JVM_MAXPATHLEN) {
+        strncpy(&path[jvm_offset], library_name, strlen(library_name));
+        strncat(&path[jvm_offset], os::dll_file_extension(), strlen(os::dll_file_extension()));
+        library = (address)os::dll_load(path, err_buf, sizeof(err_buf));
+      }
+    }
+    return library;
+  }
+
+  address get_BLAS_func_entry(address library, const char* func_name) {
+    if (library == NULL) {
+        return NULL;
+    }
+
+    // Try to find BLAS function entry.
+    return (address)os::dll_lookup((void*)library, func_name);
+  }
+
+  /**
+   *  Arguments:
+   *
+   * Inputs:
+   *   c_rarg0   - int n
+   *   c_rarg1   - double[] dx
+   *   c_rarg2   - int incx
+   *   c_rarg3   - double[] dy
+   *   c_rarg4   - int incy
+   *
+   * Output:
+   *       d0   - ddot result
+   *
+   */
+  address generate_ddotF2jBLAS() {
+    __ align(CodeEntryAlignment);
+    StubCodeMark mark(this, "StubRoutines", "f2jblas_ddot");
+
+    address start = __ pc();
+
+    const Register n    = c_rarg0;
+    const Register dx   = c_rarg1;
+    const Register incx = c_rarg2;
+    const Register dy   = c_rarg3;
+    const Register incy = c_rarg4;
+
+    BLOCK_COMMENT("Entry:");
+
+    __ f2j_ddot(n, dx, incx, dy, incy, rscratch2);
+
+    return start;
+  }
+
   // Parameter conversion from JVM to native BLAS
   //
   // Register:
@@ -3518,77 +3589,6 @@ class StubGenerator: public StubCodeGenerator {
   }
 
 
-
-  /**
-   *  Arguments:
-   *
-   * Inputs:
-   *   c_rarg0   - int n
-   *   c_rarg1   - double[] dx
-   *   c_rarg2   - int incx
-   *   c_rarg3   - double[] dy
-   *   c_rarg4   - int incy
-   *
-   * Output:
-   *       d0   - ddot result
-   *
-   */
-  address generate_ddotF2jBLAS() {
-    __ align(CodeEntryAlignment);
-    StubCodeMark mark(this, "StubRoutines", "f2jblas_ddot");
-
-    address start = __ pc();
-
-    const Register n    = c_rarg0;
-    const Register dx   = c_rarg1;
-    const Register incx = c_rarg2;
-    const Register dy   = c_rarg3;
-    const Register incy = c_rarg4;
-
-    BLOCK_COMMENT("Entry:");
-
-    __ f2j_ddot(n, dx, incx, dy, incy, rscratch2);
-
-    return start;
-  }
-
-  address load_BLAS_library() {
-    // Try to load BLAS library.
-    const char library_name[] = "openblas";
-    char err_buf[1024] = {0};
-    char path[JVM_MAXPATHLEN] = {0};
-    os::jvm_path(path, sizeof(path));
-    int jvm_offset = -1;
-
-    // Match "jvm[^/]*" in jvm_path.
-    const char* last_name = strrchr(path, '/');
-    last_name = last_name ? last_name : path;
-    const char* last_lib_name = strstr(last_name, "jvm");
-    if (last_lib_name != NULL) {
-      jvm_offset = last_lib_name - path;
-    }
-
-    address library = NULL;
-    // Find the BLAS shared library.
-    // Search path: <home>/jre/lib/<arch>/<vm>/libopenblas.so
-    if (jvm_offset >= 0) {
-      if (jvm_offset + strlen(library_name) + strlen(os::dll_file_extension()) < JVM_MAXPATHLEN) {
-        strncpy(&path[jvm_offset], library_name, strlen(library_name));
-        strncat(&path[jvm_offset], os::dll_file_extension(), strlen(os::dll_file_extension()));
-        library = (address)os::dll_load(path, err_buf, sizeof(err_buf));
-      }
-    }
-    return library;
-  }
-
-  address get_BLAS_func_entry(address library, const char* func_name) {
-    if (library == NULL) {
-        return NULL;
-    }
-
-    // Try to find BLAS function entry.
-    return (address)os::dll_lookup((void*)library, func_name);
-  }
 
   /**
    *  Arguments:

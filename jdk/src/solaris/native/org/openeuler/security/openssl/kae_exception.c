@@ -105,14 +105,10 @@ void KAE_ThrowFromOpenssl(JNIEnv* env, const char* msg, void (* defaultException
         KAE_TRACE("OpenSSL error in %s: err=%lx, lib=%x, reason=%x, file=%s, line=%d, estring=%s, data=%s", msg, err,
                   lib, reason, file, line, estring, (flags & ERR_TXT_STRING) ? data : "(no data)");
 
-        switch (lib) {
-            case ERR_LIB_EVP:
-            case ERR_LIB_RSA:
-                KAE_ThrowEvpException(env, reason, estring, defaultException);
-                break;
-            default:
-                defaultException(env, estring);
-                break;
+        if (lib == ERR_LIB_EVP || lib == ERR_LIB_RSA) {
+            KAE_ThrowEvpException(env, reason, estring, defaultException);
+        } else {
+            defaultException(env, estring);
         }
     }
 

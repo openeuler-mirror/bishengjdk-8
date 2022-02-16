@@ -78,6 +78,36 @@ static void freeCEN(jzfile *);
 
 static jint INITIAL_META_COUNT = 2;   /* initial number of entries in meta name array */
 
+#ifdef LINUX
+#define ZIP_INVALID_LOC_HEADER_EXIT "ZIP_INVALID_LOC_HEADER_EXIT"
+
+void printFdInfo(jzfile *zip) {
+    int fd = zip->zfd;
+    char fdPath[100];
+    char filePath[PATH_MAX + 1];
+    sprintf(fdPath, "/proc/self/fd/%d", fd);
+    int len = readlink(fdPath, filePath, PATH_MAX);
+    if (len < 0) {
+        printf("[LOC-ERROR] Could not find fd : %d\n", fd);
+        return;
+    }
+    filePath[len] = '\0';
+    printf("[LOC-ERROR] LOC check failed, zfd : %d , zfd file : %s\n", zip->zfd, filePath);
+}
+
+char *getExitFlag() {
+    static char *process_exit_flag = NULL;
+    static jboolean is_initialized = JNI_FALSE;
+    if (is_initialized) {
+        return process_exit_flag;
+    }
+    process_exit_flag = getenv(ZIP_INVALID_LOC_HEADER_EXIT);
+    is_initialized = JNI_TRUE;
+    return process_exit_flag;
+}
+
+#endif
+
 /*
  * The ZFILE_* functions exist to provide some platform-independence with
  * respect to file access needs.
@@ -1322,6 +1352,35 @@ ZIP_GetEntryDataOffset(jzfile *zip, jzentry *entry)
         }
         if (GETSIG(loc) != LOCSIG) {
             zip->msg = "invalid LOC header (bad signature)";
+            printf("[LOC-ERROR] LOC check failed, %s\n", zip->msg);
+            printf("[LOC-ERROR] LOC check failed for jar: %s, class: %s, LOCSIG: %08lx, expected LOCSIG: %08lx, "
+                   "pos:%ld\n", zip->name, entry->name, GETSIG(loc), LOCSIG, (-(entry->pos)));
+            unsigned int *temp = (unsigned int *) loc;
+            printf("[LOC-ERROR] LOC check failed, readVal: %08x  %08x  %08x  %08x  %08x  %08x  %08x  %02x %02x\n",
+                   *temp, *(temp + 1), *(temp + 2), *(temp + 3), *(temp + 4),
+                   *(temp + 5), *(temp + 6), loc[28], loc[29]);
+
+#ifdef LINUX
+#define ZIP_INVALID_LOC_HEADER_EXIT_ONLY "1"
+#define ZIP_INVALID_LOC_HEADER_EXIT_CODE_DUMP "2"
+            // print fd info
+            printFdInfo(zip);
+
+            /*
+            * The meaning of the exit flag is as follows:
+            * 1: exit (126)
+            * 2: core dump
+            * others: throws ZipException
+            */
+            char *exitFlag = getExitFlag();
+            if (exitFlag != NULL) {
+                if (strcmp(exitFlag, ZIP_INVALID_LOC_HEADER_EXIT_ONLY) == 0) {
+                    exit(126);
+                } else if (strcmp(exitFlag, ZIP_INVALID_LOC_HEADER_EXIT_CODE_DUMP) == 0) {
+                    abort();
+                }
+            }
+#endif
             return -1;
         }
         entry->pos = (- entry->pos) + LOCHDR + LOCNAM(loc) + LOCEXT(loc);
