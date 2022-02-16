@@ -64,6 +64,11 @@ CXXFLAGS = $(SYSDEFS) $(INCLUDES)
 # Force assertions on.
 CXXFLAGS += -DASSERT
 
+# Introduced in GCC 8.X
+ifneq "$(shell expr \( $(CC_VER_MAJOR) \>= 8 \))" "0"
+  CXXFLAGS += -Wno-error=stringop-overflow=
+endif
+
 # CFLAGS_WARN holds compiler options to suppress/enable warnings.
 # Compiler warnings are treated as errors
 CFLAGS_WARN = $(WARNINGS_ARE_ERRORS)
