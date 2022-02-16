@@ -41,7 +41,7 @@ import javax.swing.SwingUtilities;
  * @author Alexander Scherbatiy
  * @summary DefaultCellEditor for comboBox creates ActionEvent with wrong source
  *          object
- * @run main bug8072767
+ * @run main/othervm -Dswing.JComboBox.useLegacyMode=false bug8072767
  */
 
 public class bug8072767 {

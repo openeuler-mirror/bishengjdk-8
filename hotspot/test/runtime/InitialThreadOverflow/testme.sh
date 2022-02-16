@@ -51,6 +51,10 @@ fi
 
 CFLAGS="-m${VM_BITS}"
 
+if [ "${VM_CPU}" == "aarch64" ]; then
+    CFLAGS="-mabi=lp64"
+fi
+
 LD_LIBRARY_PATH=.:${COMPILEJAVA}/jre/lib/${VM_CPU}/${VM_TYPE}:/usr/lib:$LD_LIBRARY_PATH
 export LD_LIBRARY_PATH
 
@@ -67,7 +71,7 @@ echo "Compilation flag: ${COMP_FLAG}"
 $gcc_cmd -DLINUX ${CFLAGS} -o invoke \
     -I${COMPILEJAVA}/include -I${COMPILEJAVA}/include/linux \
     -L${COMPILEJAVA}/jre/lib/${VM_CPU}/${VM_TYPE} \
-    -ljvm -lpthread invoke.cxx
+    invoke.cxx -ljvm -lpthread
 
 ./invoke
 exit $?

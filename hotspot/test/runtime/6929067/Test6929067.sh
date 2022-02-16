@@ -101,6 +101,10 @@ case "$ARCH" in
 esac
 
 
+if [ "${VM_CPU}" == "aarch64" ]; then
+    COMP_FLAG="-mabi=lp64"
+fi
+
 # VM type: need to know server or client
 VMTYPE=client
 grep Server vm_version.out > ${NULL}
@@ -128,7 +132,7 @@ echo "VM type: ${VMTYPE}"
 $gcc_cmd -DLINUX ${COMP_FLAG} -o invoke \
     -I${COMPILEJAVA}/include -I${COMPILEJAVA}/include/linux \
     -L${COMPILEJAVA}/jre/lib/${ARCH}/${VMTYPE} \
-    -ljvm -lpthread invoke.c
+    invoke.c -ljvm -lpthread
 
 ./invoke
 exit $?

@@ -65,9 +65,8 @@ public class KAEECKeyPairGenerator extends KeyPairGeneratorSpi {
 
     private ECParameterSpec getParamsByCurve(String curveName) {
         byte[][] params = nativeGenerateParam(curveName);
-        if (params == null) {
-            throw new InvalidParameterException("unknown curve " + curveName);
-        }
+        // check params
+        checkParams(params, curveName);
         BigInteger p = new BigInteger(params[0]);
         BigInteger a = new BigInteger(params[1]);
         BigInteger b = new BigInteger(params[2]);
@@ -80,6 +79,21 @@ public class KAEECKeyPairGenerator extends KeyPairGeneratorSpi {
         ECPoint g = new ECPoint(x, y);
         ECParameterSpec spec = new ECParameterSpec(curve, g, order, cofactor.intValue());
         return spec;
+    }
+
+    private void checkParams(byte[][] params, String curveName) {
+        if (params == null) {
+            throw new InvalidParameterException("Unknown curve " + curveName);
+        }
+        // The params needs to contain at least 7 byte arrays, which are p,a,b,x,y,order and cofactor.
+        if (params.length < 7) {
+            throw new InvalidParameterException("The params length is less than 7.");
+        }
+        for (int i = 0; i < params.length; i++) {
+            if (params[i] == null) {
+                throw new InvalidParameterException("The params[" + i + "]" + "is null.");
+            }
+        }
     }
 
     @Override
