@@ -2606,6 +2606,9 @@ void G1CollectedHeap::collect(GCCause::Cause cause) {
             gclog_or_tty->print_cr("Periodic GC is denied and not try !");
             return;
           }
+          if (GC_locker::is_active_and_needs_gc()) {
+            GC_locker::stall_until_clear();
+          }
         }
       }
     } else if (GC_locker::should_discard(cause, gc_count_before)) {
