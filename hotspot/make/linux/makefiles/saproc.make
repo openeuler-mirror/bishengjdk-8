@@ -108,7 +108,7 @@ $(LIBSAPROC): $(SASRCFILES) $(SAMAPFILE)
 	           $(SA_OPT_FLAGS)                                      \
 	           $(EXTRA_CFLAGS)                                      \
 	           -o $@                                                \
-	           -lthread_db -ldl
+	           -ldl
 ifeq ($(ENABLE_FULL_DEBUG_SYMBOLS),1)
   ifneq ($(STRIP_POLICY),no_strip)
 	$(QUIETLY) $(OBJCOPY) --only-keep-debug $@ $(LIBSAPROC_DEBUGINFO)
