@@ -38,8 +38,6 @@ INCLUDES = -I${JAVA_HOME}/include -I${JAVA_HOME}/include/linux
 
 OBJS     = $(SOURCES:%.c=$(ARCH)/%.o) $(ARCH)/sadis.o
 
-LIBS     = -lthread_db
-
 CFLAGS   = -c -fPIC -g -D_GNU_SOURCE -D$(ARCH) $(INCLUDES) -I$(ARCH)
 
 LIBSA = $(ARCH)/libsaproc.so
@@ -81,13 +79,13 @@ LDFLAGS_NO_EXEC_STACK="-Wl,-z,noexecstack"
 LFLAGS_LIBSA += $(LDFLAGS_NO_EXEC_STACK)
 
 $(LIBSA): $(ARCH) $(OBJS) mapfile
-        $(GCC) -shared $(LFLAGS_LIBSA) -o $(LIBSA) $(OBJS) $(LIBS)
+        $(GCC) -shared $(LFLAGS_LIBSA) -o $(LIBSA) $(OBJS)
 
 test.o: test.c
 	$(GCC) -c -o test.o -g -D_GNU_SOURCE -D$(ARCH) $(INCLUDES) test.c
 
 test: test.o
-	$(GCC) -o test test.o -L$(ARCH) -lsaproc $(LIBS)
+	$(GCC) -o test test.o -L$(ARCH) -lsaproc
 
 clean:
         rm -fr $(ARCH)
