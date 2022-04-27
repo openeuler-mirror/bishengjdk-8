@@ -77,7 +77,7 @@ class PSMarkSweep : public MarkSweep {
 
   // Reset time since last full gc
   static void reset_millis_since_last_gc();
-  static void ps_marksweep_init();
+  static void ps_marksweep_init() NOT_ALL_GCS_RETURN;
 
  public:
   static inline PSMarkSweep* the_ps_mark() { return (PSMarkSweep*)_the_ps_mark; }

@@ -31,7 +31,6 @@ static JNINativeMethod methods[] = {
   {"getG1PeriodicGCIntervalImpl",        "()I",  (void *)&JVM_AdaptiveHeapGetG1PeriodicGCInterval},
   {"setG1PeriodicGCLoadThresholdImpl",   "(I)V", (void *)&JVM_AdaptiveHeapSetG1PeriodicGCLoadThreshold},
   {"getG1PeriodicGCLoadThresholdImpl",   "()I",  (void *)&JVM_AdaptiveHeapGetG1PeriodicGCLoadThreshold},
-
 };
 
 JNIEXPORT void JNICALL

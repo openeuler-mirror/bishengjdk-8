@@ -273,10 +273,12 @@ void ParallelTaskTerminator::reset_for_reuse(int n_threads) {
   _n_threads = n_threads;
 }
 
+#if INCLUDE_ALL_GCS
 TaskTerminator::TaskTerminator(uint n_threads, TaskQueueSetSuper* queue_set) :
   _terminator(UseOWSTTaskTerminator ? new OWSTTaskTerminator(n_threads, queue_set)
                                     : new ParallelTaskTerminator(n_threads, queue_set)) {
 }
+#endif
 
 TaskTerminator::~TaskTerminator() {
   if (_terminator != NULL) {

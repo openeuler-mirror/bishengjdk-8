@@ -763,7 +763,7 @@ private:
   TaskTerminator(const TaskTerminator& o) { }
   TaskTerminator& operator=(TaskTerminator& o) { return *this; }
 public:
-  TaskTerminator(uint n_threads, TaskQueueSetSuper* queue_set);
+  TaskTerminator(uint n_threads, TaskQueueSetSuper* queue_set) NOT_ALL_GCS_RETURN;
   ~TaskTerminator();
 
   // Move assignment
