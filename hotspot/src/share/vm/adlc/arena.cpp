@@ -93,7 +93,7 @@ void* Arena::grow( size_t x ) {
   // Get minimal required size.  Either real big, or even bigger for giant objs
   size_t len = max(x, Chunk::size);
 
-  Chunk *k = _chunk;   // Get filled-up chunk address
+  Chunk *k = _chunk;            // Get filled-up chunk address
   _chunk = new (len) Chunk(len);
 
   if( k ) k->_next = _chunk;    // Append new chunk to end of linked list

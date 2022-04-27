@@ -131,6 +131,11 @@ class UnixFileSystem extends FileSystem {
         return (f.getPrefixLength() != 0);
     }
 
+    @Override
+    public boolean isInvalid(File f) {
+        return f.getPath().indexOf('\u0000') < 0 ? false : true;
+    }
+
     public String resolve(File f) {
         if (isAbsolute(f)) return f.getPath();
         SecurityManager sm = System.getSecurityManager();
