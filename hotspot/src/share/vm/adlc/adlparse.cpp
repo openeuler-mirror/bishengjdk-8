@@ -4762,7 +4762,7 @@ char *ADLParser::get_unique_ident(FormDict& dict, const char* nameDescription){
 // invokes a parse_err if the next token is not an integer.
 // This routine does not leave the integer null-terminated.
 int ADLParser::get_int(void) {
-  char c;
+  char          c;
   char         *start;            // Pointer to start of token
   char         *end;              // Pointer to end of token
   int           result;           // Storage for integer result
