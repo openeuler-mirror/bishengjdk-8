@@ -1093,19 +1093,6 @@ Klass* SystemDictionary::parse_stream(Symbol* class_name,
   return k();
 }
 
-static char* convert_into_package_name(char* name) {
-  char* index = strrchr(name, '/');
-  if (index == NULL) {
-    return NULL;
-  } else {  
-    *index = '\0'; // chop to just the package name
-    while ((index = strchr(name, '/')) != NULL) {
-      *index = '.'; // replace '/' with '.' in package name
-    }
-    return name;
-  }
-}
-
 static bool is_prohibited_package_slow(Symbol* class_name) {
   // Caller has ResourceMark
   int length;
@@ -1252,6 +1239,18 @@ void SystemDictionary::set_shared_dictionary(HashtableBucket<mtClass>* t, int le
   _shared_dictionary = new Dictionary(_nof_buckets, t, number_of_entries);
 }
 
+static char* convert_into_package_name(char* name) {
+  char* index = strrchr(name, '/');
+  if (index == NULL) {
+    return NULL;
+  } else {
+    *index = '\0'; // chop to just the package name
+    while ((index = strchr(name, '/')) != NULL) {
+      *index = '.'; // replace '/' with '.' in package name
+    }
+    return name;
+  }
+}
 
 // If there is a shared dictionary, then find the entry for the
 // given shared system class, if any.
@@ -1266,7 +1265,6 @@ Klass* SystemDictionary::find_shared_class(Symbol* class_name) {
     return NULL;
   }
 }
-
 
 // Load a class from the shared spaces (found through the shared system
 // dictionary).  Force the superclass and all interfaces to be loaded.
