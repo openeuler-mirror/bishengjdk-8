@@ -50,6 +50,7 @@ SA_CLASSPATH = $(BOOT_JAVA_HOME)/lib/tools.jar
 MODULELIB_PATH= $(BOOT_JAVA_HOME)/lib/modules
 
 AGENT_FILES_LIST := $(GENERATED)/agent.classes.list
+SA_CLASSDIR_JAR_CONTENTS := $(GENERATED)/sa.jar_contents
 
 SA_CLASSDIR = $(GENERATED)/saclasses
 
@@ -104,8 +105,11 @@ $(GENERATED)/sa-jdi.jar:: $(AGENT_FILES)
 	$(QUIETLY) rm -f $(SA_CLASSDIR)/sun/jvm/hotspot/ui/resources/*
 	$(QUIETLY) cp $(AGENT_SRC_DIR)/sun/jvm/hotspot/ui/resources/*.png $(SA_CLASSDIR)/sun/jvm/hotspot/ui/resources/
 	$(QUIETLY) cp -r $(AGENT_SRC_DIR)/images/* $(SA_CLASSDIR)/
-	$(QUIETLY) $(REMOTE) $(RUN.JAR) cf $@ -C $(SA_CLASSDIR)/ .
-	$(QUIETLY) $(REMOTE) $(RUN.JAR) uf $@ -C $(AGENT_SRC_DIR) META-INF/services/com.sun.jdi.connect.Connector
+	$(QUIETLY) rm -f $(SA_CLASSDIR_JAR_CONTENTS) && touch $(SA_CLASSDIR_JAR_CONTENTS)
+	$(QUIETLY) find $(SA_CLASSDIR) -type f | sed 's|$(SA_CLASSDIR)/||g' >> $(SA_CLASSDIR_JAR_CONTENTS)
+	$(QUIETLY) cd $(AGENT_SRC_DIR) && $(REMOTE) $(RUN.JAR) cf $@ META-INF/services/com.sun.jdi.connect.Connector
+	$(QUIETLY) cd $(SA_CLASSDIR) && $(REMOTE) $(RUN.JAR) uf $@ @$(SA_CLASSDIR_JAR_CONTENTS)
+	$(QUIETLY) cd $(TOPDIR)
 	$(QUIETLY) $(REMOTE) $(RUN.JAVAH) -classpath $(SA_CLASSDIR) -d $(GENERATED) -jni sun.jvm.hotspot.debugger.x86.X86ThreadContext
 	$(QUIETLY) $(REMOTE) $(RUN.JAVAH) -classpath $(SA_CLASSDIR) -d $(GENERATED) -jni sun.jvm.hotspot.debugger.amd64.AMD64ThreadContext
 	$(QUIETLY) $(REMOTE) $(RUN.JAVAH) -classpath $(SA_CLASSDIR) -d $(GENERATED) -jni sun.jvm.hotspot.debugger.aarch64.AARCH64ThreadContext
