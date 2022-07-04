@@ -49,8 +49,6 @@ import sun.security.util.Debug;
 
 final class JceSecurity {
 
-    static final SecureRandom RANDOM = new SecureRandom();
-
     // The defaultPolicy and exemptPolicy will be set up
     // in the static initializer.
     private static CryptoPermissions defaultPolicy = null;

@@ -32,6 +32,7 @@ import java.security.Provider.Service;
 
 import sun.security.jca.*;
 import sun.security.jca.GetInstance.Instance;
+import sun.security.provider.SunEntries;
 import sun.security.util.Debug;
 
 /**
@@ -191,27 +192,42 @@ public class SecureRandom extends java.util.Random {
     }
 
     private void getDefaultPRNG(boolean setSeed, byte[] seed) {
-        String prng = getPrngAlgorithm();
-        if (prng == null) {
-            // bummer, get the SUN implementation
-            prng = "SHA1PRNG";
+        Service prngService = null;
+        String prngAlgorithm = null;
+        for (Provider p : Providers.getProviderList().providers()) {
+            // SUN provider uses the SunEntries.DEF_SECURE_RANDOM_ALGO
+            // as the default SecureRandom algorithm; for other providers,
+            // Provider.getDefaultSecureRandom() will use the 1st
+            // registered SecureRandom algorithm
+            if (p.getName().equals("SUN")) {
+                prngAlgorithm = SunEntries.DEF_SECURE_RANDOM_ALGO;
+                prngService = p.getService("SecureRandom", prngAlgorithm);
+                break;
+            } else {
+                prngService = p.getDefaultSecureRandomService();
+                if (prngService != null) {
+                    prngAlgorithm = prngService.getAlgorithm();
+                    break;
+                }
+            }
+        }
+        // per javadoc, if none of the Providers support a RNG algorithm,
+        // then an implementation-specific default is returned.
+        if (prngService == null) {
+            prngAlgorithm = "SHA1PRNG";
             this.secureRandomSpi = new sun.security.provider.SecureRandom();
             this.provider = Providers.getSunProvider();
-            if (setSeed) {
-                this.secureRandomSpi.engineSetSeed(seed);
-            }
         } else {
             try {
-                SecureRandom random = SecureRandom.getInstance(prng);
-                this.secureRandomSpi = random.getSecureRandomSpi();
-                this.provider = random.getProvider();
-                if (setSeed) {
-                    this.secureRandomSpi.engineSetSeed(seed);
-                }
+                this.secureRandomSpi = (SecureRandomSpi) prngService.newInstance(null);
+                this.provider = prngService.getProvider();
             } catch (NoSuchAlgorithmException nsae) {
-                // never happens, because we made sure the algorithm exists
+                // should not happen
                 throw new RuntimeException(nsae);
             }
+        }
+        if (setSeed) {
+            this.secureRandomSpi.engineSetSeed(seed);
         }
         // JDK 1.1 based implementations subclass SecureRandom instead of
         // SecureRandomSpi. They will also go through this code path because
@@ -219,7 +235,7 @@ public class SecureRandom extends java.util.Random {
         // If we are dealing with such an implementation, do not set the
         // algorithm value as it would be inaccurate.
         if (getClass() == SecureRandom.class) {
-            this.algorithm = prng;
+            this.algorithm = prngAlgorithm;
         }
     }
 
@@ -387,13 +403,6 @@ public class SecureRandom extends java.util.Random {
     }
 
     /**
-     * Returns the SecureRandomSpi of this SecureRandom object.
-     */
-    SecureRandomSpi getSecureRandomSpi() {
-        return secureRandomSpi;
-    }
-
-    /**
      * Returns the provider of this SecureRandom object.
      *
      * @return the provider of this SecureRandom object.
@@ -546,23 +555,6 @@ public class SecureRandom extends java.util.Random {
         }
 
         return retVal;
-    }
-
-    /**
-     * Gets a default PRNG algorithm by looking through all registered
-     * providers. Returns the first PRNG algorithm of the first provider that
-     * has registered a SecureRandom implementation, or null if none of the
-     * registered providers supplies a SecureRandom implementation.
-     */
-    private static String getPrngAlgorithm() {
-        for (Provider p : Providers.getProviderList().providers()) {
-            for (Service s : p.getServices()) {
-                if (s.getType().equals("SecureRandom")) {
-                    return s.getAlgorithm();
-                }
-            }
-        }
-        return null;
     }
 
     /*

@@ -29,7 +29,6 @@ import java.util.*;
 
 import java.security.*;
 
-import sun.security.action.PutAllAction;
 
 /**
  * Provider class for the RSA signature provider. Supports RSA keyfactory,
@@ -45,17 +44,25 @@ public final class SunRsaSign extends Provider {
     public SunRsaSign() {
         super("SunRsaSign", 1.8d, "Sun RSA signature provider");
 
-        // if there is no security manager installed, put directly into
-        // the provider. Otherwise, create a temporary map and use a
-        // doPrivileged() call at the end to transfer the contents
+        Provider p = this;
+        Iterator<Provider.Service> serviceIter = new SunRsaSignEntries(p).iterator();
+
         if (System.getSecurityManager() == null) {
-            SunRsaSignEntries.putEntries(this);
+            putEntries(serviceIter);
         } else {
-            // use LinkedHashMap to preserve the order of the PRNGs
-            Map<Object, Object> map = new HashMap<>();
-            SunRsaSignEntries.putEntries(map);
-            AccessController.doPrivileged(new PutAllAction(this, map));
+            AccessController.doPrivileged(new PrivilegedAction<Void>() {
+                @Override
+                public Void run() {
+                    putEntries(serviceIter);
+                    return null;
+                }
+            });
         }
     }
 
+    void putEntries(Iterator<Provider.Service> i) {
+        while (i.hasNext()) {
+            putService(i.next());
+        }
+    }
 }
