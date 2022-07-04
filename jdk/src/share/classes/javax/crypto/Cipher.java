@@ -1186,7 +1186,7 @@ public class Cipher {
      * by the underlying {@code CipherSpi}.
      */
     public final void init(int opmode, Key key) throws InvalidKeyException {
-        init(opmode, key, JceSecurity.RANDOM);
+        init(opmode, key, JCAUtil.getSecureRandom());
     }
 
     /**
@@ -1327,7 +1327,7 @@ public class Cipher {
     public final void init(int opmode, Key key, AlgorithmParameterSpec params)
             throws InvalidKeyException, InvalidAlgorithmParameterException
     {
-        init(opmode, key, params, JceSecurity.RANDOM);
+        init(opmode, key, params, JCAUtil.getSecureRandom());
     }
 
     /**
@@ -1470,7 +1470,7 @@ public class Cipher {
     public final void init(int opmode, Key key, AlgorithmParameters params)
             throws InvalidKeyException, InvalidAlgorithmParameterException
     {
-        init(opmode, key, params, JceSecurity.RANDOM);
+        init(opmode, key, params, JCAUtil.getSecureRandom());
     }
 
     /**
@@ -1618,7 +1618,7 @@ public class Cipher {
     public final void init(int opmode, Certificate certificate)
             throws InvalidKeyException
     {
-        init(opmode, certificate, JceSecurity.RANDOM);
+        init(opmode, certificate, JCAUtil.getSecureRandom());
     }
 
     /**

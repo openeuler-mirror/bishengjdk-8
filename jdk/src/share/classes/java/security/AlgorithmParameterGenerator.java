@@ -26,6 +26,7 @@
 package java.security;
 
 import java.security.spec.AlgorithmParameterSpec;
+import sun.security.jca.JCAUtil;
 
 /**
  * The {@code AlgorithmParameterGenerator} class is used to generate a
@@ -282,7 +283,7 @@ public class AlgorithmParameterGenerator {
      * @param size the size (number of bits).
      */
     public final void init(int size) {
-        paramGenSpi.engineInit(size, new SecureRandom());
+        paramGenSpi.engineInit(size, JCAUtil.getSecureRandom());
     }
 
     /**
@@ -313,7 +314,7 @@ public class AlgorithmParameterGenerator {
      */
     public final void init(AlgorithmParameterSpec genParamSpec)
         throws InvalidAlgorithmParameterException {
-            paramGenSpi.engineInit(genParamSpec, new SecureRandom());
+            paramGenSpi.engineInit(genParamSpec, JCAUtil.getSecureRandom());
     }
 
     /**

@@ -427,7 +427,7 @@ public class KeyGenerator {
     public final void init(AlgorithmParameterSpec params)
         throws InvalidAlgorithmParameterException
     {
-        init(params, JceSecurity.RANDOM);
+        init(params, JCAUtil.getSecureRandom());
     }
 
     /**
@@ -491,7 +491,7 @@ public class KeyGenerator {
      * supported.
      */
     public final void init(int keysize) {
-        init(keysize, JceSecurity.RANDOM);
+        init(keysize, JCAUtil.getSecureRandom());
     }
 
     /**

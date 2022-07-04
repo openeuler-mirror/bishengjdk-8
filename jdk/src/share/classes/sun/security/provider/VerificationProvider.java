@@ -28,8 +28,6 @@ package sun.security.provider;
 import java.util.*;
 import java.security.*;
 
-import sun.security.action.PutAllAction;
-
 import sun.security.rsa.SunRsaSignEntries;
 
 /**
@@ -68,19 +66,29 @@ public final class VerificationProvider extends Provider {
             return;
         }
 
+        Provider p = this;
+        Iterator<Provider.Service> sunIter = new SunEntries(p).iterator();
+        Iterator<Provider.Service> rsaIter = new SunRsaSignEntries(p).iterator();
         // if there is no security manager installed, put directly into
-        // the provider. Otherwise, create a temporary map and use a
-        // doPrivileged() call at the end to transfer the contents
+        // the provider.
         if (System.getSecurityManager() == null) {
-            SunEntries.putEntries(this);
-            SunRsaSignEntries.putEntries(this);
+            putEntries(sunIter);
+            putEntries(rsaIter);
         } else {
             // use LinkedHashMap to preserve the order of the PRNGs
-            Map<Object, Object> map = new LinkedHashMap<>();
-            SunEntries.putEntries(map);
-            SunRsaSignEntries.putEntries(map);
-            AccessController.doPrivileged(new PutAllAction(this, map));
+            AccessController.doPrivileged(new PrivilegedAction<Object>() {
+                public Void run() {
+                    putEntries(sunIter);
+                    putEntries(rsaIter);
+                    return null;
+                }
+            });
         }
     }
 
+    void putEntries(Iterator<Provider.Service> i) {
+        while (i.hasNext()) {
+            putService(i.next());
+        }
+    }
 }

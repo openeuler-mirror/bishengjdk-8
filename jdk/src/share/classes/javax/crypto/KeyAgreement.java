@@ -438,7 +438,7 @@ public class KeyAgreement {
      * has an incompatible algorithm type.
      */
     public final void init(Key key) throws InvalidKeyException {
-        init(key, JceSecurity.RANDOM);
+        init(key, JCAUtil.getSecureRandom());
     }
 
     /**
@@ -506,7 +506,7 @@ public class KeyAgreement {
     public final void init(Key key, AlgorithmParameterSpec params)
         throws InvalidKeyException, InvalidAlgorithmParameterException
     {
-        init(key, params, JceSecurity.RANDOM);
+        init(key, params, JCAUtil.getSecureRandom());
     }
 
     /**
