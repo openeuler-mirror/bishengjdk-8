@@ -68,7 +68,7 @@ floobydust (void *p)
 int
 main (int argc, const char** argv)
 {
-  options[0].optionString = "-Xss320k";
+  options[0].optionString = "-Xss512k";
 
   vm_args.version = JNI_VERSION_1_2;
   vm_args.ignoreUnrecognized = JNI_TRUE;
