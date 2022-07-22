@@ -113,7 +113,6 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBVERIFY, \
     INCLUDE_FILES := $(BUILD_LIBVERIFY_SRC), \
     LANG := C, \
     OPTIMIZATION := $(LIBVERIFY_OPTIMIZATION), \
-    EXTRA_FILES := $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp, \
     CFLAGS := $(CFLAGS_JDKLIB), \
     MAPFILE := $(JDK_TOPDIR)/make/mapfiles/libverify/mapfile-vers, \
     LDFLAGS := $(LDFLAGS_JDKLIB) \
@@ -225,7 +224,6 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBJAVA, \
     EXCLUDE_FILES := $(LIBJAVA_EXCLUDE_FILES), \
     LANG := C, \
     OPTIMIZATION := HIGH, \
-    EXTRA_FILES := $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp, \
     CFLAGS := $(CFLAGS_JDKLIB) \
         $(LIBJAVA_CFLAGS), \
     MAPFILE := $(LIBJAVA_MAPFILE), \
@@ -287,7 +285,6 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBZIP, \
     OUTPUT_DIR := $(INSTALL_LIBRARIES_HERE), \
     LANG := C, \
     OPTIMIZATION := LOW, \
-    EXTRA_FILES := $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp, \
     SRC := $(JDK_TOPDIR)/src/share/native/java/util/zip, \
     EXCLUDES := $(LIBZIP_EXCLUDES), \
     CFLAGS := $(CFLAGS_JDKLIB) \
@@ -329,7 +326,6 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBUNPACK, \
     EXCLUDE_FILES := main.cpp, \
     LANG := C++, \
     OPTIMIZATION := LOW, \
-    EXTRA_FILES := $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp, \
     CFLAGS := $(CXXFLAGS_JDKLIB) \
         -DNO_ZLIB -DUNPACK_JNI -DFULL, \
     CFLAGS_release := -DPRODUCT, \
@@ -442,7 +438,6 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBJLI, \
     INCLUDE_FILES := $(BUILD_LIBJLI_FILES), \
     LANG := C, \
     OPTIMIZATION := HIGH, \
-    EXTRA_FILES := $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp, \
     CFLAGS := $(LIBJLI_CFLAGS), \
     MAPFILE := $(JDK_TOPDIR)/make/mapfiles/libjli/mapfile-vers, \
     LDFLAGS := $(LDFLAGS_JDKLIB) \
@@ -544,7 +539,6 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBNPT, \
     SRC := $(JDK_TOPDIR)/src/share/npt $(JDK_TOPDIR)/src/$(OPENJDK_TARGET_OS_API_DIR)/npt, \
     LANG := C, \
     OPTIMIZATION := LOW, \
-    EXTRA_FILES := $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp, \
     CFLAGS := $(CFLAGS_JDKLIB) \
         -I$(JDK_TOPDIR)/src/share/npt \
         -I$(JDK_TOPDIR)/src/$(OPENJDK_TARGET_OS_API_DIR)/npt, \

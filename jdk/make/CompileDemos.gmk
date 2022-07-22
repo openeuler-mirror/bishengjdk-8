@@ -250,7 +250,6 @@ define SetupJVMTIDemo
       SRC := $(JDK_TOPDIR)/src/share/demo/jvmti/$1 $$(BUILD_DEMO_JVMTI_$1_EXTRA_SRC), \
       LANG := $$(BUILD_DEMO_JVMTI_$1_LANG), \
       OPTIMIZATION := LOW, \
-      EXTRA_FILES := $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp, \
       CXXFLAGS := $$($1_CXXFLAGS), \
       LDFLAGS := $(filter-out -incremental:no -opt:ref, $$(LDFLAGS_JDKLIB)), \
       LDFLAGS_macosx := $$(call SET_EXECUTABLE_ORIGIN), \
