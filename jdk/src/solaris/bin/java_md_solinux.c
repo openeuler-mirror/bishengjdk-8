@@ -903,6 +903,13 @@ LoadJavaVM(const char *jvmpath, InvocationFunctions *ifn)
         return JNI_FALSE;
     }
 
+    ifn->SetCParam = (SetCParam_t)
+        dlsym(libjvm, "JNI_SetCParam");
+    if (ifn->SetCParam == NULL) {
+        JLI_ReportErrorMessage(DLL_ERROR2, jvmpath, dlerror());
+        return JNI_FALSE;
+    }
+
     ifn->GetDefaultJavaVMInitArgs = (GetDefaultJavaVMInitArgs_t)
         dlsym(libjvm, "JNI_GetDefaultJavaVMInitArgs");
     if (ifn->GetDefaultJavaVMInitArgs == NULL) {

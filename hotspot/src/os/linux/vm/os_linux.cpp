@@ -133,6 +133,8 @@ PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 #define LARGEPAGES_BIT (1 << 6)
 ////////////////////////////////////////////////////////////////////////////////
 // global variables
+extern char** argv_for_execvp;
+
 julong os::Linux::_physical_memory = 0;
 
 address   os::Linux::_initial_thread_stack_bottom = NULL;
@@ -3129,6 +3131,77 @@ void* os::Linux::libnuma_v2_dlsym(void* handle, const char* name) {
   return dlvsym(handle, name, "libnuma_1.2");
 }
 
+void os::Linux::parse_numa_nodes() {
+  if (NUMANodes == NULL && NUMANodesRandom == 0) {
+    return;
+  }
+  const char* numa_nodes = NUMANodes;
+  // Max length for "%d-%d" is 24
+  char buf[24] = {0};
+  if (NUMANodesRandom != 0) {
+    int nodes_to_bind = NUMANodesRandom;
+    int nodes_num = Linux::numa_max_node() + 1;
+    const int MAX_NUMA = 1000000;
+    if (nodes_num > 0 &&
+        nodes_num < MAX_NUMA &&
+        nodes_to_bind > 0 &&
+        nodes_to_bind < nodes_num) {
+      int bound = 1;
+      while (bound < nodes_to_bind) {
+        bound *= 2;
+      }
+      struct timeval tv;
+      gettimeofday(&tv,NULL);
+      srand(tv.tv_usec);
+      int first = 0;
+      if (nodes_num > bound) {
+        first = rand() % (nodes_num / bound) * bound;
+      }
+      if (bound != nodes_to_bind) {
+        first += rand() % (1 + bound - nodes_to_bind);
+      }
+      sprintf(buf, "%d-%d", first, first + nodes_to_bind - 1);
+      numa_nodes = buf;
+      if (LogNUMANodes) {
+        warning("NUMANodes is converted to %s, with total %d nodes!", buf, nodes_num);
+      }
+    } else {
+      if (LogNUMANodes) {
+        warning("The count of nodes to bind should be less that the count of all nodes, Skip!");
+      }
+      return;
+    }
+  }
+  bitmask* mask = os::Linux::numa_parse_nodestring_all(numa_nodes);
+  if (!mask) {
+    if (LogNUMANodes) {
+      warning("<%s> is invalid", numa_nodes);
+    }
+    return;
+  }
+  if (os::Linux::numa_bitmask_equal(mask, os::Linux::_numa_membind_bitmask)) {
+    os::Linux::numa_bitmask_free(mask);
+    if (LogNUMANodes) {
+      warning("Mempolicy is not changed, param: %s",  numa_nodes);
+    }
+    return;
+  }
+  errno = 0;
+  os::Linux::numa_run_on_node_mask(mask);
+  if (errno) {
+    perror("sched_setaffinity");
+  }
+  errno = 0;
+  os::Linux::numa_set_membind(mask);
+  int errtmp = errno;
+  os::Linux::numa_bitmask_free(mask);
+  if (errtmp) {
+    perror("numa_set_membind");
+  } else {
+    execvp(*argv_for_execvp, argv_for_execvp);
+  }
+}
+
 bool os::Linux::libnuma_init() {
   // sched_getcpu() should be in libc.
   set_sched_getcpu(CAST_TO_FN_PTR(sched_getcpu_func_t,
@@ -3169,6 +3242,16 @@ bool os::Linux::libnuma_init() {
                                          libnuma_dlsym(handle, "numa_move_pages")));
       set_numa_run_on_node(CAST_TO_FN_PTR(numa_run_on_node_func_t,
                                          libnuma_dlsym(handle, "numa_run_on_node")));
+      set_numa_parse_nodestring_all(CAST_TO_FN_PTR(numa_parse_nodestring_all_func_t,
+                                         libnuma_dlsym(handle, "numa_parse_nodestring_all")));
+      set_numa_run_on_node_mask(CAST_TO_FN_PTR(numa_run_on_node_mask_func_t,
+                                         libnuma_v2_dlsym(handle, "numa_run_on_node_mask")));
+      set_numa_bitmask_equal(CAST_TO_FN_PTR(numa_bitmask_equal_func_t,
+                                         libnuma_v2_dlsym(handle, "numa_bitmask_equal")));
+      set_numa_set_membind(CAST_TO_FN_PTR(numa_set_membind_func_t,
+                                         libnuma_v2_dlsym(handle, "numa_set_membind")));
+      set_numa_bitmask_free(CAST_TO_FN_PTR(numa_bitmask_free_func_t,
+                                         libnuma_dlsym(handle, "numa_bitmask_free")));
 
       if (numa_available() != -1) {
         set_numa_all_nodes((unsigned long*)libnuma_dlsym(handle, "numa_all_nodes"));
@@ -3176,6 +3259,9 @@ bool os::Linux::libnuma_init() {
         set_numa_nodes_ptr((struct bitmask **)libnuma_dlsym(handle, "numa_nodes_ptr"));
         set_numa_interleave_bitmask(_numa_get_interleave_mask());
         set_numa_membind_bitmask(_numa_get_membind());
+        if (isbound_to_all_node()) {
+          parse_numa_nodes();
+        }
         // Create an index -> node mapping, since nodes are not always consecutive
         _nindex_to_node = new (ResourceObj::C_HEAP, mtInternal) GrowableArray<int>(0, true);
         rebuild_nindex_to_node_map();
@@ -3295,6 +3381,11 @@ os::Linux::numa_get_membind_func_t os::Linux::_numa_get_membind;
 os::Linux::numa_get_interleave_mask_func_t os::Linux::_numa_get_interleave_mask;
 os::Linux::numa_move_pages_func_t os::Linux::_numa_move_pages;
 os::Linux::numa_run_on_node_func_t os::Linux::_numa_run_on_node;
+os::Linux::numa_parse_nodestring_all_func_t os::Linux::_numa_parse_nodestring_all;
+os::Linux::numa_run_on_node_mask_func_t os::Linux::_numa_run_on_node_mask;
+os::Linux::numa_bitmask_equal_func_t os::Linux::_numa_bitmask_equal;
+os::Linux::numa_set_membind_func_t os::Linux::_numa_set_membind;
+os::Linux::numa_bitmask_free_func_t os::Linux::_numa_bitmask_free;
 os::Linux::NumaAllocationPolicy os::Linux::_current_numa_policy;
 unsigned long* os::Linux::_numa_all_nodes;
 struct bitmask* os::Linux::_numa_all_nodes_ptr;

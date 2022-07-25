@@ -86,6 +86,7 @@ AGCT_EXPORT=/export:AsyncGetCallTrace
 LD_FLAGS=$(LD_FLAGS) $(STACK_SIZE) /subsystem:windows /dll /base:0x8000000 \
   /export:JNI_GetDefaultJavaVMInitArgs       \
   /export:JNI_CreateJavaVM                   \
+  /export:JNI_SetCParam                      \
   /export:JVM_FindClassFromBootLoader        \
   /export:JNI_GetCreatedJavaVMs              \
   /export:jio_snprintf                       \

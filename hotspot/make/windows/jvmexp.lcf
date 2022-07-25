@@ -1,5 +1,6 @@
 -export:JNI_GetDefaultJavaVMInitArgs
 -export:JNI_CreateJavaVM
+-export:JNI_SetCParam;
 -export:JNI_GetCreatedJavaVMs
 
 -export:jio_snprintf

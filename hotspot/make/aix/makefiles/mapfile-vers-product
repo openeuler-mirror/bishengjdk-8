@@ -28,6 +28,7 @@ SUNWprivate_1.1 {
         global:
                 # JNI
                 JNI_CreateJavaVM;
+                JNI_SetCParam;
                 JNI_GetCreatedJavaVMs;
                 JNI_GetDefaultJavaVMInitArgs;
 

@@ -51,6 +51,15 @@ public class CPUSetsReader {
         Asserts.assertEquals(listToString(parseCpuSet(cpuSet)), expectedResult);
     }
 
+    public static int getNumCpus() {
+        String path = "/proc/cpuinfo";
+        try {
+            Stream<String> stream = Files.lines(Paths.get(path));
+            return (int) stream.filter(line -> line.startsWith("processor")).count();
+        } catch (IOException e) {
+            return 0;
+        }
+    }
 
     public static String readFromProcStatus(String setType) {
         String path = PROC_SELF_STATUS_PATH;
