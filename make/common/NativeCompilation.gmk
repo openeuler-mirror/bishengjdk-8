@@ -271,7 +271,6 @@ define SetupNativeCompilation
 
   # Find all files in the source trees. Sort to remove duplicates.
   $1_ALL_SRCS := $$(sort $$(call CacheFind,$$($1_SRC)))
-
   # Extract the C/C++ files.
   $1_EXCLUDE_FILES:=$$(foreach i,$$($1_SRC),$$(addprefix $$i/,$$($1_EXCLUDE_FILES)))
   $1_INCLUDE_FILES:=$$(foreach i,$$($1_SRC),$$(addprefix $$i/,$$($1_INCLUDE_FILES)))
@@ -282,20 +281,13 @@ define SetupNativeCompilation
   ifneq (,$$(strip $$($1_INCLUDE_FILES)))
     $1_SRCS := $$(filter $$($1_INCLUDE_FILES),$$($1_SRCS))
   endif
-
-  # Pickup extra OPENJDK_TARGET_OS_API and/or OPENJDK_TARGET_OS dependent variables
-  # for LDFLAGS and LDFLAGS_SUFFIX
-  $1_EXTRA_LDFLAGS:=$$($1_LDFLAGS_$(OPENJDK_TARGET_OS_API)) $$($1_LDFLAGS_$(OPENJDK_TARGET_OS))
-  $1_EXTRA_LDFLAGS_SUFFIX:=$$($1_LDFLAGS_SUFFIX_$(OPENJDK_TARGET_OS_API)) $$($1_LDFLAGS_SUFFIX_$(OPENJDK_TARGET_OS))
-
   ifeq ($(OPENJDK_TARGET_OS), linux) # only on linux
-    ifneq ($$(findstring wrap=memcpy, $$($1_LDFLAGS)$$($1_EXTRA_LDFLAGS))$$($1_EXTRA_LDFLAGS_SUFFIX),)
-      ifeq ($$(findstring memcpy.cpp, $$($1_SRCS)),)
-        $1_SRCS += $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp
+    ifneq ($(OPENJDK_TARGET_CPU_ARCH), aarch64) # not need on the arm arch
+      ifneq (,$$(strip $$($1_EXTRA_FILES)))
+        $1_SRCS += $$($1_EXTRA_FILES)
       endif
     endif
   endif
-
   ifeq (,$$($1_SRCS))
     $$(error No sources found for $1 when looking inside the dirs $$($1_SRC))
   endif
@@ -440,6 +432,10 @@ define SetupNativeCompilation
     endif
   endif
 
+  # Pickup extra OPENJDK_TARGET_OS_API and/or OPENJDK_TARGET_OS dependent variables
+  # for LDFLAGS and LDFLAGS_SUFFIX
+  $1_EXTRA_LDFLAGS:=$$($1_LDFLAGS_$(OPENJDK_TARGET_OS_API)) $$($1_LDFLAGS_$(OPENJDK_TARGET_OS))
+  $1_EXTRA_LDFLAGS_SUFFIX:=$$($1_LDFLAGS_SUFFIX_$(OPENJDK_TARGET_OS_API)) $$($1_LDFLAGS_SUFFIX_$(OPENJDK_TARGET_OS))
   ifneq (,$$($1_REAL_MAPFILE))
     $1_EXTRA_LDFLAGS += $(call SET_SHARED_LIBRARY_MAPFILE,$$($1_REAL_MAPFILE))
   endif

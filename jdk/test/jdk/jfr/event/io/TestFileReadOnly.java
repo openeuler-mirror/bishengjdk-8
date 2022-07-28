@@ -38,6 +38,7 @@ import java.util.List;
 
 import jdk.jfr.Recording;
 import jdk.jfr.consumer.RecordedEvent;
+import jdk.test.lib.Utils;
 import jdk.test.lib.jfr.Events;
 
 /**
@@ -52,7 +53,7 @@ public class TestFileReadOnly {
     public static void main(String[] args) throws Throwable {
         File tmp = File.createTempFile("TestFileReadOnly", ".tmp", new File("."));
         tmp.deleteOnExit();
-        try(Recording recording = new Recording()) {
+        try (Recording recording = new Recording()) {
             List<IOEvent> expectedEvents = new ArrayList<>();
 
             recording.enable(IOEvent.EVENT_FILE_READ).withThreshold(Duration.ofMillis(0));

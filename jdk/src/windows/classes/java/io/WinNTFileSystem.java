@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2001, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -57,16 +57,15 @@ class WinNTFileSystem extends FileSystem {
 
     // Whether to enable alternative data streams (ADS) by suppressing
     // checking the path for invalid characters, in particular ":".
-    // ADS support will be enabled if and only if the property is set and
-    // is the empty string or is equal, ignoring case, to the string "true".
-    // By default ADS support is disabled.
+    // By default, ADS support is enabled and will be disabled if and
+    // only if the property is set, ignoring case, to the string "false".
     private static final boolean ENABLE_ADS;
     static {
         String enableADS = GetPropertyAction.privilegedGetProperty("jdk.io.File.enableADS");
         if (enableADS != null) {
-            ENABLE_ADS = "".equals(enableADS) || Boolean.parseBoolean(enableADS);
+            ENABLE_ADS = !enableADS.equalsIgnoreCase(Boolean.FALSE.toString());
         } else {
-            ENABLE_ADS = false;
+            ENABLE_ADS = true;
         }
     }
 
@@ -77,7 +76,7 @@ class WinNTFileSystem extends FileSystem {
             new GetPropertyAction("path.separator")).charAt(0);
         altSlash = (this.slash == '\\') ? '/' : '\\';
         userDir = AccessController.doPrivileged(
-                new GetPropertyAction("user.dir"));
+            new GetPropertyAction("user.dir"));
     }
 
     private boolean isSlash(char c) {

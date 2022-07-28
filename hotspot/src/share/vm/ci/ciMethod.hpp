@@ -140,7 +140,7 @@ class ciMethod : public ciMetadata {
   // be determined differently, as the method's flags are not yet available.
   // The invoke_arg_size() method assumes in that case that all bytecodes except
   // invokestatic and invokedynamic have a receiver that is also pushed onto the
-  // stack by the caller of the current method. 
+  // stack by the caller of the current method.
   int invoke_arg_size(Bytecodes::Code code) const {
     if (is_loaded()) {
       return arg_size();
