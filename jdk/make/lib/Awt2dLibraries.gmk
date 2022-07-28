@@ -52,7 +52,6 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBMLIB_IMAGE, \
     EXCLUDE_FILES := awt_ImagingLib.c mlib_c_ImageBlendTable.c, \
     LANG := C, \
     OPTIMIZATION := HIGHEST, \
-    EXTRA_FILES := $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp, \
     CFLAGS := $(CFLAGS_JDKLIB) \
         $(BUILD_LIBMLIB_CFLAGS), \
     MAPFILE := $(BUILD_LIBMLIB_IMAGE_MAPFILE), \
@@ -471,7 +470,6 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBAWT, \
     INCLUDE_FILES := $(LIBAWT_FILES), \
     LANG := $(LIBAWT_LANG), \
     OPTIMIZATION := LOW, \
-    EXTRA_FILES := $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp, \
     CFLAGS := $(CFLAGS_JDKLIB) $(LIBAWT_CFLAGS), \
     ASFLAGS := $(LIBAWT_ASFLAGS), \
     MAPFILE := $(LIBAWT_MAPFILE), \
@@ -633,7 +631,6 @@ ifeq ($(findstring $(OPENJDK_TARGET_OS),windows macosx),)
         INCLUDE_FILES := $(LIBAWT_XAWT_FILES), \
         LANG := C, \
         OPTIMIZATION := LOW, \
-        EXTRA_FILES := $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp, \
         CFLAGS := $(CFLAGS_JDKLIB) $(LIBAWT_XAWT_CFLAGS) \
             $(X_CFLAGS), \
         MAPFILE := $(JDK_TOPDIR)/make/mapfiles/libawt_xawt/mapfile-vers, \
@@ -675,7 +672,6 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBLCMS, \
     SRC := $(JDK_TOPDIR)/src/share/native/sun/java2d/cmm/lcms, \
     LANG := C, \
     OPTIMIZATION := HIGHEST, \
-    EXTRA_FILES := $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp, \
     CFLAGS := $(filter-out -xc99=%none, $(CFLAGS_JDKLIB)) \
         -DCMS_DONT_USE_FAST_FLOOR \
         $(SHARED_LIBRARY_FLAGS) \
@@ -743,7 +739,6 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBJPEG, \
         $(JDK_TOPDIR)/src/share/native/sun/awt/image/jpeg, \
     LANG := C, \
     OPTIMIZATION := HIGHEST, \
-    EXTRA_FILES := $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp, \
     CFLAGS := $(CFLAGS_JDKLIB) \
         $(BUILD_LIBJPEG_CLOSED_INCLUDES) \
         -I$(JDK_TOPDIR)/src/share/native/sun/awt/image/jpeg, \
@@ -919,7 +914,6 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBFONTMANAGER, \
     EXCLUDE_FILES := $(LIBFONTMANAGER_EXCLUDE_FILES) \
         AccelGlyphCache.c, \
     LANG := C++, \
-    EXTRA_FILES := $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp, \
     CFLAGS := $(CFLAGS_JDKLIB) $(BUILD_LIBFONTMANAGER_CFLAGS_COMMON), \
     CXXFLAGS := $(CXXFLAGS_JDKLIB) $(BUILD_LIBFONTMANAGER_CFLAGS_COMMON), \
     OPTIMIZATION := $(LIBFONTMANAGER_OPTIMIZATION), \
@@ -1211,7 +1205,6 @@ ifndef BUILD_HEADLESS_ONLY
       EXCLUDE_FILES := imageioJPEG.c jpegdecoder.c pngtest.c, \
       LANG := C, \
       OPTIMIZATION := LOW, \
-      EXTRA_FILES := $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp, \
       CFLAGS := $(LIBSPLASHSCREEN_CFLAGS) $(CFLAGS_JDKLIB) $(GIFLIB_CFLAGS), \
       MAPFILE := $(JDK_TOPDIR)/make/mapfiles/libsplashscreen/mapfile-vers, \
       LDFLAGS := $(LDFLAGS_JDKLIB) \

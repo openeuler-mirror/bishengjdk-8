@@ -201,7 +201,6 @@ ifneq ($(filter jsoundalsa, $(EXTRA_SOUND_JNI_LIBS)), )
           PLATFORM_API_LinuxOS_ALSA_Ports.c, \
       LANG := C, \
       OPTIMIZATION := LOW, \
-      EXTRA_FILES := $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp, \
       CFLAGS := $(CFLAGS_JDKLIB) $(ALSA_CFLAGS) \
           $(LIBJSOUND_CFLAGS) \
           -DUSE_DAUDIO=TRUE \
