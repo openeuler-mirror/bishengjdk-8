@@ -37,6 +37,7 @@ import java.util.List;
 import jdk.jfr.Recording;
 import jdk.jfr.consumer.RecordedEvent;
 import jdk.test.lib.Asserts;
+import jdk.test.lib.Utils;
 import jdk.test.lib.jfr.Events;
 import jdk.test.lib.thread.TestThread;
 import jdk.test.lib.thread.XRun;
@@ -85,21 +86,21 @@ public class TestRandomAccessFileThread {
                 }}, "TestWriterThread");
 
             TestThread readerThread = new TestThread(new XRun() {
-                @Override
-                public void xrun() throws IOException {
-                    try (RandomAccessFile raf = new RandomAccessFile(tmp, "r")) {
-                        byte[] buf = new byte[OP_COUNT];
-                        for(int i = 0; i < OP_COUNT; ++i) {
-                            while (writeCount <= i) {
-                                // No more data to read. Wait for writer thread.
-                                Thread.yield();
-                            }
-                            int expectedSize = i + 1;
-                            int actualSize = raf.read(buf, 0, expectedSize);
-                            Asserts.assertEquals(actualSize, expectedSize, "Wrong read size. Probably test error.");
+            @Override
+            public void xrun() throws IOException {
+                try (RandomAccessFile raf = new RandomAccessFile(tmp, "r")) {
+                    byte[] buf = new byte[OP_COUNT];
+                    for(int i = 0; i < OP_COUNT; ++i) {
+                        while (writeCount <= i) {
+                            // No more data to read. Wait for writer thread.
+                            Thread.yield();
                         }
+                        int expectedSize = i + 1;
+                        int actualSize = raf.read(buf, 0, expectedSize);
+                        Asserts.assertEquals(actualSize, expectedSize, "Wrong read size. Probably test error.");
                     }
-                }}, "TestReaderThread");
+                }
+            }}, "TestReaderThread");
 
             readerThread.start();
             writerThread.start();
@@ -137,90 +138,90 @@ public class TestRandomAccessFileThread {
         }
     }
 
-    private static void logEventSummary(RecordedEvent event) {
-        boolean isRead = Events.isEventType(event, IOEvent.EVENT_FILE_READ);
-        String name = isRead ? "read " : "write";
-        String bytesField = isRead ? "bytesRead" : "bytesWritten";
-        long bytes = Events.assertField(event, bytesField).getValue();
-        long commit = Events.assertField(event, "startTime").getValue();
-        Instant start = event.getStartTime();
-        Instant end = event.getEndTime();
-        System.out.printf("%s: bytes=%d, commit=%d, start=%s, end=%s%n", name, bytes, commit, start, end);
-    }
-
-    private static void verifyThread(List<RecordedEvent> events, Thread thread) {
-        events.stream().forEach(e -> Events.assertEventThread(e, thread));
-    }
-
-    private static void verifyBytes(List<RecordedEvent> events, String fieldName) {
-        long expectedBytes = 0;
-        for (RecordedEvent event : events) {
-            Events.assertField(event, fieldName).equal(++expectedBytes);
+        private static void logEventSummary(RecordedEvent event) {
+            boolean isRead = Events.isEventType(event, IOEvent.EVENT_FILE_READ);
+            String name = isRead ? "read " : "write";
+            String bytesField = isRead ? "bytesRead" : "bytesWritten";
+            long bytes = Events.assertField(event, bytesField).getValue();
+            long commit = Events.assertField(event, "startTime").getValue();
+            Instant start = event.getStartTime();
+            Instant end = event.getEndTime();
+            System.out.printf("%s: bytes=%d, commit=%d, start=%s, end=%s%n", name, bytes, commit, start, end);
         }
-    }
 
-    // Verify that all times are increasing
-    private static void verifyTimes(List<RecordedEvent> events) {
-        RecordedEvent prev = null;
-        for (RecordedEvent curr : events) {
-            if (prev != null) {
-                try {
-                    Asserts.assertGreaterThanOrEqual(curr.getStartTime(), prev.getStartTime(), "Wrong startTime");
-                    Asserts.assertGreaterThanOrEqual(curr.getEndTime(), prev.getEndTime(), "Wrong endTime");
-                    long commitPrev = Events.assertField(prev, "startTime").getValue();
-                    long commitCurr = Events.assertField(curr, "startTime").getValue();
-                    Asserts.assertGreaterThanOrEqual(commitCurr, commitPrev, "Wrong commitTime");
-                } catch (Exception e) {
-                    System.out.println("Error: " + e.getMessage());
-                    System.out.println("Prev Event: " + prev);
-                    System.out.println("Curr Event: " + curr);
-                    throw e;
+        private static void verifyThread(List<RecordedEvent> events, Thread thread) {
+            events.stream().forEach(e -> Events.assertEventThread(e, thread));
+        }
+
+        private static void verifyBytes(List<RecordedEvent> events, String fieldName) {
+            long expectedBytes = 0;
+            for (RecordedEvent event : events) {
+                Events.assertField(event, fieldName).equal(++expectedBytes);
+            }
+        }
+
+        // Verify that all times are increasing
+        private static void verifyTimes(List<RecordedEvent> events) {
+            RecordedEvent prev = null;
+            for (RecordedEvent curr : events) {
+                if (prev != null) {
+                    try {
+                        Asserts.assertGreaterThanOrEqual(curr.getStartTime(), prev.getStartTime(), "Wrong startTime");
+                        Asserts.assertGreaterThanOrEqual(curr.getEndTime(), prev.getEndTime(), "Wrong endTime");
+                        long commitPrev = Events.assertField(prev, "startTime").getValue();
+                        long commitCurr = Events.assertField(curr, "startTime").getValue();
+                        Asserts.assertGreaterThanOrEqual(commitCurr, commitPrev, "Wrong commitTime");
+                    } catch (Exception e) {
+                        System.out.println("Error: " + e.getMessage());
+                        System.out.println("Prev Event: " + prev);
+                        System.out.println("Curr Event: " + curr);
+                        throw e;
+                    }
                 }
+                prev = curr;
             }
-            prev = curr;
         }
-    }
 
-    // Verify that all times are increasing
-    private static void verifyReadWriteTimes(List<RecordedEvent> readEvents, List<RecordedEvent> writeEvents) {
-        List<RecordedEvent> events = new ArrayList<>();
-        events.addAll(readEvents);
-        events.addAll(writeEvents);
-        events.sort(new EventComparator());
+        // Verify that all times are increasing
+        private static void verifyReadWriteTimes(List<RecordedEvent> readEvents, List<RecordedEvent> writeEvents) {
+            List<RecordedEvent> events = new ArrayList<>();
+            events.addAll(readEvents);
+            events.addAll(writeEvents);
+            events.sort(new EventComparator());
 
-        int countRead = 0;
-        int countWrite = 0;
-        for (RecordedEvent event : events) {
-            if (Events.isEventType(event, IOEvent.EVENT_FILE_READ)) {
-                ++countRead;
-            } else {
-                ++countWrite;
+            int countRead = 0;
+            int countWrite = 0;
+            for (RecordedEvent event : events) {
+                if (Events.isEventType(event, IOEvent.EVENT_FILE_READ)) {
+                    ++countRead;
+                } else {
+                    ++countWrite;
+                }
+                // We can not read from the file before it has been written.
+                // This check verifies that times of different threads are correct.
+                // Since the read and write are from different threads, it is possible that the read
+                // is committed before the same write.
+                // But read operation may only be 1 step ahead of the write operation.
+                Asserts.assertLessThanOrEqual(countRead, countWrite + 1, "read must be after write");
             }
-            // We can not read from the file before it has been written.
-            // This check verifies that times of different threads are correct.
-            // Since the read and write are from different threads, it is possible that the read
-            // is committed before the same write.
-            // But read operation may only be 1 step ahead of the write operation.
-            Asserts.assertLessThanOrEqual(countRead, countWrite + 1, "read must be after write");
         }
-    }
 
-    private static boolean isOurEvent(RecordedEvent event, File file) {
-        if (!Events.isEventType(event, IOEvent.EVENT_FILE_READ) &&
-            !Events.isEventType(event, IOEvent.EVENT_FILE_WRITE)) {
-            return false;
+        private static boolean isOurEvent(RecordedEvent event, File file) {
+            if (!Events.isEventType(event, IOEvent.EVENT_FILE_READ) &&
+                !Events.isEventType(event, IOEvent.EVENT_FILE_WRITE)) {
+                return false;
+            }
+            String path = Events.assertField(event, "path").getValue();
+            return file.getPath().equals(path);
         }
-        String path = Events.assertField(event, "path").getValue();
-        return file.getPath().equals(path);
-    }
 
-    private static class EventComparator implements Comparator<RecordedEvent> {
-        @Override
-        public int compare(RecordedEvent a, RecordedEvent b) {
-            long commitA = Events.assertField(a, "startTime").getValue();
-            long commitB = Events.assertField(b, "startTime").getValue();
-            return Long.compare(commitA, commitB);
+        private static class EventComparator implements Comparator<RecordedEvent> {
+            @Override
+            public int compare(RecordedEvent a, RecordedEvent b) {
+                long commitA = Events.assertField(a, "startTime").getValue();
+                long commitB = Events.assertField(b, "startTime").getValue();
+                return Long.compare(commitA, commitB);
+            }
         }
-    }
 
 }

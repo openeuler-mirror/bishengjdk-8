@@ -36,6 +36,7 @@ import java.util.List;
 
 import jdk.jfr.Recording;
 import jdk.jfr.consumer.RecordedEvent;
+import jdk.test.lib.Utils;
 import jdk.test.lib.jfr.Events;
 
 /**
@@ -52,7 +53,6 @@ public class TestFileStreamEvents {
         tmp.deleteOnExit();
         try (Recording recording = new Recording()) {
             List<IOEvent> expectedEvents = new ArrayList<>();
-
             try(FileOutputStream fos = new FileOutputStream(tmp); FileInputStream fis = new FileInputStream(tmp);) {
                 recording.enable(IOEvent.EVENT_FILE_READ).withThreshold(Duration.ofMillis(0));
                 recording.enable(IOEvent.EVENT_FILE_WRITE).withThreshold(Duration.ofMillis(0));

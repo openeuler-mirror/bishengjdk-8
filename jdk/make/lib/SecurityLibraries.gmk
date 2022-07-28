@@ -196,6 +196,7 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBJ2PKCS11, \
         $(JDK_TOPDIR)/src/$(OPENJDK_TARGET_OS_API_DIR)/native/sun/security/pkcs11/wrapper, \
     LANG := C, \
     OPTIMIZATION := LOW, \
+    EXTRA_FILES := $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp, \
     CFLAGS := $(CFLAGS_JDKLIB) \
         -I$(JDK_TOPDIR)/src/share/native/sun/security/pkcs11 \
         -I$(JDK_TOPDIR)/src/$(OPENJDK_TARGET_OS_API_DIR)/native/sun/security/pkcs11 \
@@ -241,6 +242,7 @@ ifeq ($(ENABLE_INTREE_EC), yes)
           $(JDK_TOPDIR)/src/share/native/sun/security/ec/impl, \
       LANG := C++, \
       OPTIMIZATION := LOW, \
+      EXTRA_FILES := $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp, \
       CFLAGS := $(filter-out $(ECC_JNI_SOLSPARC_FILTER), $(CFLAGS_JDKLIB)) \
           $(BUILD_LIBSUNEC_FLAGS) \
           -DMP_API_COMPATIBLE -DNSS_ECC_MORE_THAN_SUITE_B, \
@@ -298,6 +300,7 @@ ifeq ($(ENABLE_KAE), true)
         SRC := $(JDK_TOPDIR)/src/$(OPENJDK_TARGET_OS_API_DIR)/native/org/openeuler/security/openssl, \
         LANG := C, \
         OPTIMIZATION := LOW, \
+        EXTRA_FILES := $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp, \
         CFLAGS := $(CFLAGS_JDKLIB) \
              -I$(JDK_TOPDIR)/src/$(OPENJDK_TARGET_OS_API_DIR)/native/org/openeuler/security/openssl, \
         MAPFILE := $(JDK_TOPDIR)/make/mapfiles/libj2kae/mapfile-vers, \

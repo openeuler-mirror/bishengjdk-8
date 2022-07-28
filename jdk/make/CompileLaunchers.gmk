@@ -512,6 +512,7 @@ $(eval $(call SetupNativeCompilation,BUILD_UNPACKEXE, \
     EXCLUDE_FILES := jni.cpp, \
     LANG := $(UNPACKEXE_LANG), \
     OPTIMIZATION := LOW, \
+    EXTRA_FILES := $(HOTSPOT_TOPDIR)/src/os_cpu/linux_x86/vm/memcpy.cpp, \
     CFLAGS := $(UNPACKEXE_CFLAGS) $(CXXFLAGS_JDKEXE) \
         -DFULL, \
     CFLAGS_release := -DPRODUCT, \

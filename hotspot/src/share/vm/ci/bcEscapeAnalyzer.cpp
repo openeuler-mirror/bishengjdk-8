@@ -919,8 +919,8 @@ void BCEscapeAnalyzer::iterate_one_block(ciBlock *blk, StateInfo &state, Growabl
           // not have an appendix argument).
           if (target->is_loaded() &&
               Bytecodes::has_optional_appendix(s.cur_bc_raw()) &&
-              target->intrinsic_id() != vmIntrinsics::_invokeBasic) {  
-              state.apush(unknown_obj);
+              target->intrinsic_id() != vmIntrinsics::_invokeBasic) {
+            state.apush(unknown_obj);
           }
           // Pass in raw bytecode because we need to see invokehandle instructions.
           invoke(state, s.cur_bc_raw(), target, holder);

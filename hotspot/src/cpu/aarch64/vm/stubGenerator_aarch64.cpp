@@ -3328,8 +3328,8 @@ class StubGenerator: public StubCodeGenerator {
     // Search path: <home>/jre/lib/<arch>/<vm>/libopenblas.so
     if (jvm_offset >= 0) {
       if (jvm_offset + strlen(library_name) + strlen(os::dll_file_extension()) < JVM_MAXPATHLEN) {
-        strncpy(&path[jvm_offset], library_name, JVM_MAXPATHLEN - jvm_offset);
-        strncat(path, os::dll_file_extension(), strlen(os::dll_file_extension()));
+        strncpy(&path[jvm_offset], library_name, strlen(library_name));
+        strncat(&path[jvm_offset], os::dll_file_extension(), strlen(os::dll_file_extension()));
         library = (address)os::dll_load(path, err_buf, sizeof(err_buf));
       }
     }
