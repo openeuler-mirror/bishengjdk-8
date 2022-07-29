@@ -104,8 +104,6 @@ public class KAEProvider extends Provider {
         if (needLog && "true".equalsIgnoreCase(props.getProperty("kae.log"))) {
             logStart(excp);
             needLog = false; // Log only once
-        } else {
-            KAEProvider.excp = null; // Ignore exception.
         }
         if (!"false".equalsIgnoreCase(props.getProperty("kae.md5"))) {
             putMD5();
