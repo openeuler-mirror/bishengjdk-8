@@ -67,16 +67,14 @@ void BitMap::resize(idx_t size_in_bits, bool in_resource_area) {
   idx_t new_size_in_words = size_in_words();
   if (in_resource_area) {
     _map = NEW_RESOURCE_ARRAY(bm_word_t, new_size_in_words);
+    Copy::disjoint_words((HeapWord*)old_map, (HeapWord*) _map,
+                     MIN2(old_size_in_words, new_size_in_words));
   } else {
-    if (old_map != NULL) {
-      _map_allocator.free();
-    }
-    _map = _map_allocator.allocate(new_size_in_words);
+    _map = _map_allocator.reallocate(new_size_in_words);
   }
-  Copy::disjoint_words((HeapWord*)old_map, (HeapWord*) _map,
-                       MIN2(old_size_in_words, new_size_in_words));
+
   if (new_size_in_words > old_size_in_words) {
-    clear_range_of_words(old_size_in_words, size_in_words());
+    clear_range_of_words(old_size_in_words, new_size_in_words);
   }
 }
 
@@ -452,6 +450,11 @@ bool BitMap::is_empty() const {
     word++;
   }
   return rest == 0 || (*word & right_n_bits((int)rest)) == (bm_word_t) NoBits;
+}
+
+void BitMap::write_to(bm_word_t* buffer, size_t buffer_size_in_bytes) const {
+  assert(buffer_size_in_bytes == (size_in_words() * BytesPerWord), "must be");
+  memcpy(buffer, _map, size_in_words() * BytesPerWord);
 }
 
 void BitMap::clear_large() {

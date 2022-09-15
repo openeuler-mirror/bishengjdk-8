@@ -37,6 +37,7 @@
 #include "memory/heapInspection.hpp"
 #include "memory/metadataFactory.hpp"
 #include "memory/metaspaceShared.hpp"
+#include "memory/metaspaceClosure.hpp"
 #include "memory/oopFactory.hpp"
 #include "oops/constMethod.hpp"
 #include "oops/methodData.hpp"
@@ -834,6 +835,20 @@ void Method::set_not_osr_compilable(int comp_level, bool report, const char* rea
   assert(!CompilationPolicy::can_be_osr_compiled(this, comp_level), "sanity check");
 }
 
+void Method::metaspace_pointers_do(MetaspaceClosure* it) {
+  if (TraceDynamicCDS) {
+    dynamic_cds_log->print_cr("Iter(Method): %p", this);
+  }
+
+  if (!method_holder()->is_rewritten()) {
+    it->push(&_constMethod, MetaspaceClosure::_writable);
+  } else {
+    it->push(&_constMethod);
+  }
+  it->push(&_method_data);
+  it->push(&_method_counters);
+}
+
 // Revert to using the interpreter and clear out the nmethod
 void Method::clear_code(bool acquire_lock /* = true */) {
   MutexLockerEx pl(acquire_lock ? Patching_lock : NULL, Mutex::_no_safepoint_check_flag);
@@ -1421,12 +1436,15 @@ static int method_comparator(Method* a, Method* b) {
 
 // This is only done during class loading, so it is OK to assume method_idnum matches the methods() array
 // default_methods also uses this without the ordering for fast find_method
-void Method::sort_methods(Array<Method*>* methods, bool idempotent, bool set_idnums) {
+void Method::sort_methods(Array<Method*>* methods, bool idempotent, bool set_idnums, method_comparator_func func) {
   int length = methods->length();
   if (length > 1) {
+    if (func == NULL) {
+      func = method_comparator;
+    }
     {
       No_Safepoint_Verifier nsv;
-      QuickSort::sort<Method*>(methods->data(), length, method_comparator, idempotent);
+      QuickSort::sort<Method*>(methods->data(), length, func, idempotent);
     }
     // Reset method ordering
     if (set_idnums) {

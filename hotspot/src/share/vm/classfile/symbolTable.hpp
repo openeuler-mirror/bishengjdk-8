@@ -25,6 +25,7 @@
 #ifndef SHARE_VM_CLASSFILE_SYMBOLTABLE_HPP
 #define SHARE_VM_CLASSFILE_SYMBOLTABLE_HPP
 
+#include "classfile/compactHashtable.hpp"
 #include "memory/allocation.inline.hpp"
 #include "oops/symbol.hpp"
 #include "utilities/hashtable.hpp"
@@ -106,6 +107,10 @@ private:
                           TRAPS) {
     add(loader_data, cp, names_count, name, lengths, cp_indices, hashValues, THREAD);
   }
+
+  static Symbol* lookup_shared(const char* name, int len, unsigned int hash) NOT_CDS_RETURN_(NULL);
+
+  static Symbol* lookup_common(const char* name, int len);
 
   Symbol* lookup(int index, const char* name, int len, unsigned int hash);
 
@@ -237,6 +242,10 @@ public:
   static void dump(outputStream* st);
 
   // Sharing
+private:
+  static void copy_shared_symbol_table(GrowableArray<Symbol*>* symbols,
+                                       CompactHashtableWriter* ch_table);
+public:
   static void copy_buckets(char** top, char*end) {
     the_table()->Hashtable<Symbol*, mtSymbol>::copy_buckets(top, end);
   }
@@ -246,6 +255,9 @@ public:
   static void reverse(void* boundary = NULL) {
     the_table()->Hashtable<Symbol*, mtSymbol>::reverse(boundary);
   }
+  static size_t estimate_size_for_archive();
+  static void write_to_archive(GrowableArray<Symbol*>* symbols);
+  static void serialize_shared_table_header(SerializeClosure* soc);
 
   // Rehash the symbol table if it gets out of balance
   static void rehash_table();

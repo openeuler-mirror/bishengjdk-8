@@ -3910,6 +3910,24 @@ class CommandLineFlags {
           NOT_LP64(LINUX_ONLY(2*G) NOT_LINUX(0)),                           \
           "Address to allocate shared memory region for class data")        \
                                                                             \
+  experimental(ccstr, ArchiveClassesAtExit, NULL,                           \
+          "The path and name of the dynamic archive file")                  \
+                                                                            \
+  product(bool, InfoDynamicCDS, false,                                      \
+          "Log info level in DynamicCDS")                                   \
+                                                                            \
+  product(bool, TraceDynamicCDS, false,                                     \
+          "Trace details in DynamicCDS")                                    \
+                                                                            \
+  product(bool, DebugDynamicCDS, false,                                     \
+          "Debug details in DynamicCDS")                                    \
+                                                                            \
+  product(bool, DynamicDumpSharedSpaces, false,                             \
+          "Dynamic archive")                                                \
+                                                                            \
+  product(uintx, SharedSymbolTableBucketSize, 4,                            \
+          "Average number of symbols per bucket in shared table")           \
+                                                                            \
   diagnostic(bool, EnableInvokeDynamic, true,                               \
           "support JSR 292 (method handles, invokedynamic, "                \
           "anonymous classes")                                              \
@@ -4016,6 +4034,9 @@ class CommandLineFlags {
   product(ccstr, DumpLoadedClassList, NULL,                                 \
           "Dump the names all loaded classes, that could be stored into "   \
           "the CDS archive, in the specified file")                         \
+                                                                            \
+  product(ccstr, DynamicCDSLog, NULL,                                       \
+          "Dynamic CDS log path")                                           \
                                                                             \
   product(ccstr, SharedClassListFile, NULL,                                 \
           "Override the default CDS class list")                            \

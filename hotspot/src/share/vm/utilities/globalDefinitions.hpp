@@ -1511,6 +1511,16 @@ static inline void* dereference_vptr(const void* addr) {
   return *(void**)addr;
 }
 
+
+template<typename K> unsigned primitive_hash(const K& k) {
+  unsigned hash = (unsigned)((uintptr_t)k);
+  return hash ^ (hash >> 3); // just in case we're dealing with aligned ptrs
+}
+
+template<typename K> bool primitive_equals(const K& k0, const K& k1) {
+  return k0 == k1;
+}
+
 #ifndef PRODUCT
 
 // For unit testing only
@@ -1519,7 +1529,6 @@ public:
   static void test_globals();
   static void test_proper_unit();
 };
-
 #endif // PRODUCT
 
 #endif // SHARE_VM_UTILITIES_GLOBALDEFINITIONS_HPP

@@ -302,6 +302,7 @@ define_array(intArray , int )          define_stack(intStack , intArray )
 
 template <typename T>
 class Array: public MetaspaceObj {
+  friend class ArchiveBuilder;
   friend class MetadataFactory;
   friend class VMStructs;
   friend class MethodHandleCompiler;           // special case

@@ -24,6 +24,8 @@
 
 #include "jvm.h"
 #include "precompiled.hpp"
+#include "cds/archiveBuilder.hpp"
+#include "cds/dynamicArchive.hpp"
 #include "classfile/classLoader.hpp"
 #include "classfile/sharedClassUtil.hpp"
 #include "classfile/symbolTable.hpp"
@@ -140,19 +142,33 @@ template <int N> static void get_header_version(char (&header_version) [N]) {
   }
 }
 
-FileMapInfo::FileMapInfo() {
-  assert(_current_info == NULL, "must be singleton"); // not thread safe
-  _current_info = this;
+FileMapInfo::FileMapInfo(bool is_static) {
   memset(this, 0, sizeof(FileMapInfo));
+  _is_static = is_static;
+
+  if (is_static) {
+    assert(_current_info == NULL, "must be singleton"); // not thread safe
+    _current_info = this;
+    _header = SharedClassUtil::allocate_file_map_header();
+  } else {
+    assert(_dynamic_archive_info == NULL, "must be singleton"); // not thread safe
+    _dynamic_archive_info = this;
+    _header = SharedClassUtil::allocate_dynamic_archive_header();
+  }
+
+  _header->_version = _invalid_version;
   _file_offset = 0;
   _file_open = false;
-  _header = SharedClassUtil::allocate_file_map_header();
-  _header->_version = _invalid_version;
 }
 
 FileMapInfo::~FileMapInfo() {
-  assert(_current_info == this, "must be singleton"); // not thread safe
-  _current_info = NULL;
+  if (_is_static) {
+    assert(_current_info == this, "must be singleton"); // not thread safe
+    _current_info = NULL;
+  } else {
+    assert(_dynamic_archive_info == this, "must be singleton"); // not thread safe
+    _dynamic_archive_info = NULL;
+  }
 }
 
 void FileMapInfo::populate_header(size_t alignment) {
@@ -163,14 +179,66 @@ size_t FileMapInfo::FileMapHeader::data_size() {
   return SharedClassUtil::file_map_header_size() - sizeof(FileMapInfo::FileMapHeaderBase);
 }
 
+size_t FileMapInfo::DynamicArchiveHeader::data_size() {
+  return sizeof(FileMapInfo::DynamicArchiveHeader) - sizeof(FileMapInfo::FileMapHeaderBase);
+}
+
+bool FileMapInfo::DynamicArchiveHeader::validate() {
+  if (_magic != CDS_DYNAMIC_ARCHIVE_MAGIC) {
+    FileMapInfo::fail_continue("The shared archive file has a bad magic number.");
+    return false;
+  }
+  if (VerifySharedSpaces && compute_crc() != _crc) {
+    fail_continue("Header checksum verification failed.");
+    return false;
+  }
+  if (_version != current_version()) {
+    FileMapInfo::fail_continue("The shared archive file is the wrong version.");
+    return false;
+  }
+  char header_version[JVM_IDENT_MAX];
+  get_header_version(header_version);
+  if (strncmp(_jvm_ident, header_version, JVM_IDENT_MAX-1) != 0) {
+    if (TraceClassPaths) {
+      tty->print_cr("Expected: %s", header_version);
+      tty->print_cr("Actual:   %s", _jvm_ident);
+    }
+    FileMapInfo::fail_continue("The shared archive file was created by a different"
+                  " version or build of HotSpot");
+    return false;
+  }
+  if (_obj_alignment != ObjectAlignmentInBytes) {
+    FileMapInfo::fail_continue("The shared archive file's ObjectAlignmentInBytes of %d"
+                  " does not equal the current ObjectAlignmentInBytes of %d.",
+                  _obj_alignment, ObjectAlignmentInBytes);
+    return false;
+  }
+
+  // TODO: much more validate check
+
+  return true;
+}
+
 void FileMapInfo::FileMapHeader::populate(FileMapInfo* mapinfo, size_t alignment) {
-  _magic = 0xf00baba2;
-  _version = _current_version;
+  if (DynamicDumpSharedSpaces) {
+    _magic = CDS_DYNAMIC_ARCHIVE_MAGIC;
+  } else {
+    _magic = CDS_ARCHIVE_MAGIC;
+  }
+  _version = current_version();
   _alignment = alignment;
   _obj_alignment = ObjectAlignmentInBytes;
-  _classpath_entry_table_size = mapinfo->_classpath_entry_table_size;
-  _classpath_entry_table = mapinfo->_classpath_entry_table;
-  _classpath_entry_size = mapinfo->_classpath_entry_size;
+  /* TODO
+  _compressed_oops = UseCompressedOops;
+  _compressed_class_ptrs = UseCompressedClassPointers;
+  _max_heap_size = MaxHeapSize;
+  _narrow_klass_shift = CompressedKlassPointers::shift();
+  */
+  if (!DynamicDumpSharedSpaces) {
+    _classpath_entry_table_size = mapinfo->_classpath_entry_table_size;
+    _classpath_entry_table = mapinfo->_classpath_entry_table;
+    _classpath_entry_size = mapinfo->_classpath_entry_size;
+  }
 
   // The following fields are for sanity checks for whether this archive
   // will function correctly with this JVM and the bootclasspath it's
@@ -303,62 +371,174 @@ bool FileMapInfo::validate_classpath_entry_table() {
   return true;
 }
 
+bool FileMapInfo::get_base_archive_name_from_header(const char* archive_name,
+                                                    int* size, char** base_archive_name) {
+  int fd = os::open(archive_name, O_RDONLY | O_BINARY, 0);
+  if (fd < 0) {
+    *size = 0;
+    return false;
+  }
+
+  // read the header as a dynamic archive header
+  DynamicArchiveHeader* dynamic_header = SharedClassUtil::allocate_dynamic_archive_header();
+  size_t sz = dynamic_header->data_size();
+  char* addr = dynamic_header->data();
+  size_t n = os::read(fd, addr, (unsigned int)sz);
+  if (n != sz) {
+    fail_continue("Unable to read the file header.");
+    delete dynamic_header;
+    os::close(fd);
+    return false;
+  }
+  if (dynamic_header->magic() != CDS_DYNAMIC_ARCHIVE_MAGIC) {
+    // Not a dynamic header, no need to proceed further.
+    *size = 0;
+    delete dynamic_header;
+    os::close(fd);
+    return false;
+  }
+
+  // read the base archive name
+  size_t name_size = dynamic_header->base_archive_name_size();
+  if (name_size == 0) {
+    delete dynamic_header;
+    os::close(fd);
+    return false;
+  }
+  *base_archive_name = NEW_C_HEAP_ARRAY(char, name_size, mtInternal);
+  n = os::read(fd, *base_archive_name, (unsigned int)name_size);
+  if (n != name_size) {
+    fail_continue("Unable to read the base archive name from the header.");
+    FREE_C_HEAP_ARRAY(char, *base_archive_name, mtInternal);
+    *base_archive_name = NULL;
+    delete dynamic_header;
+    os::close(fd);
+    return false;
+  }
+
+  delete dynamic_header;
+  os::close(fd);
+  return true;
+}
+
+bool FileMapInfo::check_archive(const char* archive_name, bool is_static) {
+  int fd = os::open(archive_name, O_RDONLY | O_BINARY, 0);
+  if (fd < 0) {
+    // do not vm_exit_during_initialization here because Arguments::init_shared_archive_paths()
+    // requires a shared archive name. The open_for_read() function will log a message regarding
+    // failure in opening a shared archive.
+    return false;
+  }
+
+  FileMapHeader* header = NULL;
+  if (is_static) {
+    header = SharedClassUtil::allocate_file_map_header();
+  } else {
+    header = SharedClassUtil::allocate_dynamic_archive_header();
+  }
+
+  size_t sz = header->data_size();
+  size_t n = os::read(fd, header->data(), (unsigned int)sz);
+  if (n != sz) {
+    delete header;
+    os::close(fd);
+    vm_exit_during_initialization("Unable to read header from shared archive", archive_name);
+    return false;
+  }
+  if (is_static) {
+    FileMapHeader* static_header = (FileMapHeader*)header;
+    if (static_header->magic() != CDS_ARCHIVE_MAGIC) {
+      delete header;
+      os::close(fd);
+      vm_exit_during_initialization("Not a base shared archive", archive_name);
+      return false;
+    }
+  } else {
+    DynamicArchiveHeader* dynamic_header = (DynamicArchiveHeader*)header;
+    if (dynamic_header->magic() != CDS_DYNAMIC_ARCHIVE_MAGIC) {
+      delete header;
+      os::close(fd);
+      vm_exit_during_initialization("Not a top shared archive", archive_name);
+      return false;
+    }
+  }
+  delete header;
+  os::close(fd);
+  return true;
+}
 
 // Read the FileMapInfo information from the file.
 
 bool FileMapInfo::init_from_file(int fd) {
-  size_t sz = _header->data_size();
-  char* addr = _header->data();
+  size_t sz = header()->data_size();
+  char* addr = header()->data();
   size_t n = os::read(fd, addr, (unsigned int)sz);
   if (n != sz) {
     fail_continue("Unable to read the file header.");
     return false;
   }
-  if (_header->_version != current_version()) {
-    fail_continue("The shared archive file has the wrong version.");
-    return false;
+
+  _file_offset += n;
+
+  if (is_static()) {
+    size_t info_size = _header->_paths_misc_info_size;
+    _paths_misc_info = NEW_C_HEAP_ARRAY_RETURN_NULL(char, info_size, mtClass);
+    if (_paths_misc_info == NULL) {
+      fail_continue("Unable to read the file header.");
+      return false;
+    }
+    n = os::read(fd, _paths_misc_info, (unsigned int)info_size);
+    if (n != info_size) {
+      fail_continue("Unable to read the shared path info header.");
+      FREE_C_HEAP_ARRAY(char, _paths_misc_info, mtClass);
+      _paths_misc_info = NULL;
+      return false;
+    }
+
+    // just checking the last region is sufficient since the archive is written
+    // in sequential order
+    size_t len = lseek(fd, 0, SEEK_END);
+    struct FileMapInfo::FileMapHeader::space_info* si =
+      &_header->_space[MetaspaceShared::mc];
+    if (si->_file_offset >= len || len - si->_file_offset < si->_used) {
+      fail_continue("The shared archive file has been truncated.");
+      return false;
+    }
+
+    _file_offset += n;
+  } else {
+    _file_offset += dynamic_header()->base_archive_name_size(); // accounts for the size of _base_archive_name
   }
 
-  size_t info_size = _header->_paths_misc_info_size;
-  _paths_misc_info = NEW_C_HEAP_ARRAY_RETURN_NULL(char, info_size, mtClass);
-  if (_paths_misc_info == NULL) {
-    fail_continue("Unable to read the file header.");
-    return false;
-  }
-  n = os::read(fd, _paths_misc_info, (unsigned int)info_size);
-  if (n != info_size) {
-    fail_continue("Unable to read the shared path info header.");
-    FREE_C_HEAP_ARRAY(char, _paths_misc_info, mtClass);
-    _paths_misc_info = NULL;
-    return false;
-  }
-
-  size_t len = lseek(fd, 0, SEEK_END);
-  struct FileMapInfo::FileMapHeader::space_info* si =
-    &_header->_space[MetaspaceShared::mc];
-  if (si->_file_offset >= len || len - si->_file_offset < si->_used) {
-    fail_continue("The shared archive file has been truncated.");
-    return false;
-  }
-
-  _file_offset += (long)n;
   return true;
 }
 
 
 // Read the FileMapInfo information from the file.
 bool FileMapInfo::open_for_read() {
-  _full_path = make_log_name(Arguments::GetSharedArchivePath(), NULL);
-  int fd = open(_full_path, O_RDONLY | O_BINARY, 0);
+  if (_file_open) {
+    return true;
+  }
+  if (is_static()) {
+    _full_path = Arguments::GetSharedArchivePath();
+  } else {
+    _full_path = Arguments::GetSharedDynamicArchivePath();
+  }
+  if (InfoDynamicCDS) {
+    dynamic_cds_log->print_cr("trying to map %s", _full_path);
+  }
+  int fd = os::open(_full_path, O_RDONLY | O_BINARY, 0);
   if (fd < 0) {
     if (errno == ENOENT) {
-      // Not locating the shared archive is ok.
-      fail_continue("Specified shared archive not found. archive file path:%s", _full_path);
+      fail_continue("Specified shared archive not found (%s).", _full_path);
     } else {
-      fail_continue("Failed to open shared archive file (%s).",
-                    strerror(errno));
+      fail_continue("Failed to open shared archive file (%s).", strerror(errno));
     }
     return false;
+  } else {
+    if (InfoDynamicCDS) {
+      dynamic_cds_log->print_cr("Opened archive %s.", _full_path);
+    }
   }
 
   _fd = fd;
@@ -368,7 +548,7 @@ bool FileMapInfo::open_for_read() {
 
 // Write the FileMapInfo information to the file.
 void FileMapInfo::open_for_write() {
-  if (UseAppCDS && AppCDSLockFile != NULL) {
+  if ((DynamicDumpSharedSpaces || UseAppCDS) && AppCDSLockFile != NULL) {
     char* pos = strrchr(const_cast<char*>(AppCDSLockFile), '/');
 #ifdef __linux__
     if (pos != NULL && pos != AppCDSLockFile) { // No directory path specified
@@ -391,14 +571,18 @@ void FileMapInfo::open_for_write() {
       int lock_fd = open(_appcds_file_lock_path, O_CREAT | O_WRONLY | O_EXCL, S_IRUSR | S_IWUSR);
       if (lock_fd < 0) {
         tty->print_cr("Failed to create jsa file !\n Please check: \n 1. The directory exists.\n "
-		      "2. You have the permission.\n 3. Make sure no other process using the same lock file.\n");
+                      "2. You have the permission.\n 3. Make sure no other process using the same lock file.\n");
         fail_stop("Failed to create appcds lock file, the lock path is: %s.", _appcds_file_lock_path);
       }
       tty->print_cr("You are using file lock %s in concurrent mode", AppCDSLockFile);
     }
 #endif
   }
-  _full_path = make_log_name(Arguments::GetSharedArchivePath(), NULL);
+  if (is_static()) {
+    _full_path = make_log_name(Arguments::GetSharedArchivePath(), NULL);
+  } else {
+    _full_path = make_log_name(Arguments::GetSharedDynamicArchivePath(), NULL);
+  }
   if (PrintSharedSpaces) {
     tty->print_cr("Dumping shared data to file: ");
     tty->print_cr("   %s", _full_path);
@@ -436,6 +620,18 @@ void FileMapInfo::write_header() {
   align_file_position();
 }
 
+void FileMapInfo::write_dynamic_header() {
+  align_file_position();
+  size_t sz = _header->data_size();
+  char* addr = _header->data();
+  write_bytes(addr, (int)sz); // skip the C++ vtable
+
+  char* base_archive_name = (char*)Arguments::GetSharedArchivePath();
+  if (base_archive_name != NULL) {
+    write_bytes(base_archive_name, dynamic_header()->base_archive_name_size());
+  }
+  align_file_position();
+}
 
 // Dump shared spaces to file.
 
@@ -464,7 +660,15 @@ void FileMapInfo::write_region(int region, char* base, size_t size,
   } else {
     si->_file_offset = _file_offset;
   }
-  si->_base = base;
+  if (is_static()) {
+    si->_base = base;
+  } else {
+    if (region == MetaspaceShared::d_bm) {
+      si->_base = NULL;  // always NULL for bm region
+    } else {
+      si->_base = ArchiveBuilder::current()->to_requested(base);
+    }
+  }
   si->_used = size;
   si->_capacity = capacity;
   si->_read_only = read_only;
@@ -473,7 +677,16 @@ void FileMapInfo::write_region(int region, char* base, size_t size,
   write_bytes_aligned(base, (int)size);
 }
 
+char* FileMapInfo::write_bitmap_region(const BitMap* ptrmap) {
+  size_t size_in_bits = ptrmap->size();
+  size_t size_in_bytes = ptrmap->size_in_words() * BytesPerWord;
+  char* buffer = NEW_C_HEAP_ARRAY(char, size_in_bytes, mtClassShared);
+  ptrmap->write_to((BitMap::bm_word_t*)buffer, size_in_bytes);
+  dynamic_header()->set_ptrmap_size_in_bits(size_in_bits);
 
+  write_region(MetaspaceShared::d_bm, (char*)buffer, size_in_bytes, size_in_bytes, /*read_only=*/true, /*allow_exec=*/false);
+  return buffer;
+}
 // Dump bytes to file -- at the current file position.
 
 void FileMapInfo::write_bytes(const void* buffer, int nbytes) {
@@ -542,7 +755,7 @@ void FileMapInfo::close() {
 // JVM/TI RedefineClasses() support:
 // Remap the shared readonly space to shared readwrite, private.
 bool FileMapInfo::remap_shared_readonly_as_readwrite() {
-  struct FileMapInfo::FileMapHeader::space_info* si = &_header->_space[0];
+  struct FileMapInfo::FileMapHeader::space_info* si = is_static() ? &_header->_space[0] : &_header->_space[1];
   if (!si->_read_only) {
     // the space is already readwrite so we are done
     return true;
@@ -570,10 +783,14 @@ bool FileMapInfo::remap_shared_readonly_as_readwrite() {
 
 // Map the whole region at once, assumed to be allocated contiguously.
 ReservedSpace FileMapInfo::reserve_shared_memory() {
-  struct FileMapInfo::FileMapHeader::space_info* si = &_header->_space[0];
-  char* requested_addr = si->_base;
+  char* requested_addr = region_base(0);
+  size_t size = 0;
 
-  size_t size = FileMapInfo::shared_spaces_size();
+  if (is_static()) {
+    size = FileMapInfo::shared_spaces_size();
+  } else {
+    size = align_up((uintptr_t)region_end(1) - (uintptr_t)region_base(0), (size_t)os::vm_allocation_granularity());
+  }
 
   // Reserve the space first, then map otherwise map will go right over some
   // other reserved memory (like the code cache).
@@ -648,6 +865,7 @@ void FileMapInfo::assert_mark(bool check) {
 
 
 FileMapInfo* FileMapInfo::_current_info = NULL;
+FileMapInfo* FileMapInfo::_dynamic_archive_info = NULL;
 SharedClassPathEntry* FileMapInfo::_classpath_entry_table = NULL;
 int FileMapInfo::_classpath_entry_table_size = 0;
 size_t FileMapInfo::_classpath_entry_size = 0x1234baad;
@@ -674,17 +892,24 @@ bool FileMapInfo::initialize() {
   if (!open_for_read()) {
     return false;
   }
-
-  init_from_file(_fd);
+  if (!init_from_file(_fd)) {
+    return false;
+  }
   if (!validate_header()) {
     return false;
   }
 
-  SharedReadOnlySize =  _header->_space[0]._capacity;
-  SharedReadWriteSize = _header->_space[1]._capacity;
-  SharedMiscDataSize =  _header->_space[2]._capacity;
-  SharedMiscCodeSize =  _header->_space[3]._capacity;
+  if (is_static()) {
+    SharedReadOnlySize =  _header->_space[0]._capacity;
+    SharedReadWriteSize = _header->_space[1]._capacity;
+    SharedMiscDataSize =  _header->_space[2]._capacity;
+    SharedMiscCodeSize =  _header->_space[3]._capacity;
+  }
   return true;
+}
+
+void FileMapInfo::DynamicArchiveHeader::set_as_offset(char* p, size_t *offset) {
+  *offset = ArchiveBuilder::current()->any_to_offset((address)p);
 }
 
 int FileMapInfo::FileMapHeader::compute_crc() {
@@ -701,7 +926,7 @@ int FileMapInfo::compute_header_crc() {
 }
 
 bool FileMapInfo::FileMapHeader::validate() {
-  if (_magic != (int)0xf00baba2) {
+  if (_magic != CDS_ARCHIVE_MAGIC) {
     FileMapInfo::fail_continue("The shared archive file has a bad magic number.");
     return false;
   }
@@ -738,6 +963,10 @@ bool FileMapInfo::FileMapHeader::validate() {
 bool FileMapInfo::validate_header() {
   bool status = _header->validate();
 
+  if (status && !is_static()) {
+    return DynamicArchive::validate(this);
+  }
+
   if (status) {
     if (!ClassLoader::check_shared_paths_misc_info(_paths_misc_info, _header->_paths_misc_info_size)) {
       if (!PrintSharedArchiveAndExit) {
@@ -761,7 +990,13 @@ bool FileMapInfo::validate_header() {
 // Return:
 // True if the p is within the mapped shared space, otherwise, false.
 bool FileMapInfo::is_in_shared_space(const void* p) {
-  for (int i = 0; i < MetaspaceShared::n_regions; i++) {
+  int count = 0;
+  if (is_static()) {
+    count = MetaspaceShared::n_regions;
+  } else {
+    count = MetaspaceShared::d_n_regions;
+  }
+  for (int i = 0; i < count; i++) {
     if (p >= _header->_space[i]._base &&
         p < _header->_space[i]._base + _header->_space[i]._used) {
       return true;
@@ -772,6 +1007,11 @@ bool FileMapInfo::is_in_shared_space(const void* p) {
 }
 
 void FileMapInfo::print_shared_spaces() {
+  // TODO: support dynamic archive
+  if (!is_static()) {
+    return;
+  }
+
   gclog_or_tty->print_cr("Shared Spaces:");
   for (int i = 0; i < MetaspaceShared::n_regions; i++) {
     struct FileMapInfo::FileMapHeader::space_info* si = &_header->_space[i];

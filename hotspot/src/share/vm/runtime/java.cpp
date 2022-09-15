@@ -23,6 +23,7 @@
  */
 
 #include "precompiled.hpp"
+#include "cds/dynamicArchive.hpp"
 #include "classfile/classLoader.hpp"
 #include "classfile/symbolTable.hpp"
 #include "classfile/systemDictionary.hpp"
@@ -545,6 +546,13 @@ void before_exit(JavaThread * thread) {
   // Terminate the signal thread
   // Note: we don't wait until it actually dies.
   os::terminate_signal_thread();
+
+#if INCLUDE_CDS
+  if (DynamicDumpSharedSpaces) {
+    DynamicArchive::dump();
+    ShouldNotReachHere();
+  }
+#endif
 
   print_statistics();
   Universe::heap()->print_tracing_info();

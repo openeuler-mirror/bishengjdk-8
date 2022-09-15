@@ -109,7 +109,8 @@ class ObjArrayKlass : public ArrayKlass {
   template <class T> inline void objarray_follow_contents(oop obj, int index, MarkSweep* mark);
 
   int  oop_adjust_pointers(oop obj);
-
+  
+  virtual void metaspace_pointers_do(MetaspaceClosure* iter);
   // Parallel Scavenge and Parallel Old
   PARALLEL_GC_DECLS
 #if INCLUDE_ALL_GCS

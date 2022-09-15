@@ -28,6 +28,7 @@
 #include "utilities/exceptions.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/ostream.hpp"
+class MetaspaceClosure;
 
 // This is the base class for an internal Class related metadata
 class Metadata : public MetaspaceObj {
@@ -47,8 +48,9 @@ class Metadata : public MetaspaceObj {
   virtual bool is_method()             const volatile { return false; }
   virtual bool is_methodData()         const volatile { return false; }
   virtual bool is_constantPool()       const volatile { return false; }
-
+  virtual MetaspaceObj::Type type()    const = 0;
   virtual const char* internal_name()  const = 0;
+  virtual void metaspace_pointers_do(MetaspaceClosure* iter) {}
 
   void print()       const { print_on(tty); }
   void print_value() const { print_value_on(tty); }

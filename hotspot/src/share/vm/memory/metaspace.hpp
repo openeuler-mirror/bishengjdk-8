@@ -82,6 +82,7 @@ class VirtualSpaceList;
 // quantum of metadata.
 
 class Metaspace : public CHeapObj<mtClass> {
+  friend class ArchiveBuilder;
   friend class VMStructs;
   friend class SpaceManager;
   friend class VM_CollectForMetadataAllocation;

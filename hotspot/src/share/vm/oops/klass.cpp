@@ -26,16 +26,19 @@
 #include "classfile/javaClasses.hpp"
 #include "classfile/dictionary.hpp"
 #include "classfile/systemDictionary.hpp"
+#include "classfile/systemDictionaryShared.hpp"
 #include "classfile/vmSymbols.hpp"
 #include "gc_implementation/shared/markSweep.inline.hpp"
 #include "gc_interface/collectedHeap.inline.hpp"
 #include "memory/heapInspection.hpp"
 #include "memory/metadataFactory.hpp"
+#include "memory/metaspaceClosure.hpp"
 #include "memory/oopFactory.hpp"
 #include "memory/resourceArea.hpp"
 #include "oops/instanceKlass.hpp"
 #include "oops/klass.inline.hpp"
 #include "oops/oop.inline2.hpp"
+#include "runtime/arguments.hpp"
 #include "runtime/atomic.inline.hpp"
 #include "runtime/orderAccess.inline.hpp"
 #include "utilities/stack.hpp"
@@ -69,6 +72,10 @@ ClassLoaderData *Klass::_fake_loader_data_Ext = reinterpret_cast<ClassLoaderData
 void Klass::set_name(Symbol* n) {
   _name = n;
   if (_name != NULL) _name->increment_refcount();
+
+  if (Arguments::is_dumping_archive() && oop_is_instance()) {
+    SystemDictionaryShared::init_dumptime_info(InstanceKlass::cast(this));
+  }
 }
 
 bool Klass::is_subclass_of(const Klass* k) const {
@@ -369,6 +376,36 @@ GrowableArray<Klass*>* Klass::compute_secondary_supers(int num_extra_slots) {
   return NULL;
 }
 
+void Klass::metaspace_pointers_do(MetaspaceClosure* it) {
+  if (TraceDynamicCDS) {
+    ResourceMark rm;
+    dynamic_cds_log->print_cr("Iter(Klass): %p (%s)", this, external_name());
+  }
+
+  it->push(&_name);
+  it->push(&_secondary_super_cache);
+  it->push(&_secondary_supers);
+  for (int i = 0; i < _primary_super_limit; i++) {
+    it->push(&_primary_supers[i]);
+  }
+  it->push(&_super);
+  it->push((Klass**)&_subklass);
+  it->push((Klass**)&_next_sibling);
+  it->push(&_next_link);
+
+  vtableEntry* vt = start_of_vtable();
+  for (int i = 0; i < vtable_length(); i++) {
+    it->push(vt[i].method_addr());
+  }
+}
+
+inline vtableEntry* Klass::start_of_vtable() const {
+  return (vtableEntry*) ((address)this + in_bytes(vtable_start_offset()));
+}
+
+inline ByteSize Klass::vtable_start_offset() {
+  return in_ByteSize(InstanceKlass::header_size() * wordSize);
+}
 
 Klass* Klass::subklass() const {
   return _subklass == NULL ? NULL : _subklass;
@@ -530,7 +567,7 @@ void Klass::oops_do(OopClosure* cl) {
 }
 
 void Klass::remove_unshareable_info() {
-  assert (DumpSharedSpaces, "only called for DumpSharedSpaces");
+  assert (DumpSharedSpaces || DynamicDumpSharedSpaces, "only called for DumpSharedSpaces or DynamicDumpSharedSpaces");
 
   JFR_ONLY(REMOVE_ID(this);)
   set_subklass(NULL);
@@ -539,40 +576,46 @@ void Klass::remove_unshareable_info() {
   set_java_mirror(NULL);
   set_next_link(NULL);
 
-  if (!UseAppCDS) {
-    // CDS logic
+  if (class_loader_data() == NULL) {
+    // Null out class loader data for classes loaded by bootstrap (null) loader
     set_class_loader_data(NULL);
-  } else if (class_loader_data() != NULL) {
-    // AppCDS logic
-    if (class_loader() == NULL) {
-      // Null out class loader data for classes loaded by bootstrap (null) loader
-      set_class_loader_data(NULL);
-    } else if(SystemDictionary::is_ext_class_loader(class_loader())) {
-      // Mark class loaded by system class loader
-      set_class_loader_data(_fake_loader_data_Ext);
-    } else {
-      set_class_loader_data(_fake_loader_data_App);
-    }
+  } else if (SystemDictionary::is_ext_class_loader(class_loader())) {
+    // Mark class loaded by system class loader
+    set_class_loader_data(_fake_loader_data_Ext);
+  } else if (SystemDictionary::is_app_class_loader(class_loader())) {
+    set_class_loader_data(_fake_loader_data_App);
+  } else {
+    // Class loader data for classes loaded by customer loader
+    set_class_loader_data(NULL);
   }
+}
+
+void Klass::remove_java_mirror() {
+  Arguments::assert_is_dumping_archive();
+  if (TraceDynamicCDS) {
+    ResourceMark rm;
+    dynamic_cds_log->print_cr("remove java_mirror: %s", external_name());
+  }
+  // Just null out the mirror.  The class_loader_data() no longer exists.
+  _java_mirror = NULL;
 }
 
 void Klass::restore_unshareable_info(ClassLoaderData* loader_data, Handle protection_domain, TRAPS) {
   JFR_ONLY(RESTORE_ID(this);)
+  if (TraceDynamicCDS) {
+    ResourceMark rm(THREAD);
+    dynamic_cds_log->print_cr("restore: %s", external_name());
+  }
+
   // If an exception happened during CDS restore, some of these fields may already be
   // set.  We leave the class on the CLD list, even if incomplete so that we don't
   // modify the CLD list outside a safepoint.
   if (class_loader_data() == NULL || has_fake_loader_data()) {
-    // CDS should not set fake loader data
-    assert(!has_fake_loader_data() || (has_fake_loader_data() && UseAppCDS),
-        "setting fake loader data possible only with AppCDS enabled");
-    // Restore class_loader_data
     set_class_loader_data(loader_data);
-
     // Add to class loader list first before creating the mirror
     // (same order as class file parsing)
     loader_data->add_class(this);
   }
-
   // Recreate the class mirror.
   // Only recreate it if not present.  A previous attempt to restore may have
   // gotten an OOM later but keep the mirror if it was created.

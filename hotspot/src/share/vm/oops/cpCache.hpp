@@ -124,6 +124,7 @@ class PSPromotionManager;
 // source code.  The _indices field with the bytecode must be written last.
 
 class CallInfo;
+class MetaspaceClosure;
 
 class ConstantPoolCacheEntry VALUE_OBJ_CLASS_SPEC {
   friend class VMStructs;
@@ -397,6 +398,24 @@ class ConstantPoolCacheEntry VALUE_OBJ_CLASS_SPEC {
     // When shifting flags as a 32-bit int, make sure we don't need an extra mask for tos_state:
     assert((((u4)-1 >> tos_state_shift) & ~tos_state_mask) == 0, "no need for tos_state mask");
   }
+
+  void reinitialize(bool f2_used) {
+    _indices &= cp_index_mask;
+    _f1 = NULL;
+    _flags = 0;
+    if (!f2_used) {
+      _f2 = 0;
+    }
+  }
+
+  void verify_just_initialized(bool f2_used) {
+  assert((_indices & (~cp_index_mask)) == 0, "sanity");
+  assert(_f1 == NULL, "sanity");
+  assert(_flags == 0, "sanity");
+  if (!f2_used) {
+    assert(_f2 == 0, "sanity");
+  }
+}
 };
 
 
@@ -468,6 +487,10 @@ class ConstantPoolCache: public MetaspaceObj {
     return base() + i;
   }
 
+  void metaspace_pointers_do(MetaspaceClosure* it);
+  void remove_unshareable_info();
+  void walk_entries_for_initialization(bool check_only);
+  MetaspaceObj::Type type() const         { return ConstantPoolCacheType; }
   // Code generation
   static ByteSize base_offset()                  { return in_ByteSize(sizeof(ConstantPoolCache)); }
   static ByteSize entry_offset(int raw_index) {
@@ -488,7 +511,7 @@ class ConstantPoolCache: public MetaspaceObj {
 #endif // INCLUDE_JVMTI
 
   void reset();
-  
+
   // Deallocate - no fields to deallocate
   DEBUG_ONLY(bool on_stack() { return false; })
   void deallocate_contents(ClassLoaderData* data) {}

@@ -29,6 +29,7 @@
 #include "compiler/compilerOracle.hpp"
 #include "memory/allocation.inline.hpp"
 #include "memory/cardTableRS.hpp"
+#include "memory/filemap.hpp"
 #include "memory/genCollectedHeap.hpp"
 #include "memory/referenceProcessor.hpp"
 #include "memory/universe.inline.hpp"
@@ -126,6 +127,7 @@ bool   Arguments::_BackgroundCompilation        = BackgroundCompilation;
 bool   Arguments::_ClipInlining                 = ClipInlining;
 
 char*  Arguments::SharedArchivePath             = NULL;
+char*  Arguments::SharedDynamicArchivePath      = NULL;
 
 AgentLibraryList Arguments::_libraryList;
 AgentLibraryList Arguments::_agentList;
@@ -178,6 +180,117 @@ static void logOption(const char* opt) {
     jio_fprintf(defaultStream::output_stream(), "VM option '%s'\n", opt);
   }
 }
+
+#if INCLUDE_CDS
+// Sharing support
+// Construct the path to the archive
+int Arguments::num_archives(const char* archive_path) {
+  if (archive_path == NULL) {
+    return 0;
+  }
+  int npaths = 1;
+  char* p = (char*)archive_path;
+  while (*p != '\0') {
+    if (*p == os::path_separator()[0]) {
+      npaths++;
+    }
+    p++;
+  }
+  return npaths;
+}
+
+void Arguments::extract_shared_archive_paths(const char* archive_path,
+                                             char** base_archive_path,
+                                             char** top_archive_path) {
+  char* begin_ptr = (char*)archive_path;
+  char* end_ptr = strchr((char*)archive_path, os::path_separator()[0]);
+  if (end_ptr == NULL || end_ptr == begin_ptr) {
+    vm_exit_during_initialization("Base archive was not specified", archive_path);
+  }
+  size_t len = end_ptr - begin_ptr;
+  char* cur_path = NEW_C_HEAP_ARRAY(char, len + 1, mtInternal);
+  strncpy(cur_path, begin_ptr, len);
+  cur_path[len] = '\0';
+  FileMapInfo::check_archive((const char*)cur_path, true /*is_static*/);
+  *base_archive_path = cur_path;
+
+  begin_ptr = ++end_ptr;
+  if (*begin_ptr == '\0') {
+    vm_exit_during_initialization("Top archive was not specified", archive_path);
+  }
+  end_ptr = strchr(begin_ptr, '\0');
+  assert(end_ptr != NULL, "sanity");
+  len = end_ptr - begin_ptr;
+  cur_path = NEW_C_HEAP_ARRAY(char, len + 1, mtInternal);
+  strncpy(cur_path, begin_ptr, len + 1);
+
+  FileMapInfo::check_archive((const char*)cur_path, false /*is_static*/);
+  *top_archive_path = cur_path;
+}
+
+bool Arguments::init_shared_archive_paths() {
+  if (ArchiveClassesAtExit != NULL) {
+    if (DumpSharedSpaces) {
+      vm_exit_during_initialization("-XX:ArchiveClassesAtExit cannot be used with -Xshare:dump");
+    }
+    SharedDynamicArchivePath = os::strdup_check_oom(ArchiveClassesAtExit, mtClassShared);
+  } else {
+    if (SharedDynamicArchivePath != NULL) {
+      os::free(SharedDynamicArchivePath);
+      SharedDynamicArchivePath = NULL;
+    }
+  }
+
+  if (SharedArchiveFile != NULL) {
+    int archives = num_archives(SharedArchiveFile);
+    if (is_dumping_archive()) {
+      if (archives > 1) {
+        vm_exit_during_initialization(
+          "Cannot have more than 1 archive file specified in -XX:SharedArchiveFile during CDS dumping");
+      }
+      if (DynamicDumpSharedSpaces) {
+        if (strcmp(SharedArchiveFile, ArchiveClassesAtExit) == 0) {
+          vm_exit_during_initialization(
+            "Cannot have the same archive file specified for -XX:SharedArchiveFile and -XX:ArchiveClassesAtExit",
+            SharedArchiveFile);
+        }
+      }
+    }
+
+    if (!is_dumping_archive()) {
+      if (archives > 2) {
+        vm_exit_during_initialization(
+          "Cannot have more than 2 archive files specified in the -XX:SharedArchiveFile option");
+      }
+      if (archives == 1) {
+        char* temp_archive_path = os::strdup_check_oom(SharedArchiveFile, mtClassShared);
+        int name_size;
+        bool success =
+          FileMapInfo::get_base_archive_name_from_header(temp_archive_path, &name_size, &SharedArchivePath);
+        if (!success) {
+          SharedArchivePath = temp_archive_path;
+        } else {
+          SharedDynamicArchivePath = temp_archive_path;
+        }
+      } else {
+        extract_shared_archive_paths((const char*)SharedArchiveFile,
+                                      &SharedArchivePath, &SharedDynamicArchivePath);
+      }
+
+      // We must use tty here instead of dynamic_cds_log for dynamic_cds_log is initialized after share path init.
+      if (InfoDynamicCDS && SharedArchivePath != NULL) {
+        tty->print_cr("SharedArchivePath:        %s", SharedArchivePath);
+      }
+      if (InfoDynamicCDS && SharedDynamicArchivePath != NULL) {
+        tty->print_cr("SharedDynamicArchivePath: %s", SharedDynamicArchivePath);
+      }
+    } else { // CDS dumping
+      SharedArchivePath = os::strdup_check_oom(SharedArchiveFile, mtClassShared);
+    }
+  }
+  return (SharedArchivePath != NULL);
+}
+#endif // INCLUDE_CDS
 
 // Process java launcher properties.
 void Arguments::process_sun_java_launcher_properties(JavaVMInitArgs* args) {
@@ -3724,6 +3837,30 @@ jint Arguments::finalize_vm_init_args(SysClassPath* scp_p, bool scp_assembly_req
     set_mode_flags(_int);
   }
 
+#if INCLUDE_CDS
+  if (ArchiveClassesAtExit == NULL) {
+    FLAG_SET_DEFAULT(DynamicDumpSharedSpaces, false);
+  } else {
+    FLAG_SET_DEFAULT(DynamicDumpSharedSpaces, true);
+    // When Dynamic CDS dump is turned on, we will set ClassUnloading false,
+    // and there is no need to care if the class loader is alive.
+    FLAG_SET_DEFAULT(ClassUnloading, false);
+  }
+
+  if (TraceDynamicCDS) {
+    FLAG_SET_DEFAULT(DebugDynamicCDS, true);
+    FLAG_SET_DEFAULT(InfoDynamicCDS, true);
+  } else if (DebugDynamicCDS) {
+    FLAG_SET_DEFAULT(InfoDynamicCDS, true);
+  }
+
+#ifdef _LP64
+  // We attempt to set SharedBaseAddress right above
+  // the java heap base on ObjectAlignmentInBytes.
+  FLAG_SET_DEFAULT(SharedBaseAddress, (ObjectAlignmentInBytes * 4 * G));
+#endif // _LP64
+#endif // INCLUDE_CDS
+
   // eventually fix up InitialTenuringThreshold if only MaxTenuringThreshold is set
   if (FLAG_IS_DEFAULT(InitialTenuringThreshold) && (InitialTenuringThreshold > MaxTenuringThreshold)) {
     FLAG_SET_ERGO(uintx, InitialTenuringThreshold, MaxTenuringThreshold);
@@ -3885,6 +4022,11 @@ void Arguments::set_shared_spaces_flags() {
     }
 #endif
   }
+
+#if INCLUDE_CDS
+  // Initialize shared archive paths which could include both base and dynamic archive paths
+  init_shared_archive_paths();
+#endif  // INCLUDE_CDS
 }
 
 #if !INCLUDE_ALL_GCS

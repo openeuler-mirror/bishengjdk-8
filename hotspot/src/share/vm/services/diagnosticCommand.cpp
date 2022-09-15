@@ -23,6 +23,7 @@
  */
 
 #include "precompiled.hpp"
+#include "cds/dynamicArchive.hpp"
 #include "classfile/classLoaderStats.hpp"
 #include "gc_implementation/shared/vmGCOperations.hpp"
 #include "runtime/javaCalls.hpp"
@@ -57,6 +58,7 @@ void DCmdRegistrant::register_dcmds(){
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<FinalizerInfoDCmd>(full_export, true, false));
 #if INCLUDE_SERVICES // Heap dumping/inspection supported
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<HeapDumpDCmd>(DCmd_Source_Internal | DCmd_Source_AttachAPI, true, false));
+  DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<DynamicCDSDumpDCmd>(DCmd_Source_Internal | DCmd_Source_AttachAPI, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<ClassHistogramDCmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<ClassStatsDCmd>(full_export, true, false));
 #endif // INCLUDE_SERVICES
@@ -373,6 +375,17 @@ int HeapDumpDCmd::num_arguments() {
   } else {
     return 0;
   }
+}
+
+void DynamicCDSDumpDCmd::execute(DCmdSource source, TRAPS) {
+#if INCLUDE_CDS
+  if (DynamicDumpSharedSpaces) {
+    DynamicArchive::dump();
+    ShouldNotReachHere();
+  } else {
+    warning("Dynamic CDS is not enabled");
+  }
+#endif
 }
 
 ClassHistogramDCmd::ClassHistogramDCmd(outputStream* output, bool heap) :

@@ -30,6 +30,7 @@
 #include "jvmtifiles/jvmti.h"
 #include "memory/gcLocker.hpp"
 #include "memory/universe.inline.hpp"
+#include "memory/metaspaceClosure.hpp"
 #include "oops/arrayKlass.hpp"
 #include "oops/arrayOop.hpp"
 #include "oops/instanceKlass.hpp"
@@ -62,6 +63,19 @@ Klass* ArrayKlass::java_super() const {
 oop ArrayKlass::multi_allocate(int rank, jint* sizes, TRAPS) {
   ShouldNotReachHere();
   return NULL;
+}
+
+void ArrayKlass::metaspace_pointers_do(MetaspaceClosure* it) {
+  Klass::metaspace_pointers_do(it);
+
+  if (TraceDynamicCDS) {
+    ResourceMark rm;
+    dynamic_cds_log->print_cr("Iter(InstanceKlass): %p (%s)", this, external_name());
+  }
+
+  // need to cast away volatile
+  it->push((Klass**)&_higher_dimension);
+  it->push((Klass**)&_lower_dimension);
 }
 
 // find field according to JVM spec 5.4.3.2, returns the klass in which the field is defined
@@ -201,6 +215,14 @@ void ArrayKlass::remove_unshareable_info() {
     ak->remove_unshareable_info();
   }
   _higher_dimension = NULL;
+}
+
+void ArrayKlass::remove_java_mirror() {
+  Klass::remove_java_mirror();
+  if (_higher_dimension != NULL) {
+    ArrayKlass *ak = ArrayKlass::cast(higher_dimension());
+    ak->remove_java_mirror();
+  }
 }
 
 void ArrayKlass::restore_unshareable_info(ClassLoaderData* loader_data, Handle protection_domain, TRAPS) {

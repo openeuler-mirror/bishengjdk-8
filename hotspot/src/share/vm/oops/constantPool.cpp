@@ -23,16 +23,19 @@
  */
 
 #include "precompiled.hpp"
+#include "cds/archiveUtils.hpp"
 #include "classfile/classLoaderData.hpp"
 #include "classfile/javaClasses.hpp"
 #include "classfile/metadataOnStackMark.hpp"
 #include "classfile/symbolTable.hpp"
 #include "classfile/systemDictionary.hpp"
+#include "classfile/systemDictionaryShared.hpp"
 #include "classfile/vmSymbols.hpp"
 #include "interpreter/linkResolver.hpp"
 #include "memory/heapInspection.hpp"
 #include "memory/metadataFactory.hpp"
 #include "memory/oopFactory.hpp"
+#include "memory/metaspaceClosure.hpp"
 #include "oops/constantPool.hpp"
 #include "oops/instanceKlass.hpp"
 #include "oops/objArrayKlass.hpp"
@@ -153,6 +156,52 @@ void ConstantPool::initialize_resolved_references(ClassLoaderData* loader_data,
   }
 }
 
+void ConstantPool::metaspace_pointers_do(MetaspaceClosure* it) {
+  if (TraceDynamicCDS) {
+    dynamic_cds_log->print_cr("Iter(ConstantPool): %p", this);
+  }
+
+  it->push(&_tags, MetaspaceClosure::_writable);
+  it->push(&_cache);
+  it->push(&_pool_holder);
+  it->push(&_operands);
+  it->push(&_reference_map, MetaspaceClosure::_writable);
+
+  for (int i = 0; i < length(); i++) {
+    // About resolved klasses, we should be careful because of data structure difference
+    // between jdk8 and jdk17.
+    constantTag ctag = tag_at(i);
+    if (ctag.is_string() || ctag.is_utf8() || ctag.is_replaced_symbol()) {
+      it->push(symbol_at_addr(i));
+    } else if (ctag.is_klass()) {
+      it->push((Klass**)obj_at_addr_raw(i));
+    }
+  }
+}
+
+// We replace data in base() by normal symbol in two conditions:
+// 1. resolved klass
+//   The value is klass ptr, in remove_unshareable_info we need replace klass ptr by klass‘s
+//   name. The klass may be excluded, hence klass ptr is NULL and lost klass'name
+//   at the end. Replace excluded klasses by names.
+// 2. unresolved klass
+//   The value is symbol ptr | 1, the data is unparseable pushed in MetaspaceClosure, we need
+//   replace the data by a normal symbol ptr at first, and store value symbol ptr | 1 at last.
+void ConstantPool::symbol_replace_excluded_klass() {
+  for (int i = 0; i < length(); i++) {
+    constantTag ctag = tag_at(i);
+    if (ctag.is_klass()) {
+      Klass* klass = resolved_klass_at(i);
+      if (SystemDictionaryShared::is_excluded_class((InstanceKlass*)klass)) {
+        replaced_symbol_at_put(i, klass->name());
+      }
+    } else if (ctag.is_unresolved_klass()) {
+      CPSlot entry = slot_at(i);
+      replaced_symbol_at_put(i, entry.get_symbol());
+    }
+  }
+}
+
 // CDS support. Create a new resolved_references array.
 void ConstantPool::restore_unshareable_info(TRAPS) {
 
@@ -180,18 +229,30 @@ void ConstantPool::restore_unshareable_info(TRAPS) {
 }
 
 void ConstantPool::remove_unshareable_info() {
-  if (UseAppCDS) {
-    if (cache() != NULL) {
-      cache()->reset();
+  if (cache() != NULL) {
+    cache()->remove_unshareable_info();
+  }
+
+  // Shared ConstantPools are in the RO region, so the _flags cannot be modified.
+  // The _on_stack flag is used to prevent ConstantPools from deallocation during
+  // class redefinition. Since shared ConstantPools cannot be deallocated anyway,
+  // we always set _on_stack to true to avoid having to change _flags during runtime.
+  _flags |= _on_stack;
+  int num_klasses = 0;
+  for (int index = 1; index < length(); index++) { // Index 0 is unused
+    if (tag_at(index).is_unresolved_klass_in_error()) {
+      tag_at_put(index, JVM_CONSTANT_UnresolvedClass);
+    } else if (tag_at(index).is_method_handle_in_error()) {
+      tag_at_put(index, JVM_CONSTANT_MethodHandle);
+    } else if (tag_at(index).is_method_type_in_error()) {
+      tag_at_put(index, JVM_CONSTANT_MethodType);
     }
-    for (int i = 0; i < _length; i++) {
-      if (tag_at(i).is_klass()) {
-        Klass* resolvedKlass = resolved_klass_at(i);
-        ResourceMark rm;
-        char* name = resolvedKlass->name()->as_C_string();
-        int len = strlen(name);
-        unresolved_klass_at_put(i, resolvedKlass->name());
-      }
+
+    if (tag_at(index).is_klass()) {
+      Klass* resolved_Klass = resolved_klass_at(index);
+      unresolved_klass_at_put(index, resolved_Klass->name());
+    } else if (tag_at(index).is_replaced_symbol()) {
+      unresolved_klass_at_put(index, *symbol_at_addr(index));
     }
   }
   // Resolved references are not in the shared archive.
@@ -519,8 +580,14 @@ Klass* ConstantPool::klass_ref_at(int which, TRAPS) {
 
 
 Symbol* ConstantPool::klass_name_at(int which) const {
-  assert(tag_at(which).is_unresolved_klass() || tag_at(which).is_klass(),
-         "Corrupted constant pool");
+  // Dynamic CDS dump need call here in verify, release version no need do it.
+#ifndef PRODUCT
+  assert(tag_at(which).is_unresolved_klass() || tag_at(which).is_klass() ||
+         tag_at(which).is_replaced_symbol(), "Corrupted constant pool");
+  if (tag_at(which).is_replaced_symbol()) {
+    return *symbol_at_addr(which);
+  }
+#endif
   // A resolved constantPool entry will contain a Klass*, otherwise a Symbol*.
   // It is not safe to rely on the tag bit's here, since we don't have a lock, and the entry and
   // tag is not updated atomicly.

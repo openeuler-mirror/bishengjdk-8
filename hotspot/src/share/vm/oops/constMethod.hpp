@@ -129,7 +129,7 @@ class MethodParametersElement VALUE_OBJ_CLASS_SPEC {
 };
 
 class KlassSizeStats;
-
+class MetaspaceClosure;
 // Class to collect the sizes of ConstMethod inline tables
 #define INLINE_TABLES_DO(do_element)            \
   do_element(localvariable_table_length)        \
@@ -343,6 +343,12 @@ public:
 
   // Size needed
   static int size(int code_size, InlineTableSizes* sizes);
+
+  // ConstMethods should be stored in the read-only region of CDS archive.
+  static bool is_read_only_by_default() { return true; }
+
+  void metaspace_pointers_do(MetaspaceClosure* it);
+  MetaspaceObj::Type type() const { return ConstMethodType; }
 
   int size() const                    { return _constMethod_size;}
   void set_constMethod_size(int size)     { _constMethod_size = size; }

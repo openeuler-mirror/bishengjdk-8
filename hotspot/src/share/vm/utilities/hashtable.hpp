@@ -151,7 +151,7 @@ public:
   void copy_table(char** top, char* end);
 
   // Bucket handling
-  int hash_to_index(unsigned int full_hash) {
+  int hash_to_index(unsigned int full_hash) const {
     int h = full_hash % _table_size;
     assert(h >= 0 && h < _table_size, "Illegal hash value");
     return h;
@@ -184,7 +184,7 @@ protected:
   int entry_size() const { return _entry_size; }
 
   // The following method is MT-safe and may be used with caution.
-  BasicHashtableEntry<F>* bucket(int i);
+  BasicHashtableEntry<F>* bucket(int i) const;
 
   // The following method is not MT-safe and must be done under lock.
   BasicHashtableEntry<F>** bucket_addr(int i) { return _buckets[i].entry_addr(); }
@@ -234,7 +234,7 @@ protected:
   // is mt-safe wrt. to other calls of this method.
   void bulk_free_entries(BucketUnlinkContext* context);
 public:
-  int table_size() { return _table_size; }
+  int table_size() const { return _table_size; }
   void set_entry(int index, BasicHashtableEntry<F>* entry);
 
   void add_entry(int index, BasicHashtableEntry<F>* entry);
@@ -242,6 +242,10 @@ public:
   void free_entry(BasicHashtableEntry<F>* entry);
 
   int number_of_entries() { return _number_of_entries; }
+
+  bool resize(int new_size);
+
+  bool maybe_grow(int max_size, int load_factor = 0);
 
   void verify() PRODUCT_RETURN;
 };
@@ -361,6 +365,94 @@ public:
 
   int index_for(Symbol* name, ClassLoaderData* loader_data) {
     return this->hash_to_index(compute_hash(name, loader_data));
+  }
+};
+
+// A subclass of BasicHashtable that allows you to do a simple K -> V mapping
+// without using tons of boilerplate code.
+template<
+    typename K, typename V, MEMFLAGS F,
+    unsigned (*HASH)  (K const&)           = primitive_hash<K>,
+    bool     (*EQUALS)(K const&, K const&) = primitive_equals<K>
+    >
+class KVHashtable : public BasicHashtable<F> {
+  class KVHashtableEntry : public BasicHashtableEntry<F> {
+  public:
+    K _key;
+    V _value;
+    KVHashtableEntry* next() {
+      return (KVHashtableEntry*)BasicHashtableEntry<F>::next();
+    }
+  };
+
+protected:
+  KVHashtableEntry* bucket(int i) const {
+    return (KVHashtableEntry*)BasicHashtable<F>::bucket(i);
+  }
+
+  KVHashtableEntry* new_entry(unsigned int hashValue, K key, V value) {
+    KVHashtableEntry* entry = (KVHashtableEntry*)BasicHashtable<F>::new_entry(hashValue);
+    entry->_key   = key;
+    entry->_value = value;
+    return entry;
+  }
+
+public:
+  KVHashtable(int table_size) : BasicHashtable<F>(table_size, sizeof(KVHashtableEntry)) {}
+
+  V* add(K key, V value) {
+    unsigned int hash = HASH(key);
+    KVHashtableEntry* entry = new_entry(hash, key, value);
+    BasicHashtable<F>::add_entry(BasicHashtable<F>::hash_to_index(hash), entry);
+    return &(entry->_value);
+  }
+
+  V* lookup(K key) const {
+    unsigned int hash = HASH(key);
+    int index = BasicHashtable<F>::hash_to_index(hash);
+    for (KVHashtableEntry* e = bucket(index); e != NULL; e = e->next()) {
+      if (e->hash() == hash && EQUALS(e->_key, key)) {
+        return &(e->_value);
+      }
+    }
+    return NULL;
+  }
+
+  // Look up the key.
+  // If an entry for the key exists, leave map unchanged and return a pointer to its value.
+  // If no entry for the key exists, create a new entry from key and value and return a
+  //  pointer to the value.
+  // *p_created is true if entry was created, false if entry pre-existed.
+  V* add_if_absent(K key, V value, bool* p_created) {
+    unsigned int hash = HASH(key);
+    int index = BasicHashtable<F>::hash_to_index(hash);
+    for (KVHashtableEntry* e = bucket(index); e != NULL; e = e->next()) {
+      if (e->hash() == hash && EQUALS(e->_key, key)) {
+        *p_created = false;
+        return &(e->_value);
+      }
+    }
+    KVHashtableEntry* entry = new_entry(hash, key, value);
+    BasicHashtable<F>::add_entry(BasicHashtable<F>::hash_to_index(hash), entry);
+    *p_created = true;
+    return &(entry->_value);
+  }
+
+  int table_size() const {
+    return BasicHashtable<F>::table_size();
+  }
+
+  // ITER contains bool do_entry(K, V const&), which will be
+  // called for each entry in the table.  If do_entry() returns false,
+  // the iteration is cancelled.
+  template<class ITER>
+  void iterate(ITER* iter) const {
+    for (int index = 0; index < table_size(); index++) {
+      for (KVHashtableEntry* e = bucket(index); e != NULL; e = e->next()) {
+        bool cont = iter->do_entry(e->_key, &e->_value);
+        if (!cont) { return; }
+      }
+    }
   }
 };
 

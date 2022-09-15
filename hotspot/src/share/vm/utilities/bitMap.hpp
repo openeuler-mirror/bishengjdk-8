@@ -269,6 +269,7 @@ class BitMap VALUE_OBJ_CLASS_SPEC {
   bool is_full() const;
   bool is_empty() const;
 
+  void write_to(bm_word_t* buffer, size_t buffer_size_in_bytes) const;
   void print_on_error(outputStream* st, const char* prefix) const;
 
 #ifndef PRODUCT

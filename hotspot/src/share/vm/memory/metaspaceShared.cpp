@@ -38,6 +38,7 @@
 #include "memory/metaspaceShared.hpp"
 #include "oops/objArrayOop.hpp"
 #include "oops/oop.inline.hpp"
+#include "runtime/arguments.hpp"
 #include "runtime/signature.hpp"
 #include "runtime/vm_operations.hpp"
 #include "runtime/vmThread.hpp"
@@ -47,14 +48,17 @@
 PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 
 int MetaspaceShared::_max_alignment = 0;
-
 ReservedSpace* MetaspaceShared::_shared_rs = NULL;
+char* MetaspaceShared::_requested_base_address;
 
 bool MetaspaceShared::_link_classes_made_progress;
 bool MetaspaceShared::_check_classes_made_progress;
 bool MetaspaceShared::_has_error_classes;
 bool MetaspaceShared::_archive_loading_failed = false;
 bool MetaspaceShared::_remapped_readwrite = false;
+void* MetaspaceShared::_shared_metaspace_static_bottom = NULL;
+void* MetaspaceShared::_shared_metaspace_dynamic_base = NULL;
+void* MetaspaceShared::_shared_metaspace_dynamic_top = NULL;
 // Read/write a data stream for restoring/preserving metadata pointers and
 // miscellaneous data from/to the shared archive file.
 
@@ -843,7 +847,7 @@ int MetaspaceShared::preload_and_dump(const char * class_list_path,
 
 // Returns true if the class's status has changed
 bool MetaspaceShared::try_link_class(InstanceKlass* ik, TRAPS) {
-  assert(DumpSharedSpaces, "should only be called during dumping");
+//  assert(DumpSharedSpaces, "should only be called during dumping");
   if (ik->init_state() < InstanceKlass::linked) {
     bool saved = BytecodeVerificationLocal;
     if (!SharedClassUtil::is_shared_boot_class(ik)) {
@@ -862,6 +866,7 @@ bool MetaspaceShared::try_link_class(InstanceKlass* ik, TRAPS) {
       tty->print_cr("Preload Warning: Verification failed for %s",
                     ik->external_name());
       CLEAR_PENDING_EXCEPTION;
+      SystemDictionaryShared::set_class_has_failed_verification(ik);
       ik->set_in_error_state();
       _has_error_classes = true;
     }
@@ -902,6 +907,11 @@ public:
     FileMapInfo::assert_mark(tag == old_tag);
   }
 
+  void do_u4(u4* p) {
+    intptr_t obj = nextPtr();
+    *p = (u4)(uintx(obj));
+  }
+
   void do_region(u_char* start, size_t size) {
     assert((intptr_t)start % sizeof(intptr_t) == 0, "bad alignment");
     assert(size % sizeof(intptr_t) == 0, "bad size");
@@ -918,7 +928,10 @@ public:
 
 // Return true if given address is in the mapped shared space.
 bool MetaspaceShared::is_in_shared_space(const void* p) {
-  return UseSharedSpaces && FileMapInfo::current_info()->is_in_shared_space(p);
+  return UseSharedSpaces && ((FileMapInfo::current_info() != NULL &&
+                              FileMapInfo::current_info()->is_mapped() &&
+                              FileMapInfo::current_info()->is_in_shared_space(p)) ||
+                              is_shared_dynamic(p));
 }
 
 void MetaspaceShared::print_shared_spaces() {
@@ -927,19 +940,34 @@ void MetaspaceShared::print_shared_spaces() {
   }
 }
 
-
 // Map shared spaces at requested addresses and return if succeeded.
 // Need to keep the bounds of the ro and rw space for the Metaspace::contains
 // call, or is_in_shared_space.
 bool MetaspaceShared::map_shared_spaces(FileMapInfo* mapinfo) {
   size_t image_alignment = mapinfo->alignment();
 
+  mapinfo->set_is_mapped(false);
+
 #ifndef _WINDOWS
   // Map in the shared memory and then map the regions on top of it.
   // On Windows, don't map the memory here because it will cause the
   // mappings of the regions to fail.
   ReservedSpace shared_rs = mapinfo->reserve_shared_memory();
-  if (!shared_rs.is_reserved()) return false;
+  if (!shared_rs.is_reserved()) {
+    FileMapInfo::fail_continue("Unable to reserve shared memory");
+    FLAG_SET_DEFAULT(UseSharedSpaces, false);
+    return false;
+  }
+  if (InfoDynamicCDS) {
+    dynamic_cds_log->print_cr("Reserved archive_space_rs [" INTPTR_FORMAT " - " INTPTR_FORMAT "] (" SIZE_FORMAT ") bytes",
+                   p2i(shared_rs.base()), p2i(shared_rs.base() + shared_rs.size()), shared_rs.size());
+  }
+  if (mapinfo->is_static()) {
+    _requested_base_address = shared_rs.base();
+  } else {
+    _shared_metaspace_dynamic_base = shared_rs.base();
+    _shared_metaspace_dynamic_top = shared_rs.base() + shared_rs.size();
+  }
 #endif
 
   assert(!DumpSharedSpaces, "Should not be called with DumpSharedSpaces");
@@ -950,40 +978,79 @@ bool MetaspaceShared::map_shared_spaces(FileMapInfo* mapinfo) {
   char* _mc_base = NULL;
 
   // Map each shared region
-  if ((_ro_base = mapinfo->map_region(ro)) != NULL &&
-       mapinfo->verify_region_checksum(ro) &&
-      (_rw_base = mapinfo->map_region(rw)) != NULL &&
-       mapinfo->verify_region_checksum(rw) &&
-      (_md_base = mapinfo->map_region(md)) != NULL &&
-       mapinfo->verify_region_checksum(md) &&
-      (_mc_base = mapinfo->map_region(mc)) != NULL &&
-       mapinfo->verify_region_checksum(mc) &&
-      (image_alignment == (size_t)max_alignment()) &&
-      mapinfo->validate_classpath_entry_table()) {
-    // Success (no need to do anything)
-    return true;
-  } else {
-    // If there was a failure in mapping any of the spaces, unmap the ones
-    // that succeeded
-    if (_ro_base != NULL) mapinfo->unmap_region(ro);
-    if (_rw_base != NULL) mapinfo->unmap_region(rw);
-    if (_md_base != NULL) mapinfo->unmap_region(md);
-    if (_mc_base != NULL) mapinfo->unmap_region(mc);
-#ifndef _WINDOWS
-    // Release the entire mapped region
-    shared_rs.release();
-#endif
-    // If -Xshare:on is specified, print out the error message and exit VM,
-    // otherwise, set UseSharedSpaces to false and continue.
-    if (RequireSharedSpaces || PrintSharedArchiveAndExit) {
-      vm_exit_during_initialization("Unable to use shared archive.", "Failed map_region for using -Xshare:on.");
-    } else {
-      FLAG_SET_DEFAULT(UseSharedSpaces, false);
+  if (mapinfo->is_static()) {
+    if ((_ro_base = mapinfo->map_region(ro)) != NULL &&
+         mapinfo->verify_region_checksum(ro) &&
+        (_rw_base = mapinfo->map_region(rw)) != NULL &&
+         mapinfo->verify_region_checksum(rw) &&
+        (_md_base = mapinfo->map_region(md)) != NULL &&
+         mapinfo->verify_region_checksum(md) &&
+        (_mc_base = mapinfo->map_region(mc)) != NULL &&
+         mapinfo->verify_region_checksum(mc) &&
+        (image_alignment == (size_t)max_alignment()) &&
+        mapinfo->validate_classpath_entry_table()) {
+      mapinfo->set_is_mapped(true);
+      return true;
     }
-    return false;
+  } else {
+    if ((_rw_base = mapinfo->map_region(d_rw)) != NULL &&
+         mapinfo->verify_region_checksum(d_rw) &&
+        (_ro_base = mapinfo->map_region(d_ro)) != NULL &&
+         mapinfo->verify_region_checksum(d_ro) &&
+        (image_alignment == (size_t)max_alignment())) {
+      mapinfo->set_is_mapped(true);
+      return true;
+    }
   }
+
+  // If there was a failure in mapping any of the spaces, unmap the ones
+  // that succeeded
+  if (_ro_base != NULL) mapinfo->unmap_region(ro);
+  if (_rw_base != NULL) mapinfo->unmap_region(rw);
+  if (_md_base != NULL) mapinfo->unmap_region(md);
+  if (_mc_base != NULL) mapinfo->unmap_region(mc);
+#ifndef _WINDOWS
+  // Release the entire mapped region
+  shared_rs.release();
+#endif
+  // If -Xshare:on is specified, print out the error message and exit VM,
+  // otherwise, set UseSharedSpaces to false and continue.
+  if (RequireSharedSpaces || PrintSharedArchiveAndExit) {
+    vm_exit_during_initialization("Unable to use shared archive.", "Failed map_region for using -Xshare:on.");
+  } else {
+    FLAG_SET_DEFAULT(UseSharedSpaces, false);
+  }
+  return false;
 }
 
+void** MetaspaceShared::_vtbl_list = NULL;
+
+intptr_t* MetaspaceShared::get_archived_vtable(MetaspaceObj::Type msotype, address obj) {
+  Arguments::assert_is_dumping_archive();
+  switch (msotype) {
+  case MetaspaceObj::SymbolType:
+  case MetaspaceObj::TypeArrayU1Type:
+  case MetaspaceObj::TypeArrayU2Type:
+  case MetaspaceObj::TypeArrayU4Type:
+  case MetaspaceObj::TypeArrayU8Type:
+  case MetaspaceObj::TypeArrayOtherType:
+  case MetaspaceObj::ConstMethodType:
+  case MetaspaceObj::ConstantPoolCacheType:
+  case MetaspaceObj::AnnotationType:
+  case MetaspaceObj::MethodCountersType:
+    // These have no vtables.
+    break;
+  case MetaspaceObj::MethodDataType:
+    // We don't archive MethodData <-- should have been removed in removed_unsharable_info
+    ShouldNotReachHere();
+    break;
+  default:
+    int vtable_offset = MetaspaceShared::vtbl_list_size * sizeof(void*) + sizeof(intptr_t);
+    char* vtable_start = (char*)_vtbl_list + vtable_offset;
+    return (intptr_t*)find_matching_vtbl_ptr(_vtbl_list, (void*)vtable_start, obj);
+  }
+  return NULL;
+}
 // Read the miscellaneous data from the shared file, and
 // serialize it out to its various destinations.
 
@@ -996,6 +1063,7 @@ void MetaspaceShared::initialize_shared_spaces() {
   // for Klass objects.  They get filled in later.
 
   void** vtbl_list = (void**)buffer;
+  _vtbl_list = vtbl_list;
   buffer += MetaspaceShared::vtbl_list_size * sizeof(void*);
   Universe::init_self_patching_vtbl_list(vtbl_list, vtbl_list_size);
 
@@ -1079,6 +1147,15 @@ void MetaspaceShared::initialize_shared_spaces() {
   // Close the mapinfo file
   mapinfo->close();
 
+  FileMapInfo *dynamic_mapinfo = FileMapInfo::dynamic_info();
+  if (dynamic_mapinfo != NULL) {
+    intptr_t* buffer = (intptr_t*)dynamic_mapinfo->serialized_data();
+    ReadClosure rc(&buffer);
+    SymbolTable::serialize_shared_table_header(&rc);
+    SystemDictionaryShared::serialize_dictionary_headers(&rc);
+    dynamic_mapinfo->close();
+  }
+
   if (PrintSharedArchiveAndExit) {
     if (PrintSharedDictionary) {
       tty->print_cr("\nShared classes:\n");
@@ -1102,6 +1179,11 @@ bool MetaspaceShared::remap_shared_readonly_as_readwrite() {
     // remap the shared readonly space to shared readwrite, private
     FileMapInfo* mapinfo = FileMapInfo::current_info();
     if (!mapinfo->remap_shared_readonly_as_readwrite()) {
+      return false;
+    }
+
+    mapinfo = FileMapInfo::dynamic_info();
+    if (mapinfo != NULL && !mapinfo->remap_shared_readonly_as_readwrite()) {
       return false;
     }
     _remapped_readwrite = true;

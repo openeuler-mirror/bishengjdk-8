@@ -33,6 +33,7 @@
 #include "memory/metadataFactory.hpp"
 #include "memory/resourceArea.hpp"
 #include "memory/universe.inline.hpp"
+#include "memory/metaspaceClosure.hpp"
 #include "oops/instanceKlass.hpp"
 #include "oops/klass.inline.hpp"
 #include "oops/objArrayKlass.hpp"
@@ -567,6 +568,12 @@ int ObjArrayKlass::oop_adjust_pointers(oop obj) {
   int size = a->object_size();
   ObjArrayKlass_OOP_ITERATE(a, p, MarkSweep::adjust_pointer(p))
   return size;
+}
+
+void ObjArrayKlass::metaspace_pointers_do(MetaspaceClosure* it) {
+  ArrayKlass::metaspace_pointers_do(it);
+  it->push(&_element_klass);
+  it->push(&_bottom_klass);
 }
 
 #if INCLUDE_ALL_GCS

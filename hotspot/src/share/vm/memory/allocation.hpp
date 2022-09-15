@@ -302,6 +302,11 @@ class MetaspaceObj {
                      Type type, Thread* thread) throw();
                      // can't use TRAPS from this header file.
   void operator delete(void* p) { ShouldNotCallThis(); }
+
+  // Declare a *static* method with the same signature in any subclass of MetaspaceObj
+  // that should be read-only by default. See symbol.hpp for an example. This function
+  // is used by the templates in metaspaceClosure.hpp
+  static bool is_read_only_by_default() { return false; }
 };
 
 // Base class for classes that constitute name spaces.
@@ -728,6 +733,12 @@ class ArrayAllocator VALUE_OBJ_CLASS_SPEC {
   bool _use_malloc;
   size_t _size;
   bool _free_in_destructor;
+
+  static bool should_use_malloc(size_t size) {
+    return size < ArrayAllocatorMallocLimit;
+  }
+
+  static char* allocate_inner(size_t& size, bool& use_malloc);
  public:
   ArrayAllocator(bool free_in_destructor = true) :
     _addr(NULL), _use_malloc(false), _size(0), _free_in_destructor(free_in_destructor) { }
@@ -739,6 +750,7 @@ class ArrayAllocator VALUE_OBJ_CLASS_SPEC {
   }
 
   E* allocate(size_t length);
+  E* reallocate(size_t new_length);
   void free();
 };
 

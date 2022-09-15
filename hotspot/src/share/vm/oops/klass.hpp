@@ -94,6 +94,8 @@ class ParCompactionManager;
 class KlassSizeStats;
 class fieldDescriptor;
 class MarkSweep;
+class MetaspaceClosure;
+class vtableEntry;
 
 class Klass : public Metadata {
   friend class VMStructs;
@@ -209,7 +211,7 @@ protected:
   bool has_fake_loader_data_App() { return class_loader_data() == _fake_loader_data_App; }
   bool has_fake_loader_data_Ext()  { return class_loader_data() == _fake_loader_data_Ext; }
   bool has_fake_loader_data() { return (has_fake_loader_data_App() || has_fake_loader_data_Ext()); }
-  
+
   bool is_klass() const volatile { return true; }
 
   // super
@@ -316,6 +318,7 @@ protected:
     _shared_class_path_index = index;
   };
 
+  virtual void metaspace_pointers_do(MetaspaceClosure* it);
 
  protected:                                // internal accessors
   Klass* subklass_oop() const            { return _subklass; }
@@ -323,7 +326,10 @@ protected:
   void     set_subklass(Klass* s);
   void     set_next_sibling(Klass* s);
 
+  vtableEntry* start_of_vtable() const;
+
  public:
+  static ByteSize vtable_start_offset();
 
   // Compiler support
   static ByteSize super_offset()                 { return in_ByteSize(offset_of(Klass, _super)); }
@@ -505,6 +511,7 @@ protected:
  public:
   // CDS support - remove and restore oops from metadata. Oops are not shared.
   virtual void remove_unshareable_info();
+  virtual void remove_java_mirror();
   virtual void restore_unshareable_info(ClassLoaderData* loader_data, Handle protection_domain, TRAPS);
 
  protected:
@@ -725,6 +732,7 @@ protected:
 
   virtual const char* internal_name() const = 0;
 
+  virtual MetaspaceObj::Type type() const { return ClassType; }
   // Verification
   virtual void verify_on(outputStream* st);
   void verify() { verify_on(tty); }

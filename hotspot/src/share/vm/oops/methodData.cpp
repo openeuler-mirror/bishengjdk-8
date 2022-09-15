@@ -29,6 +29,7 @@
 #include "interpreter/bytecodeStream.hpp"
 #include "interpreter/linkResolver.hpp"
 #include "memory/heapInspection.hpp"
+#include "memory/metaspaceClosure.hpp"
 #include "oops/methodData.hpp"
 #include "prims/jvmtiRedefineClasses.hpp"
 #include "runtime/compilationPolicy.hpp"
@@ -1682,4 +1683,12 @@ void MethodData::clean_weak_method_links() {
   CleanExtraDataMethodClosure cl;
   clean_extra_data(&cl);
   verify_extra_data_clean(&cl);
+}
+
+
+void MethodData::metaspace_pointers_do(MetaspaceClosure* iter) {
+  if (TraceDynamicCDS) {
+    dynamic_cds_log->print_cr("Iter(MethodData): %p", this);
+  }
+  iter->push(&_method);
 }

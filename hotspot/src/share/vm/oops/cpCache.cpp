@@ -24,14 +24,17 @@
 
 #include "precompiled.hpp"
 #include "gc_implementation/shared/markSweep.inline.hpp"
+#include "interpreter/bytecodeStream.hpp"
 #include "interpreter/interpreter.hpp"
 #include "interpreter/rewriter.hpp"
 #include "memory/universe.inline.hpp"
+#include "memory/metaspaceClosure.hpp"
 #include "oops/cpCache.hpp"
 #include "oops/objArrayOop.hpp"
 #include "oops/oop.inline.hpp"
 #include "prims/jvmtiRedefineClassesTrace.hpp"
 #include "prims/methodHandles.hpp"
+#include "runtime/arguments.hpp"
 #include "runtime/handles.inline.hpp"
 #include "runtime/orderAccess.inline.hpp"
 #include "utilities/macros.hpp"
@@ -598,6 +601,72 @@ void ConstantPoolCache::initialize(const intArray& inverse_index_map,
 #endif
       entry_at(cpci)->initialize_resolved_reference_index(ref);
       ref += ConstantPoolCacheEntry::_indy_resolved_references_entries - 1;  // skip extra entries
+    }
+  }
+}
+
+void ConstantPoolCache::metaspace_pointers_do(MetaspaceClosure* it) {
+  if (TraceDynamicCDS) {
+    dynamic_cds_log->print_cr("Iter(ConstantPoolCache): %p", this);
+  }
+  it->push(&_constant_pool);
+ // it->push(&_reference_map);
+}
+
+void ConstantPoolCache::remove_unshareable_info() {
+  walk_entries_for_initialization(/*check_only = */ false);
+}
+
+void ConstantPoolCache::walk_entries_for_initialization(bool check_only) {
+  Arguments::assert_is_dumping_archive();
+  // When dumping the archive, we want to clean up the ConstantPoolCache
+  // to remove any effect of linking due to the execution of Java code --
+  // each ConstantPoolCacheEntry will have the same contents as if
+  // ConstantPoolCache::initialize has just returned:
+  //
+  // - We keep the ConstantPoolCache::constant_pool_index() bits for all entries.
+  // - We keep the "f2" field for entries used by invokedynamic and invokehandle
+  // - All other bits in the entries are cleared to zero.
+  ResourceMark rm;
+
+  InstanceKlass* ik = constant_pool()->pool_holder();
+  bool* f2_used = NEW_RESOURCE_ARRAY(bool, length());
+  memset(f2_used, 0, sizeof(bool) * length());
+
+  Thread* current = Thread::current();
+
+  // Find all the slots that we need to preserve f2
+  for (int i = 0; i < ik->methods()->length(); i++) {
+    Method* m = ik->methods()->at(i);
+    RawBytecodeStream bcs(methodHandle(current, m));
+    while (!bcs.is_last_bytecode()) {
+      Bytecodes::Code opcode = bcs.raw_next();
+      switch (opcode) {
+      case Bytecodes::_invokedynamic: {
+          int index = Bytes::get_native_u4(bcs.bcp() + 1);
+          int cp_cache_index = constant_pool()->invokedynamic_cp_cache_index(index);
+          f2_used[cp_cache_index] = 1;
+        }
+        break;
+      case Bytecodes::_invokehandle: {
+          int cp_cache_index = Bytes::get_native_u2(bcs.bcp() + 1);
+          f2_used[cp_cache_index] = 1;
+        }
+        break;
+      default:
+        break;
+      }
+    }
+  }
+
+  if (check_only) {
+    DEBUG_ONLY(
+      for (int i=0; i<length(); i++) {
+        entry_at(i)->verify_just_initialized(f2_used[i]);
+      })
+  } else {
+    for (int i=0; i<length(); i++) {
+      entry_at(i)->reinitialize(f2_used[i]);
     }
   }
 }

@@ -37,6 +37,7 @@
 #include "memory/metaspaceTracer.hpp"
 #include "memory/resourceArea.hpp"
 #include "memory/universe.hpp"
+#include "runtime/arguments.hpp"
 #include "runtime/atomic.inline.hpp"
 #include "runtime/globals.hpp"
 #include "runtime/init.hpp"
@@ -426,7 +427,15 @@ VirtualSpaceNode::VirtualSpaceNode(size_t bytes) : _top(NULL), _next(NULL), _rs(
       assert(shared_base == 0 || _rs.base() == shared_base, "should match");
     } else {
       // Get a mmap region anywhere if the SharedBaseAddress fails.
+      if (InfoDynamicCDS) {
+        dynamic_cds_log->print_cr("Could not allocate static space at request address: " INTPTR_FORMAT, p2i(shared_base));
+      }
       _rs = ReservedSpace(bytes, Metaspace::reserve_alignment(), large_pages);
+    }
+    // ...failing that, give up.
+    if (!_rs.is_reserved()) {
+      vm_exit_during_initialization(
+          err_msg("Could not allocate static shared space: " SIZE_FORMAT " bytes", bytes));
     }
     MetaspaceShared::set_shared_rs(&_rs);
   } else
@@ -3322,21 +3331,80 @@ void Metaspace::global_initialize() {
     // the addresses don't conflict)
     address cds_address = NULL;
     if (UseSharedSpaces) {
-      FileMapInfo* mapinfo = new FileMapInfo();
+      FileMapInfo* static_mapinfo = new FileMapInfo();
+      FileMapInfo* dynamic_mapinfo = new FileMapInfo(false);
 
       // Open the shared archive file, read and validate the header. If
       // initialization fails, shared spaces [UseSharedSpaces] are
       // disabled and the file is closed.
-      // Map in spaces now also
-      if (mapinfo->initialize() && MetaspaceShared::map_shared_spaces(mapinfo)) {
+      //
+      // This will reserve two address spaces suitable to house Klass structures, one
+      //  for the cds archives (static archive and optionally dynamic archive) and
+      //  optionally one move for ccs.
+      //
+      // Since both spaces must fall within the compressed class pointer encoding
+      //  range, they are allocated close to each other.
+      //
+      // Space for archives will be reserved first, followed by a potential gap,
+      //  followed by the space for ccs:
+      //
+      // +-- Base address                                                   End
+      // |                                                                   |
+      // v                                                                   v
+      // +------------+         +-------------+         +--------------------+
+      // | static arc | [align] | [dyn. arch] | [align] | compr. class space |
+      // +------------+         +-------------+         +--------------------+
+      //
+      // (The gap may result from different alignment requirements between metaspace
+      //  and CDS)
+      //
+      // If UseCompressedClassPointers is disabled, only one address space will be
+      //  reserved:
+      //
+      // +-- Base address                    End
+      // |                                    |
+      // v                                    v
+      // +------------+         +-------------+
+      // | static arc | [align] | [dyn. arch] |
+      // +------------+         +-------------+
+      //
+      // If UseCompressedClassPointers=1, the range encompassing both spaces will be
+      //  suitable to en/decode narrow Klass pointers: the base will be valid for
+      //  encoding, the range [Base, End) not surpass KlassEncodingMetaspaceMax.
+      if (static_mapinfo->initialize() && MetaspaceShared::map_shared_spaces(static_mapinfo)) {
         cds_total = FileMapInfo::shared_spaces_size();
-        cds_address = (address)mapinfo->region_base(0);
+        cds_address = (address)static_mapinfo->region_base(0);
+        MetaspaceShared::set_shared_metaspace_static_bottom(cds_address);
+        // Update SharedBaseAddress to the same value as the dump phase.
+        SharedBaseAddress = (size_t)cds_address;
+        if (!DynamicDumpSharedSpaces &&
+            (Arguments::GetSharedDynamicArchivePath() != NULL) &&
+            dynamic_mapinfo->initialize() &&
+            MetaspaceShared::map_shared_spaces(dynamic_mapinfo)) {
+          cds_total += align_up(dynamic_mapinfo->region_end(1) - dynamic_mapinfo->region_base(0),
+                                (size_t)os::vm_allocation_granularity());
+        } else {
+          assert(!dynamic_mapinfo->is_open(),
+                 "dynamic archive file not closed or shared spaces not disabled.");
+        }
       } else {
-        assert(!mapinfo->is_open() && !UseSharedSpaces,
-               "archive file not closed or shared spaces not disabled.");
+        assert(!static_mapinfo->is_open() && !UseSharedSpaces,
+               "static archive file not closed or shared spaces not disabled.");
+      }
+
+      if (static_mapinfo != NULL && !static_mapinfo->is_mapped()) {
+        delete static_mapinfo;
+      }
+      if (dynamic_mapinfo != NULL && !dynamic_mapinfo->is_mapped()) {
+        delete dynamic_mapinfo;
       }
     }
+
+    if (DynamicDumpSharedSpaces && !UseSharedSpaces) {
+      vm_exit_during_initialization("DynamicDumpSharedSpaces is unsupported when base CDS archive is not loaded", NULL);
+    }
 #endif // INCLUDE_CDS
+
 #ifdef _LP64
     // If UseCompressedClassPointers is set then allocate the metaspace area
     // above the heap and above the CDS area (if it exists).

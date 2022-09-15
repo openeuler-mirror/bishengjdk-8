@@ -27,6 +27,7 @@
 #include "memory/heapInspection.hpp"
 #include "memory/metadataFactory.hpp"
 #include "memory/oopFactory.hpp"
+#include "memory/metaspaceClosure.hpp"
 #include "oops/annotations.hpp"
 #include "oops/instanceKlass.hpp"
 #include "utilities/ostream.hpp"
@@ -34,6 +35,17 @@
 // Allocate annotations in metadata area
 Annotations* Annotations::allocate(ClassLoaderData* loader_data, TRAPS) {
   return new (loader_data, size(), true, MetaspaceObj::AnnotationType, THREAD) Annotations();
+}
+
+void Annotations::metaspace_pointers_do(MetaspaceClosure* it) {
+  if (TraceDynamicCDS) {
+    dynamic_cds_log->print_cr("Iter(Annotations): %p", this);
+  }
+
+  it->push(&_class_annotations);
+  it->push(&_fields_annotations);
+  it->push(&_class_type_annotations);
+  it->push(&_fields_type_annotations); // FIXME: need a test case where _fields_type_annotations != NULL
 }
 
 // helper

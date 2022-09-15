@@ -43,6 +43,10 @@ public:
     return new FileMapInfo::FileMapHeader();
   }
 
+  static FileMapInfo::DynamicArchiveHeader* allocate_dynamic_archive_header() {
+    return new FileMapInfo::DynamicArchiveHeader();
+  }
+
   static size_t file_map_header_size() {
     return sizeof(FileMapInfo::FileMapHeader);
   }

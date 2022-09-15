@@ -26,6 +26,7 @@
 #include "interpreter/interpreter.hpp"
 #include "memory/gcLocker.hpp"
 #include "memory/heapInspection.hpp"
+#include "memory/metaspaceClosure.hpp"
 #include "memory/metadataFactory.hpp"
 #include "oops/constMethod.hpp"
 #include "oops/method.hpp"
@@ -147,6 +148,31 @@ int ConstMethod::size(int code_size,
 Method* ConstMethod::method() const {
     return _constants->pool_holder()->method_with_idnum(_method_idnum);
   }
+
+void ConstMethod::metaspace_pointers_do(MetaspaceClosure* it) {
+  if (TraceDynamicCDS) {
+    dynamic_cds_log->print_cr("Iter(ConstMethod): %p", this);
+  }
+
+  if (!method()->method_holder()->is_rewritten()) {
+    it->push(&_constants, MetaspaceClosure::_writable);
+  } else {
+    it->push(&_constants);
+  }
+  it->push(&_stackmap_data);
+  if (has_method_annotations()) {
+    it->push(method_annotations_addr());
+  }
+  if (has_parameter_annotations()) {
+      it->push(parameter_annotations_addr());
+  }
+  if (has_type_annotations()) {
+      it->push(type_annotations_addr());
+  }
+  if (has_default_annotations()) {
+      it->push(default_annotations_addr());
+  }
+}
 
 // linenumber table - note that length is unknown until decompression,
 // see class CompressedLineNumberReadStream.
