@@ -24,116 +24,103 @@
 
 package org.openeuler.security.openssl;
 
-import java.io.BufferedWriter;
-import java.io.BufferedInputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.InputStream;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
-import java.util.Date;
-import java.util.Properties;
+import sun.security.util.Debug;
+
+import java.security.AccessController;
+import java.security.PrivilegedAction;
 import java.security.Provider;
 
 /**
  * KAE Provider
  */
 public class KAEProvider extends Provider {
-    private static Throwable excp;
-    private static boolean needLog = true;
+    private static final Debug kaeDebug = Debug.getInstance("kae");
+
+    // default engine id
+    private static final String DEFAULT_ENGINE_ID = "kae";
 
     static {
-        Throwable status = null;
+        initialize();
+    }
+
+    private static void initialize() {
+        loadLibrary();
+        initOpenssl();
+    }
+
+    // load kae.so
+    private static void loadLibrary() {
+        AccessController.doPrivileged(new PrivilegedAction<Object>() {
+            @Override
+            public Object run() {
+                System.loadLibrary("j2kae");
+                return null;
+            }
+        });
+    }
+
+    // init openssl
+    private static void initOpenssl() {
+        boolean useGlobalMode = useGlobalMode();
+        String engineId = getEngineId();
+        boolean[] algorithmKaeFlags = KAEConfig.getUseKaeEngineFlags();
+        Throwable throwable = null;
         try {
-            System.loadLibrary("j2kae");
-            initOpenssl();
-        } catch (UnsatisfiedLinkError t) {
-            status = t;
-        } catch (RuntimeException e) {
-            status = e;
+            initOpenssl(useGlobalMode, engineId, algorithmKaeFlags);
+        } catch (Throwable t) {
+            throwable = t;
+            if (kaeDebug != null) {
+                kaeDebug.println("initOpenssl failed : " + throwable.getMessage());
+            }
         }
-        excp = status;
+        boolean[] engineFlags = getEngineFlags();
+        boolean[] kaeProviderFlags = KAEConfig.getUseKaeProviderFlags();
+        KAELog.log(engineId, throwable, engineFlags, kaeProviderFlags);
     }
 
-    private void logStart(Throwable excp) {
-        File file = new File(System.getProperty("user.dir"), "kae.log");
-        Path fpath = file.toPath();
-        if (!Files.exists(fpath)) {
-            try {
-                file.createNewFile();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-
-        try (BufferedWriter writer = Files.newBufferedWriter(fpath, StandardOpenOption.APPEND)) {
-            if (excp != null) {
-                writer.write(excp.getMessage());
-            } else {
-                writer.write("KAE Engine was found");
-            }
-            writer.write("    " + new Date());
-            writer.newLine();
-        } catch (IOException e) {
-            e.initCause(excp).printStackTrace();
-        }
-        KAEProvider.excp = null; // Exception already logged, clean it.
+    // get engine id
+    private static String getEngineId() {
+        return KAEConfig.privilegedGetOverridable("kae.engine.id", DEFAULT_ENGINE_ID);
     }
 
-    private Properties getProp() {
-        Properties props = new Properties();
-        String sep = File.separator;
-        File propFile = new File(System.getProperty("java.home") + sep + "lib" + sep +
-                        "ext" + sep + "kaeprovider.conf");
-        if (propFile.exists()) {
-            try (InputStream is = new BufferedInputStream(new FileInputStream(propFile))) {
-                props.load(is);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-        return props;
+    // whether to set libcrypto.so to GLOBAL mode, by default libcrypto.so is LOCAL mode
+    private static boolean useGlobalMode() {
+        String explicitLoad = KAEConfig.privilegedGetOverridable(
+                "kae.libcrypto.useGlobalMode", "false");
+        return Boolean.parseBoolean(explicitLoad);
     }
 
     public KAEProvider() {
         super("KAEProvider", 1.8d, "KAE provider");
-        Properties props = getProp();
-        if (needLog && "true".equalsIgnoreCase(props.getProperty("kae.log"))) {
-            logStart(excp);
-            needLog = false; // Log only once
-        }
-        if (!"false".equalsIgnoreCase(props.getProperty("kae.md5"))) {
+        if (KAEConfig.useKaeProvider("kae.md5")) {
             putMD5();
         }
-        if (!"false".equalsIgnoreCase(props.getProperty("kae.sha256"))) {
+        if (KAEConfig.useKaeProvider("kae.sha256")) {
             putSHA256();
         }
-        if (!"false".equalsIgnoreCase(props.getProperty("kae.sha384"))) {
+        if (KAEConfig.useKaeProvider("kae.sha384")) {
             putSHA384();
         }
-        if (!"false".equalsIgnoreCase(props.getProperty("kae.sm3"))) {
+        if (KAEConfig.useKaeProvider("kae.sm3")) {
             putSM3();
         }
-        if (!"false".equalsIgnoreCase(props.getProperty("kae.aes"))) {
+        if (KAEConfig.useKaeProvider("kae.aes")) {
             putAES();
         }
-        if (!"false".equalsIgnoreCase(props.getProperty("kae.sm4"))) {
+        if (KAEConfig.useKaeProvider("kae.sm4")) {
             putSM4();
         }
-        if (!"false".equalsIgnoreCase(props.getProperty("kae.hmac"))) {
+        if (KAEConfig.useKaeProvider("kae.hmac")) {
             putHMAC();
         }
-        if (!"false".equalsIgnoreCase(props.getProperty("kae.rsa"))) {
+        if (KAEConfig.useKaeProvider("kae.rsa")) {
             putRSA();
             putSignatureRSA();
         }
-        if (!"false".equalsIgnoreCase(props.getProperty("kae.dh"))) {
+        if (KAEConfig.useKaeProvider("kae.dh")) {
             putDH();
         }
-        if (!"false".equalsIgnoreCase(props.getProperty("kae.ec"))) {
+        if (KAEConfig.useKaeProvider("kae.ec")) {
             putEC();
         }
     }
@@ -285,28 +272,28 @@ public class KAEProvider extends Provider {
                 "org.openeuler.security.openssl.KAERSASignature$SHA512withRSA");
 
         // alias
-        put("Alg.Alias.Signature.1.2.840.113549.1.1.4",     "MD5withRSA");
+        put("Alg.Alias.Signature.1.2.840.113549.1.1.4", "MD5withRSA");
         put("Alg.Alias.Signature.OID.1.2.840.113549.1.1.4", "MD5withRSA");
 
-        put("Alg.Alias.Signature.1.2.840.113549.1.1.5",     "SHA1withRSA");
+        put("Alg.Alias.Signature.1.2.840.113549.1.1.5", "SHA1withRSA");
         put("Alg.Alias.Signature.OID.1.2.840.113549.1.1.5", "SHA1withRSA");
-        put("Alg.Alias.Signature.1.3.14.3.2.29",            "SHA1withRSA");
+        put("Alg.Alias.Signature.1.3.14.3.2.29", "SHA1withRSA");
 
-        put("Alg.Alias.Signature.1.2.840.113549.1.1.14",     "SHA224withRSA");
+        put("Alg.Alias.Signature.1.2.840.113549.1.1.14", "SHA224withRSA");
         put("Alg.Alias.Signature.OID.1.2.840.113549.1.1.14", "SHA224withRSA");
 
-        put("Alg.Alias.Signature.1.2.840.113549.1.1.11",     "SHA256withRSA");
+        put("Alg.Alias.Signature.1.2.840.113549.1.1.11", "SHA256withRSA");
         put("Alg.Alias.Signature.OID.1.2.840.113549.1.1.11", "SHA256withRSA");
 
-        put("Alg.Alias.Signature.1.2.840.113549.1.1.12",     "SHA384withRSA");
+        put("Alg.Alias.Signature.1.2.840.113549.1.1.12", "SHA384withRSA");
         put("Alg.Alias.Signature.OID.1.2.840.113549.1.1.12", "SHA384withRSA");
 
-        put("Alg.Alias.Signature.1.2.840.113549.1.1.13",     "SHA512withRSA");
+        put("Alg.Alias.Signature.1.2.840.113549.1.1.13", "SHA512withRSA");
         put("Alg.Alias.Signature.OID.1.2.840.113549.1.1.13", "SHA512withRSA");
 
         put("Signature.RSASSA-PSS", "org.openeuler.security.openssl.KAERSAPSSSignature");
 
-        put("Alg.Alias.Signature.1.2.840.113549.1.1.10",     "RSASSA-PSS");
+        put("Alg.Alias.Signature.1.2.840.113549.1.1.10", "RSASSA-PSS");
         put("Alg.Alias.Signature.OID.1.2.840.113549.1.1.10", "RSASSA-PSS");
 
         // attributes for supported key classes
@@ -326,6 +313,10 @@ public class KAEProvider extends Provider {
         put("Alg.Alias.KeyPairGenerator.EllipticCurve", "EC");
         put("KeyAgreement.ECDH", "org.openeuler.security.openssl.KAEECDHKeyAgreement");
     }
+
     // init openssl
-    static native void initOpenssl() throws RuntimeException;
+    static native void initOpenssl(boolean useGlobalMode, String engineId, boolean[] algorithmKaeFlags)
+            throws RuntimeException;
+
+    static native boolean[] getEngineFlags();
 }

@@ -50,8 +50,8 @@ JNIEXPORT jobjectArray JNICALL Java_org_openeuler_security_openssl_KAEDHKeyPairG
     jobjectArray keys = NULL;
     jbyteArray pri_key = NULL;
     jbyteArray pub_key = NULL;
-    static ENGINE* kaeEngine = NULL;
-    kaeEngine = (kaeEngine == NULL) ? GetKaeEngine() : kaeEngine;
+    ENGINE* kaeEngine = GetEngineByAlgorithmIndex(DH_INDEX);
+    KAE_TRACE("KAEDHKeyPairGenerator_nativeGenerateKeyPair: kaeEngine => %p", kaeEngine);
 
     KAE_TRACE("Java_org_openeuler_security_openssl_KAEDHKeyPairGenerator_nativeGenerateKeyPair start !");
 

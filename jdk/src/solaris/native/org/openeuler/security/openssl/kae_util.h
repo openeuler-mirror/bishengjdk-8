@@ -27,6 +27,43 @@
 #include <openssl/bn.h>
 #include <jni.h>
 
+typedef enum {
+    MD5_INDEX,
+    SHA256_INDEX,
+    SHA384_INDEX,
+    SM3_INDEX,
+    AES_128_ECB_INDEX,
+    AES_128_CBC_INDEX,
+    AES_128_CTR_INDEX,
+    AES_128_GCM_INDEX,
+    AES_192_ECB_INDEX,
+    AES_192_CBC_INDEX,
+    AES_192_CTR_INDEX,
+    AES_192_GCM_INDEX,
+    AES_256_ECB_INDEX,
+    AES_256_CBC_INDEX,
+    AES_256_CTR_INDEX,
+    AES_256_GCM_INDEX,
+    SM4_ECB_INDEX,
+    SM4_CBC_INDEX,
+    SM4_CTR_INDEX,
+    SM4_OFB_INDEX,
+    HMAC_MD5_INDEX,
+    HMAC_SHA1_INDEX,
+    HMAC_SHA224_INDEX,
+    HMAC_SHA256_INDEX,
+    HMAC_SHA384_INDEX,
+    HMAC_SHA512_INDEX,
+    RSA_INDEX,
+    DH_INDEX,
+    EC_INDEX
+} AlgorithmIndex;
+
+typedef struct {
+    AlgorithmIndex algorithmIndex;
+    const char* algorithmName;
+} KAEAlgorithm;
+
 /* jbyteArray convert to BIGNUM */
 BIGNUM* KAE_GetBigNumFromByteArray(JNIEnv* env, jbyteArray byteArray);
 
@@ -40,8 +77,18 @@ void SetKaeEngine(ENGINE* engine);
 
 ENGINE* GetKaeEngine();
 
-void SetKaeEngine(ENGINE* engine);
+void initEngines(JNIEnv* env, jbooleanArray algorithmKaeFlags);
 
-ENGINE* GetKaeEngine();
+jbooleanArray getEngineFlags(JNIEnv* env);
+
+ENGINE* GetEngineByAlgorithmIndex(AlgorithmIndex algorithmIndex);
+
+ENGINE* GetHmacEngineByAlgorithmName(const char* algorithmName);
+
+ENGINE* GetDigestEngineByAlgorithmName(const char* algorithmName);
+
+ENGINE* GetAesEngineByAlgorithmName(const char* algorithmName);
+
+ENGINE* GetSm4EngineByAlgorithmName(const char* algorithmName);
 
 #endif

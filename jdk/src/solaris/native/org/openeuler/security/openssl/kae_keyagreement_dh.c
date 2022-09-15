@@ -51,8 +51,8 @@ JNIEXPORT jbyteArray JNICALL Java_org_openeuler_security_openssl_KAEDHKeyAgreeme
     int computekeyLength = 0;
     unsigned char* secret = NULL;
     jbyteArray retByteArray = NULL;
-    static ENGINE* kaeEngine = NULL;
-    kaeEngine = (kaeEngine == NULL) ? GetKaeEngine() : kaeEngine;
+    ENGINE* kaeEngine = GetEngineByAlgorithmIndex(DH_INDEX);
+    KAE_TRACE("KAEDHKeyAgreement_nativeComputeKey: kaeEngine => %p", kaeEngine);
 
     // bits to Bytes
     int pSizeInByte = (pSize +7) >> 3;

@@ -24,9 +24,12 @@
 #include <openssl/bio.h>
 #include <openssl/ssl.h>
 #include <openssl/engine.h>
+#include <dlfcn.h>
 #include "kae_exception.h"
 #include "kae_util.h"
 #include "org_openeuler_security_openssl_KAEProvider.h"
+
+#define KAE_OPENSSL_LIBRARY "libcrypto.so"
 
 /*
  * Class:     Java_org_openeuler_security_openssl_KAEProvider
@@ -34,10 +37,39 @@
  * Signature: ()V
  */
 JNIEXPORT void JNICALL Java_org_openeuler_security_openssl_KAEProvider_initOpenssl
-        (JNIEnv *env, jclass cls) {
+        (JNIEnv *env, jclass cls, jboolean useGlobalMode, jstring engineId, jbooleanArray algorithmKaeFlags) {
     SSL_load_error_strings();
     ERR_load_BIO_strings();
     OpenSSL_add_all_algorithms();
+
+    /*
+     * If the same shared object is opened again with dlopen(), the same object handle is returned.
+     * The dynamic linker maintains reference counts for object handles.
+     * An object that was previously opened with RTLD_LOCAL can be promoted to RTLD_GLOBAL in a subsequent dlopen().
+     *
+     * RTLD_GLOBAL
+	 *     The symbols defined by this shared object will be made
+	 *     available for symbol resolution of subsequently loaded
+	 *     shared objects.
+     * RTLD_LOCAL
+	 *     This is the converse of RTLD_GLOBAL, and the default if
+	 *     neither flag is specified.  Symbols defined in this shared
+	 *     object are not made available to resolve references in
+	 *     subsequently loaded shared objects.
+     * For more information see https://man7.org/linux/man-pages/man3/dlopen.3.html.
+     */
+    if (useGlobalMode) {
+        char msg[1024];
+        void *handle = NULL;
+        // Promote the flags of the loaded libcrypto.so library from RTLD_LOCAL to RTLD_GLOBAL
+        handle = dlopen(KAE_OPENSSL_LIBRARY, RTLD_LAZY | RTLD_GLOBAL);
+        if (handle == NULL) {
+            snprintf(msg, sizeof(msg), "Cannot load %s (%s)!", KAE_OPENSSL_LIBRARY,  dlerror());
+            KAE_ThrowByName(env, "java/lang/UnsatisfiedLinkError", msg);
+            return;
+        }
+        dlclose(handle);
+    }
 
     // check if KaeEngine holder is already set
     ENGINE* e = GetKaeEngine();
@@ -47,11 +79,25 @@ JNIEXPORT void JNICALL Java_org_openeuler_security_openssl_KAEProvider_initOpens
     }
 
     // determine whether KAE is loaded successfully
-    e = ENGINE_by_id("kae");
+    const char* id = (*env)->GetStringUTFChars(env, engineId, 0);
+    e = ENGINE_by_id(id);
+    (*env)->ReleaseStringUTFChars(env, engineId, id);
     if (e == NULL) {
-        ERR_clear_error();
-        KAE_ThrowRuntimeException(env, "kae engine not found");
+        KAE_ThrowFromOpenssl(env, "ENGINE_by_id", KAE_ThrowRuntimeException);
         return;
     }
     SetKaeEngine(e);
+
+    // initialize the engine for each algorithm
+    initEngines(env, algorithmKaeFlags);
+}
+
+/*
+ * Class:     Java_org_openeuler_security_openssl_KAEProvider
+ * Method:    getEngineFlags
+ * Signature: ()V
+ */
+JNIEXPORT jbooleanArray JNICALL Java_org_openeuler_security_openssl_KAEProvider_getEngineFlags
+        (JNIEnv *env, jclass cls) {
+    return getEngineFlags(env);
 }

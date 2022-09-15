@@ -23,6 +23,7 @@
 
 #include <stdbool.h>
 #include <openssl/rsa.h>
+#include "kae_log.h"
 #include "kae_util.h"
 #include "kae_exception.h"
 #include "org_openeuler_security_openssl_KAERSAKeyPairGenerator.h"
@@ -62,8 +63,9 @@ static const BIGNUM* (* GetRSAParamFunctionList[])(const RSA*) = {
  * step 3.Generate rsa key, and all key information is stored in RSA
  */
 static RSA* NewRSA(JNIEnv* env, jint keySize, jbyteArray publicExponent) {
-    static ENGINE* kaeEngine = NULL;
-    kaeEngine = (kaeEngine == NULL) ? GetKaeEngine() : kaeEngine;
+    ENGINE* kaeEngine = GetEngineByAlgorithmIndex(RSA_INDEX);
+    KAE_TRACE("NewRSA: kaeEngine => %p", kaeEngine);
+
     // new rsa
     RSA* rsa = RSA_new_method(kaeEngine);
     if (rsa == NULL) {
