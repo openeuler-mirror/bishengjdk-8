@@ -129,5 +129,12 @@ class MethodCounters: public MetaspaceObj {
     return offset_of(MethodCounters, _interpreter_invocation_count);
   }
 
+  MetaspaceObj::Type type() const { return MethodCountersType; }
+
+  void metaspace_pointers_do(MetaspaceClosure* it) {
+    if (TraceDynamicCDS) {
+      dynamic_cds_log->print_cr("Iter(MethodCounters): %p", this);
+    }
+  }
 };
 #endif //SHARE_VM_OOPS_METHODCOUNTERS_HPP

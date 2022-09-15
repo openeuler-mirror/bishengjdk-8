@@ -39,6 +39,7 @@
 
 Mutex*   Patching_lock                = NULL;
 Monitor* SystemDictionary_lock        = NULL;
+Mutex*   SharedDictionary_lock        = NULL;
 Mutex*   PackageTable_lock            = NULL;
 Mutex*   CompiledIC_lock              = NULL;
 Mutex*   InlineCacheBuffer_lock       = NULL;
@@ -129,6 +130,7 @@ Monitor* RedefineClasses_lock         = NULL;
 
 Mutex*   FreeHumongousRegions_lock    = NULL;
 
+Mutex*   DumpTimeTable_lock           = NULL;
 #ifdef INCLUDE_JFR
 Mutex*   JfrStacktrace_lock           = NULL;
 Monitor* JfrMsg_lock                  = NULL;
@@ -224,6 +226,7 @@ void mutex_init() {
   def(JmethodIdCreation_lock       , Mutex  , leaf,        true ); // used for creating jmethodIDs.
 
   def(SystemDictionary_lock        , Monitor, leaf,        true ); // lookups done by VM thread
+  def(SharedDictionary_lock        , Mutex  , leaf,        true );
   def(PackageTable_lock            , Mutex  , leaf,        false);
   def(InlineCacheBuffer_lock       , Mutex  , leaf,        true );
   def(VMStatistic_lock             , Mutex  , leaf,        false);
@@ -289,7 +292,7 @@ void mutex_init() {
   def(RedefineClasses_lock         , Monitor, nonleaf+5,   true);
 
   def(FreeHumongousRegions_lock    , Mutex  , nonleaf,     false);
-
+  def(DumpTimeTable_lock           , Mutex  , leaf - 1,    true);
 #if INCLUDE_JFR
   def(JfrMsg_lock                  , Monitor, leaf,        true);
   def(JfrBuffer_lock               , Mutex,   leaf,        true);

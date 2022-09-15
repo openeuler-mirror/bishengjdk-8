@@ -34,7 +34,7 @@
 #include "utilities/hashtable.hpp"
 #include "utilities/hashtable.inline.hpp"
 #include "utilities/numberSeq.hpp"
-
+#include "utilities/align.hpp"
 
 // This hashtable is implemented as an open hash table with a fixed number of buckets.
 
@@ -145,7 +145,7 @@ template <MEMFLAGS F> void BasicHashtable<F>::free_buckets() {
     // Don't delete the buckets in the shared space.  They aren't
     // allocated by os::malloc
     if (!UseSharedSpaces ||
-        !FileMapInfo::current_info()->is_in_shared_space(_buckets)) {
+        !MetaspaceShared::is_in_shared_space(_buckets)) {
        FREE_C_HEAP_ARRAY(HashtableBucket, _buckets, F);
     }
     _buckets = NULL;
@@ -221,7 +221,7 @@ template <MEMFLAGS F> void BasicHashtable<F>::copy_table(char** top, char* end) 
       *top += entry_size();
     }
   }
-  *plen = (char*)(*top) - (char*)plen - sizeof(*plen);
+  *plen = ((char*)(*top) - (char*)plen) - sizeof(*plen);
 
   // Set the shared bit.
 
@@ -317,7 +317,6 @@ template <class T, MEMFLAGS F> void RehashableHashtable<T, F>::dump_table(output
   st->print_cr("Maximum bucket size     : %9d", (int)summary.maximum());
 }
 
-
 // Dump the hash table buckets.
 
 template <MEMFLAGS F> void BasicHashtable<F>::copy_buckets(char** top, char* end) {
@@ -335,6 +334,57 @@ template <MEMFLAGS F> void BasicHashtable<F>::copy_buckets(char** top, char* end
   *top += len;
 }
 
+template <MEMFLAGS F> bool BasicHashtable<F>::resize(int new_size) {
+
+  // Allocate new buckets
+  HashtableBucket<F>* buckets_new = NEW_C_HEAP_ARRAY2_RETURN_NULL(HashtableBucket<F>, new_size, F, CURRENT_PC);
+  if (buckets_new == NULL) {
+    return false;
+  }
+
+  // Clear the new buckets
+  for (int i = 0; i < new_size; i++) {
+    buckets_new[i].clear();
+  }
+
+  int table_size_old = _table_size;
+  // hash_to_index() uses _table_size, so switch the sizes now
+  _table_size = new_size;
+
+  // Move entries from the old table to a new table
+  for (int index_old = 0; index_old < table_size_old; index_old++) {
+    for (BasicHashtableEntry<F>* p = _buckets[index_old].get_entry(); p != NULL; ) {
+      BasicHashtableEntry<F>* next = p->next();
+      int index_new = hash_to_index(p->hash());
+
+      p->set_next(buckets_new[index_new].get_entry());
+      buckets_new[index_new].set_entry(p);
+      p = next;
+    }
+  }
+
+  // The old backets now can be released
+  BasicHashtable<F>::free_buckets();
+
+  // Switch to the new storage
+  _buckets = buckets_new;
+
+  return true;
+}
+
+template <MEMFLAGS F> bool BasicHashtable<F>::maybe_grow(int max_size, int load_factor) {
+  assert(SafepointSynchronize::is_at_safepoint(), "must be at safepoint");
+
+  if (table_size() >= max_size) {
+    return false;
+  }
+  if (number_of_entries() / table_size() > load_factor) {
+    resize(MIN2<int>(table_size() * 2, max_size));
+    return true;
+  } else {
+    return false;
+  }
+}
 
 #ifndef PRODUCT
 
@@ -351,7 +401,6 @@ template <class T, MEMFLAGS F> void Hashtable<T, F>::print() {
     }
   }
 }
-
 
 template <MEMFLAGS F> void BasicHashtable<F>::verify() {
   int count = 0;
@@ -406,3 +455,4 @@ template class BasicHashtable<mtClass>;
 template class BasicHashtable<mtSymbol>;
 template class BasicHashtable<mtCode>;
 template class BasicHashtable<mtInternal>;
+template class BasicHashtable<mtClassShared>;

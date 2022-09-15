@@ -267,6 +267,29 @@ public:
 };
 #endif // INCLUDE_SERVICES
 
+class DynamicCDSDumpDCmd : public DCmdWithParser {
+public:
+  DynamicCDSDumpDCmd(outputStream* output, bool heap) : DCmdWithParser(output, heap) { }
+  static const char* name() {
+    return "GC.dynamic_cds_dump";
+  }
+  static const char* description() {
+    return "Dynamic CDS dump";
+  }
+  static const char* impact() {
+    return "Medium";
+  }
+  static const JavaPermission permission() {
+    JavaPermission p = {"java.lang.management.ManagementPermission",
+                        "monitor", NULL};
+    return p;
+  }
+  static int num_arguments() {
+    return 0; 
+  }
+  virtual void execute(DCmdSource source, TRAPS);
+};
+
 // See also: inspectheap in attachListener.cpp
 class ClassHistogramDCmd : public DCmdWithParser {
 protected:

@@ -378,6 +378,13 @@ public:
   // for verification that sections of the serialized data are of the
   // correct length.
   virtual void do_tag(int tag) = 0;
+
+  // Read/write the 32-bit unsigned integer pointed to by p.
+  virtual void do_u4(u4* p) { }
+
+  bool writing() {
+    return !reading();
+  }
 };
 
 class SymbolClosure : public StackObj {

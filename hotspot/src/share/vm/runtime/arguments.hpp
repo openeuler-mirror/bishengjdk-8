@@ -443,7 +443,8 @@ class Arguments : AllStatic {
   static bool   CheckCompileOnly;
 
   static char*  SharedArchivePath;
-  static char*  AppCDSLockPath;
+
+  static char*  SharedDynamicArchivePath;
 
  public:
   // Parses the arguments, first phase
@@ -552,6 +553,22 @@ class Arguments : AllStatic {
   static bool GetCheckCompileOnly ()        { return CheckCompileOnly; }
 
   static const char* GetSharedArchivePath() { return SharedArchivePath; }
+
+  static const char* GetSharedDynamicArchivePath() { return SharedDynamicArchivePath; }
+
+  static bool init_shared_archive_paths();
+
+  static void extract_shared_archive_paths(const char* archive_path,
+                                         char** base_archive_path,
+                                         char** top_archive_path);
+
+  static int num_archives(const char* archive_path);
+
+  static bool is_dumping_archive() { return DumpSharedSpaces || DynamicDumpSharedSpaces; }
+
+  static void assert_is_dumping_archive() {
+    assert(Arguments::is_dumping_archive(), "dump time only");
+  }
 
   static bool CompileMethod(char* className, char* methodName) {
     return

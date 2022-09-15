@@ -27,20 +27,12 @@
 
 #include "memory/allocation.hpp"
 #include "utilities/top.hpp"
+#include "utilities/globalDefinitions.hpp"
 
 template<typename K> struct ResourceHashtableFns {
     typedef unsigned (*hash_fn)(K const&);
     typedef bool (*equals_fn)(K const&, K const&);
 };
-
-template<typename K> unsigned primitive_hash(const K& k) {
-  unsigned hash = (unsigned)((uintptr_t)k);
-  return hash ^ (hash >> 3); // just in case we're dealing with aligned ptrs
-}
-
-template<typename K> bool primitive_equals(const K& k0, const K& k1) {
-  return k0 == k1;
-}
 
 template<
     typename K, typename V,
@@ -66,6 +58,10 @@ class ResourceHashtable : public ResourceObj {
 
     Node(unsigned hash, K const& key, V const& value) :
         _hash(hash), _key(key), _value(value), _next(NULL) {}
+
+        // Create a node with a default-constructed value.
+    Node(unsigned hash, K const& key) :
+        _hash(hash), _key(key), _value(), _next(NULL) {}
   };
 
   Node* _table[SIZE];
@@ -138,6 +134,19 @@ class ResourceHashtable : public ResourceObj {
       return true;
     }
   }
+
+  V* put_if_absent(K const& key, bool* p_created) {
+    unsigned hv = HASH(key);
+    Node** ptr = lookup_node(hv, key);
+    if (*ptr == NULL) {
+      *ptr = new (ALLOC_TYPE, MEM_TYPE) Node(hv, key);
+      *p_created = true;
+    } else {
+      *p_created = false;
+    }
+    return &(*ptr)->_value;
+  }
+
 
   bool remove(K const& key) {
     unsigned hv = HASH(key);

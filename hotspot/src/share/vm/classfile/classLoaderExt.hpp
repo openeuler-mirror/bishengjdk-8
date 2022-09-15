@@ -48,7 +48,7 @@ public:
     instanceKlassHandle record_result(const int classpath_index,
                                       ClassPathEntry* e, instanceKlassHandle result, TRAPS) {
       if (ClassLoader::add_package(_file_name, classpath_index, THREAD)) {
-        if (DumpSharedSpaces) {
+        if (DumpSharedSpaces || DynamicDumpSharedSpaces) {
           result->set_shared_classpath_index(classpath_index);
         }
         return result;

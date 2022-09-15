@@ -231,6 +231,9 @@ class ConstantPool : public Metadata {
     return cache()->entry_at(cp_cache_index);
   }
 
+  virtual void metaspace_pointers_do(MetaspaceClosure* it);
+  void symbol_replace_excluded_klass();
+  virtual MetaspaceObj::Type type() const { return ConstantPoolType; }
   // Assembly code support
   static int tags_offset_in_bytes()         { return offset_of(ConstantPool, _tags); }
   static int cache_offset_in_bytes()        { return offset_of(ConstantPool, _cache); }
@@ -312,6 +315,11 @@ class ConstantPool : public Metadata {
   void symbol_at_put(int which, Symbol* s) {
     assert(s->refcount() != 0, "should have nonzero refcount");
     tag_at_put(which, JVM_CONSTANT_Utf8);
+    *symbol_at_addr(which) = s;
+  }
+
+  void replaced_symbol_at_put(int which, Symbol*s) {
+    tag_at_put(which, JVM_CONSTANT_ReplacedSymbol);
     *symbol_at_addr(which) = s;
   }
 
@@ -746,6 +754,10 @@ class ConstantPool : public Metadata {
 #if INCLUDE_SERVICES
   void collect_statistics(KlassSizeStats *sz) const;
 #endif
+
+  // ConstantPools should be stored in the read-only region of CDS archive.
+  // But the vtable will be patched in JDK8, so it must be writable.
+  static bool is_read_only_by_default() { return false; }
 
   friend class ClassFileParser;
   friend class SystemDictionary;

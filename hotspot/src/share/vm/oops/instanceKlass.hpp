@@ -323,6 +323,7 @@ class InstanceKlass: public Klass {
   friend class SystemDictionary;
 
  public:
+  static bool _disable_method_binary_search;
   bool has_nonstatic_fields() const        {
     return (_misc_flags & _misc_has_nonstatic_fields) != 0;
   }
@@ -488,6 +489,7 @@ class InstanceKlass: public Klass {
   void link_class(TRAPS);
   bool link_class_or_fail(TRAPS); // returns false on failure
   void unlink_class();
+  bool can_be_verified_at_dumptime() const;
   void rewrite_class(TRAPS);
   void link_methods(TRAPS);
   Method* class_initializer();
@@ -524,6 +526,10 @@ class InstanceKlass: public Klass {
   // find a local method (returns NULL if not found)
   Method* find_method(Symbol* name, Symbol* signature) const;
   static Method* find_method(Array<Method*>* methods, Symbol* name, Symbol* signature);
+
+  static void disable_method_binary_search() {
+    _disable_method_binary_search = true;
+  }
 
   // find a local method, but skip static methods
   Method* find_instance_method(Symbol* name, Symbol* signature,
@@ -1001,7 +1007,8 @@ class InstanceKlass: public Klass {
   bool can_be_fastpath_allocated() const {
     return !layout_helper_needs_slow_path(layout_helper());
   }
-
+  
+  virtual void metaspace_pointers_do(MetaspaceClosure* iter);
   // Java vtable/itable
   klassVtable* vtable() const;        // return new klassVtable wrapper
   inline Method* method_at_vtable(int index);
@@ -1075,7 +1082,7 @@ class InstanceKlass: public Klass {
 
 public:
   void set_in_error_state() {
-    assert(DumpSharedSpaces, "only call this when dumping archive");
+    assert(DumpSharedSpaces || DynamicDumpSharedSpaces, "only call this when dumping archive");
     _init_state = initialization_error;
   }
   bool check_sharing_error_state();
@@ -1150,6 +1157,7 @@ private:
 public:
   // CDS support - remove and restore oops from metadata. Oops are not shared.
   virtual void remove_unshareable_info();
+  virtual void remove_java_mirror();
   virtual void restore_unshareable_info(ClassLoaderData* loader_data, Handle protection_domain, TRAPS);
 
   // jvm support

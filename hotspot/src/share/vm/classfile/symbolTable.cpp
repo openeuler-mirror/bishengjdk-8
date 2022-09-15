@@ -23,6 +23,8 @@
  */
 
 #include "precompiled.hpp"
+#include "cds/archiveBuilder.hpp"
+#include "cds/dynamicArchive.hpp"
 #include "classfile/altHashing.hpp"
 #include "classfile/javaClasses.hpp"
 #include "classfile/symbolTable.hpp"
@@ -41,6 +43,19 @@
 #endif
 
 PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
+
+inline bool symbol_equals_compact_hashtable_entry(Symbol* value, const char* key, int len) {
+  if (value->equals(key, len)) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+static OffsetCompactHashtable<
+  const char*, Symbol*,
+  symbol_equals_compact_hashtable_entry
+> _dynamic_shared_table;
 
 // --------------------------------------------------------------------------
 
@@ -95,6 +110,7 @@ void SymbolTable::symbols_do(SymbolClosure *cl) {
 int SymbolTable::_symbols_removed = 0;
 int SymbolTable::_symbols_counted = 0;
 volatile int SymbolTable::_parallel_claimed_idx = 0;
+volatile bool _lookup_shared_first = false;
 
 void SymbolTable::buckets_unlink(int start_idx, int end_idx, BucketUnlinkContext* context, size_t* memory_total) {
   for (int i = start_idx; i < end_idx; ++i) {
@@ -225,10 +241,25 @@ Symbol* SymbolTable::lookup(int index, const char* name,
 unsigned int SymbolTable::hash_symbol(const char* s, int len) {
   return use_alternate_hashcode() ?
            AltHashing::halfsiphash_32(seed(), (const uint8_t*)s, len) :
-           java_lang_String::hash_code(s, len);
+           java_lang_String::hash_code((const jbyte*)s, len);
 }
 
+#if INCLUDE_CDS
+Symbol* SymbolTable::lookup_shared(const char* name,
+                                   int len, unsigned int hash) {
+  Symbol* sym = NULL;
+  if (DynamicArchive::is_mapped()) {
+    if (use_alternate_hashcode()) {
+      // hash_code parameter may use alternate hashing algorithm but the shared table
+      // always uses the same original hash code.
+      hash = java_lang_String::hash_code((const jbyte*)name, len);
+    }
 
+    sym = _dynamic_shared_table.lookup(name, hash, len);
+  }
+  return sym;
+}
+#endif
 // We take care not to be blocking while holding the
 // SymbolTable_lock. Otherwise, the system might deadlock, since the
 // symboltable is used during compilation (VM_thread) The lock free
@@ -236,12 +267,32 @@ unsigned int SymbolTable::hash_symbol(const char* s, int len) {
 // entries in the symbol table during normal execution (only during
 // safepoints).
 
+Symbol* SymbolTable::lookup_common(const char* name, int len) {
+  unsigned int hashValue = hash_symbol(name, len);
+  int index = the_table()->hash_to_index(hashValue);
+  Symbol* s;
+  if (_lookup_shared_first) {
+    s = lookup_shared(name, len, hashValue);
+    if (s == NULL) {
+      _lookup_shared_first = false;
+      s = the_table()->lookup(index, name, len, hashValue);
+    }
+  } else {
+    s = the_table()->lookup(index, name, len, hashValue);
+    if (s == NULL) {
+      s = lookup_shared(name, len, hashValue);
+      if (s!= NULL) {
+        _lookup_shared_first = true;
+      }
+    }
+  }
+  return s;
+}
+
 Symbol* SymbolTable::lookup(const char* name, int len, TRAPS) {
   unsigned int hashValue = hash_symbol(name, len);
   int index = the_table()->hash_to_index(hashValue);
-
-  Symbol* s = the_table()->lookup(index, name, len, hashValue);
-
+  Symbol* s = lookup_common(name, len);
   // Found
   if (s != NULL) return s;
 
@@ -264,8 +315,7 @@ Symbol* SymbolTable::lookup(const Symbol* sym, int begin, int end, TRAPS) {
     len = end - begin;
     hashValue = hash_symbol(name, len);
     index = the_table()->hash_to_index(hashValue);
-    Symbol* s = the_table()->lookup(index, name, len, hashValue);
-
+    Symbol* s = lookup_common(name, len);
     // Found
     if (s != NULL) return s;
   }
@@ -294,9 +344,7 @@ Symbol* SymbolTable::lookup(const Symbol* sym, int begin, int end, TRAPS) {
 Symbol* SymbolTable::lookup_only(const char* name, int len,
                                    unsigned int& hash) {
   hash = hash_symbol(name, len);
-  int index = the_table()->hash_to_index(hash);
-
-  Symbol* s = the_table()->lookup(index, name, len, hash);
+  Symbol* s = lookup_common(name, len);
   return s;
 }
 
@@ -501,6 +549,42 @@ void SymbolTable::dump(outputStream* st) {
   the_table()->dump_table(st, "SymbolTable");
 }
 
+static uintx hash_shared_symbol(const char* s, int len) {
+  return java_lang_String::hash_code((const jbyte*)s, len);
+}
+
+void SymbolTable::copy_shared_symbol_table(GrowableArray<Symbol*>* symbols,
+                                           CompactHashtableWriter* writer) {
+  ArchiveBuilder* builder = ArchiveBuilder::current();
+  int len = symbols->length();
+  for (int i = 0; i < len; i++) {
+    Symbol* sym = ArchiveBuilder::get_relocated_symbol(symbols->at(i));
+    unsigned int fixed_hash = hash_shared_symbol((const char*)sym->bytes(), sym->utf8_length());
+    assert(fixed_hash == hash_symbol((const char*)sym->bytes(), sym->utf8_length()),
+           "must not rehash during dumping");
+    sym->set_permanent();
+    writer->add(fixed_hash, builder->buffer_to_offset_u4((address)sym));
+  }
+}
+
+size_t SymbolTable::estimate_size_for_archive() {
+  return CompactHashtableWriter::estimate_size(the_table()->number_of_entries());
+}
+
+void SymbolTable::write_to_archive(GrowableArray<Symbol*>* symbols) {
+  CompactHashtableWriter writer(symbols->length(), ArchiveBuilder::symbol_stats());
+  copy_shared_symbol_table(symbols, &writer);
+  _dynamic_shared_table.reset();
+  writer.dump(&_dynamic_shared_table, "symbol");
+}
+
+void SymbolTable::serialize_shared_table_header(SerializeClosure* soc) {
+  _dynamic_shared_table.serialize_header(soc);
+  if (soc->writing()) {
+    // Sanity. Make sure we don't use the shared table at dump time
+    _dynamic_shared_table.reset();
+  }
+}
 
 //---------------------------------------------------------------------------
 // Non-product code

@@ -25,9 +25,9 @@
 #ifndef SHARE_VM_OOPS_SYMBOL_HPP
 #define SHARE_VM_OOPS_SYMBOL_HPP
 
-#include "utilities/utf8.hpp"
 #include "memory/allocation.hpp"
 #include "runtime/atomic.hpp"
+#include "utilities/utf8.hpp"
 
 // A Symbol is a canonicalized string.
 // All Symbols reside in global SymbolTable and are reference counted.
@@ -101,6 +101,7 @@
 // Since sometimes this is allocated from Metadata, pick a base allocation
 // type without virtual functions.
 class ClassLoaderData;
+class MetaspaceClosure;
 
 // We separate the fields in SymbolBase from Symbol::_body so that
 // Symbol::size(int) can correctly calculate the space needed.
@@ -113,7 +114,7 @@ class SymbolBase : public MetaspaceObj {
   int            _identity_hash;
 };
 
-class Symbol : private SymbolBase {
+class Symbol : public SymbolBase {
   friend class VMStructs;
   friend class SymbolTable;
   friend class MoveSymbols;
@@ -160,6 +161,9 @@ class Symbol : private SymbolBase {
   int refcount() const      { return _refcount; }
   void increment_refcount();
   void decrement_refcount();
+  bool is_permanent() const {
+    return (refcount() == -1);
+  }
 
   int byte_at(int index) const {
     assert(index >=0 && index < _length, "symbol index overflow");
@@ -180,6 +184,17 @@ class Symbol : private SymbolBase {
     return starts_with(prefix, (int) strlen(prefix));
   }
 
+  void set_permanent() {
+    _refcount = -1;
+  }
+
+  void metaspace_pointers_do(MetaspaceClosure* it) {
+    if (TraceDynamicCDS) {
+      dynamic_cds_log->print_cr("Iter(Symbol): %p", this);
+    }
+  }
+
+  MetaspaceObj::Type type() const { return SymbolType; }
   // Tests if the symbol starts with the given prefix.
   int index_of_at(int i, const char* str, int len) const;
   int index_of_at(int i, const char* str) const {
@@ -207,6 +222,9 @@ class Symbol : private SymbolBase {
   }
 
   jchar* as_unicode(int& length) const;
+
+  // Symbols should be stored in the read-only region of CDS archive.
+  static bool is_read_only_by_default() { return true; }
 
   // Treating this symbol as a class name, returns the Java name for the class.
   // String is allocated in resource area if buffer is not provided.

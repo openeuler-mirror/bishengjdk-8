@@ -43,7 +43,8 @@ enum {
   JVM_CONSTANT_UnresolvedClassInError   = 103,  // Error tag due to resolution error
   JVM_CONSTANT_MethodHandleInError      = 104,  // Error tag due to resolution error
   JVM_CONSTANT_MethodTypeInError        = 105,  // Error tag due to resolution error
-  JVM_CONSTANT_InternalMax              = 105   // Last implementation tag
+  JVM_CONSTANT_ReplacedSymbol           = 106,
+  JVM_CONSTANT_InternalMax              = 106   // Last implementation tag
 };
 
 
@@ -62,7 +63,7 @@ class constantTag VALUE_OBJ_CLASS_SPEC {
   bool is_double() const            { return _tag == JVM_CONSTANT_Double; }
   bool is_name_and_type() const     { return _tag == JVM_CONSTANT_NameAndType; }
   bool is_utf8() const              { return _tag == JVM_CONSTANT_Utf8; }
-
+  bool is_replaced_symbol() const   { return _tag == JVM_CONSTANT_ReplacedSymbol; }
   bool is_invalid() const           { return _tag == JVM_CONSTANT_Invalid; }
 
   bool is_unresolved_klass() const {

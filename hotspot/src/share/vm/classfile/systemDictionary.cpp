@@ -31,6 +31,7 @@
 #include "classfile/resolutionErrors.hpp"
 #include "classfile/systemDictionary.hpp"
 #if INCLUDE_CDS
+#include "cds/dynamicArchive.hpp"
 #include "classfile/sharedClassUtil.hpp"
 #include "classfile/systemDictionaryShared.hpp"
 #endif
@@ -185,6 +186,11 @@ bool SystemDictionary::is_app_class_loader(Handle class_loader) {
   return (class_loader->klass()->name() == vmSymbols::sun_misc_Launcher_AppClassLoader());
 }
 
+bool SystemDictionary::is_builtin_loader(Handle class_loader) {
+  return class_loader.is_null() ||
+         class_loader->klass()->name() == vmSymbols::sun_misc_Launcher_AppClassLoader() ||
+         class_loader->klass()->name() == vmSymbols::sun_misc_Launcher_ExtClassLoader();
+}
 // ----------------------------------------------------------------------------
 // Resolving of classes
 
@@ -1131,76 +1137,92 @@ Klass* SystemDictionary::resolve_from_stream(Symbol* class_name,
   check_loader_lock_contention(lockObject, THREAD);
   ObjectLocker ol(lockObject, THREAD, DoObjectLock);
 
+  instanceKlassHandle k;
   TempNewSymbol parsed_name = NULL;
 
-  // Parse the stream. Note that we do this even though this klass might
-  // already be present in the SystemDictionary, otherwise we would not
-  // throw potential ClassFormatErrors.
-  //
-  // Note: "name" is updated.
+#if INCLUDE_CDS
+  if (DynamicArchive::is_mapped()) {
+    k = SystemDictionaryShared::lookup_from_stream(class_name,
+                                                   class_loader,
+                                                   protection_domain,
+                                                   st,
+                                                   CHECK_NULL);
+  }
+#endif
 
-  // Callers are expected to declare a ResourceMark to determine
-  // the lifetime of any updated (resource) allocated under
-  // this call to parseClassFile
-  ResourceMark rm(THREAD);
-  ClassFileParser parser(st);
-  instanceKlassHandle k = parser.parseClassFile(class_name,
-                                                loader_data,
-                                                protection_domain,
-                                                parsed_name,
-                                                verify,
-                                                THREAD);
+  if (k() != NULL) {
+    parsed_name = k->name();
+  } else {
+    // Parse the stream. Note that we do this even though this klass might
+    // already be present in the SystemDictionary, otherwise we would not
+    // throw potential ClassFormatErrors.
+    //
+    // Note: "name" is updated.
 
-  const char* pkg = "java/";
-  size_t pkglen = strlen(pkg);
-  if (!HAS_PENDING_EXCEPTION &&
-      !class_loader.is_null() &&
-      parsed_name != NULL &&
-      parsed_name->utf8_length() >= (int)pkglen) {
-      ResourceMark rm(THREAD);
-      bool prohibited;
-      const jbyte* base = parsed_name->base();
-      if ((base[0] | base[1] | base[2] | base[3] | base[4]) & 0x80) {
-        prohibited = is_prohibited_package_slow(parsed_name);
-      } else {
-        char* name = parsed_name->as_C_string();
-        prohibited = (strncmp(name, pkg, pkglen) == 0);
-      }
-      if (prohibited) {
-        // It is illegal to define classes in the "java." package from
-        // JVM_DefineClass or jni_DefineClass unless you're the bootclassloader
-        char* name = parsed_name->as_C_string();
-        char* index = strrchr(name, '/');
-        assert(index != NULL, "must be");
-        *index = '\0'; // chop to just the package name
-        while ((index = strchr(name, '/')) != NULL) {
-          *index = '.'; // replace '/' with '.' in package name
+    // Callers are expected to declare a ResourceMark to determine
+    // the lifetime of any updated (resource) allocated under
+    // this call to parseClassFile
+    ResourceMark rm(THREAD);
+    ClassFileParser parser(st);
+    k = parser.parseClassFile(class_name,
+                              loader_data,
+                              protection_domain,
+                              parsed_name,
+                              verify,
+                              THREAD);
+    const char* pkg = "java/";
+    size_t pkglen = strlen(pkg);
+    if (!HAS_PENDING_EXCEPTION &&
+        !class_loader.is_null() &&
+        parsed_name != NULL &&
+        parsed_name->utf8_length() >= (int)pkglen) {
+        ResourceMark rm(THREAD);
+        bool prohibited;
+        const jbyte* base = parsed_name->base();
+        if ((base[0] | base[1] | base[2] | base[3] | base[4]) & 0x80) {
+          prohibited = is_prohibited_package_slow(parsed_name);
+        } else {
+          char* name = parsed_name->as_C_string();
+          prohibited = (strncmp(name, pkg, pkglen) == 0);
         }
-        const char* fmt = "Prohibited package name: %s";
-        size_t len = strlen(fmt) + strlen(name);
-        char* message = NEW_RESOURCE_ARRAY(char, len);
-        jio_snprintf(message, len, fmt, name);
-        Exceptions::_throw_msg(THREAD_AND_LOCATION,
-          vmSymbols::java_lang_SecurityException(), message);
+        if (prohibited) {
+          // It is illegal to define classes in the "java." package from
+          // JVM_DefineClass or jni_DefineClass unless you're the bootclassloader
+          char* name = parsed_name->as_C_string();
+          char* index = strrchr(name, '/');
+          assert(index != NULL, "must be");
+          *index = '\0'; // chop to just the package name
+          while ((index = strchr(name, '/')) != NULL) {
+            *index = '.'; // replace '/' with '.' in package name
+          }
+          const char* fmt = "Prohibited package name: %s";
+          size_t len = strlen(fmt) + strlen(name);
+          char* message = NEW_RESOURCE_ARRAY(char, len);
+          jio_snprintf(message, len, fmt, name);
+          Exceptions::_throw_msg(THREAD_AND_LOCATION,
+            vmSymbols::java_lang_SecurityException(), message);
+        }
+    }
+
+    if (!HAS_PENDING_EXCEPTION) {
+      assert(parsed_name != NULL, "Sanity");
+      assert(class_name == NULL || class_name == parsed_name, "name mismatch");
+      // Verification prevents us from creating names with dots in them, this
+      // asserts that that's the case.
+      assert(is_internal_format(parsed_name),
+             "external class name format used internally");
+
+#if INCLUDE_JFR
+      {
+        InstanceKlass* ik = k();
+        ON_KLASS_CREATION(ik, parser, THREAD);
+        k = instanceKlassHandle(ik);
       }
+#endif
+    }
   }
 
   if (!HAS_PENDING_EXCEPTION) {
-    assert(parsed_name != NULL, "Sanity");
-    assert(class_name == NULL || class_name == parsed_name, "name mismatch");
-    // Verification prevents us from creating names with dots in them, this
-    // asserts that that's the case.
-    assert(is_internal_format(parsed_name),
-           "external class name format used internally");
-
-#if INCLUDE_JFR
-    {
-      InstanceKlass* ik = k();
-      ON_KLASS_CREATION(ik, parser, THREAD);
-      k = instanceKlassHandle(ik);
-    }
-#endif
-
     // Add class just loaded
     // If a class loader supports parallel classloading handle parallel define requests
     // find_or_define_instance_class may return a different InstanceKlass
@@ -1274,14 +1296,19 @@ Klass* SystemDictionary::find_shared_class(Symbol* class_name) {
 
 instanceKlassHandle SystemDictionary::load_shared_class(
                  Symbol* class_name, Handle class_loader, TRAPS) {
-  if (!(class_loader.is_null() ||  SystemDictionary::is_app_class_loader(class_loader) ||
+  if (!(class_loader.is_null() || SystemDictionary::is_app_class_loader(class_loader) ||
                                   SystemDictionary::is_ext_class_loader(class_loader))) {
     return instanceKlassHandle();
   }
 
-  instanceKlassHandle ik (THREAD, find_shared_class(class_name)); // InstanceKlass is find with null class loader.
+  Klass* klass = SystemDictionaryShared::find_dynamic_builtin_class(class_name);
+  if (klass == NULL) {
+    klass = find_shared_class(class_name);
+  }
+
+  instanceKlassHandle ik (THREAD, klass); // InstanceKlass is find with null class loader.
   if (ik.not_null()) {
-    if (!UseAppCDS) {
+    if (!(UseAppCDS || DynamicArchive::is_mapped())) {
       // CDS logic
       if (SharedClassUtil::is_shared_boot_class(ik()) && class_loader.is_null()) {
         // CDS record boot class load index.
@@ -1289,7 +1316,7 @@ instanceKlassHandle SystemDictionary::load_shared_class(
         return load_shared_class(ik, class_loader, protection_domain, THREAD);
       }
     } else {
-      // AppCDS logic. Only use null loader only to load classes that
+      // AppCDS and dynamic CDS logic. Only use null loader only to load classes that
       // have been dumped by null loader. For non-null class loaders,
       // either the class loader data is not initialized (but also not
       // null) or the same class loader is used to load previously
@@ -1424,7 +1451,7 @@ instanceKlassHandle SystemDictionary::load_shared_class(instanceKlassHandle ik,
                                              true /* shared class */);
 
      // register package for this class, if necessary
-    if (UseAppCDS && class_loader.not_null()) {
+    if (SystemDictionary::is_app_class_loader(class_loader) || SystemDictionary::is_ext_class_loader(class_loader)) {
 
       ResourceMark rm(THREAD);
       char* name = ik->name()->as_C_string();

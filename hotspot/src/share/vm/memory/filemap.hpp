@@ -27,6 +27,8 @@
 
 #include "memory/metaspaceShared.hpp"
 #include "memory/metaspace.hpp"
+#include "runtime/os.hpp"
+#include "utilities/align.hpp"
 
 // Layout of the file:
 //  header: dump of archive instance plus versioning info, datestamp, etc.
@@ -37,8 +39,12 @@
 //  misc data (block offset table, string table, symbols, dictionary, etc.)
 //  tag(666)
 
+#define CDS_ARCHIVE_MAGIC         0xf00baba2
+#define CDS_DYNAMIC_ARCHIVE_MAGIC 0xf00baba8
+
 static const int JVM_IDENT_MAX = 256;
 
+class BitMap;
 class Metaspace;
 
 class SharedClassPathEntry VALUE_OBJ_CLASS_SPEC {
@@ -56,11 +62,13 @@ private:
   friend class ManifestStream;
   enum {
     _invalid_version = -1,
-    _current_version = 2
+    _current_version = 3,
   };
 
-  bool  _file_open;
-  int   _fd;
+  bool    _is_static;
+  bool    _file_open;
+  bool    _is_mapped;
+  int     _fd;
   size_t  _file_offset;
 
 private:
@@ -77,20 +85,21 @@ public:
   struct FileMapHeaderBase : public CHeapObj<mtClass> {
     virtual bool validate() = 0;
     virtual void populate(FileMapInfo* info, size_t alignment) = 0;
-  };
-  struct FileMapHeader : FileMapHeaderBase {
     // Use data() and data_size() to memcopy to/from the FileMapHeader. We need to
     // avoid read/writing the C++ vtable pointer.
-    static size_t data_size();
+    virtual size_t data_size() = 0;
+  };
+  struct FileMapHeader : FileMapHeaderBase {
+    size_t data_size();
     char* data() {
       return ((char*)this) + sizeof(FileMapHeaderBase);
     }
 
-    int    _magic;                    // identify file type.
-    int    _crc;                      // header crc checksum.
-    int    _version;                  // (from enum, above.)
-    size_t _alignment;                // how shared archive should be aligned
-    int    _obj_alignment;            // value of ObjectAlignmentInBytes
+    unsigned int _magic;                    // identify file type.
+    int          _crc;                      // header crc checksum.
+    int          _version;                  // (from enum, above.)
+    size_t       _alignment;                // how shared archive should be aligned
+    int          _obj_alignment;            // value of ObjectAlignmentInBytes
 
     struct space_info {
       int    _crc;           // crc checksum of the current space
@@ -137,7 +146,48 @@ public:
 
     virtual bool validate();
     virtual void populate(FileMapInfo* info, size_t alignment);
+    int crc() { return _crc; }
+    int space_crc(int i) { return _space[i]._crc; }
     int compute_crc();
+    unsigned int magic()                    const { return _magic; }
+    const char* jvm_ident()                 const { return _jvm_ident; }
+  };
+
+  // Fixme
+  struct DynamicArchiveHeader : FileMapHeader {
+  private:
+    int    _base_header_crc;
+    int    _base_region_crc[MetaspaceShared::n_regions];
+    char*  _requested_base_address;  // Archive relocation is not necessary if we map with this base address.
+    size_t _ptrmap_size_in_bits;     // Size of pointer relocation bitmap
+    size_t _base_archive_name_size;
+    size_t _serialized_data_offset;  // Data accessed using {ReadClosure,WriteClosure}::serialize()
+
+  public:
+    size_t data_size();
+    int base_header_crc() const { return _base_header_crc; }
+    int base_region_crc(int i) const {
+      return _base_region_crc[i];
+    }
+
+    void set_base_header_crc(int c) { _base_header_crc = c; }
+    void set_base_region_crc(int i, int c) {
+      _base_region_crc[i] = c;
+    }
+
+    void set_requested_base(char* b) {
+      _requested_base_address = b;
+    }
+    size_t ptrmap_size_in_bits()             const { return _ptrmap_size_in_bits; }
+    void set_ptrmap_size_in_bits(size_t s)         { _ptrmap_size_in_bits = s; }
+    void set_base_archive_name_size(size_t s)      { _base_archive_name_size = s; }
+    size_t base_archive_name_size()                { return _base_archive_name_size; }
+    void set_as_offset(char* p, size_t *offset);
+    char* from_mapped_offset(size_t offset)  const { return _requested_base_address + offset; }
+    void set_serialized_data(char* p)              { set_as_offset(p, &_serialized_data_offset); }
+    char* serialized_data()                  const { return from_mapped_offset(_serialized_data_offset); }
+
+    virtual bool validate();
   };
 
   FileMapHeader * _header;
@@ -147,29 +197,49 @@ public:
   char* _paths_misc_info;
 
   static FileMapInfo* _current_info;
+  static FileMapInfo* _dynamic_archive_info;
 
+  static bool get_base_archive_name_from_header(const char* archive_name,
+                                         int* size, char** base_archive_name);
+  static bool check_archive(const char* archive_name, bool is_static);
   bool  init_from_file(int fd);
   void  align_file_position();
   bool  validate_header_impl();
 
 public:
-  FileMapInfo();
+  FileMapInfo(bool is_static = true);
   ~FileMapInfo();
 
   static int current_version()        { return _current_version; }
   int    compute_header_crc();
   void   set_header_crc(int crc)      { _header->_crc = crc; }
+  int    space_crc(int i)             { return _header->_space[i]._crc; }
   void   populate_header(size_t alignment);
   bool   validate_header();
   void   invalidate();
+  int    crc()                        { return _header->_crc; }
   int    version()                    { return _header->_version; }
   size_t alignment()                  { return _header->_alignment; }
   size_t space_capacity(int i)        { return _header->_space[i]._capacity; }
+  size_t used(int i)                  { return _header->_space[i]._used; }
+  size_t used_aligned(int i)          { return align_up(used(i), (size_t)os::vm_allocation_granularity()); }
   char*  region_base(int i)           { return _header->_space[i]._base; }
+  char*  region_end(int i)            { return region_base(i) + used_aligned(i); }
   struct FileMapHeader* header()      { return _header; }
+  struct DynamicArchiveHeader* dynamic_header() {
+  //  assert(!is_static(), "must be");
+    return (struct DynamicArchiveHeader*)header();
+  }
+
+  void set_header_base_archive_name_size(size_t size)      { dynamic_header()->set_base_archive_name_size(size); }
 
   static FileMapInfo* current_info() {
     CDS_ONLY(return _current_info;)
+    NOT_CDS(return NULL;)
+  }
+
+  static FileMapInfo* dynamic_info() {
+    CDS_ONLY(return _dynamic_archive_info;)
     NOT_CDS(return NULL;)
   }
 
@@ -180,18 +250,24 @@ public:
   bool  open_for_read();
   void  open_for_write();
   void  write_header();
+  void  write_dynamic_header();
   void  write_space(int i, Metaspace* space, bool read_only);
   void  write_region(int region, char* base, size_t size,
                      size_t capacity, bool read_only, bool allow_exec);
+  char* write_bitmap_region(const BitMap* ptrmap);
   void  write_bytes(const void* buffer, int count);
   void  write_bytes_aligned(const void* buffer, int count);
   char* map_region(int i);
   void  unmap_region(int i);
   bool  verify_region_checksum(int i);
   void  close();
-  bool  is_open() { return _file_open; }
+  bool  is_open()                                   { return _file_open; }
+  bool  is_static()                           const { return _is_static; }
+  bool  is_mapped()                           const { return _is_mapped; }
+  void  set_is_mapped(bool v)                       { _is_mapped = v; }
   ReservedSpace reserve_shared_memory();
-
+  void set_requested_base(char* b)                  { dynamic_header()->set_requested_base(b); }
+  char* serialized_data()                           { return dynamic_header()->serialized_data(); }
   // JVM/TI RedefineClasses() support:
   // Remap the shared readonly space to shared readwrite, private.
   bool  remap_shared_readonly_as_readwrite();

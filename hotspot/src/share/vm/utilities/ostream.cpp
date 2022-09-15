@@ -379,6 +379,7 @@ xmlStream*   xtty;
 outputStream* tty;
 outputStream* gclog_or_tty;
 CDS_ONLY(jsaFileStream* classlist_file;) // Only dump the classes that can be stored into the CDS archive
+CDS_ONLY(outputStream* dynamic_cds_log;)
 extern Mutex* tty_lock;
 
 #define EXTRACHARLEN   32
@@ -1401,6 +1402,16 @@ void ostream_init_log() {
     classlist_file = new(ResourceObj::C_HEAP, mtInternal)
                          jsaFileStream(list_name);
     FREE_C_HEAP_ARRAY(char, list_name, mtInternal);
+  }
+
+  // For -XX:DynamicCDSLog=<file> option
+  if (DynamicCDSLog != NULL) {
+    const char* log_name = make_log_name(DynamicCDSLog, NULL);
+    dynamic_cds_log = new(ResourceObj::C_HEAP, mtInternal)
+                         fileStream(log_name);
+    FREE_C_HEAP_ARRAY(char, log_name, mtInternal);
+  } else {
+    dynamic_cds_log = tty;
   }
 #endif
 

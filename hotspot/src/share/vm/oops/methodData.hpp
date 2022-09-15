@@ -67,7 +67,7 @@ class KlassSizeStats;
 
 // forward decl
 class ProfileData;
-
+class MetaspaceClosure;
 // DataLayout
 //
 // Overlay for generic profiling data.
@@ -2486,6 +2486,9 @@ public:
   void clean_method_data(BoolObjectClosure* is_alive);
 
   void clean_weak_method_links();
+
+  virtual void metaspace_pointers_do(MetaspaceClosure* iter);
+  virtual MetaspaceObj::Type type() const { return MethodDataType; }
 };
 
 #endif // SHARE_VM_OOPS_METHODDATAOOP_HPP

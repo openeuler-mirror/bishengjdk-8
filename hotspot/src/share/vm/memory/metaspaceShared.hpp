@@ -28,6 +28,7 @@
 #include "memory/memRegion.hpp"
 #include "runtime/virtualspace.hpp"
 #include "utilities/exceptions.hpp"
+#include "utilities/growableArray.hpp"
 #include "utilities/macros.hpp"
 
 #define LargeSharedArchiveSize    (300*M)
@@ -44,6 +45,7 @@
     (uintx)(type ## SharedArchiveSize *  region ## RegionPercentage) : Shared ## region ## Size
 
 class FileMapInfo;
+class SerializeClosure;
 
 // Class Data Sharing Support
 class MetaspaceShared : AllStatic {
@@ -56,6 +58,11 @@ class MetaspaceShared : AllStatic {
   static bool _has_error_classes;
   static bool _archive_loading_failed;
   static bool _remapped_readwrite;
+  static void* _shared_metaspace_static_bottom;
+  static void** _vtbl_list;  // Remember the vtable start address for dynamic dump metadata
+  static char* _requested_base_address;
+  static void* _shared_metaspace_dynamic_base;
+  static void* _shared_metaspace_dynamic_top;
  public:
   enum {
     vtbl_list_size         = 17,   // number of entries in the shared space vtable list.
@@ -71,11 +78,20 @@ class MetaspaceShared : AllStatic {
   };
 
   enum {
-    ro = 0,  // read-only shared space in the heap
-    rw = 1,  // read-write shared space in the heap
-    md = 2,  // miscellaneous data for initializing tables, etc.
-    mc = 3,  // miscellaneous code - vtable replacement.
-    n_regions = 4
+    // core archive spaces
+    ro = 0,            // read-only shared space in the heap
+    rw = 1,            // read-write shared space in the heap
+    md = 2,            // miscellaneous data for initializing tables, etc. (static only)
+    mc = 3,            // miscellaneous code - vtable replacement. (static only)
+    n_regions = 4      // total number of static regions
+  };
+
+  enum {
+    // core dynamic archive spaces
+    d_rw = 0,          // read-write shared space in the heap
+    d_ro = 1,          // read-only shared space in the heap
+    d_bm = 2,          // relocation bitmaps (freed after file mapping is finished)
+    d_n_regions = 2    // d_rw and d_ro
   };
 
   // Accessor functions to save shared space created for metadata, which has
@@ -108,6 +124,28 @@ class MetaspaceShared : AllStatic {
     _archive_loading_failed = true;
   }
   static bool map_shared_spaces(FileMapInfo* mapinfo) NOT_CDS_RETURN_(false);
+
+  static bool is_shared_dynamic(const void* p) {
+    return p < _shared_metaspace_dynamic_top && p >= _shared_metaspace_dynamic_base;
+  }
+
+  // This is the base address as specified by -XX:SharedBaseAddress during -Xshare:dump.
+  // Both the base/top archives are written using this as their base address.
+  //
+  // During static dump: _requested_base_address == SharedBaseAddress.
+  //
+  // During dynamic dump: _requested_base_address is not always the same as SharedBaseAddress:
+  // - SharedBaseAddress is used for *reading the base archive*. I.e., CompactHashtable uses
+  //   it to convert offsets to pointers to Symbols in the base archive.
+  //   The base archive may be mapped to an OS-selected address due to ASLR. E.g.,
+  //   you may have SharedBaseAddress == 0x00ff123400000000.
+  // - _requested_base_address is used for *writing the output archive*. It's usually
+  //   0x800000000 (unless it was set by -XX:SharedBaseAddress during -Xshare:dump).
+  static char* requested_base_address() {
+    return _requested_base_address;
+  }
+
+  static intptr_t* get_archived_vtable(MetaspaceObj::Type msotype, address obj);
   static void initialize_shared_spaces() NOT_CDS_RETURN;
 
   // Return true if given address is in the mapped shared space.
@@ -138,5 +176,8 @@ class MetaspaceShared : AllStatic {
 
   static int count_class(const char* classlist_file);
   static void estimate_regions_size() NOT_CDS_RETURN;
+
+  static void set_shared_metaspace_static_bottom(void* bottom) { _shared_metaspace_static_bottom = bottom; }
+  static void* shared_metaspace_static_bottom() { return _shared_metaspace_static_bottom; }
 };
 #endif // SHARE_VM_MEMORY_METASPACE_SHARED_HPP

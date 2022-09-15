@@ -2370,8 +2370,7 @@ void os::print_siginfo(outputStream* st, void* siginfo) {
 #if INCLUDE_CDS
   if (si && (si->si_signo == SIGBUS || si->si_signo == SIGSEGV) &&
       UseSharedSpaces) {
-    FileMapInfo* mapinfo = FileMapInfo::current_info();
-    if (mapinfo->is_in_shared_space(si->si_addr)) {
+    if (MetaspaceShared::is_in_shared_space(si->si_addr)) {
       st->print("\n\nError accessing class data sharing archive."   \
                 " Mapped file inaccessible during execution, "      \
                 " possible disk/network problem.");

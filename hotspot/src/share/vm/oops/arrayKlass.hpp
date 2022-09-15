@@ -100,7 +100,7 @@ class ArrayKlass: public Klass {
 
   GrowableArray<Klass*>* compute_secondary_supers(int num_extra_slots);
   bool compute_is_subtype_of(Klass* k);
-
+  virtual void metaspace_pointers_do(MetaspaceClosure* it);
   // Sizing
   static int header_size()                 { return sizeof(ArrayKlass)/HeapWordSize; }
   static int static_size(int header_size);
@@ -141,6 +141,7 @@ class ArrayKlass: public Klass {
 
   // CDS support - remove and restore oops from metadata. Oops are not shared.
   virtual void remove_unshareable_info();
+  virtual void remove_java_mirror();
   virtual void restore_unshareable_info(ClassLoaderData* loader_data, Handle protection_domain, TRAPS);
 
   // Printing

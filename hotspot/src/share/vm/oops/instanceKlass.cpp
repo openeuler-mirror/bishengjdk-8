@@ -39,6 +39,7 @@
 #include "memory/iterator.inline.hpp"
 #include "memory/metadataFactory.hpp"
 #include "memory/oopFactory.hpp"
+#include "memory/metaspaceClosure.hpp"
 #include "oops/fieldStreams.hpp"
 #include "oops/instanceClassLoaderKlass.hpp"
 #include "oops/instanceKlass.hpp"
@@ -53,6 +54,7 @@
 #include "prims/jvmtiRedefineClasses.hpp"
 #include "prims/jvmtiThreadState.hpp"
 #include "prims/methodComparator.hpp"
+#include "runtime/arguments.hpp"
 #include "runtime/fieldDescriptor.hpp"
 #include "runtime/handles.inline.hpp"
 #include "runtime/javaCalls.hpp"
@@ -463,10 +465,71 @@ void InstanceKlass::deallocate_contents(ClassLoaderData* loader_data) {
     MetadataFactory::free_metadata(loader_data, annotations());
   }
   set_annotations(NULL);
+
+  if (Arguments::is_dumping_archive()) {
+    SystemDictionaryShared::remove_dumptime_info(this);
+  }
 }
 
 bool InstanceKlass::should_be_initialized() const {
   return !is_initialized();
+}
+
+void InstanceKlass::metaspace_pointers_do(MetaspaceClosure* it) {
+  Klass::metaspace_pointers_do(it);
+
+  if (TraceDynamicCDS) {
+    ResourceMark rm;
+    dynamic_cds_log->print_cr("Iter(InstanceKlass): %p (%s)", this, external_name());
+  }
+
+  it->push(&_annotations);
+  it->push((Klass**)&_array_klasses);
+  if (!is_rewritten()) {
+    it->push(&_constants, MetaspaceClosure::_writable);
+  } else {
+    it->push(&_constants);
+  }
+  it->push(&_inner_classes);
+#if INCLUDE_JVMTI
+  it->push(&_previous_versions);
+#endif
+  it->push(&_array_name);
+  it->push(&_methods);
+  it->push(&_default_methods);
+  it->push(&_local_interfaces);
+  it->push(&_transitive_interfaces);
+  it->push(&_method_ordering);
+  if (!is_rewritten()) {
+    it->push(&_default_vtable_indices, MetaspaceClosure::_writable);
+  } else {
+    it->push(&_default_vtable_indices);
+  }
+
+  // _fields might be written into by Rewriter::scan_method() -> fd.set_has_initialized_final_update()
+  it->push(&_fields, MetaspaceClosure::_writable);
+
+  if (itable_length() > 0) {
+    itableOffsetEntry* ioe = (itableOffsetEntry*)start_of_itable();
+    int method_table_offset_in_words = ioe->offset()/wordSize;
+    int nof_interfaces = (method_table_offset_in_words - itable_offset_in_words())
+                         / itableOffsetEntry::size();
+
+    for (int i = 0; i < nof_interfaces; i ++, ioe ++) {
+      if (ioe->interface_klass() != NULL) {
+        it->push(ioe->interface_klass_addr());
+        itableMethodEntry* ime = ioe->first_method_entry(this);
+        int n = klassItable::method_count_for_interface(ioe->interface_klass());
+        for (int index = 0; index < n; index ++) {
+          it->push(ime[index].method_addr());
+        }
+      }
+    }
+  }
+
+ // it->push(&_nest_members);
+ // it->push(&_permitted_subclasses);
+ // it->push(&_record_components);
 }
 
 klassVtable* InstanceKlass::vtable() const {
@@ -764,6 +827,28 @@ bool InstanceKlass::link_class_impl(
   return true;
 }
 
+
+// Check if a class or any of its supertypes has a version older than 50.
+// CDS will not perform verification of old classes during dump time because
+// without changing the old verifier, the verification constraint cannot be
+// retrieved during dump time.
+// Verification of archived old classes will be performed during run time.
+bool InstanceKlass::can_be_verified_at_dumptime() const {
+  if (major_version() < 50 /*JAVA_6_VERSION*/) {
+    return false;
+  }
+  if (java_super() != NULL && !java_super()->can_be_verified_at_dumptime()) {
+    return false;
+  }
+  Array<Klass*>* interfaces = local_interfaces();
+  int len = interfaces->length();
+  for (int i = 0; i < len; i++) {
+    if (!((InstanceKlass*)interfaces->at(i))->can_be_verified_at_dumptime()) {
+      return false;
+    }
+  }
+  return true;
+}
 
 // Rewrite the byte codes of all of the methods of a class.
 // The rewriter must be called exactly once. Rewriting must happen after
@@ -1459,7 +1544,32 @@ static int linear_search(Array<Method*>* methods, Symbol* name, Symbol* signatur
 }
 #endif
 
+bool InstanceKlass::_disable_method_binary_search = false;
+
+NOINLINE int linear_search(const Array<Method*>* methods, const Symbol* name) {
+  int len = methods->length();
+  int l = 0;
+  int h = len - 1;
+  while (l <= h) {
+    Method* m = methods->at(l);
+    if (m->name() == name) {
+      return l;
+    }
+    l++;
+  }
+  return -1;
+}
+
 static int binary_search(Array<Method*>* methods, Symbol* name) {
+  if (InstanceKlass::_disable_method_binary_search) {
+    assert(DynamicDumpSharedSpaces, "must be");
+    // At the final stage of dynamic dumping, the methods array may not be sorted
+    // by ascending addresses of their names, so we can't use binary search anymore.
+    // However, methods with the same name are still laid out consecutively inside the
+    // methods array, so let's look for the first one that matches.
+    return linear_search(methods, name);
+  }
+
   int len = methods->length();
   // methods are sorted, so do binary search
   int l = 0;
@@ -2455,24 +2565,37 @@ void InstanceKlass::remove_unshareable_info() {
     m->remove_unshareable_info();
   }
 
-  if (UseAppCDS) {
+  if (UseAppCDS || DynamicDumpSharedSpaces) {
     if (_oop_map_cache != NULL) {
       delete _oop_map_cache;
       _oop_map_cache = NULL;
     }
-    
+
     JNIid::deallocate(jni_ids());
     set_jni_ids(NULL);
-    
+
     jmethodID* jmeths = methods_jmethod_ids_acquire();
     if (jmeths != (jmethodID*)NULL) {
       release_set_methods_jmethod_ids(NULL);
       FreeHeap(jmeths);
     }
   }
-
   // do array classes also.
   array_klasses_do(remove_unshareable_in_class);
+  // These are not allocated from metaspace. They are safe to set to NULL.
+  _member_names = NULL;
+  _dependencies = NULL;
+  _osr_nmethods_head = NULL;
+  _init_thread = NULL;
+}
+
+void InstanceKlass::remove_java_mirror() {
+  Klass::remove_java_mirror();
+
+  // do array classes also.
+  if (array_klasses() != NULL) {
+    array_klasses()->remove_java_mirror();
+  }
 }
 
 static void restore_unshareable_in_class(Klass* k, TRAPS) {

@@ -35,6 +35,7 @@
 class ClassLoaderData;
 class outputStream;
 class KlassSizeStats;
+class MetaspaceClosure;
 
 typedef Array<u1> AnnotationArray;
 
@@ -54,6 +55,8 @@ class Annotations: public MetaspaceObj {
   Array<AnnotationArray*>*     _fields_type_annotations;
 
  public:
+  void metaspace_pointers_do(MetaspaceClosure* it);
+
   // Allocate instance of this class
   static Annotations* allocate(ClassLoaderData* loader_data, TRAPS);
 
@@ -61,8 +64,14 @@ class Annotations: public MetaspaceObj {
   void deallocate_contents(ClassLoaderData* loader_data);
   DEBUG_ONLY(bool on_stack() { return false; })  // for template
 
+  // Annotations should be stored in the read-only region of CDS archive.
+  static bool is_read_only_by_default() { return true; }
+
+  MetaspaceObj::Type type() const { return AnnotationType; }
+
   // Sizing (in words)
   static int size()    { return sizeof(Annotations) / wordSize; }
+
 #if INCLUDE_SERVICES
   void collect_statistics(KlassSizeStats *sz) const;
 #endif

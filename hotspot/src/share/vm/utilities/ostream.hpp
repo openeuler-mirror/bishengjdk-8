@@ -221,7 +221,7 @@ class jsaFileStream : public fileStream {
 };
 
 CDS_ONLY(extern jsaFileStream*   classlist_file;)
-
+CDS_ONLY(extern outputStream* dynamic_cds_log;)
 // unlike fileStream, fdStream does unbuffered I/O by calling
 // open() and write() directly. It is async-safe, but output
 // from multiple thread may be mixed together. Used by fatal

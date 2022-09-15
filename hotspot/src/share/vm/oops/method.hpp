@@ -99,6 +99,7 @@ class MethodCounters;
 class ConstMethod;
 class InlineTableSizes;
 class KlassSizeStats;
+class MetaspaceClosure;
 
 class Method : public Metadata {
  friend class VMStructs;
@@ -857,6 +858,9 @@ class Method : public Metadata {
   void print_made_not_compilable(int comp_level, bool is_osr, bool report, const char* reason);
 
  public:
+  void metaspace_pointers_do(MetaspaceClosure* it);
+  virtual MetaspaceObj::Type type() const { return MethodType; }
+
   MethodCounters* get_method_counters(TRAPS) {
     if (_method_counters == NULL) {
       build_method_counters(this, CHECK_AND_CLEAR_NULL);
@@ -897,8 +901,9 @@ class Method : public Metadata {
   void print_name(outputStream* st = tty)        PRODUCT_RETURN; // prints as "virtual void foo(int)"
 #endif
 
+  typedef int (*method_comparator_func)(Method* a, Method* b);
   // Helper routine used for method sorting
-  static void sort_methods(Array<Method*>* methods, bool idempotent = false, bool set_idnums = true);
+  static void sort_methods(Array<Method*>* methods, bool idempotent = false, bool set_idnums = true, method_comparator_func func = NULL);
 
   // Deallocation function for redefine classes or if an error occurs
   void deallocate_contents(ClassLoaderData* loader_data);

@@ -4376,6 +4376,13 @@ instanceKlassHandle ClassFileParser::parseClassFile(Symbol* name,
   instanceKlassHandle this_klass (THREAD, preserve_this_klass);
   debug_only(this_klass->verify();)
 
+#if INCLUDE_CDS
+  if (DynamicDumpSharedSpaces && !SystemDictionary::is_builtin_loader(class_loader)) {
+    this_klass->set_shared_classpath_index(UNREGISTERED_INDEX);
+    SystemDictionaryShared::set_shared_class_misc_info(this_klass(), cfs);
+  }
+#endif // INCLUDE_CDS
+
   // Clear class if no error has occurred so destructor doesn't deallocate it
   _klass = NULL;
   return this_klass;
