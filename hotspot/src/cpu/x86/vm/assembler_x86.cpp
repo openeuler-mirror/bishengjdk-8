@@ -2373,17 +2373,49 @@ void Assembler::pcmpestri(XMMRegister dst, XMMRegister src, int imm8) {
 
 void Assembler::pextrd(Register dst, XMMRegister src, int imm8) {
   assert(VM_Version::supports_sse4_1(), "");
-  int encode = simd_prefix_and_encode(as_XMMRegister(dst->encoding()), xnoreg, src, VEX_SIMD_66, VEX_OPCODE_0F_3A, false);
+  int encode = simd_prefix_and_encode(src, xnoreg, as_XMMRegister(dst->encoding()), VEX_SIMD_66, VEX_OPCODE_0F_3A, false);
   emit_int8(0x16);
   emit_int8((unsigned char)(0xC0 | encode));
   emit_int8(imm8);
 }
 
+void Assembler::pextrd(Address dst, XMMRegister src, int imm8) {
+  assert(VM_Version::supports_sse4_1(), "");
+  simd_prefix(src, xnoreg, dst, VEX_SIMD_66, VEX_OPCODE_0F_3A, false);
+  emit_int8(0x16);
+  emit_operand(src, dst);
+  emit_int8(imm8);
+}
+
 void Assembler::pextrq(Register dst, XMMRegister src, int imm8) {
   assert(VM_Version::supports_sse4_1(), "");
-  int encode = simd_prefix_and_encode(as_XMMRegister(dst->encoding()), xnoreg, src, VEX_SIMD_66, VEX_OPCODE_0F_3A, true);
+  int encode = simd_prefix_and_encode(src, xnoreg, as_XMMRegister(dst->encoding()), VEX_SIMD_66, VEX_OPCODE_0F_3A, true);
   emit_int8(0x16);
   emit_int8((unsigned char)(0xC0 | encode));
+  emit_int8(imm8);
+}
+
+void Assembler::pextrq(Address dst, XMMRegister src, int imm8) {
+  assert(VM_Version::supports_sse4_1(), "");
+  simd_prefix(src, xnoreg, dst, VEX_SIMD_66, VEX_OPCODE_0F_3A, true);
+  emit_int8(0x16);
+  emit_operand(src, dst);
+  emit_int8(imm8);
+}
+
+void Assembler::pextrw(Address dst, XMMRegister src, int imm8) {
+  assert(VM_Version::supports_sse4_1(), "");
+  simd_prefix(src, xnoreg, dst, VEX_SIMD_66, VEX_OPCODE_0F_3A);
+  emit_int8((unsigned char)0x15);
+  emit_operand(src, dst);
+  emit_int8(imm8);
+}
+
+void Assembler::pextrb(Address dst, XMMRegister src, int imm8) {
+  assert(VM_Version::supports_sse4_1(), "");
+  simd_prefix(src, xnoreg, dst, VEX_SIMD_66, VEX_OPCODE_0F_3A);
+  emit_int8(0x14);
+  emit_operand(src, dst);
   emit_int8(imm8);
 }
 
@@ -2395,11 +2427,43 @@ void Assembler::pinsrd(XMMRegister dst, Register src, int imm8) {
   emit_int8(imm8);
 }
 
+void Assembler::pinsrd(XMMRegister dst, Address src, int imm8) {
+  assert(VM_Version::supports_sse4_1(), "");
+  simd_prefix(dst, dst, src, VEX_SIMD_66, VEX_OPCODE_0F_3A, false);
+  emit_int8(0x22);
+  emit_operand(dst,src);
+  emit_int8(imm8);
+}
+
 void Assembler::pinsrq(XMMRegister dst, Register src, int imm8) {
   assert(VM_Version::supports_sse4_1(), "");
   int encode = simd_prefix_and_encode(dst, dst, as_XMMRegister(src->encoding()), VEX_SIMD_66, VEX_OPCODE_0F_3A, true);
   emit_int8(0x22);
   emit_int8((unsigned char)(0xC0 | encode));
+  emit_int8(imm8);
+}
+
+void Assembler::pinsrq(XMMRegister dst, Address src, int imm8) {
+  assert(VM_Version::supports_sse4_1(), "");
+  simd_prefix(dst, dst, src, VEX_SIMD_66, VEX_OPCODE_0F_3A, true);
+  emit_int8(0x22);
+  emit_operand(dst, src);
+  emit_int8(imm8);
+}
+
+void Assembler::pinsrw(XMMRegister dst, Address src, int imm8) {
+  assert(VM_Version::supports_sse2(), "");
+  simd_prefix(dst, dst, src, VEX_SIMD_66, VEX_OPCODE_0F);
+  emit_int8((unsigned char)0xC4);
+  emit_operand(dst, src);
+  emit_int8(imm8);
+}
+
+void Assembler::pinsrb(XMMRegister dst, Address src, int imm8) {
+  assert(VM_Version::supports_sse4_1(), "");
+  simd_prefix(dst, dst, src, VEX_SIMD_66, VEX_OPCODE_0F_3A);
+  emit_int8(0x20);
+  emit_operand(dst, src);
   emit_int8(imm8);
 }
 
@@ -3075,6 +3139,12 @@ void Assembler::xorl(Register dst, Register src) {
   emit_arith(0x33, 0xC0, dst, src);
 }
 
+void Assembler::xorb(Register dst, Address src) {
+  InstructionMark im(this);
+  prefix(src, dst);
+  emit_int8(0x32);
+  emit_operand(dst, src);
+}
 
 // AVX 3-operands scalar float-point arithmetic instructions
 

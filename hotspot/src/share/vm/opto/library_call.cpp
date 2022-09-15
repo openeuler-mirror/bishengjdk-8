@@ -196,6 +196,7 @@ class LibraryCallKit : public GraphKit {
     return generate_method_call(method_id, true, false);
   }
   Node * load_field_from_object(Node * fromObj, const char * fieldName, const char * fieldTypeString, bool is_exact, bool is_static);
+  Node * field_address_from_object(Node * fromObj, const char * fieldName, const char * fieldTypeString, bool is_exact, bool is_static, ciInstanceKlass * fromKls);
 
   Node* make_string_method_node(int opcode, Node* str1_start, Node* cnt1, Node* str2_start, Node* cnt2);
   Node* make_string_method_node(int opcode, Node* str1, Node* str2);
@@ -309,7 +310,9 @@ class LibraryCallKit : public GraphKit {
   bool inline_reference_get();
   bool inline_aescrypt_Block(vmIntrinsics::ID id);
   bool inline_cipherBlockChaining_AESCrypt(vmIntrinsics::ID id);
+  bool inline_counterMode_AESCrypt(vmIntrinsics::ID id);
   Node* inline_cipherBlockChaining_AESCrypt_predicate(bool decrypting);
+  Node* inline_counterMode_AESCrypt_predicate();
   Node* get_key_start_from_aescrypt_object(Node* aescrypt_object);
   Node* get_original_key_start_from_aescrypt_object(Node* aescrypt_object);
   bool inline_ghash_processBlocks();
@@ -555,6 +558,13 @@ CallGenerator* Compile::make_vm_intrinsic(ciMethod* m, bool is_virtual) {
   case vmIntrinsics::_cipherBlockChaining_decryptAESCrypt:
     if (!UseAESIntrinsics) return NULL;
     // these two require the predicated logic
+    predicates = 1;
+    break;
+
+  case vmIntrinsics::_counterMode_AESCrypt:
+    if (!UseAESCTRIntrinsics) {
+      return NULL;
+    }
     predicates = 1;
     break;
 
@@ -950,6 +960,9 @@ bool LibraryCallKit::try_to_inline(int predicate) {
   case vmIntrinsics::_cipherBlockChaining_decryptAESCrypt:
     return inline_cipherBlockChaining_AESCrypt(intrinsic_id());
 
+  case vmIntrinsics::_counterMode_AESCrypt:
+    return inline_counterMode_AESCrypt(intrinsic_id());
+
   case vmIntrinsics::_sha_implCompress:
   case vmIntrinsics::_sha2_implCompress:
   case vmIntrinsics::_sha5_implCompress:
@@ -1021,6 +1034,8 @@ Node* LibraryCallKit::try_to_predicate(int predicate) {
     return inline_cipherBlockChaining_AESCrypt_predicate(false);
   case vmIntrinsics::_cipherBlockChaining_decryptAESCrypt:
     return inline_cipherBlockChaining_AESCrypt_predicate(true);
+  case vmIntrinsics::_counterMode_AESCrypt:
+    return inline_counterMode_AESCrypt_predicate();
   case vmIntrinsics::_digestBase_implCompressMB:
     return inline_digestBase_implCompressMB_predicate(predicate);
 
@@ -6581,6 +6596,39 @@ Node * LibraryCallKit::load_field_from_object(Node * fromObj, const char * field
   return loadedField;
 }
 
+Node * LibraryCallKit::field_address_from_object(Node * fromObj, const char * fieldName, const char * fieldTypeString,
+                                                 bool is_exact = true, bool is_static = false,
+                                                 ciInstanceKlass * fromKls = NULL) {
+  if (fromKls == NULL) {
+    const TypeInstPtr* tinst = _gvn.type(fromObj)->isa_instptr();
+    assert(tinst != NULL, "obj is null");
+    assert(tinst->klass()->is_loaded(), "obj is not loaded");
+    assert(!is_exact || tinst->klass_is_exact(), "klass not exact");
+    fromKls = tinst->klass()->as_instance_klass();
+  }
+  else {
+    assert(is_static, "only for static field access");
+  }
+  ciField* field = fromKls->get_field_by_name(ciSymbol::make(fieldName),
+    ciSymbol::make(fieldTypeString),
+    is_static);
+
+  assert(field != NULL, "undefined field");
+  assert(!field->is_volatile(), "not defined for volatile fields");
+
+  if (is_static) {
+    const TypeInstPtr* tip = TypeInstPtr::make(fromKls->java_mirror());
+    fromObj = makecon(tip);
+  }
+
+  // Next code  copied from Parse::do_get_xxx():
+
+  // Compute address and memory type.
+  int offset = field->offset_in_bytes();
+  Node *adr = basic_plus_adr(fromObj, fromObj, offset);
+
+  return adr;
+}
 
 //------------------------------inline_aescrypt_Block-----------------------
 bool LibraryCallKit::inline_aescrypt_Block(vmIntrinsics::ID id) {
@@ -6747,6 +6795,90 @@ bool LibraryCallKit::inline_cipherBlockChaining_AESCrypt(vmIntrinsics::ID id) {
   return true;
 }
 
+//------------------------------inline_counterMode_AESCrypt-----------------------
+bool LibraryCallKit::inline_counterMode_AESCrypt(vmIntrinsics::ID id) {
+  assert(UseAES, "need AES instruction support");
+  if (!UseAESCTRIntrinsics) return false;
+
+  address stubAddr = NULL;
+  const char *stubName = NULL;
+  if (id == vmIntrinsics::_counterMode_AESCrypt) {
+    stubAddr = StubRoutines::counterMode_AESCrypt();
+    stubName = "counterMode_AESCrypt";
+  }
+  if (stubAddr == NULL) return false;
+
+  Node* counterMode_object = argument(0);
+  Node* src = argument(1);
+  Node* src_offset = argument(2);
+  Node* len = argument(3);
+  Node* dest = argument(4);
+  Node* dest_offset = argument(5);
+
+  // (1) src and dest are arrays.
+  const Type* src_type = src->Value(&_gvn);
+  const Type* dest_type = dest->Value(&_gvn);
+  const TypeAryPtr* top_src = src_type->isa_aryptr();
+  const TypeAryPtr* top_dest = dest_type->isa_aryptr();
+  assert(top_src != NULL && top_src->klass() != NULL &&
+         top_dest != NULL && top_dest->klass() != NULL, "args are strange");
+
+  // checks are the responsibility of the caller
+  Node* src_start = src;
+  Node* dest_start = dest;
+  if (src_offset != NULL || dest_offset != NULL) {
+    assert(src_offset != NULL && dest_offset != NULL, "");
+    src_start = array_element_address(src, src_offset, T_BYTE);
+    dest_start = array_element_address(dest, dest_offset, T_BYTE);
+  }
+
+  // if we are in this set of code, we "know" the embeddedCipher is an AESCrypt object
+  // (because of the predicated logic executed earlier).
+  // so we cast it here safely.
+  // this requires a newer class file that has this array as littleEndian ints, otherwise we revert to java
+  Node* embeddedCipherObj = load_field_from_object(counterMode_object, "embeddedCipher", "Lcom/sun/crypto/provider/SymmetricCipher;", /*is_exact*/ false);
+  if (embeddedCipherObj == NULL) return false;
+  // cast it to what we know it will be at runtime
+  const TypeInstPtr* tinst = _gvn.type(counterMode_object)->isa_instptr();
+  assert(tinst != NULL, "CTR obj is null");
+  assert(tinst->klass()->is_loaded(), "CTR obj is not loaded");
+  ciKlass* klass_AESCrypt = tinst->klass()->as_instance_klass()->find_klass(ciSymbol::make("com/sun/crypto/provider/AESCrypt"));
+  assert(klass_AESCrypt->is_loaded(), "predicate checks that this class is loaded");
+  ciInstanceKlass* instklass_AESCrypt = klass_AESCrypt->as_instance_klass();
+  const TypeKlassPtr* aklass = TypeKlassPtr::make(instklass_AESCrypt);
+  const TypeOopPtr* xtype = aklass->as_instance_type();
+  Node* aescrypt_object = new (C) CheckCastPPNode(control(), embeddedCipherObj, xtype);
+  aescrypt_object = _gvn.transform(aescrypt_object);
+  // we need to get the start of the aescrypt_object's expanded key array
+  Node* k_start = get_key_start_from_aescrypt_object(aescrypt_object);
+  if (k_start == NULL) return false;
+  // similarly, get the start address of the r vector
+  Node* obj_counter = load_field_from_object(counterMode_object, "counter", "[B", /*is_exact*/ false);
+  if (obj_counter == NULL) return false;
+  Node* cnt_start = array_element_address(obj_counter, intcon(0), T_BYTE);
+
+  Node* saved_encCounter = load_field_from_object(counterMode_object, "encryptedCounter", "[B", /*is_exact*/ false);
+  if (saved_encCounter == NULL) return false;
+  Node* saved_encCounter_start = array_element_address(saved_encCounter, intcon(0), T_BYTE);
+  Node* used = field_address_from_object(counterMode_object, "used", "I", /*is_exact*/ false);
+
+  Node* ctrCrypt;
+  if (Matcher::pass_original_key_for_aes()) {
+    // no SPARC version for AES/CTR intrinsics now.
+    return false;
+  }
+  // Call the stub, passing src_start, dest_start, k_start, r_start and src_len
+  ctrCrypt = make_runtime_call(RC_LEAF|RC_NO_FP,
+                               OptoRuntime::counterMode_aescrypt_Type(),
+                               stubAddr, stubName, TypePtr::BOTTOM,
+                               src_start, dest_start, k_start, cnt_start, len, saved_encCounter_start, used);
+
+  // return cipher length (int)
+  Node* retvalue = _gvn.transform(new (C) ProjNode(ctrCrypt, TypeFunc::Parms));
+  set_result(retvalue);
+  return true;
+}
+
 //------------------------------get_key_start_from_aescrypt_object-----------------------
 Node * LibraryCallKit::get_key_start_from_aescrypt_object(Node *aescrypt_object) {
 #ifdef PPC64
@@ -6839,6 +6971,48 @@ Node* LibraryCallKit::inline_cipherBlockChaining_AESCrypt_predicate(bool decrypt
 
   record_for_igvn(region);
   return _gvn.transform(region);
+}
+
+//----------------------------inline_counterMode_AESCrypt_predicate----------------------------
+// Return node representing slow path of predicate check.
+// the pseudo code we want to emulate with this predicate is:
+// for encryption:
+//    if (embeddedCipherObj instanceof AESCrypt) do_intrinsic, else do_javapath
+// for decryption:
+//    if ((embeddedCipherObj instanceof AESCrypt) && (cipher!=plain)) do_intrinsic, else do_javapath
+//    note cipher==plain is more conservative than the original java code but that's OK
+//
+
+Node* LibraryCallKit::inline_counterMode_AESCrypt_predicate() {
+  // The receiver was checked for NULL already.
+  Node* objCTR = argument(0);
+
+  // Load embeddedCipher field of CipherBlockChaining object.
+  Node* embeddedCipherObj = load_field_from_object(objCTR, "embeddedCipher", "Lcom/sun/crypto/provider/SymmetricCipher;", /*is_exact*/ false);
+
+  // get AESCrypt klass for instanceOf check
+  // AESCrypt might not be loaded yet if some other SymmetricCipher got us to this compile point
+  // will have same classloader as CipherBlockChaining object
+  const TypeInstPtr* tinst = _gvn.type(objCTR)->isa_instptr();
+  assert(tinst != NULL, "CTRobj is null");
+  assert(tinst->klass()->is_loaded(), "CTRobj is not loaded");
+
+  // we want to do an instanceof comparison against the AESCrypt class
+  ciKlass* klass_AESCrypt = tinst->klass()->as_instance_klass()->find_klass(ciSymbol::make("com/sun/crypto/provider/AESCrypt"));
+  if (!klass_AESCrypt->is_loaded()) {
+    // if AESCrypt is not even loaded, we never take the intrinsic fast path
+    Node* ctrl = control();
+    set_control(top()); // no regular fast path
+    return ctrl;
+  }
+
+  ciInstanceKlass* instklass_AESCrypt = klass_AESCrypt->as_instance_klass();
+  Node* instof = gen_instanceof(embeddedCipherObj, makecon(TypeKlassPtr::make(instklass_AESCrypt)));
+  Node* cmp_instof = _gvn.transform(new (C) CmpINode(instof, intcon(1)));
+  Node* bool_instof = _gvn.transform(new (C) BoolNode(cmp_instof, BoolTest::ne));
+  Node* instof_false = generate_guard(bool_instof, NULL, PROB_MIN);
+
+  return instof_false; // even if it is NULL
 }
 
 //------------------------------inline_ghash_processBlocks
