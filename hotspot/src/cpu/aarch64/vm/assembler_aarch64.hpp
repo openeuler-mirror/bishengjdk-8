@@ -146,6 +146,21 @@ REGISTER_DECLARATION(Register, esp,      r20);
 
 #define assert_cond(ARG1) assert(ARG1, #ARG1)
 
+// In many places we've added C-style casts to silence compiler
+// warnings, for example when truncating a size_t to an int when we
+// know the size_t is a small struct. Such casts are risky because
+// they effectively disable useful compiler warnings. We can make our
+// lives safer with this function, which ensures that any cast is
+// reversible without loss of information. It doesn't check
+// everything: it isn't intended to make sure that pointer types are
+// compatible, for example.
+template <typename T2, typename T1>
+T2 checked_cast(T1 thing) {
+  T2 result = static_cast<T2>(thing);
+  assert(static_cast<T1>(result) == thing, "must be");
+  return result;
+}
+
 namespace asm_util {
   uint32_t encode_logical_immediate(bool is32, uint64_t imm);
 };
@@ -193,7 +208,7 @@ public:
   static inline uint32_t extract(uint32_t val, int msb, int lsb) {
     int nbits = msb - lsb + 1;
     assert_cond(msb >= lsb);
-    uint32_t mask = (1U << nbits) - 1;
+    uint32_t mask = checked_cast<uint32_t>(right_n_bits(nbits));
     uint32_t result = val >> lsb;
     result &= mask;
     return result;
@@ -208,7 +223,7 @@ public:
     int nbits = msb - lsb + 1;
     guarantee(val < (1U << nbits), "Field too big for insn");
     assert_cond(msb >= lsb);
-    unsigned mask = (1U << nbits) - 1;
+    unsigned mask = checked_cast<unsigned>(right_n_bits(nbits));
     val <<= lsb;
     mask <<= lsb;
     unsigned target = *(unsigned *)a;
@@ -222,7 +237,7 @@ public:
     long chk = val >> (nbits - 1);
     guarantee (chk == -1 || chk == 0, "Field too big for insn");
     unsigned uval = val;
-    unsigned mask = (1U << nbits) - 1;
+    unsigned mask = checked_cast<unsigned>(right_n_bits(nbits));
     uval &= mask;
     uval <<= lsb;
     mask <<= lsb;
@@ -234,9 +249,9 @@ public:
 
   void f(unsigned val, int msb, int lsb) {
     int nbits = msb - lsb + 1;
-    guarantee(val < (1U << nbits), "Field too big for insn");
+    guarantee(val < (1ULL << nbits), "Field too big for insn");
     assert_cond(msb >= lsb);
-    unsigned mask = (1U << nbits) - 1;
+    unsigned mask = checked_cast<unsigned>(right_n_bits(nbits));
     val <<= lsb;
     mask <<= lsb;
     insn |= val;
@@ -255,7 +270,7 @@ public:
     long chk = val >> (nbits - 1);
     guarantee (chk == -1 || chk == 0, "Field too big for insn");
     unsigned uval = val;
-    unsigned mask = (1U << nbits) - 1;
+    unsigned mask = checked_cast<unsigned>(right_n_bits(nbits));
     uval &= mask;
     f(uval, lsb + nbits - 1, lsb);
   }
@@ -280,7 +295,7 @@ public:
 
   unsigned get(int msb = 31, int lsb = 0) {
     int nbits = msb - lsb + 1;
-    unsigned mask = ((1U << nbits) - 1) << lsb;
+    unsigned mask = checked_cast<unsigned>(right_n_bits(nbits)) << lsb;
     assert_cond((bits & mask) == mask);
     return (insn & mask) >> lsb;
   }
@@ -1991,21 +2006,21 @@ public:
     starti;
     f(0,31), f((int)T & 1, 30);
     f(op1, 29, 21), f(0, 20, 16), f(op2, 15, 12);
-    f((int)T >> 1, 11, 10), rf(Xn, 5), rf(Vt, 0);
+    f((int)T >> 1, 11, 10), srf(Xn, 5), rf(Vt, 0);
   }
   void ld_st(FloatRegister Vt, SIMD_Arrangement T, Register Xn,
              int imm, int op1, int op2) {
     starti;
     f(0,31), f((int)T & 1, 30);
     f(op1 | 0b100, 29, 21), f(0b11111, 20, 16), f(op2, 15, 12);
-    f((int)T >> 1, 11, 10), rf(Xn, 5), rf(Vt, 0);
+    f((int)T >> 1, 11, 10), srf(Xn, 5), rf(Vt, 0);
   }
   void ld_st(FloatRegister Vt, SIMD_Arrangement T, Register Xn,
              Register Xm, int op1, int op2) {
     starti;
     f(0,31), f((int)T & 1, 30);
     f(op1 | 0b100, 29, 21), rf(Xm, 16), f(op2, 15, 12);
-    f((int)T >> 1, 11, 10), rf(Xn, 5), rf(Vt, 0);
+    f((int)T >> 1, 11, 10), srf(Xn, 5), rf(Vt, 0);
   }
 
  void ld_st(FloatRegister Vt, SIMD_Arrangement T, Address a, int op1, int op2) {

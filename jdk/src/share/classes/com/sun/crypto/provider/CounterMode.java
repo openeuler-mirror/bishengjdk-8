@@ -39,10 +39,10 @@ import java.security.InvalidKeyException;
  * @author Andreas Sterbenz
  * @since 1.4.2
  */
-final class CounterMode extends FeedbackCipher {
+class CounterMode extends FeedbackCipher {
 
     // current counter value
-    private final byte[] counter;
+    final byte[] counter;
 
     // encrypted bytes of the previous counter value
     private final byte[] encryptedCounter;
@@ -137,7 +137,7 @@ final class CounterMode extends FeedbackCipher {
      * <code>cipherOffset</code>.
      *
      * @param in the buffer with the input data to be encrypted
-     * @param inOffset the offset in <code>plain</code>
+     * @param inOff the offset in <code>plain</code>
      * @param len the length of the input data
      * @param out the buffer for the result
      * @param outOff the offset in <code>cipher</code>
@@ -176,6 +176,11 @@ final class CounterMode extends FeedbackCipher {
         RangeUtil.nullAndBoundsCheck(in, inOff, len);
         RangeUtil.nullAndBoundsCheck(out, outOff, len);
 
+        return implCrypt(in, inOff, len, out, outOff);
+    }
+
+    // Implementation of crpyt() method. Possibly replaced with a compiler intrinsic.
+    private int implCrypt(byte[] in, int inOff, int len, byte[] out, int outOff) {
         int result = len;
         while (len-- > 0) {
             if (used >= blockSize) {
