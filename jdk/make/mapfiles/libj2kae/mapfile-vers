@@ -27,6 +27,7 @@ SUNWprivate_1.1 {
 	global:
 		JNI_OnLoad;
 		Java_org_openeuler_security_openssl_KAEProvider_initOpenssl;
+		Java_org_openeuler_security_openssl_KAEProvider_getEngineFlags;
 		Java_org_openeuler_security_openssl_KAEDigest_nativeInit;
 		Java_org_openeuler_security_openssl_KAEDigest_nativeUpdate;
 		Java_org_openeuler_security_openssl_KAEDigest_nativeDigest;

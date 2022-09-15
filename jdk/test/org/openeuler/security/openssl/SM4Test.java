@@ -22,9 +22,10 @@
  */
 
 import org.openeuler.security.openssl.KAEProvider;
+
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-import java.security.NoSuchAlgorithmException;
 import java.security.Security;
 import javax.crypto.Cipher;
 import javax.crypto.spec.IvParameterSpec;
@@ -55,6 +56,25 @@ public class SM4Test {
         test(shortPlainText, "SM4/OFB/PKCS5Padding", new byte[]{32, 108, 35, 108, -16, 119, -111, 114, 94, 110});
 
         testCtrShortIv(plainText, "SM4/CTR/NOPADDING", new byte[]{-13, 73, 40, -36, -64, -67, 75, -72, 90, 58, 73, -4, -36, 115, 126, -48});
+
+        testByteBuffer(plainText, "SM4/CBC/NOPADDING", new byte[]{86, 69, 47, -115, -63, 54, 35, 24, -2, 114, 113, 102, 82, 20, 69, 59});
+        testByteBuffer(shortPlainText, "SM4/CBC/PKCS5Padding", new byte[]{10, 105, 75, -80, -85, -68, 13, -53, 42, 91, -64, 99, 104, 35, -85, 8});
+        testByteBuffer(plainText, "SM4/ECB/NOPADDING", new byte[]{103, 36, -31, -53, -109, -12, -71, -79, -54, 106, 10, -3, -35, -22, -122, -67});
+        testByteBuffer(shortPlainText, "SM4/ECB/PKCS5Padding", new byte[]{-10, 99, -9, 90, 58, -36, -109, 54, -55, -52, 7, -49, 110, -88, 72, 40});
+        testByteBuffer(plainText, "SM4/CTR/NOPADDING", new byte[]{32, 108, 35, 108, -16, 119, -111, 114, 94, 110, -100, -113, -46, -29, -11, 71});
+        testByteBuffer(plainText, "SM4/OFB/NOPADDING", new byte[]{32, 108, 35, 108, -16, 119, -111, 114, 94, 110, -100, -113, -46, -29, -11, 71});
+        testByteBuffer(shortPlainText, "SM4/OFB/PKCS5Padding", new byte[]{32, 108, 35, 108, -16, 119, -111, 114, 94, 110});
+
+        System.setProperty("kae.sm4.maxChunkSize", "65536");
+        testByteBuffer(plainText, "SM4/CBC/NOPADDING", new byte[]{86, 69, 47, -115, -63, 54, 35, 24, -2, 114, 113, 102, 82, 20, 69, 59});
+        testByteBuffer(shortPlainText, "SM4/CBC/PKCS5Padding", new byte[]{10, 105, 75, -80, -85, -68, 13, -53, 42, 91, -64, 99, 104, 35, -85, 8});
+        testByteBuffer(plainText, "SM4/ECB/NOPADDING", new byte[]{103, 36, -31, -53, -109, -12, -71, -79, -54, 106, 10, -3, -35, -22, -122, -67});
+        testByteBuffer(shortPlainText, "SM4/ECB/PKCS5Padding", new byte[]{-10, 99, -9, 90, 58, -36, -109, 54, -55, -52, 7, -49, 110, -88, 72, 40});
+        testByteBuffer(plainText, "SM4/CTR/NOPADDING", new byte[]{32, 108, 35, 108, -16, 119, -111, 114, 94, 110, -100, -113, -46, -29, -11, 71});
+        testByteBuffer(plainText, "SM4/OFB/NOPADDING", new byte[]{32, 108, 35, 108, -16, 119, -111, 114, 94, 110, -100, -113, -46, -29, -11, 71});
+        testByteBuffer(shortPlainText, "SM4/OFB/PKCS5Padding", new byte[]{32, 108, 35, 108, -16, 119, -111, 114, 94, 110});
+
+
     }
 
     public static void test(String plainText, String algo, byte[] expectRes) throws Exception {
@@ -91,5 +111,45 @@ public class SM4Test {
        if (!plainText.equals(decryptPlainText)) {
            throw new RuntimeException("sm4 decryption failed, algo = " + algo);
        }
+    }
+
+    public static void testByteBuffer(String plainText, String algo, byte[] expectRes) throws Exception {
+        // encrypt
+        Cipher encryptCipher = Cipher.getInstance(algo);
+        if (algo.contains("ECB")) {
+            encryptCipher.init(Cipher.ENCRYPT_MODE, ks);
+        } else {
+            encryptCipher.init(Cipher.ENCRYPT_MODE, ks, iv);
+        }
+        int inputLen = plainText.length();
+        ByteBuffer sourceByteBuffer = ByteBuffer.allocateDirect(inputLen);
+        sourceByteBuffer.put(plainText.getBytes());
+        sourceByteBuffer.flip();
+        int outputLen = encryptCipher.getOutputSize(inputLen);
+        ByteBuffer encryptedByteBuffer = ByteBuffer.allocate(outputLen);
+        encryptCipher.doFinal(sourceByteBuffer,encryptedByteBuffer);
+        encryptedByteBuffer.flip();
+        byte[] encryptedBytes = new byte[encryptedByteBuffer.limit()];
+        encryptedByteBuffer.get(encryptedBytes);
+        if (!Arrays.equals(encryptedBytes, expectRes)) {
+            throw new RuntimeException("sm4 encryption failed, algo = " + algo);
+        }
+        sourceByteBuffer.clear();
+        encryptedByteBuffer.flip();
+
+        // decrypt
+        Cipher decryptCipher = Cipher.getInstance(algo);
+        decryptCipher.init(Cipher.DECRYPT_MODE, ks, encryptCipher.getParameters());
+        outputLen = decryptCipher.getOutputSize(encryptedBytes.length);
+        ByteBuffer decryptedByteBuffer = ByteBuffer.allocate(outputLen);
+        decryptCipher.doFinal(encryptedByteBuffer, decryptedByteBuffer);
+        decryptedByteBuffer.flip();
+        byte[] decryptedBytes = new byte[decryptedByteBuffer.limit()];
+        decryptedByteBuffer.get(decryptedBytes);
+        if (!Arrays.equals(plainText.getBytes(), decryptedBytes)) {
+            throw new RuntimeException("sm4 decryption failed, algo = " + algo);
+        }
+        encryptedByteBuffer.clear();
+        decryptedByteBuffer.clear();
     }
 }

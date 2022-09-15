@@ -42,7 +42,7 @@ JNIEXPORT jlong JNICALL
 Java_org_openeuler_security_openssl_KAEDigest_nativeInit(JNIEnv *env, jclass cls, jstring algorithmName)
 {
     EVP_MD_CTX* ctx = NULL;
-    static ENGINE* kaeEngine = NULL;
+    ENGINE* kaeEngine = NULL;
 
     if (algorithmName == NULL) {
         KAE_ThrowNullPointerException(env, "algorithm is null");
@@ -51,11 +51,8 @@ Java_org_openeuler_security_openssl_KAEDigest_nativeInit(JNIEnv *env, jclass cls
 
     // EVP_get_digestbyname
     const char* algo_utf = (*env)->GetStringUTFChars(env, algorithmName, 0);
-    if ((strcasecmp(algo_utf, "md5") == 0) || (strcasecmp(algo_utf, "sm3") == 0)) {
-        kaeEngine = (kaeEngine == NULL) ? GetKaeEngine() : kaeEngine;
-    } else {
-        kaeEngine = NULL;
-    }
+    kaeEngine = GetDigestEngineByAlgorithmName(algo_utf);
+    KAE_TRACE("KAEDigest_nativeInit: kaeEngine => %p", kaeEngine);
     EVP_MD* md = (EVP_MD*) EVP_get_digestbyname(algo_utf);
     (*env)->ReleaseStringUTFChars(env, algorithmName, algo_utf);
     if (md == NULL) {

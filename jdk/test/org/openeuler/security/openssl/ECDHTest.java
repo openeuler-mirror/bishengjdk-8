@@ -41,6 +41,7 @@ import java.nio.charset.StandardCharsets;
 /**
  * @test
  * @summary Basic test for ECDH
+ * @requires os.arch=="aarch64"
  * @run main ECDHTest
  */
 

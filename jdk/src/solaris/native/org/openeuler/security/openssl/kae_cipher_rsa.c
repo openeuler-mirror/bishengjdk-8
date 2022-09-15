@@ -24,11 +24,10 @@
 #include <stdbool.h>
 #include <openssl/rsa.h>
 #include <openssl/evp.h>
+#include "kae_log.h"
 #include "kae_util.h"
 #include "kae_exception.h"
 #include "org_openeuler_security_openssl_KAERSACipher.h"
-
-static ENGINE* kaeEngine = NULL;
 
 typedef int RSACryptOperation(int, const unsigned char*, unsigned char*, RSA*, int);
 
@@ -176,7 +175,9 @@ static int RSACryptOAEPPadding(JNIEnv* env, jlong keyAddress, jint inLen, jbyteA
     // outLen type should be size_t
     // EVP_PKEY_encrypt takes the outLen address as a parameter, and the parameter type is size_t*
     size_t outLen = 0;
-    kaeEngine = (kaeEngine == NULL) ? GetKaeEngine() : kaeEngine;
+    ENGINE* kaeEngine = GetEngineByAlgorithmIndex(RSA_INDEX);
+    KAE_TRACE("RSACryptOAEPPadding: kaeEngine => %p", kaeEngine);
+
 
     EVP_PKEY* pkey = (EVP_PKEY*) keyAddress;
 
@@ -272,7 +273,8 @@ JNIEXPORT jlong JNICALL Java_org_openeuler_security_openssl_KAERSACipher_nativeC
     BIGNUM* bnIQMP = NULL;
     RSA* rsa = NULL;
     EVP_PKEY* pkey = NULL;
-    kaeEngine = (kaeEngine == NULL) ? GetKaeEngine() : kaeEngine;
+    ENGINE* kaeEngine = GetEngineByAlgorithmIndex(RSA_INDEX);
+    KAE_TRACE("KAERSACipher_nativeCreateRSAPrivateCrtKey: kaeEngine => %p", kaeEngine);
 
     // convert to big num
     if ((bnN = KAE_GetBigNumFromByteArray(env, n)) == NULL ||
@@ -334,7 +336,8 @@ JNIEXPORT jlong JNICALL Java_org_openeuler_security_openssl_KAERSACipher_nativeC
     BIGNUM* bnE = NULL;
     RSA* rsa = NULL;
     EVP_PKEY* pkey = NULL;
-    kaeEngine = (kaeEngine == NULL) ? GetKaeEngine() : kaeEngine;
+    ENGINE* kaeEngine = GetEngineByAlgorithmIndex(RSA_INDEX);
+    KAE_TRACE("KAERSACipher_nativeCreateRSAPublicKey: kaeEngine => %p", kaeEngine);
 
     // get public key param n
     bnN = KAE_GetBigNumFromByteArray(env, n);

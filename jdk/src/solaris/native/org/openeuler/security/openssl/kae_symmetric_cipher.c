@@ -142,16 +142,19 @@ Java_org_openeuler_security_openssl_KAESymmetricCipherBase_nativeInit(JNIEnv* en
     jbyte* keyBytes = NULL;
     jbyte* ivBytes = NULL;
     const EVP_CIPHER* cipher = NULL;
-    static ENGINE* kaeEngine = NULL;
+    ENGINE* kaeEngine = NULL;
 
     const char* algo = (*env)->GetStringUTFChars(env, cipherType, 0);
     if (StartsWith("aes", algo)) {
         cipher = EVPGetAesCipherByName(env, algo);
-        kaeEngine = NULL;
+        kaeEngine = GetAesEngineByAlgorithmName(algo);
     } else {
         cipher = EVPGetSm4CipherByName(env, algo);
-        kaeEngine = (kaeEngine == NULL) ? GetKaeEngine() : kaeEngine;
+        kaeEngine = GetSm4EngineByAlgorithmName(algo);
     }
+
+    KAE_TRACE("KAESymmetricCipherBase_nativeInit: kaeEngine => %p", kaeEngine);
+
     (*env)->ReleaseStringUTFChars(env, cipherType, algo);
     if (cipher == NULL) {
         KAE_ThrowOOMException(env, "create EVP_CIPHER fail");

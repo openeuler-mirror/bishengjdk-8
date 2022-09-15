@@ -24,6 +24,7 @@
 #include <string.h>
 #include <openssl/rsa.h>
 #include <openssl/evp.h>
+#include "kae_log.h"
 #include "kae_util.h"
 #include "kae_exception.h"
 
@@ -99,8 +100,9 @@ JNIEXPORT jbyteArray JNICALL Java_org_openeuler_security_openssl_KAERSASignature
     jbyte* digestBytes = NULL;
     jbyte* sigBytes = NULL;
     jbyteArray sigByteArray = NULL;
-    static ENGINE* kaeEngine = NULL;
-    kaeEngine = (kaeEngine == NULL) ? GetKaeEngine() : kaeEngine;
+    ENGINE* kaeEngine = GetEngineByAlgorithmIndex(RSA_INDEX);
+    KAE_TRACE("KAERSASignatureNative_rsaSign: kaeEngine => %p", kaeEngine);
+
     // new EVP_PKEY_CTX
     if ((pkeyCtx = EVP_PKEY_CTX_new(pkey, kaeEngine)) == NULL) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_new", KAE_ThrowSignatureException);
@@ -163,8 +165,9 @@ JNIEXPORT jboolean JNICALL Java_org_openeuler_security_openssl_KAERSASignatureNa
     jbyte* digestBytes = NULL;
     jbyte* sigBytes = NULL;
     jboolean isSuccess = JNI_FALSE;
-    static ENGINE* kaeEngine = NULL;
-    kaeEngine = (kaeEngine == NULL) ? GetKaeEngine() : kaeEngine;
+    ENGINE* kaeEngine = GetEngineByAlgorithmIndex(RSA_INDEX);
+    KAE_TRACE("KAERSASignatureNative_rsaVerify: kaeEngine => %p", kaeEngine);
+
     // new EVP_PKEY_CTX
     if ((pkeyCtx = EVP_PKEY_CTX_new(pkey, kaeEngine)) == NULL) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_new", KAE_ThrowSignatureException);
@@ -255,8 +258,9 @@ JNIEXPORT jbyteArray JNICALL Java_org_openeuler_security_openssl_KAERSASignature
     jbyte* digestBytes = NULL;
     jbyte* sigBytes = NULL;
     jbyteArray sigByteArray = NULL;
-    static ENGINE* kaeEngine = NULL;
-    kaeEngine = (kaeEngine == NULL) ? GetKaeEngine() : kaeEngine;
+    ENGINE* kaeEngine = GetEngineByAlgorithmIndex(RSA_INDEX);
+    KAE_TRACE("KAERSASignatureNative_pssSign: kaeEngine => %p", kaeEngine);
+
     // new EVP_PKEY_CTX
     if ((pkeyCtx = EVP_PKEY_CTX_new(pkey, kaeEngine)) == NULL) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_new", KAE_ThrowSignatureException);
@@ -320,8 +324,9 @@ JNIEXPORT jboolean JNICALL Java_org_openeuler_security_openssl_KAERSASignatureNa
     jbyte* digestBytes = NULL;
     jbyte* sigBytes = NULL;
     jboolean isSuccess = JNI_FALSE;
-    static ENGINE* kaeEngine = NULL;
-    kaeEngine = (kaeEngine == NULL) ? GetKaeEngine() : kaeEngine;
+    ENGINE* kaeEngine = GetEngineByAlgorithmIndex(RSA_INDEX);
+    KAE_TRACE("KAERSASignatureNative_pssVerify: kaeEngine => %p", kaeEngine);
+
     // new EVP_PKEY_CTX
     if ((pkeyCtx = EVP_PKEY_CTX_new(pkey, kaeEngine)) == NULL) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_new", KAE_ThrowSignatureException);

@@ -73,9 +73,14 @@ JNIEXPORT jlong JNICALL Java_org_openeuler_security_openssl_KAEHMac_nativeInit
     HMAC_CTX* ctx = NULL;
     jbyte* key_buffer = NULL;
     const EVP_MD* md = NULL;
+    ENGINE* kaeEngine = NULL;
 
     const char* algo = (*env)->GetStringUTFChars(env, algoStr, 0);
-    md  = EVPGetDigestByName(env, algo);
+    md = EVPGetDigestByName(env, algo);
+
+    kaeEngine = GetHmacEngineByAlgorithmName(algo);
+    KAE_TRACE("KAEHMac_nativeInit: kaeEngine => %p", kaeEngine);
+
     (*env)->ReleaseStringUTFChars(env, algoStr, algo);
     if (md == NULL) {
         KAE_ThrowRuntimeException(env, "algorithm unsupport");
@@ -98,7 +103,7 @@ JNIEXPORT jlong JNICALL Java_org_openeuler_security_openssl_KAEHMac_nativeInit
     }
 
     // init hmac context with sc_key and evp_md
-    int result_code = HMAC_Init_ex(ctx, key_buffer, key_len, md, NULL);
+    int result_code = HMAC_Init_ex(ctx, key_buffer, key_len, md, kaeEngine);
     if (result_code == 0) {
         KAE_ThrowRuntimeException(env, "Hmac_Init_ex invoked failed");
         goto cleanup;
