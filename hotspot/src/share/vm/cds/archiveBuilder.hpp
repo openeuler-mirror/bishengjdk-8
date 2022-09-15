@@ -163,10 +163,13 @@ private:
   static const int MAX_TABLE_SIZE     = 1000000;
 
   ReservedSpace _shared_rs;
+  ReservedSpace _md_rs;
   VirtualSpace _shared_vs;
+  VirtualSpace _md_vs;
 
   DumpRegion _rw_region;
   DumpRegion _ro_region;
+  DumpRegion _md_region;
   BitMap _ptrmap;
 
   SourceObjList _rw_src_objs;                 // objs to put in rw region
@@ -327,6 +330,7 @@ public:
 
   void dump_rw_metadata();
   void dump_ro_metadata();
+  void dump_md_metadata();
   void relocate_metaspaceobj_embedded_pointers();
   void relocate_roots();
   void make_klasses_shareable();

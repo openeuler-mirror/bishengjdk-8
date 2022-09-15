@@ -52,8 +52,12 @@ public:
   const char *_name;
   time_t _timestamp;          // jar timestamp,  0 if is directory
   long   _filesize;           // jar file size, -1 if is directory
+  bool _sys_class;
   bool is_dir() {
     return _filesize == -1;
+  }
+  void set_sys_class(bool isSysClass) {
+    _sys_class = isSysClass;
   }
 };
 
@@ -100,6 +104,7 @@ public:
     int          _version;                  // (from enum, above.)
     size_t       _alignment;                // how shared archive should be aligned
     int          _obj_alignment;            // value of ObjectAlignmentInBytes
+    bool         _is_default_jsa;           // indicates whether is the default jsa file
 
     struct space_info {
       int    _crc;           // crc checksum of the current space
@@ -264,6 +269,8 @@ public:
   bool  is_open()                                   { return _file_open; }
   bool  is_static()                           const { return _is_static; }
   bool  is_mapped()                           const { return _is_mapped; }
+  bool  is_default_jsa()                      const { return _header->_is_default_jsa; }
+  void  set_is_default_jsa(bool v)                  { _header->_is_default_jsa = v; }
   void  set_is_mapped(bool v)                       { _is_mapped = v; }
   ReservedSpace reserve_shared_memory();
   void set_requested_base(char* b)                  { dynamic_header()->set_requested_base(b); }

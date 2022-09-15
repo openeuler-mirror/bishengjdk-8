@@ -149,6 +149,7 @@ public:
 
     relocate_to_requested();
 
+    dump_md_metadata();
     write_archive(serialized_data);
     release_header();
 

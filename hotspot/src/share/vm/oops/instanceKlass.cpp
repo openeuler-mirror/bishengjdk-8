@@ -2633,7 +2633,7 @@ void InstanceKlass::restore_unshareable_info(ClassLoaderData* loader_data, Handl
 
 // returns true IFF is_in_error_state() has been changed as a result of this call.
 bool InstanceKlass::check_sharing_error_state() {
-  assert(DumpSharedSpaces, "should only be called during dumping");
+  assert(DynamicDumpSharedSpaces || DumpSharedSpaces, "should only be called during dumping");
   bool old_state = is_in_error_state();
 
   if (!is_in_error_state()) {
@@ -3573,6 +3573,9 @@ void InstanceKlass::verify_on(outputStream* st) {
   // Avoid redundant verifies, this really should be in product.
   if (_verify_count == Universe::verify_count()) return;
   _verify_count = Universe::verify_count();
+  if (is_in_error_state()) {
+    return;
+  }
 #endif
 
   // Verify Klass

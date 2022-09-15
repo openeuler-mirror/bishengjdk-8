@@ -59,6 +59,18 @@ ArchiveBuilder::SourceObjList::~SourceObjList() {
   delete _objs;
 }
 
+static void caculate_fingerprint(Klass * klass) {
+  if (klass->oop_is_instance()) {
+    InstanceKlass* ik = InstanceKlass::cast(klass);
+    for (int i = 0; i < ik->methods()->length(); i++) {
+      Method* m = ik->methods()->at(i);
+      Fingerprinter fp(m);
+      // The side effect of this call sets method's fingerprint field.
+      fp.fingerprint();
+    }
+  }
+}
+
 void ArchiveBuilder::SourceObjList::append(MetaspaceClosure::Ref* enclosing_ref, SourceObjInfo* src_info) {
   // Save this source object for copying
   _objs->append(src_info);
@@ -166,6 +178,7 @@ ArchiveBuilder::ArchiveBuilder() :
   _buffer_to_requested_delta(0),
   _rw_region("rw", MAX_SHARED_DELTA),
   _ro_region("ro", MAX_SHARED_DELTA),
+  _md_region("md", MAX_SHARED_DELTA),
   _rw_src_objs(),
   _ro_src_objs(),
   _src_obj_table(INITIAL_TABLE_SIZE),
@@ -384,6 +397,7 @@ bool ArchiveBuilder::gather_klass_and_symbol(MetaspaceClosure::Ref* ref, bool re
     Klass* klass = (Klass*)ref->obj();
     assert(klass->is_klass(), "must be");
     if (!is_excluded(klass)) {
+      caculate_fingerprint(klass);
       _klasses->append(klass);
       if (klass->oop_is_instance()) {
         _num_instance_klasses ++;
@@ -434,7 +448,8 @@ size_t ArchiveBuilder::estimate_archive_size() {
 
 address ArchiveBuilder::reserve_buffer() {
   size_t buffer_size = estimate_archive_size();
-  ReservedSpace rs(buffer_size, os::vm_allocation_granularity(), false);
+  size_t package_hash_table_est = align_up(ClassLoader::estimate_size_for_archive(), (size_t)os::vm_allocation_granularity());
+  ReservedSpace rs(buffer_size + package_hash_table_est, os::vm_allocation_granularity(), false);
   if (!rs.is_reserved()) {
     tty->print_cr("Failed to reserve " SIZE_FORMAT " bytes of output buffer.", buffer_size);
     vm_direct_exit(0);
@@ -443,7 +458,8 @@ address ArchiveBuilder::reserve_buffer() {
   // buffer_bottom is the lowest address of the 2 core regions (rw, ro) when
   // we are copying the class metadata into the buffer.
   address buffer_bottom = (address)rs.base();
-  _shared_rs = rs;
+  _shared_rs = rs.first_part(buffer_size);
+  _md_rs = rs.last_part(buffer_size);
 
   _buffer_bottom = buffer_bottom;
   _last_verified_top = buffer_bottom;
@@ -506,6 +522,19 @@ void ArchiveBuilder::dump_ro_metadata() {
   }
   start_dump_space(&_ro_region);
   make_shallow_copies(&_ro_region, &_ro_src_objs);
+}
+
+void ArchiveBuilder::dump_md_metadata() {
+  ResourceMark rm;
+  if (InfoDynamicCDS) {
+    dynamic_cds_log->print_cr("Allocating MD objects ... ");
+  }
+  _current_dump_space = &_md_region;
+  _md_region.init(&_md_rs, &_md_vs);
+  char* md_top = _md_vs.low();
+  char* md_end = _md_vs.high_boundary();
+  _md_region.allocate(md_end - md_top);
+  ClassLoader::serialize_package_hash_table(&md_top, md_end);
 }
 
 void ArchiveBuilder::start_dump_space(DumpRegion* next) {
@@ -749,6 +778,7 @@ void ArchiveBuilder::write_archive(FileMapInfo* mapinfo) {
 
   write_region(mapinfo, MetaspaceShared::d_rw, &_rw_region, /*read_only=*/false,/*allow_exec=*/false);
   write_region(mapinfo, MetaspaceShared::d_ro, &_ro_region, /*read_only=*/true, /*allow_exec=*/false);
+  write_region(mapinfo, MetaspaceShared::d_md, &_md_region, /*read_only=*/true, /*allow_exec=*/false);
 
   char* bitmap = mapinfo->write_bitmap_region(ArchivePtrMarker::ptrmap());
 

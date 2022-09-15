@@ -775,6 +775,7 @@ class SpaceManager : public CHeapObj<mtClass> {
   // Notify memory usage to MemoryService.
   void track_metaspace_memory_usage();
 
+  void reset_metachunks();
   // debugging support.
 
   void dump(outputStream* const out) const;
@@ -1923,6 +1924,15 @@ void ChunkManager::print_on(outputStream* out) const {
 
 // SpaceManager methods
 
+void SpaceManager::reset_metachunks() {
+  for (ChunkIndex i = ZeroIndex; i <= HumongousIndex; i = next_chunk_index(i)) {
+    Metachunk* chunks = chunks_in_use(i);
+    if (chunks != NULL) {
+      chunks->reset_container();
+    }
+  }
+}
+
 size_t SpaceManager::adjust_initial_chunk_size(size_t requested, bool is_class_space) {
   size_t chunk_sizes[] = {
       specialized_chunk_size(is_class_space),
@@ -3000,6 +3010,10 @@ Metaspace::~Metaspace() {
   if (using_class_space()) {
     delete _class_vsm;
   }
+}
+
+void Metaspace::reset_metachunks() {
+  vsm()->reset_metachunks();
 }
 
 VirtualSpaceList* Metaspace::_space_list = NULL;

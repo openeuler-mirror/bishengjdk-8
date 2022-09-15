@@ -54,12 +54,20 @@ public class TestCommon extends CDSTestUtils {
         System.getProperty("test.timeout.factor", "1.0");
 
     private static String currentArchiveName;
+    private static String topArchiveName;
 
     // Call this method to start new archive with new unique name
     public static void startNewArchiveName() {
         deletePriorArchives();
         currentArchiveName = JSA_FILE_PREFIX +
             timeStampFormat.format(new Date()) + ".jsa";
+    }
+
+    public static String getTopArchiveName() {
+        topArchiveName =  System.getProperty("user.dir") +
+            File.separator + "d-appcds-" + timeStampFormat.format(new Date()) + ".jsa";
+        currentArchiveName = topArchiveName;
+        return topArchiveName;
     }
 
     // Call this method to get current archive name
@@ -90,6 +98,16 @@ public class TestCommon extends CDSTestUtils {
         }
     }
 
+    public static void deletePriorTopArchives() {
+        File dir = new File(System.getProperty("user.dir"));
+        String files[] = dir.list();
+        for (String name : files) {
+            if (name.startsWith("d-appcds-") && name.endsWith(".jsa")) {
+                if (!(new File(dir, name)).delete())
+                    System.out.println("deletePriorArchives(): delete failed for file " + name);
+            }
+        }
+    }
 
     // Create AppCDS archive using most common args - convenience method
     // Legacy name preserved for compatibility
@@ -132,7 +150,6 @@ public class TestCommon extends CDSTestUtils {
 
         cmd.add("-Xshare:dump");
         cmd.add("-XX:+UseAppCDS");
-//        cmd.add("-Xlog:cds,cds+hashtables"); comment out because it will be run by jdk1.8
         cmd.add("-XX:ExtraSharedClassListFile=" + classList.getPath());
 
         if (opts.archiveName == null)
@@ -147,6 +164,36 @@ public class TestCommon extends CDSTestUtils {
         return executeAndLog(pb, "dump");
     }
 
+    public static OutputAnalyzer createBaseArchive(String appJar, String appClasses[], String... suffix)
+        throws Exception {
+        return createArchive(appJar, appClasses, suffix);
+    }
+
+    public static OutputAnalyzer createTopArchive(String appJar, String...suffix)
+        throws Exception {
+        AppCDSOptions opts = new AppCDSOptions();
+        opts.setAppJar(appJar);
+        opts.addSuffix(suffix);
+
+        ArrayList<String> cmd = new ArrayList<String>();
+        cmd.add("-cp");
+        cmd.add(opts.appJar);
+
+        String baseArchiveName = getCurrentArchiveName();
+        deletePriorTopArchives();
+        String topArchiveNmae = getTopArchiveName();
+        cmd.add("-XX:+UnlockExperimentalVMOptions");
+        cmd.add("-Xshare:on");
+        cmd.add("-XX:SharedArchiveFile=" + baseArchiveName);
+        cmd.add("-XX:ArchiveClassesAtExit=" + topArchiveNmae);
+        cmd.add("-XX:+InfoDynamicCDS");
+
+        for (String s : opts.suffix) cmd.add(s);
+
+        String[] cmdLine = cmd.toArray(new String[cmd.size()]);
+        ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(true, makeCommandLineForAppCDS(cmdLine));
+        return executeAndLog(pb, "dump");
+    }
 
     // Execute JVM using AppCDS archive with specified AppCDSOptions
     public static OutputAnalyzer runWithArchive(AppCDSOptions opts)
@@ -156,6 +203,9 @@ public class TestCommon extends CDSTestUtils {
 
         for (String p : opts.prefix) cmd.add(p);
 
+        if (topArchiveName != null) {
+            cmd.add("-XX:+InfoDynamicCDS");
+        }
         cmd.add("-Xshare:" + opts.xShareMode);
         cmd.add("-XX:+UseAppCDS");
         cmd.add("-showversion");
@@ -173,7 +223,6 @@ public class TestCommon extends CDSTestUtils {
         ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(true, makeCommandLineForAppCDS(cmdLine));
         return executeAndLog(pb, "exec");
     }
-
 
     public static OutputAnalyzer execCommon(String... suffix) throws Exception {
         AppCDSOptions opts = (new AppCDSOptions());
@@ -260,6 +309,27 @@ public class TestCommon extends CDSTestUtils {
         return checkExec(output);
     }
 
+
+    public static OutputAnalyzer testDynamicCDS(String appJar, String appClasses[], String... args)
+        throws Exception {
+        // Create base archive
+        OutputAnalyzer output = createBaseArchive(appJar, appClasses, args);
+        output.shouldContain("Loading classes to share");
+        output.shouldHaveExitValue(0);
+
+        // Create top archive
+        output = createTopArchive(appJar, args);
+        output.shouldContain("Written dynamic archive");
+        output.shouldHaveExitValue(0);
+
+        // Exec with top archive
+        output = exec(appJar, args);
+
+        // Check exec result
+        checkMatches(output, "SharedArchivePath", "SharedDynamicArchivePath");
+        output.shouldHaveExitValue(0);
+        return output;
+    }
 
     public static OutputAnalyzer checkExecReturn(OutputAnalyzer output, int ret,
                            boolean checkContain, String... matches) throws Exception {

@@ -659,7 +659,7 @@ bool SystemDictionaryShared::warn_excluded(InstanceKlass* k, const char* reason)
 
 bool SystemDictionaryShared::is_jfr_event_class(InstanceKlass *k) {
   while (k) {
-    if (k->name()->equals("jdk/jfr/Event")) {
+    if (k->name()->equals("jdk/jfr/Event") || k->name()->starts_with("jdk/jfr/event")) {
       return true;
     }
     k = k->java_super();

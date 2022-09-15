@@ -90,8 +90,9 @@ class MetaspaceShared : AllStatic {
     // core dynamic archive spaces
     d_rw = 0,          // read-write shared space in the heap
     d_ro = 1,          // read-only shared space in the heap
-    d_bm = 2,          // relocation bitmaps (freed after file mapping is finished)
-    d_n_regions = 2    // d_rw and d_ro
+    d_md = 2,          // miscellaneous data
+    d_bm = 3,          // relocation bitmaps (freed after file mapping is finished)
+    d_n_regions = 3    // d_rw, d_ro, d_md
   };
 
   // Accessor functions to save shared space created for metadata, which has
