@@ -169,6 +169,18 @@ FileMapInfo::~FileMapInfo() {
     assert(_dynamic_archive_info == this, "must be singleton"); // not thread safe
     _dynamic_archive_info = NULL;
   }
+
+  if (_header != NULL) {
+    delete _header;
+  }
+
+  if (_file_open) {
+    if (::close(_fd) < 0) {
+      fail_stop("Unable to close the shared archive file.");
+    }
+    _file_open = false;
+    _fd = -1;
+  }
 }
 
 void FileMapInfo::populate_header(size_t alignment) {
