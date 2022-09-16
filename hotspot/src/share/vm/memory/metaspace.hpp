@@ -243,6 +243,8 @@ class Metaspace : public CHeapObj<mtClass> {
   MetaWord* expand_and_allocate(size_t size,
                                 MetadataType mdtype);
 
+  void reset_metachunks();
+
   static bool contains(const void* ptr);
 
   void dump(outputStream* const out) const;

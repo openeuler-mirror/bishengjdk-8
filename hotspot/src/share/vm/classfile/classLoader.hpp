@@ -49,12 +49,17 @@ class MetaIndex: public CHeapObj<mtClass> {
 class ClassPathEntry: public CHeapObj<mtClass> {
  private:
   ClassPathEntry* _next;
+  bool _sys_class;
  public:
   // Next entry in class path
   ClassPathEntry* next()              { return _next; }
+  bool sys_class() const { return _sys_class; }
   void set_next(ClassPathEntry* next) {
     // may have unlocked readers, so write atomically.
     OrderAccess::release_store_ptr(&_next, next);
+  }
+  void set_sys_class(bool isSysClass) {
+    _sys_class = isSysClass;
   }
   virtual bool is_jar_file() = 0;
   virtual const char* name() = 0;
@@ -158,6 +163,7 @@ class ClassLoader: AllStatic {
   };
  protected:
   friend class LazyClassPathEntry;
+  friend class PackageHashtable;
 
   // Performance counters
   static PerfCounter* _perf_accumulated_time;
@@ -234,7 +240,8 @@ class ClassLoader: AllStatic {
   static int crc32(int crc, const char* buf, int len);
   static bool update_class_path_entry_list(const char *path,
                                            bool check_for_duplicates,
-                                           bool throw_exception=true);
+                                           bool throw_exception=true,
+                                           bool sys_class=false);
   static void print_bootclasspath();
 
   // Timing
@@ -318,6 +325,9 @@ class ClassLoader: AllStatic {
   // Initialization
   static void initialize();
   CDS_ONLY(static void initialize_shared_path();)
+  static const char* get_file_name_from_path(const char* path);
+  static const char* get_boot_class_path(const char* shared_path);
+
   static void create_package_info_table();
   static void create_package_info_table(HashtableBucket<mtClass> *t, int length,
                                         int number_of_entries);
@@ -340,6 +350,9 @@ class ClassLoader: AllStatic {
   // Sharing dump and restore
   static void copy_package_info_buckets(char** top, char* end);
   static void copy_package_info_table(char** top, char* end);
+  static size_t estimate_size_for_archive();
+  static void serialize_package_hash_table(char** top, char* end);
+  static void deserialize_package_hash_table(char* start);
 
   static void  check_shared_classpath(const char *path);
   static void  finalize_shared_paths_misc_info();

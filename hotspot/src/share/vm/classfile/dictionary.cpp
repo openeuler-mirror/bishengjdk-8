@@ -197,7 +197,7 @@ void Dictionary::roots_oops_do(OopClosure* strong, OopClosure* weak) {
 }
 
 void Dictionary::remove_classes_in_error_state() {
-  assert(DumpSharedSpaces, "supported only when dumping");
+  assert(DynamicDumpSharedSpaces || DumpSharedSpaces, "supported only when dumping");
   DictionaryEntry* probe = NULL;
   for (int index = 0; index < table_size(); index++) {
     for (DictionaryEntry** p = bucket_addr(index); *p != NULL; ) {

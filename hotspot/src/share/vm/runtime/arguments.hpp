@@ -240,6 +240,8 @@ class Arguments : AllStatic {
 
  private:
 
+  // Indicates whether the JSA file is the default jsa file.
+  static bool _is_default_jsa;
   // an array containing all flags specified in the .hotspotrc file
   static char** _jvm_flags_array;
   static int    _num_jvm_flags;
@@ -487,6 +489,9 @@ class Arguments : AllStatic {
   // Return the maximum size a heap with compressed oops can take
   static size_t max_heap_for_compressed_oops();
 
+  static void set_is_default_jsa(bool is_default) { _is_default_jsa = is_default; }
+  static bool get_is_default_jsa()         { return _is_default_jsa; }
+
   // return a char* array containing all options
   static char** jvm_flags_array()          { return _jvm_flags_array; }
   static char** jvm_args_array()           { return _jvm_args_array; }
@@ -622,6 +627,7 @@ class Arguments : AllStatic {
   static char* get_ext_dirs() { return _java_ext_dirs->value(); }
   static char* get_appclasspath() { return _java_class_path->value(); }
   static void  fix_appclasspath();
+  static char* get_default_shared_archive_path();
 
   // Operation modi
   static Mode mode()                { return _mode; }

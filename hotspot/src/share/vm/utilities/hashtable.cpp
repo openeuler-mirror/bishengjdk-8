@@ -58,6 +58,7 @@ template <MEMFLAGS F> BasicHashtableEntry<F>* BasicHashtable<F>::new_entry(unsig
       len = 1 << log2_int(len); // round down to power of 2
       assert(len >= _entry_size, "");
       _first_free_entry = NEW_C_HEAP_ARRAY2(char, len, F, CURRENT_PC);
+      memset(_first_free_entry, 0, len);
       _end_block = _first_free_entry + len;
     }
     entry = (BasicHashtableEntry<F>*)_first_free_entry;

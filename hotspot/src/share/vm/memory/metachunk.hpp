@@ -126,6 +126,8 @@ class Metachunk : public Metabase<Metachunk> {
 
   VirtualSpaceNode* container() const { return _container; }
 
+  void reset_container() { _container = NULL; }
+
   MetaWord* bottom() const { return (MetaWord*) this; }
 
   // Reset top to bottom so chunk can be reused.

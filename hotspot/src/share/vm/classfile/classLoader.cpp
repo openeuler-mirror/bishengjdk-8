@@ -219,6 +219,30 @@ const char* ClassLoader::package_from_name(const char* const class_name, bool* b
   return (const char *)pkg_name;
 }
 
+const char* ClassLoader::get_file_name_from_path(const char* path) {
+  const char* pos = strrchr(path, '/');
+  if (pos == NULL) {
+    return path;
+  } else {
+    return pos + 1;
+  }
+}
+
+const char* ClassLoader::get_boot_class_path(const char* shared_path) {
+  const char* shared_name = get_file_name_from_path(shared_path);
+  ClassPathEntry* e = _first_entry;
+  while (e != NULL) {
+    if (e->sys_class()) {
+      const char* name = get_file_name_from_path(e->name());
+      if (strcmp(name, shared_name) == 0) {
+        return e->name();
+      }
+    }
+    e = e->next();
+  }
+  return NULL;
+}
+
 MetaIndex::MetaIndex(char** meta_package_names, int num_meta_package_names) {
   if (num_meta_package_names == 0) {
     _meta_package_names = NULL;
@@ -512,6 +536,8 @@ void ClassLoader::setup_meta_index(const char* meta_index_path, const char* meta
   int line_no = 0;
 #if INCLUDE_CDS
   if (DumpSharedSpaces) {
+    meta_index_path = Arguments::get_is_default_jsa() ?
+                        get_file_name_from_path(meta_index_path) : meta_index_path;
     if (file != NULL) {
       _shared_paths_misc_info->add_required_file(meta_index_path);
     } else {
@@ -644,7 +670,9 @@ void ClassLoader::setup_bootstrap_search_path() {
   }
 #if INCLUDE_CDS
   if (DumpSharedSpaces) {
-    _shared_paths_misc_info->add_boot_classpath(sys_class_path);
+    const char* new_sys_class_path = Arguments::get_is_default_jsa() ?
+                                       get_file_name_from_path(sys_class_path) : sys_class_path;
+    _shared_paths_misc_info->add_boot_classpath(new_sys_class_path);
   }
 #endif
   setup_search_path(sys_class_path);
@@ -688,7 +716,7 @@ void ClassLoader::setup_search_path(const char *class_path, bool canonicalize) {
         path = canonical_path;
       }
     }
-    update_class_path_entry_list(path, /*check_for_duplicates=*/canonicalize);
+    update_class_path_entry_list(path, /*check_for_duplicates=*/canonicalize, true, true);
 #if INCLUDE_CDS
     if (DumpSharedSpaces) {
       check_shared_classpath(path);
@@ -816,7 +844,9 @@ void ClassLoader::add_to_list(ClassPathEntry *new_entry) {
 // Returns true IFF the file/dir exists and the entry was successfully created.
 bool ClassLoader::update_class_path_entry_list(const char *path,
                                                bool check_for_duplicates,
-                                               bool throw_exception) {
+                                               bool throw_exception,
+                                               bool sys_class_type) {
+  // sys_class_type indicates whether *path is a system path. The default value is false.
   struct stat st;
   if (os::stat(path, &st) == 0) {
     // File or directory found
@@ -825,6 +855,11 @@ bool ClassLoader::update_class_path_entry_list(const char *path,
     new_entry = create_class_path_entry(path, &st, LazyBootClassLoader, throw_exception, CHECK_(false));
     if (new_entry == NULL) {
       return false;
+    }
+    // If the path is a system path, set sys_class of the newly created
+    // linked list node to true. The default value is false.
+    if (sys_class_type) {
+      new_entry->set_sys_class(true);
     }
     // The kernel VM adds dynamically to the end of the classloader path and
     // doesn't reorder the bootclasspath which would break java.lang.Package
@@ -837,6 +872,8 @@ bool ClassLoader::update_class_path_entry_list(const char *path,
   } else {
 #if INCLUDE_CDS
     if (DumpSharedSpaces) {
+      path = Arguments::get_is_default_jsa() ?
+               get_file_name_from_path(path) : path;
       _shared_paths_misc_info->add_nonexist_path(path);
     }
 #endif
@@ -918,6 +955,7 @@ int ClassLoader::crc32(int crc, const char* buf, int len) {
 class PackageInfo: public BasicHashtableEntry<mtClass> {
 public:
   const char* _pkgname;       // Package name
+  const char* _filename;      // File name
   int _classpath_index;       // Index of directory or JAR file loaded from
 
   PackageInfo* next() {
@@ -926,9 +964,10 @@ public:
 
   const char* pkgname()           { return _pkgname; }
   void set_pkgname(char* pkgname) { _pkgname = pkgname; }
+  void set_filename(char* filename) { _filename = filename; }
 
   const char* filename() {
-    return ClassLoader::classpath_entry(_classpath_index)->name();
+    return _filename == NULL ? ClassLoader::classpath_entry(_classpath_index)->name() : _filename;
   }
 
   void set_index(int index) {
@@ -975,11 +1014,12 @@ public:
     return get_entry(hash_to_index(hash), hash, pkgname, n);
   }
 
-  PackageInfo* new_entry(char* pkgname, int n) {
+  PackageInfo* new_entry(char* pkgname, int n, char* filename = NULL) {
     unsigned int hash = compute_hash(pkgname, n);
     PackageInfo* pp;
     pp = (PackageInfo*)BasicHashtable<mtClass>::new_entry(hash);
     pp->set_pkgname(pkgname);
+    pp->set_filename(filename);
     return pp;
   }
 
@@ -999,6 +1039,9 @@ public:
   }
 
   CDS_ONLY(void copy_table(char** top, char* end, PackageHashtable* table);)
+  CDS_ONLY(void serialize(char** top, char* end);)
+  CDS_ONLY(void deserialize(char* start);)
+  CDS_ONLY(size_t estimate_size();)
 };
 
 #if INCLUDE_CDS
@@ -1035,6 +1078,93 @@ void PackageHashtable::copy_table(char** top, char* end,
   *tableSize = len;
 }
 
+size_t PackageHashtable::estimate_size() {
+  int size = sizeof(int);
+  ClassPathEntry* e = ClassLoader::_first_entry;
+  while (e != NULL) {
+    int length = (int)(strlen(e->name()) + 1);
+    size += length;
+    e = e->next();
+  }
+  size = align_size_up(size, sizeof(int));
+
+  size += sizeof(int);
+  for (int i = 0; i < table_size(); ++i) {
+    for (PackageInfo* pp = bucket(i);
+                      pp != NULL;
+                      pp = pp->next()) {
+      size += sizeof(int);
+      int n1 = (int)(strlen(pp->pkgname()) + 1);
+      n1 = align_size_up(n1, sizeof(int));
+      size += n1;
+    }
+  }
+  return align_size_up(size, sizeof(int));
+}
+
+void PackageHashtable::serialize(char** top, char* end) {
+  *(int*)(*top) = ClassLoader::_num_entries;
+  *top += sizeof(int);
+
+  ClassPathEntry* e = ClassLoader::_first_entry;
+  while (e != NULL) {
+    int length = (int)(strlen(e->name()) + 1);
+    memcpy(*top, e->name(), length);
+    *top += length;
+    e = e->next();
+  }
+  *top = (char*)align_size_up((intptr_t)*top, sizeof(int));
+  *(int*)(*top) = number_of_entries();
+  *top += sizeof(int);
+
+  for (int i = 0; i < table_size(); ++i) {
+    for (PackageInfo* pp = bucket(i);
+                      pp != NULL;
+                      pp = pp->next()) {
+      *(int*)(*top) = pp->_classpath_index;
+      *top += sizeof(int);
+      int n1 = (int)(strlen(pp->pkgname()) + 1);
+      memcpy(*top, pp->pkgname(), n1);
+      n1 = align_size_up(n1, sizeof(int));
+      *top += n1;
+    }
+  }
+}
+
+void PackageHashtable::deserialize(char* start) {
+  int num_entries = *(int*)start;
+  char** class_loader_entries = NEW_C_HEAP_ARRAY(char*, num_entries, mtClass);
+  start += sizeof(int);
+  int entries_len = 0;
+  for (int i = 0, index = 0; i < num_entries; i++) {
+    class_loader_entries[index++] = start + entries_len;
+    entries_len += (int)(strlen(start + entries_len) + 1);
+  }
+  start += align_size_up(entries_len, sizeof(int));
+  int number_of_entries = *(int*)start;
+  start += sizeof(int);
+  for (int i = 0; i < number_of_entries; i++) {
+    int classpath_index = *(int*)start;
+    start += sizeof(int);
+    char* pkgname = start;
+    const char *cp = strrchr(pkgname, '/');
+    if (cp != NULL) {
+      int n = cp - pkgname + 1;
+      if (get_entry(pkgname, n) == NULL) {
+        PackageInfo* info = new_entry(pkgname, n, class_loader_entries[classpath_index]);
+        add_entry(info);
+      }
+    }
+    int n1 = (int)(strlen(start) + 1);
+    start += align_size_up(n1, sizeof(int));
+  }
+  FREE_C_HEAP_ARRAY(char*, class_loader_entries, mtClass);
+}
+
+void ClassLoader::deserialize_package_hash_table(char* start) {
+  assert(_package_hash_table != NULL, "should have one yet");
+  _package_hash_table->deserialize(start);
+}
 
 void ClassLoader::copy_package_info_buckets(char** top, char* end) {
   _package_hash_table->copy_buckets(top, end);
@@ -1042,6 +1172,14 @@ void ClassLoader::copy_package_info_buckets(char** top, char* end) {
 
 void ClassLoader::copy_package_info_table(char** top, char* end) {
   _package_hash_table->copy_table(top, end, _package_hash_table);
+}
+
+size_t ClassLoader::estimate_size_for_archive() {
+  return _package_hash_table->estimate_size();
+}
+
+void ClassLoader::serialize_package_hash_table(char** top, char* end) {
+  return _package_hash_table->serialize(top, end);
 }
 #endif
 
@@ -1226,8 +1364,8 @@ void ClassLoader::create_package_info_table(HashtableBucket<mtClass> *t, int len
 
 
 void ClassLoader::create_package_info_table() {
-    assert(_package_hash_table == NULL, "shouldn't have one yet");
-    _package_hash_table = new PackageHashtable(package_hash_table_size);
+  assert(_package_hash_table == NULL, "shouldn't have one yet");
+  _package_hash_table = new PackageHashtable(package_hash_table_size);
 }
 
 

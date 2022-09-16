@@ -263,7 +263,12 @@ void FileMapInfo::allocate_classpath_entry_table() {
 
     for (int cur_entry = 0 ; cpe != NULL; cpe = cpe->next(), cur_entry++) {
       const char *name = cpe->name();
-      int name_bytes = (int)(strlen(name) + 1);
+      int name_bytes;
+      if (cpe->sys_class()) {
+        name_bytes = (int)(strlen(ClassLoader::get_file_name_from_path(name)) + 1);
+      } else {
+        name_bytes = (int)(strlen(name) + 1);
+      }
 
       if (pass == 0) {
         count ++;
@@ -286,7 +291,13 @@ void FileMapInfo::allocate_classpath_entry_table() {
           }
 
           EXCEPTION_MARK; // The following call should never throw, but would exit VM on error.
-          SharedClassUtil::update_shared_classpath(cpe, ent, st.st_mtime, st.st_size, THREAD);
+          if (cpe->sys_class()) {
+            // Jdk boot jar not need validate timestamp for we may copy whole jdk.
+            SharedClassUtil::update_shared_classpath(cpe, ent, 0, st.st_size, THREAD);
+            ent->set_sys_class(true);
+          } else {
+            SharedClassUtil::update_shared_classpath(cpe, ent, st.st_mtime, st.st_size, THREAD);
+          }
         } else {
           ent->_filesize  = -1;
           if (!os::dir_is_empty(name)) {
@@ -295,7 +306,11 @@ void FileMapInfo::allocate_classpath_entry_table() {
         }
         ent->_name = strptr;
         if (strptr + name_bytes <= strptr_max) {
-          strncpy(strptr, name, (size_t)name_bytes); // name_bytes includes trailing 0.
+          if (cpe->sys_class()) {
+            strncpy(strptr, ClassLoader::get_file_name_from_path(name), (size_t)name_bytes);
+          } else {
+            strncpy(strptr, name, (size_t)name_bytes); // name_bytes includes trailing 0.
+          }
           strptr += name_bytes;
         } else {
           assert(0, "miscalculated buffer size");
@@ -334,6 +349,14 @@ bool FileMapInfo::validate_classpath_entry_table() {
     if (TraceClassPaths || (TraceClassLoading && Verbose)) {
       tty->print_cr("[Checking shared classpath entry: %s]", name);
     }
+    if (ent->_sys_class) {
+      name = ClassLoader::get_boot_class_path(name);
+      if (name == NULL) {
+        fail_continue("Required classpath entry of system class does not exist");
+        continue;
+      }
+    }
+
     if (os::stat(name, &st) != 0) {
       fail_continue("Required classpath entry does not exist: %s", name);
       ok = false;
@@ -343,7 +366,7 @@ bool FileMapInfo::validate_classpath_entry_table() {
         ok = false;
       }
     } else {
-      if (ent->_timestamp != st.st_mtime ||
+      if ((ent->_timestamp != 0 && ent->_timestamp != st.st_mtime) ||
           ent->_filesize != st.st_size) {
         ok = false;
         if (PrintSharedArchiveAndExit) {
@@ -640,6 +663,7 @@ void FileMapInfo::write_space(int i, Metaspace* space, bool read_only) {
   size_t used = space->used_bytes_slow(Metaspace::NonClassType);
   size_t capacity = space->capacity_bytes_slow(Metaspace::NonClassType);
   struct FileMapInfo::FileMapHeader::space_info* si = &_header->_space[i];
+  space->reset_metachunks();
   write_region(i, (char*)space->bottom(), used, capacity, read_only, false);
 }
 
@@ -967,7 +991,7 @@ bool FileMapInfo::validate_header() {
     return DynamicArchive::validate(this);
   }
 
-  if (status) {
+  if (status && !_header->_is_default_jsa) {
     if (!ClassLoader::check_shared_paths_misc_info(_paths_misc_info, _header->_paths_misc_info_size)) {
       if (!PrintSharedArchiveAndExit) {
         fail_continue("shared class paths mismatch (hint: enable -XX:+TraceClassPaths to diagnose the failure)");

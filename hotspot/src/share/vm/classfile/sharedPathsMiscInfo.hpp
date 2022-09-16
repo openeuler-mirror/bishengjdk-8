@@ -26,6 +26,7 @@
 #define SHARE_VM_CLASSFILE_SHAREDPATHSMISCINFO_HPP
 
 #include "runtime/os.hpp"
+#include "runtime/arguments.hpp"
 
 // During dumping time, when processing class paths, we build up the dump-time
 // classpath. The JAR files that exist are stored in the list ClassLoader::_first_entry.
@@ -111,12 +112,18 @@ public:
     add_path(path, REQUIRED);
 
     struct stat st;
-    if (os::stat(path, &st) != 0) {
+    if (!Arguments::get_is_default_jsa() && os::stat(path, &st) != 0) {
       assert(0, "sanity");
       ClassLoader::exit_with_path_failure("failed to os::stat(%s)", path); // should not happen
     }
-    write_time(st.st_mtime);
-    write_long(st.st_size);
+
+    if (Arguments::get_is_default_jsa()) {
+      write_time(0);
+      write_long(0);
+    } else {
+      write_time(st.st_mtime);
+      write_long(st.st_size);
+    }
   }
 
   // The path must exist, and must contain exactly <num_entries> files/dirs

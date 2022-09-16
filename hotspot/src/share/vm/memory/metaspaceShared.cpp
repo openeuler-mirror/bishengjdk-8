@@ -205,6 +205,21 @@ static void patch_klass_vtables(void** vtbl_list, void* new_vtable_start) {
   }
 }
 
+static void patch_deallocate_meta_vtables(void** vtbl_list, void* new_vtable_start, GrowableArray<Metadata*>* deallocate_list) {
+  if (deallocate_list == NULL) {
+    return;
+  }
+  for (int i = deallocate_list->length() - 1; i >= 0; i--) {
+    Metadata* m = deallocate_list->at(i);
+    if (!m->on_stack()) {
+      if (m->is_constantPool()) {
+        ((ConstantPool*)m)->remove_unshareable_info();
+        *(void**)m = find_matching_vtbl_ptr(vtbl_list, new_vtable_start, m);
+      }
+    }
+  }
+}
+
 // Closure for serializing initialization data out to a data area to be
 // written to the shared file.
 
@@ -591,6 +606,7 @@ void VM_PopulateDumpSharedSpace::doit() {
   // Update the vtable pointers in all of the Klass objects in the
   // heap. They should point to newly generated vtable.
   patch_klass_vtables(vtbl_list, vtable);
+  patch_deallocate_meta_vtables(vtbl_list, vtable, _loader_data->_deallocate_list);
 
   // dunno what this is for.
   char* saved_vtbl = (char*)os::malloc(vtbl_list_size * sizeof(void*), mtClass);
@@ -602,6 +618,9 @@ void VM_PopulateDumpSharedSpace::doit() {
   FileMapInfo* mapinfo = new FileMapInfo();
   mapinfo->populate_header(MetaspaceShared::max_alignment());
 
+  if (Arguments::get_is_default_jsa()) {
+    mapinfo->set_is_default_jsa(true);
+  }
   // Pass 1 - update file offsets in header.
   mapinfo->write_header();
   mapinfo->write_space(MetaspaceShared::ro, _loader_data->ro_metaspace(), true);
@@ -997,6 +1016,8 @@ bool MetaspaceShared::map_shared_spaces(FileMapInfo* mapinfo) {
          mapinfo->verify_region_checksum(d_rw) &&
         (_ro_base = mapinfo->map_region(d_ro)) != NULL &&
          mapinfo->verify_region_checksum(d_ro) &&
+        (_ro_base = mapinfo->map_region(d_md)) != NULL &&
+         mapinfo->verify_region_checksum(d_md) &&
         (image_alignment == (size_t)max_alignment())) {
       mapinfo->set_is_mapped(true);
       return true;
@@ -1153,6 +1174,7 @@ void MetaspaceShared::initialize_shared_spaces() {
     ReadClosure rc(&buffer);
     SymbolTable::serialize_shared_table_header(&rc);
     SystemDictionaryShared::serialize_dictionary_headers(&rc);
+    ClassLoader::deserialize_package_hash_table(dynamic_mapinfo->region_base(d_md));
     dynamic_mapinfo->close();
   }
 
