@@ -984,11 +984,6 @@ void DumperSupport::dump_class_and_array_classes(DumpWriter* writer, Klass* k) {
     return;
   }
 
-  // Ignore the class if it hasn't been initialized yet
-  if (!ik->is_linked()) {
-    return;
-  }
-
   writer->write_u1(HPROF_GC_CLASS_DUMP);
 
   // class ID
