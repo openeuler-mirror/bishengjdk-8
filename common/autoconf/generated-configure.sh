@@ -831,6 +831,7 @@ COPYRIGHT_YEAR
 VENDOR_URL_VM_BUG
 VENDOR_URL_BUG
 VENDOR_URL
+INTERNAL_VERSION
 COMPANY_NAME
 MACOSX_BUNDLE_ID_BASE
 MACOSX_BUNDLE_NAME_BASE
@@ -1077,6 +1078,7 @@ with_vendor_url
 with_vendor_bug_url
 with_vendor_vm_bug_url
 with_copyright_year
+with_internal_version
 with_boot_jdk
 with_boot_jdk_jvmargs
 with_add_source_root
@@ -1937,6 +1939,9 @@ Optional Packages:
   --with-vendor-vm-bug-url
                           Sets the bug URL which will be displayed when the VM
                           crashes [not specified]
+  --with-internal-version
+                          Sets the internal version which will be
+                          displayed in the release file [not specified]
   --with-copyright-year   Set copyright year value for build [current year]
   --with-boot-jdk         path to Boot JDK (used to bootstrap build) [probed]
   --with-boot-jdk-jvmargs specify JVM arguments to be passed to all
@@ -20301,6 +20306,18 @@ fi
     COPYRIGHT_YEAR=`date +'%Y'`
   fi
 
+# Check whether --with-internal-version was given.
+if test "${with_internal_version+set}" = set; then :
+  withval=$with_internal_version;
+fi
+
+  if test "x$with_internal_version" = xyes; then
+    as_fn_error $? "--with-internal-version must have a value" "$LINENO" 5
+  elif  ! [[ $with_internal_version =~ ^[[:print:]]*$ ]] ; then
+    as_fn_error $? "--with-internal-version contains non-printing characters: $with_internal_version" "$LINENO" 5
+  else
+    INTERNAL_VERSION="$with_internal_version"
+  fi
 
   if test "x$JDK_UPDATE_VERSION" != x; then
     JDK_VERSION="${JDK_MAJOR_VERSION}.${JDK_MINOR_VERSION}.${JDK_MICRO_VERSION}_${JDK_UPDATE_VERSION}"
