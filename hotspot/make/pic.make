@@ -30,7 +30,7 @@ include $(GAMMADIR)/make/scm.make
 
 ifneq ($(OSNAME), windows)
   ifndef LP64
-    PARTIAL_NONPIC=1
+    PARTIAL_NONPIC=0
   endif
   PIC_ARCH = ppc arm
   ifneq ("$(filter $(PIC_ARCH),$(BUILDARCH))","")
