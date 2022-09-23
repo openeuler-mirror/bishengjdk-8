@@ -162,6 +162,9 @@ VENDOR_URL:=@VENDOR_URL@
 VENDOR_URL_BUG:=@VENDOR_URL_BUG@
 VENDOR_URL_VM_BUG:=@VENDOR_URL_VM_BUG@
 
+# Huawei internal version for use in release file. 
+INTERNAL_VERSION:=@INTERNAL_VERSION@
+
 # Location where build customization files may be found
 CUSTOM_MAKE_DIR:=@CUSTOM_MAKE_DIR@
 

@@ -627,6 +627,17 @@ AC_DEFUN_ONCE([JDKOPT_SETUP_JDK_VERSION_NUMBERS],
   fi
   AC_SUBST(COPYRIGHT_YEAR)
 
+  AC_ARG_WITH(internal-version, [AS_HELP_STRING([--with-internal-version],
+      [Sets the internal version which will be displayed in the release file @<:@not specified@:>@])])
+  if test "x$with_internal_version" = xyes; then
+    AC_MSG_ERROR([--with-internal-version must have a value])
+  elif [ ! [[ $with_internal_version =~ ^[[:print:]]*$ ]] ]; then
+    AC_MSG_ERROR([--with-internal-version contains non-printing characters: $with_internal_version])
+  else
+    INTERNAL_VERSION="$with_internal_version"
+  fi
+  AC_SUBST(INTERNAL_VERSION)
+
   if test "x$JDK_UPDATE_VERSION" != x; then
     JDK_VERSION="${JDK_MAJOR_VERSION}.${JDK_MINOR_VERSION}.${JDK_MICRO_VERSION}_${JDK_UPDATE_VERSION}"
   else
