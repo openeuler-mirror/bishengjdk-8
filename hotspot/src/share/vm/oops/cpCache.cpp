@@ -610,7 +610,6 @@ void ConstantPoolCache::metaspace_pointers_do(MetaspaceClosure* it) {
     dynamic_cds_log->print_cr("Iter(ConstantPoolCache): %p", this);
   }
   it->push(&_constant_pool);
- // it->push(&_reference_map);
 }
 
 void ConstantPoolCache::remove_unshareable_info() {

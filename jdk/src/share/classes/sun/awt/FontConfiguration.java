@@ -300,12 +300,7 @@ public abstract class FontConfiguration {
             }
         }
         foundOsSpecificFile = false;
-
-        configFile = findImpl(baseName);
-        if (configFile != null) {
-            return configFile;
-        }
-        return null;
+        return (configFile = findImpl(baseName));
     }
 
     /* Initialize the internal data tables from binary format font

@@ -240,12 +240,7 @@ void FileMapInfo::FileMapHeader::populate(FileMapInfo* mapinfo, size_t alignment
   _version = current_version();
   _alignment = alignment;
   _obj_alignment = ObjectAlignmentInBytes;
-  /* TODO
-  _compressed_oops = UseCompressedOops;
-  _compressed_class_ptrs = UseCompressedClassPointers;
-  _max_heap_size = MaxHeapSize;
-  _narrow_klass_shift = CompressedKlassPointers::shift();
-  */
+
   if (!DynamicDumpSharedSpaces) {
     _classpath_entry_table_size = mapinfo->_classpath_entry_table_size;
     _classpath_entry_table = mapinfo->_classpath_entry_table;

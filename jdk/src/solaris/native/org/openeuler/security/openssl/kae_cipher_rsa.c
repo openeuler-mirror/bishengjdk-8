@@ -174,6 +174,7 @@ static int RSACryptOAEPPadding(JNIEnv* env, jlong keyAddress, jint inLen, jbyteA
     jbyte* inBytes = NULL;
     // outLen type should be size_t
     // EVP_PKEY_encrypt takes the outLen address as a parameter, and the parameter type is size_t*
+    // You can refer to the issue #2774 to see more content
     size_t outLen = 0;
     ENGINE* kaeEngine = GetEngineByAlgorithmIndex(RSA_INDEX);
     KAE_TRACE("RSACryptOAEPPadding: kaeEngine => %p", kaeEngine);
@@ -366,7 +367,7 @@ JNIEXPORT jlong JNICALL Java_org_openeuler_security_openssl_KAERSACipher_nativeC
     }
 
     // set rsa public key params n and e
-    if(RSA_set0_key(rsa, bnN, bnE, NULL) <= 0) {
+    if (RSA_set0_key(rsa, bnN, bnE, NULL) <= 0) {
         KAE_ThrowFromOpenssl(env, "RSA_set0_key", KAE_ThrowRuntimeException);
         goto cleanup;
     }

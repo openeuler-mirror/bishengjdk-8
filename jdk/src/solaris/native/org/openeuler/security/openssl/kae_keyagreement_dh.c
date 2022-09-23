@@ -131,9 +131,9 @@ cleanup:
     if (g_bn != NULL)
         KAE_ReleaseBigNumFromByteArray(g_bn);
     if (secret != NULL)
-       free(secret);
+        free(secret);
     if (computeKeyRetBn != NULL)
-       BN_free(computeKeyRetBn);
+        BN_free(computeKeyRetBn);
 
     return retByteArray;
 }

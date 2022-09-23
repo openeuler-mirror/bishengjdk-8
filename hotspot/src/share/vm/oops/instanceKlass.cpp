@@ -526,10 +526,6 @@ void InstanceKlass::metaspace_pointers_do(MetaspaceClosure* it) {
       }
     }
   }
-
- // it->push(&_nest_members);
- // it->push(&_permitted_subclasses);
- // it->push(&_record_components);
 }
 
 klassVtable* InstanceKlass::vtable() const {

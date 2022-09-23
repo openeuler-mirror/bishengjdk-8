@@ -29,7 +29,6 @@
 #include "cds/archiveUtils.hpp"
 #include "cds/dumpAllocStats.hpp"
 #include "memory/metaspaceClosure.hpp"
-//#include "oops/array.hpp"
 #include "oops/klass.hpp"
 #include "runtime/os.hpp"
 #include "utilities/align.hpp"
