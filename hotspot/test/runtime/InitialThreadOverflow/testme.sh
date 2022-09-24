@@ -52,7 +52,7 @@ fi
 CFLAGS="-m${VM_BITS}"
 
 if [ "${VM_CPU}" == "aarch64" ]; then
-    CFLAGS="-mabi=lp64"
+    CFLAGS=""
 fi
 
 LD_LIBRARY_PATH=.:${COMPILEJAVA}/jre/lib/${VM_CPU}/${VM_TYPE}:/usr/lib:$LD_LIBRARY_PATH

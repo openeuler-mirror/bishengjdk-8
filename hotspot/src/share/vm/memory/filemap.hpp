@@ -232,7 +232,7 @@ public:
   char*  region_end(int i)            { return region_base(i) + used_aligned(i); }
   struct FileMapHeader* header()      { return _header; }
   struct DynamicArchiveHeader* dynamic_header() {
-  //  assert(!is_static(), "must be");
+
     return (struct DynamicArchiveHeader*)header();
   }
 

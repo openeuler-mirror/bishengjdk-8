@@ -102,7 +102,7 @@ esac
 
 
 if [ "${VM_CPU}" == "aarch64" ]; then
-    COMP_FLAG="-mabi=lp64"
+    COMP_FLAG=""
 fi
 
 # VM type: need to know server or client

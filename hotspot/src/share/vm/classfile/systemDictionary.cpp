@@ -1344,7 +1344,7 @@ instanceKlassHandle SystemDictionary::load_shared_class(
         Handle klass_name = java_lang_String::create_from_str(name, CHECK_0);
         JavaValue result(T_OBJECT);
 
-	// load_shared_class need protected domain to handle non-bootstrap loaded class,
+        // load_shared_class need protected domain to handle non-bootstrap loaded class,
         // so here call_virtual to call getProtectionDomainInternal function of URLClassLoader.java,
         // to get protected domain and save into result.
         JavaCalls::call_virtual(&result,

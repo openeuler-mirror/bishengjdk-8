@@ -234,11 +234,6 @@ public class ObjectOutputStream
             new sun.security.action.GetBooleanAction(
                 "sun.io.serialization.extendedDebugInfo")).booleanValue();
 
-    /**
-     * Magic number that is written to the stream header when using fastserilizer.
-     */
-    private static final short STREAM_MAGIC_FAST = (short)0xdeca;
-
     private static final Unsafe UNSAFE = Unsafe.getUnsafe();
 
     /**
@@ -254,6 +249,11 @@ public class ObjectOutputStream
     private static final boolean printFastSerializer = java.security.AccessController.doPrivileged(
             new sun.security.action.GetBooleanAction(
                     "printFastSerializer")).booleanValue();
+
+    /**
+     * Magic number that is written to the stream header when using fastserilizer.
+     */
+    private static final short STREAM_MAGIC_FAST = (short)0xdeca;
 
     /**
      * Creates an ObjectOutputStream that writes to the specified OutputStream.

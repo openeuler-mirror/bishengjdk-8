@@ -26,7 +26,6 @@
 #ifndef SHARE_VM_CDS_DYNAMICARCHIVE_HPP
 #define SHARE_VM_CDS_DYNAMICARCHIVE_HPP
 
-//#include "classfile/compactHashtable.hpp"
 #include "memory/allocation.hpp"
 #include "memory/filemap.hpp"
 #include "memory/memRegion.hpp"

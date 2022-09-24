@@ -194,6 +194,7 @@ public:
     }
     return true;
   }
+
   static size_t estimate_size_for_archive();
   static void write_to_archive();
   static void write_dictionary(RunTimeSharedDictionary* dictionary, bool is_builtin);

@@ -54,7 +54,7 @@ public class RSAKeyPairGeneratorBenchmark extends BenchmarkBase {
     public KeyPair generateKeyPair() throws Exception {
         return keyPairGenerator.generateKeyPair();
     }
-
+    
     private KeyPairGenerator createKeyPairGenerator() throws Exception {
         if (prov != null) {
             return KeyPairGenerator.getInstance(algorithm, prov);
