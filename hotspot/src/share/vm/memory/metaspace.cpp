@@ -3634,25 +3634,33 @@ void Metaspace::global_initialize() {
     }
 
 #ifdef _LP64
-    if (cds_total + compressed_class_space_size() > UnscaledClassSpaceMax) {
-      vm_exit_during_initialization("Unable to dump shared archive.",
-          err_msg("Size of archive (" SIZE_FORMAT ") + compressed class space ("
-                  SIZE_FORMAT ") == total (" SIZE_FORMAT ") is larger than compressed "
-                  "klass limit: " SIZE_FORMAT, cds_total, compressed_class_space_size(),
-                  cds_total + compressed_class_space_size(), UnscaledClassSpaceMax));
-    }
+    if (UseCompressedClassPointers) {
+      if (cds_total + compressed_class_space_size() > UnscaledClassSpaceMax) {
+        vm_exit_during_initialization("Unable to dump shared archive.",
+            err_msg("Size of archive (" SIZE_FORMAT ") + compressed class space ("
+                    SIZE_FORMAT ") == total (" SIZE_FORMAT ") is larger than compressed "
+                    "klass limit: " SIZE_FORMAT, cds_total, compressed_class_space_size(),
+                    cds_total + compressed_class_space_size(), UnscaledClassSpaceMax));
+      }
 
-    // Set the compressed klass pointer base so that decoding of these pointers works
-    // properly when creating the shared archive.
-    assert(UseCompressedOops && UseCompressedClassPointers,
-      "UseCompressedOops and UseCompressedClassPointers must be set");
-    Universe::set_narrow_klass_base((address)_space_list->current_virtual_space()->bottom());
-    if (TraceMetavirtualspaceAllocation && Verbose) {
-      gclog_or_tty->print_cr("Setting_narrow_klass_base to Address: " PTR_FORMAT,
-                             _space_list->current_virtual_space()->bottom());
-    }
+      // Set the compressed klass pointer base so that decoding of these pointers works
+      // properly when creating the shared archive.
+      assert(UseCompressedOops && UseCompressedClassPointers,
+        "UseCompressedOops and UseCompressedClassPointers must be set");
+      Universe::set_narrow_klass_base((address)_space_list->current_virtual_space()->bottom());
+      if (TraceMetavirtualspaceAllocation && Verbose) {
+        gclog_or_tty->print_cr("Setting_narrow_klass_base to Address: " PTR_FORMAT,
+                               _space_list->current_virtual_space()->bottom());
+      }
 
-    Universe::set_narrow_klass_shift(0);
+      Universe::set_narrow_klass_shift(0);
+    } else {
+      if (cds_total > UnscaledClassSpaceMax) {
+        vm_exit_during_initialization("Unable to dump shared archive.",
+            err_msg("Size of archive (" SIZE_FORMAT ") is larger than compressed "
+                    "klass limit: " SIZE_FORMAT, cds_total, UnscaledClassSpaceMax));
+      }
+    }
 #endif // _LP64
 #endif // INCLUDE_CDS
   } else {

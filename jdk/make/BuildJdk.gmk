@@ -106,8 +106,10 @@ images:
         ifeq ($(BUILD_CDS_ARCHIVE), true)
 	  echo Creating CDS archive for jdk image
 	  $(JDK_IMAGE_DIR)/bin/java -Xshare:dump -Xmx128M -Xms128M -XX:ParallelGCThreads=1 -Xint $(LOG_INFO)
+	  $(JDK_IMAGE_DIR)/bin/java -Xshare:dump -Xmx128M -Xms128M -XX:ParallelGCThreads=1 -Xint -XX:-UseCompressedOops $(LOG_INFO)
 	  echo Creating CDS archive for jre image
 	  $(JRE_IMAGE_DIR)/bin/java -Xshare:dump -Xmx128M -Xms128M -XX:ParallelGCThreads=1 -Xint $(LOG_INFO)
+	  $(JDK_IMAGE_DIR)/bin/java -Xshare:dump -Xmx128M -Xms128M -XX:ParallelGCThreads=1 -Xint -XX:-UseCompressedOops $(LOG_INFO)
         endif
 
 
