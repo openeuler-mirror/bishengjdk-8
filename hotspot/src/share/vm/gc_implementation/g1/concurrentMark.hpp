@@ -178,7 +178,6 @@ class CMMarkStack VALUE_OBJ_CLASS_SPEC {
   NOT_PRODUCT(jint _max_depth;)   // max depth plumbed during run
 
   bool  _overflow;
-  bool  _should_expand;
   DEBUG_ONLY(bool _drain_in_progress;)
   DEBUG_ONLY(bool _drain_in_progress_yields;)
 
@@ -254,9 +253,6 @@ class CMMarkStack VALUE_OBJ_CLASS_SPEC {
 
   bool overflow() { return _overflow; }
   void clear_overflow() { _overflow = false; }
-
-  bool should_expand() const { return _should_expand; }
-  void set_should_expand();
 
   // Expand the stack, typically in response to an overflow condition
   void expand();

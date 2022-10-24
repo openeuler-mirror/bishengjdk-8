@@ -247,7 +247,6 @@ bool CMMarkStack::allocate(size_t capacity) {
   setEmpty();
   _capacity = (jint) capacity;
   _saved_index = -1;
-  _should_expand = false;
   NOT_PRODUCT(_max_depth = 0);
   return true;
 }
@@ -256,8 +255,6 @@ void CMMarkStack::expand() {
   // Called, during remark, if we've overflown the marking stack during marking.
   assert(isEmpty(), "stack should been emptied while handling overflow");
   assert(_capacity <= (jint) MarkStackSizeMax, "stack bigger than permitted");
-  // Clear expansion flag
-  _should_expand = false;
   if (_capacity == (jint) MarkStackSizeMax) {
     if (PrintGCDetails && Verbose) {
       gclog_or_tty->print_cr(" (benign) Can't expand marking stack capacity, at max size limit");
@@ -288,13 +285,6 @@ void CMMarkStack::expand() {
                           _capacity / K, new_capacity / K);
     }
   }
-}
-
-void CMMarkStack::set_should_expand() {
-  // If we're resetting the marking state because of an
-  // marking stack overflow, record that we should, if
-  // possible, expand the stack.
-  _should_expand = _cm->has_overflown();
 }
 
 CMMarkStack::~CMMarkStack() {
@@ -795,8 +785,13 @@ void ConcurrentMark::reset() {
 
 
 void ConcurrentMark::reset_marking_state(bool clear_overflow) {
-  _markStack.set_should_expand();
   _markStack.setEmpty();        // Also clears the _markStack overflow flag
+
+  // Expand the marking stack, if we have to and if we can.
+  if (has_overflown()) {
+    _markStack.expand();
+  }
+
   if (clear_overflow) {
     clear_has_overflown();
   } else {
@@ -1365,11 +1360,6 @@ void ConcurrentMark::checkpointRootsFinal(bool clear_all_soft_refs) {
     assert(!restart_for_overflow(), "sanity");
     // Completely reset the marking state since marking completed
     set_non_marking_state();
-  }
-
-  // Expand the marking stack, if we have to and if we can.
-  if (_markStack.should_expand()) {
-    _markStack.expand();
   }
 
   // Statistics
