@@ -148,6 +148,7 @@ VM_PATH=$(VM_PATH);$(WorkSpace)/src/share/vm/code
 VM_PATH=$(VM_PATH);$(WorkSpace)/src/share/vm/interpreter
 VM_PATH=$(VM_PATH);$(WorkSpace)/src/share/vm/ci
 VM_PATH=$(VM_PATH);$(WorkSpace)/src/share/vm/classfile
+VM_PATH=$(VM_PATH);$(WorkSpace)/src/share/vm/cds
 VM_PATH=$(VM_PATH);$(WorkSpace)/src/share/vm/gc_implementation/parallelScavenge
 VM_PATH=$(VM_PATH);$(WorkSpace)/src/share/vm/gc_implementation/shared
 VM_PATH=$(VM_PATH);$(WorkSpace)/src/share/vm/gc_implementation/parNew
@@ -233,6 +234,9 @@ arguments.obj: $(WorkSpace)\src\share\vm\runtime\arguments.cpp
 {$(COMMONSRC)\share\vm\classfile}.cpp.obj::
         $(CXX) $(CXX_FLAGS) $(CXX_USE_PCH) /c $<
 
+{$(COMMONSRC)\share\vm\cds}.cpp.obj::
+        $(CXX) $(CXX_FLAGS) $(CXX_USE_PCH) /c $<
+
 {$(COMMONSRC)\share\vm\gc_implementation\parallelScavenge}.cpp.obj::
         $(CXX) $(CXX_FLAGS) $(CXX_USE_PCH) /c $<
 
@@ -314,6 +318,9 @@ arguments.obj: $(WorkSpace)\src\share\vm\runtime\arguments.cpp
         $(CXX) $(CXX_FLAGS) $(CXX_USE_PCH) /c $<
 
 {$(ALTSRC)\share\vm\classfile}.cpp.obj::
+        $(CXX) $(CXX_FLAGS) $(CXX_USE_PCH) /c $<
+
+{$(ALTSRC)\share\vm\cds}.cpp.obj::
         $(CXX) $(CXX_FLAGS) $(CXX_USE_PCH) /c $<
 
 {$(ALTSRC)\share\vm\gc_implementation\parallelScavenge}.cpp.obj::
