@@ -1042,7 +1042,7 @@ Unsafe_DefineAnonymousClass_impl(JNIEnv *env,
 
   if (DumpSharedSpaces) {
     tty->print_cr("failed: must not create anonymous classes when dumping.");
-    JVM_Exit(0);
+    JVM_Halt(0);
   }
 
   if (UsePerfData) {

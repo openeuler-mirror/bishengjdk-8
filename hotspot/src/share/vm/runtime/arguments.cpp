@@ -2988,7 +2988,7 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args,
     if (match_option(option, "-XX:+UseAppCDS", &tail)) {
 #ifndef __linux__
         tty->print_cr("failed: must not use AppCDS on non-linux system.");
-        JVM_Exit(0);
+        JVM_Halt(0);
 #endif
       if (!process_argument("+UseAppCDS", args->ignoreUnrecognized, origin)) {
         return JNI_EINVAL;
