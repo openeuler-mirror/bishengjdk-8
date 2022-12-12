@@ -3387,6 +3387,16 @@ class CommandLineFlags {
           "Number of entries we will try to leave on the stack "            \
           "during parallel gc")                                             \
                                                                             \
+  experimental(bool, GCTrimNativeHeap, false,                               \
+          "GC will attempt to trim the native heap periodically and at "    \
+          "full GCs.")                                                      \
+                                                                            \
+  experimental(uintx, GCTrimNativeHeapInterval, 60,                          \
+          "If GCTrimNativeHeap is enabled: interval time, in seconds, in "  \
+          "which the VM will attempt to trim the native heap. A value of "  \
+          "0 disables periodic trimming while leaving trimming at full gc " \
+          "enabled.")                                                       \
+                                                                            \
   /* stack parameters */                                                    \
   product_pd(intx, StackYellowPages,                                        \
           "Number of yellow zone (recoverable overflows) pages")            \

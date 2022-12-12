@@ -30,6 +30,7 @@
 #include "code/codeCache.hpp"
 #include "compiler/compileBroker.hpp"
 #include "compiler/compilerOracle.hpp"
+#include "gc_implementation/shared/gcTrimNativeHeap.hpp"
 #include "interpreter/bytecodeHistogram.hpp"
 #include "jfr/jfrEvents.hpp"
 #include "jfr/support/jfrThreadId.hpp"
@@ -508,6 +509,8 @@ void before_exit(JavaThread * thread) {
   // shut down the StatSampler task
   StatSampler::disengage();
   StatSampler::destroy();
+
+  GCTrimNative::cleanup();
 
   // Stop concurrent GC threads
   Universe::heap()->stop();

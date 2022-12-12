@@ -5266,3 +5266,8 @@ void TestReserveMemorySpecial_test() {
   // No tests available for this platform
 }
 #endif
+
+// stubbed-out trim-native support
+bool os::can_trim_native_heap() { return false; }
+bool os::should_trim_native_heap() { return false; }
+bool os::trim_native_heap(os::size_change_t* rss_change) { return false; }

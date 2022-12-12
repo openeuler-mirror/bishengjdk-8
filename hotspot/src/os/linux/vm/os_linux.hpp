@@ -243,7 +243,7 @@ class Linux {
   public:
   static pthread_condattr_t* condAttr() { return _condattr; }
 
-  // Output structure for query_process_memory_info()
+  // Output structure for query_process_memory_info() (all values in KB)
   struct meminfo_t {
     ssize_t vmsize;     // current virtual size
     ssize_t vmpeak;     // peak virtual size
@@ -337,40 +337,6 @@ private:
     Interleave
   };
   static NumaAllocationPolicy _current_numa_policy;
-
-#ifdef __GLIBC__
-  struct glibc_mallinfo {
-    int arena;
-    int ordblks;
-    int smblks;
-    int hblks;
-    int hblkhd;
-    int usmblks;
-    int fsmblks;
-    int uordblks;
-    int fordblks;
-    int keepcost;
-  };
-
-  struct glibc_mallinfo2 {
-    size_t arena;
-    size_t ordblks;
-    size_t smblks;
-    size_t hblks;
-    size_t hblkhd;
-    size_t usmblks;
-    size_t fsmblks;
-    size_t uordblks;
-    size_t fordblks;
-    size_t keepcost;
-  };
-
-  typedef struct glibc_mallinfo (*mallinfo_func_t)(void);
-  typedef struct glibc_mallinfo2 (*mallinfo2_func_t)(void);
-
-  static mallinfo_func_t _mallinfo;
-  static mallinfo2_func_t _mallinfo2;
-#endif
 
 public:
   static int sched_getcpu()  { return _sched_getcpu != NULL ? _sched_getcpu() : -1; }
@@ -484,6 +450,27 @@ public:
       return false;
     }
   }
+
+#ifdef __GLIBC__
+  struct glibc_mallinfo2 {
+    size_t arena;
+    size_t ordblks;
+    size_t smblks;
+    size_t hblks;
+    size_t hblkhd;
+    size_t usmblks;
+    size_t fsmblks;
+    size_t uordblks;
+    size_t fordblks;
+    size_t keepcost;
+  };
+  enum mallinfo_retval_t { ok, error, ok_but_possibly_wrapped };
+  // get_mallinfo() is a wrapper for mallinfo/mallinfo2. It will prefer mallinfo2() if found.
+  // If we only have mallinfo(), values may be 32-bit truncated, which is signaled via
+  // "ok_but_possibly_wrapped".
+  static mallinfo_retval_t get_mallinfo(glibc_mallinfo2* out);
+#endif
+
 };
 
 

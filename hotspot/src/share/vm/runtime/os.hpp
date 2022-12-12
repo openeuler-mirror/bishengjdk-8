@@ -333,6 +333,17 @@ class os: AllStatic {
   static bool   uncommit_memory(char* addr, size_t bytes);
   static bool   release_memory(char* addr, size_t bytes);
 
+  // Does the platform support trimming the native heap?
+  static bool can_trim_native_heap();
+
+  // Does the platform recommend trimming?
+  static bool should_trim_native_heap();
+
+  // Trim the C-heap. Returns RSS size change and optionally return the rss size change.
+  // If trim was done but size change could not be obtained, SIZE_MAX is returned for after size.
+  struct size_change_t { size_t before; size_t after; };
+  static bool trim_native_heap(size_change_t* rss_change);
+
   // Touch memory pages that cover the memory range from start to end (exclusive)
   // to make the OS back the memory range with actual memory.
   // Current implementation may not touch the last page if unaligned addresses

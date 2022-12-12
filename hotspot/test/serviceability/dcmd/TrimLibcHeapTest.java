@@ -29,7 +29,7 @@ import com.oracle.java.testlibrary.*;
  * @test
  * @summary Test of diagnostic command VM.trim_libc_heap
  * @library /testlibrary
- * @requires os.family == "linux"
+ * @requires os.family=="linux"
  * @modules java.base/jdk.internal.misc
  *          java.compiler
  *          java.management
@@ -40,10 +40,7 @@ public class TrimLibcHeapTest {
     public void run(CommandExecutor executor) {
         OutputAnalyzer output = executor.execute("System.trim_native_heap");
         output.reportDiagnosticSummary();
-        output.shouldMatch("(Done|Not available)"); // Not available could happen on Linux + non-glibc (eg. muslc)
-        if (output.firstMatch("Done") != null) {
-            output.shouldMatch("(Virtual size before|RSS before|Swap before|No details available)");
-        }
+        output.shouldMatch(".*Trim native heap: RSS\\+Swap: \\d+[BKM]->\\d+[BKM].*");
     }
 
     @Test

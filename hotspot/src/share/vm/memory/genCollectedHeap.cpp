@@ -58,6 +58,7 @@
 #if INCLUDE_ALL_GCS
 #include "gc_implementation/concurrentMarkSweep/concurrentMarkSweepThread.hpp"
 #include "gc_implementation/concurrentMarkSweep/vmCMSOperations.hpp"
+#include "gc_implementation/shared/gcTrimNativeHeap.hpp"
 #endif // INCLUDE_ALL_GCS
 #if INCLUDE_JFR
 #include "jfr/jfr.hpp"
@@ -570,6 +571,11 @@ void GenCollectedHeap::do_collection(bool  full,
       // Resize the metaspace capacity after full collections
       MetaspaceGC::compute_new_size();
       update_full_collections_completed();
+    }
+
+    // Trim the native heap, without a delay since this is a full gc
+    if (full && GCTrimNative::should_trim(true)) {
+      GCTrimNative::execute_trim();
     }
 
     // Track memory usage and detect low memory after GC finishes

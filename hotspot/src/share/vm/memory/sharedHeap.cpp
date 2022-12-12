@@ -26,6 +26,7 @@
 #include "classfile/symbolTable.hpp"
 #include "classfile/systemDictionary.hpp"
 #include "code/codeCache.hpp"
+#include "gc_implementation/shared/gcTrimNativeHeap.hpp"
 #include "gc_interface/collectedHeap.inline.hpp"
 #include "memory/sharedHeap.hpp"
 #include "oops/oop.inline.hpp"
@@ -104,6 +105,11 @@ void SharedHeap::set_barrier_set(BarrierSet* bs) {
 void SharedHeap::post_initialize() {
   CollectedHeap::post_initialize();
   ref_processing_init();
+  if (!UseSerialGC) {
+      GCTrimNative::initialize(true);
+  } else {
+      GCTrimNative::initialize(false); // false since we will call trim inside the collecting thread
+  }
 }
 
 void SharedHeap::ref_processing_init() {}

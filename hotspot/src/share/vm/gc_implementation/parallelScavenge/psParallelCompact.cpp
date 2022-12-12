@@ -42,6 +42,7 @@
 #include "gc_implementation/shared/gcTimer.hpp"
 #include "gc_implementation/shared/gcTrace.hpp"
 #include "gc_implementation/shared/gcTraceTime.hpp"
+#include "gc_implementation/shared/gcTrimNativeHeap.hpp"
 #include "gc_implementation/shared/isGCActiveMark.hpp"
 #include "gc_interface/gcCause.hpp"
 #include "memory/gcLocker.inline.hpp"
@@ -2008,6 +2009,9 @@ bool PSParallelCompact::invoke_no_policy(bool maximum_heap_compaction) {
     return false;
   }
 
+  // Pause native trimming for the duration of the GC
+  GCTrimNative::pause_periodic_trim();
+
   ParallelScavengeHeap* heap = gc_heap();
 
   _gc_timer.register_gc_start();
@@ -2181,6 +2185,8 @@ bool PSParallelCompact::invoke_no_policy(bool maximum_heap_compaction) {
 
     // Resize the metaspace capactiy after a collection
     MetaspaceGC::compute_new_size();
+
+    GCTrimNative::schedule_trim();
 
     if (TraceGen1Time) accumulated_time()->stop();
 

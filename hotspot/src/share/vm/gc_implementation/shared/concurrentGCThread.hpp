@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001, 2013, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2001, 2016, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -33,7 +33,7 @@ class ConcurrentGCThread: public NamedThread {
   friend class VMStructs;
 
 protected:
-  bool _should_terminate;
+  bool volatile _should_terminate;
   bool _has_terminated;
 
   enum CGC_flag_type {
@@ -50,7 +50,7 @@ protected:
   static int reset_CGC_flag(int b)         { return _CGC_flag &= ~b; }
 
   // Create and start the thread (setting it's priority high.)
-  void create_and_start();
+  void create_and_start(ThreadPriority prio = NearMaxPriority);
 
   // Do initialization steps in the thread: record stack base and size,
   // init thread local storage, set JNI handle block.

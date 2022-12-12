@@ -260,6 +260,9 @@ inline T byte_size_in_proper_unit(T s) {
   }
 }
 
+#define PROPERFMT             SIZE_FORMAT "%s"
+#define PROPERFMTARGS(S)      byte_size_in_proper_unit(S), proper_unit_for_byte_size(S)
+
 //----------------------------------------------------------------------------------------------------
 // VM type definitions
 
