@@ -243,6 +243,23 @@ class Linux {
   public:
   static pthread_condattr_t* condAttr() { return _condattr; }
 
+  // Output structure for query_process_memory_info()
+  struct meminfo_t {
+    ssize_t vmsize;     // current virtual size
+    ssize_t vmpeak;     // peak virtual size
+    ssize_t vmrss;      // current resident set size
+    ssize_t vmhwm;      // peak resident set size
+    ssize_t vmswap;     // swapped out
+    ssize_t rssanon;    // resident set size (anonymous mappings, needs 4.5)
+    ssize_t rssfile;    // resident set size (file mappings, needs 4.5)
+    ssize_t rssshmem;   // resident set size (shared mappings, needs 4.5)
+  };
+
+  // Attempts to query memory information about the current process and return it in the output structure.
+  // May fail (returns false) or succeed (returns true) but not all output fields are available; unavailable
+  // fields will contain -1.
+  static bool query_process_memory_info(meminfo_t* info);
+
   // Stack repair handling
 
   // none present

@@ -36,6 +36,10 @@
 #include "utilities/macros.hpp"
 #include "oops/objArrayOop.hpp"
 
+#ifdef LINUX
+#include "trimCHeapDCmd.hpp"
+#endif
+
 PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 
 void DCmdRegistrant::register_dcmds(){
@@ -65,6 +69,9 @@ void DCmdRegistrant::register_dcmds(){
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<ThreadDumpDCmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<RotateGCLogDCmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<ClassLoaderStatsDCmd>(full_export, true, false));
+#ifdef LINUX
+  DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<TrimCLibcHeapDCmd>(full_export, true, false));
+#endif // LINUX
 
   // Enhanced JMX Agent Support
   // These commands won't be exported via the DiagnosticCommandMBean until an
