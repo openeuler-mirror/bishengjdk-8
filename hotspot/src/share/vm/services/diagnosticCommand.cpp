@@ -64,6 +64,7 @@ void DCmdRegistrant::register_dcmds(){
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<HeapDumpDCmd>(DCmd_Source_Internal | DCmd_Source_AttachAPI, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<DynamicCDSDumpDCmd>(DCmd_Source_Internal | DCmd_Source_AttachAPI, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<ClassHistogramDCmd>(full_export, true, false));
+  DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<ClassesDCmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<ClassStatsDCmd>(full_export, true, false));
 #endif // INCLUDE_SERVICES
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<ThreadDumpDCmd>(full_export, true, false));
@@ -98,9 +99,14 @@ HelpDCmd::HelpDCmd(outputStream* output, bool heap) : DCmdWithParser(output, hea
   _dcmdparser.add_dcmd_argument(&_cmd);
 };
 
+static int compare_strings(const char** s1, const char** s2) {
+  return ::strcmp(*s1, *s2);
+}
+
 void HelpDCmd::execute(DCmdSource source, TRAPS) {
   if (_all.value()) {
     GrowableArray<const char*>* cmd_list = DCmdFactory::DCmd_list(source);
+    cmd_list->sort(compare_strings);
     for (int i = 0; i < cmd_list->length(); i++) {
       DCmdFactory* factory = DCmdFactory::factory(source, cmd_list->at(i),
                                                   strlen(cmd_list->at(i)));
@@ -141,6 +147,7 @@ void HelpDCmd::execute(DCmdSource source, TRAPS) {
   } else {
     output()->print_cr("The following commands are available:");
     GrowableArray<const char *>* cmd_list = DCmdFactory::DCmd_list(source);
+    cmd_list->sort(compare_strings);
     for (int i = 0; i < cmd_list->length(); i++) {
       DCmdFactory* factory = DCmdFactory::factory(source, cmd_list->at(i),
                                                   strlen(cmd_list->at(i)));
@@ -411,6 +418,52 @@ void ClassHistogramDCmd::execute(DCmdSource source, TRAPS) {
 int ClassHistogramDCmd::num_arguments() {
   ResourceMark rm;
   ClassHistogramDCmd* dcmd = new ClassHistogramDCmd(NULL, false);
+  if (dcmd != NULL) {
+    DCmdMark mark(dcmd);
+    return dcmd->_dcmdparser.num_arguments();
+  } else {
+    return 0;
+  }
+}
+
+ClassesDCmd::ClassesDCmd(outputStream* output, bool heap) :
+                                     DCmdWithParser(output, heap),
+  _verbose("-verbose",
+           "Dump the detailed content of a Java class. "
+           "Some classes are annotated with flags: "
+           "F = has, or inherits, a non-empty finalize method, "
+           "f = has final method, "
+           "W = methods rewritten, "
+           "C = marked with @Contended annotation, "
+           "R = has been redefined, "
+           "S = is shared class",
+           "BOOLEAN", false, "false") {
+  _dcmdparser.add_dcmd_option(&_verbose);
+}
+
+class VM_PrintClasses : public VM_Operation {
+private:
+  outputStream* _out;
+  bool _verbose;
+public:
+  VM_PrintClasses(outputStream* out, bool verbose) : _out(out), _verbose(verbose) {}
+
+  virtual VMOp_Type type() const { return VMOp_PrintClasses; }
+
+  virtual void doit() {
+    PrintClassClosure closure(_out, _verbose);
+    ClassLoaderDataGraph::classes_do(&closure);
+  }
+};
+
+void ClassesDCmd::execute(DCmdSource source, TRAPS) {
+  VM_PrintClasses vmop(output(), _verbose.is_set());
+  VMThread::execute(&vmop);
+}
+
+int ClassesDCmd::num_arguments() {
+  ResourceMark rm;
+  ClassesDCmd* dcmd = new ClassesDCmd(NULL, false);
   if (dcmd != NULL) {
     DCmdMark mark(dcmd);
     return dcmd->_dcmdparser.num_arguments();

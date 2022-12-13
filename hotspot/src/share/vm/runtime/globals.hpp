@@ -3097,7 +3097,7 @@ class CommandLineFlags {
   notproduct(intx, MaxElementPrintSize, 256,                                \
           "maximum number of elements to print")                            \
                                                                             \
-  notproduct(intx, MaxSubklassPrintSize, 4,                                 \
+  product(intx, MaxSubklassPrintSize, 4,                                 \
           "maximum number of subklasses to print when printing klass")      \
                                                                             \
   product(intx, MaxInlineLevel, 9,                                          \

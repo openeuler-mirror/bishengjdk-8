@@ -99,6 +99,7 @@
   template(WhiteBoxOperation)                     \
   template(ClassLoaderStatsOperation)             \
   template(JFROldObject)                          \
+  template(PrintClasses)                          \
 
 class VM_Operation: public CHeapObj<mtInternal> {
  public:
