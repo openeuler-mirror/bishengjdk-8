@@ -2896,10 +2896,11 @@ void ConcurrentMarkSweepGeneration::object_iterate_block(ObjectClosure *cl, size
         }
       }
     }
-    if (prev_obj < span.end()) {
-      HeapWord *cur, *limit;
+    HeapWord *limit = MIN2(cmsSpace()->end(), span.end());
+    if (prev_obj < limit) {
+      HeapWord *cur;
       size_t curSize;
-      for (cur = prev_obj, limit = span.end(); cur < limit; cur += curSize) {
+      for (cur = prev_obj; cur < limit; cur += curSize) {
         curSize = cmsSpace()->block_size_no_stall(cur, _collector);
         if (curSize == 0) {
           break;
