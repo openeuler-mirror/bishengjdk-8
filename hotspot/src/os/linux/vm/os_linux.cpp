@@ -2249,6 +2249,8 @@ void os::print_os_info(outputStream* st) {
 
   os::Linux::print_process_memory_info(st);
 
+  os::Linux::print_proc_sys_info(st);
+
   os::Linux::print_container_info(st);
 }
 
@@ -2388,6 +2390,24 @@ void os::Linux::print_process_memory_info(outputStream* st) {
 
 #endif // __GLIBC__
 
+}
+
+void os::Linux::print_proc_sys_info(outputStream* st) {
+  st->cr();
+  st->print_cr("/proc/sys/kernel/threads-max (system-wide limit on the number of threads):");
+  _print_ascii_file("/proc/sys/kernel/threads-max", st);
+  st->cr();
+  st->cr();
+
+  st->print_cr("/proc/sys/vm/max_map_count (maximum number of memory map areas a process may have):");
+  _print_ascii_file("/proc/sys/vm/max_map_count", st);
+  st->cr();
+  st->cr();
+
+  st->print_cr("/proc/sys/kernel/pid_max (system-wide limit on number of process identifiers):");
+  _print_ascii_file("/proc/sys/kernel/pid_max", st);
+  st->cr();
+  st->cr();
 }
 
 void os::Linux::print_container_info(outputStream* st) {
