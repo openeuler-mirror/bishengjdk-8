@@ -209,6 +209,10 @@ void VM_PrintJNI::doit() {
   JNIHandles::print_on(_out);
 }
 
+void VM_PrintMetadata::doit() {
+  MetaspaceAux::print_metadata_for_nmt(_out, _scale);
+}
+
 VM_FindDeadlocks::~VM_FindDeadlocks() {
   if (_deadlocks != NULL) {
     DeadlockCycle* cycle = _deadlocks;

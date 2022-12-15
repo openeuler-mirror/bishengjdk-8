@@ -75,6 +75,22 @@ enum ChunkIndex {
   NumberOfInUseLists = 4
 };
 
+// Helper, returns a descriptive name for the given index.
+static const char* chunk_size_name(ChunkIndex index) {
+  switch (index) {
+    case SpecializedIndex:
+      return "specialized";
+    case SmallIndex:
+      return "small";
+    case MediumIndex:
+      return "medium";
+    case HumongousIndex:
+      return "humongous";
+    default:
+      return "Invalid index";
+  }
+}
+
 enum ChunkSizes {    // in words.
   ClassSpecializedChunk = 128,
   SpecializedChunk = 128,
@@ -87,6 +103,18 @@ enum ChunkSizes {    // in words.
 static ChunkIndex next_chunk_index(ChunkIndex i) {
   assert(i < NumberOfInUseLists, "Out of bound");
   return (ChunkIndex) (i+1);
+}
+
+static const char* scale_unit(size_t scale) {
+  switch(scale) {
+    case 1: return "BYTES";
+    case K: return "KB";
+    case M: return "MB";
+    case G: return "GB";
+    default:
+      ShouldNotReachHere();
+      return NULL;
+  }
 }
 
 volatile intptr_t MetaspaceGC::_capacity_until_GC = 0;
@@ -141,6 +169,18 @@ class ChunkManager : public CHeapObj<mtInternal> {
   }
   void verify_free_chunks_count();
 
+  struct ChunkManagerStatistics {
+    size_t num_by_type[NumberOfFreeLists];
+    size_t single_size_by_type[NumberOfFreeLists];
+    size_t total_size_by_type[NumberOfFreeLists];
+    size_t num_humongous_chunks;
+    size_t total_size_humongous_chunks;
+  };
+
+  void locked_get_statistics(ChunkManagerStatistics* stat) const;
+  void get_statistics(ChunkManagerStatistics* stat) const;
+  static void print_statistics(const ChunkManagerStatistics* stat, outputStream* out, size_t scale);
+
  public:
 
   ChunkManager(size_t specialized_size, size_t small_size, size_t medium_size)
@@ -156,6 +196,9 @@ class ChunkManager : public CHeapObj<mtInternal> {
   // Map a size to a list index assuming that there are lists
   // for special, small, medium, and humongous chunks.
   ChunkIndex list_index(size_t size);
+
+  // Map a given index to the chunk size.
+  size_t size_by_index(ChunkIndex index) const;
 
   // Remove the chunk from its freelist.  It is
   // expected to be on one of the _free_chunks[] lists.
@@ -249,6 +292,10 @@ class ChunkManager : public CHeapObj<mtInternal> {
   void locked_print_sum_free_chunks(outputStream* st);
 
   void print_on(outputStream* st) const;
+
+  // Prints composition for both non-class and (if available)
+  // class chunk manager.
+  static void print_all_chunkmanagers(outputStream* out, size_t scale = 1);
 };
 
 // Used to manage the free list of Metablocks (a block corresponds
@@ -1707,7 +1754,6 @@ bool Metadebug::test_metadata_failure() {
 #endif
 
 // ChunkManager methods
-
 size_t ChunkManager::free_chunks_total_words() {
   return _free_chunks_total;
 }
@@ -1727,6 +1773,12 @@ size_t ChunkManager::free_chunks_count() {
   }
 #endif
   return _free_chunks_count;
+}
+
+size_t ChunkManager::size_by_index(ChunkIndex index) const {
+  index_bounds_check(index);
+  assert(index != HumongousIndex, "Do not call for humongous chunks.");
+  return _free_chunks[index].size();
 }
 
 void ChunkManager::locked_verify_free_chunks_total() {
@@ -1918,7 +1970,83 @@ Metachunk* ChunkManager::chunk_freelist_allocate(size_t word_size) {
 
 void ChunkManager::print_on(outputStream* out) const {
   if (PrintFLSStatistics != 0) {
-    const_cast<ChunkManager *>(this)->humongous_dictionary()->report_statistics();
+    _humongous_dictionary.report_statistics();
+  }
+}
+
+void ChunkManager::locked_get_statistics(ChunkManagerStatistics* stat) const {
+  assert_lock_strong(SpaceManager::expand_lock());
+  for (ChunkIndex i = ZeroIndex; i < NumberOfFreeLists; i = next_chunk_index(i)) {
+    stat->num_by_type[i] = num_free_chunks(i);
+    stat->single_size_by_type[i] = size_by_index(i);
+    stat->total_size_by_type[i] = size_free_chunks_in_bytes(i);
+  }
+  stat->num_humongous_chunks = num_free_chunks(HumongousIndex);
+  stat->total_size_humongous_chunks = size_free_chunks_in_bytes(HumongousIndex);
+}
+
+void ChunkManager::get_statistics(ChunkManagerStatistics* stat) const {
+  MutexLockerEx cl(SpaceManager::expand_lock(),
+                   Mutex::_no_safepoint_check_flag);
+  locked_get_statistics(stat);
+}
+
+void ChunkManager::print_statistics(const ChunkManagerStatistics* stat, outputStream* out, size_t scale) {
+  size_t total = 0;
+  assert(scale == 1 || scale == K || scale == M || scale == G, "Invalid scale");
+
+  const char* unit = scale_unit(scale);
+  for (ChunkIndex i = ZeroIndex; i < NumberOfFreeLists; i = next_chunk_index(i)) {
+    out->print("  " SIZE_FORMAT " %s (" SIZE_FORMAT " bytes) chunks, total ",
+                   stat->num_by_type[i], chunk_size_name(i),
+                   stat->single_size_by_type[i]);
+    if (scale == 1) {
+      out->print_cr(SIZE_FORMAT " bytes", stat->total_size_by_type[i]);
+    } else {
+      out->print_cr("%.2f%s", (float)stat->total_size_by_type[i] / scale, unit);
+    }
+
+    total += stat->total_size_by_type[i];
+  }
+
+  total += stat->total_size_humongous_chunks;
+
+  if (scale == 1) {
+    out->print_cr("  " SIZE_FORMAT " humongous chunks, total " SIZE_FORMAT " bytes",
+    stat->num_humongous_chunks, stat->total_size_humongous_chunks);
+
+    out->print_cr("  total size: " SIZE_FORMAT " bytes.", total);
+  } else {
+    out->print_cr("  " SIZE_FORMAT " humongous chunks, total %.2f%s",
+    stat->num_humongous_chunks,
+    (float)stat->total_size_humongous_chunks / scale, unit);
+
+    out->print_cr("  total size: %.2f%s.", (float)total / scale, unit);
+  }
+
+}
+
+void ChunkManager::print_all_chunkmanagers(outputStream* out, size_t scale) {
+  assert(scale == 1 || scale == K || scale == M || scale == G, "Invalid scale");
+
+  // Note: keep lock protection only to retrieving statistics; keep printing
+  // out of lock protection
+  ChunkManagerStatistics stat;
+  out->print_cr("Chunkmanager (non-class):");
+  const ChunkManager* const non_class_cm = Metaspace::chunk_manager_metadata();
+  if (non_class_cm != NULL) {
+    non_class_cm->get_statistics(&stat);
+    ChunkManager::print_statistics(&stat, out, scale);
+  } else {
+    out->print_cr("unavailable.");
+  }
+  out->print_cr("Chunkmanager (class):");
+  const ChunkManager* const class_cm = Metaspace::chunk_manager_class();
+  if (class_cm != NULL) {
+    class_cm->get_statistics(&stat);
+    ChunkManager::print_statistics(&stat, out, scale);
+  } else {
+    out->print_cr("unavailable.");
   }
 }
 
@@ -2930,6 +3058,195 @@ void MetaspaceAux::print_waste(outputStream* out) {
   }
 }
 
+class MetadataStats VALUE_OBJ_CLASS_SPEC {
+private:
+  size_t _capacity;
+  size_t _used;
+  size_t _free;
+  size_t _waste;
+
+public:
+  MetadataStats() : _capacity(0), _used(0), _free(0), _waste(0) { }
+  MetadataStats(size_t capacity, size_t used, size_t free, size_t waste)
+  : _capacity(capacity), _used(used), _free(free), _waste(waste) { }
+
+  void add(const MetadataStats& stats) {
+    _capacity += stats.capacity();
+    _used += stats.used();
+    _free += stats.free();
+    _waste += stats.waste();
+  }
+
+  size_t capacity() const { return _capacity; }
+  size_t used() const     { return _used; }
+  size_t free() const     { return _free; }
+  size_t waste() const    { return _waste; }
+
+  void print_on(outputStream* out, size_t scale) const;
+};
+
+
+void MetadataStats::print_on(outputStream* out, size_t scale) const {
+  const char* unit = scale_unit(scale);
+  out->print_cr("capacity=%10.2f%s used=%10.2f%s free=%10.2f%s waste=%10.2f%s",
+    (float)capacity() / scale, unit,
+    (float)used() / scale, unit,
+    (float)free() / scale, unit,
+    (float)waste() / scale, unit);
+}
+
+class PrintCLDMetaspaceInfoClosure : public CLDClosure {
+private:
+  outputStream*  _out;
+  size_t         _scale;
+
+  size_t         _total_count;
+  MetadataStats  _total_metadata;
+  MetadataStats  _total_class;
+
+  size_t         _total_anon_count;
+  MetadataStats  _total_anon_metadata;
+  MetadataStats  _total_anon_class;
+
+public:
+  PrintCLDMetaspaceInfoClosure(outputStream* out, size_t scale = K)
+  : _out(out), _scale(scale), _total_count(0), _total_anon_count(0) { }
+
+  ~PrintCLDMetaspaceInfoClosure() {
+    print_summary();
+  }
+
+  void do_cld(ClassLoaderData* cld) {
+    assert(SafepointSynchronize::is_at_safepoint(), "Must be at a safepoint");
+
+    if (cld->is_unloading()) return;
+    Metaspace* msp = cld->metaspace_or_null();
+    if (msp == NULL) {
+      return;
+    }
+
+    bool anonymous = false;
+    if (cld->is_anonymous()) {
+      _out->print_cr("ClassLoader: for anonymous class");
+      anonymous = true;
+    } else {
+      ResourceMark rm;
+      _out->print_cr("ClassLoader: %s", cld->loader_name());
+    }
+
+    print_metaspace(msp, anonymous);
+    _out->cr();
+  }
+
+private:
+  void print_metaspace(Metaspace* msp, bool anonymous);
+  void print_summary() const;
+};
+
+void PrintCLDMetaspaceInfoClosure::print_metaspace(Metaspace* msp, bool anonymous){
+  assert(msp != NULL, "Sanity");
+  SpaceManager* vsm = msp->vsm();
+  const char* unit = scale_unit(_scale);
+
+  size_t capacity = vsm->sum_capacity_in_chunks_in_use() * BytesPerWord;
+  size_t used = vsm->sum_used_in_chunks_in_use() * BytesPerWord;
+  size_t free = vsm->sum_free_in_chunks_in_use() * BytesPerWord;
+  size_t waste = vsm->sum_waste_in_chunks_in_use() * BytesPerWord;
+
+  _total_count ++;
+  MetadataStats metadata_stats(capacity, used, free, waste);
+  _total_metadata.add(metadata_stats);
+
+  if (anonymous) {
+    _total_anon_count ++;
+    _total_anon_metadata.add(metadata_stats);
+  }
+
+  _out->print("  Metadata   ");
+  metadata_stats.print_on(_out, _scale);
+
+  if (Metaspace::using_class_space()) {
+    vsm = msp->class_vsm();
+
+    capacity = vsm->sum_capacity_in_chunks_in_use() * BytesPerWord;
+    used = vsm->sum_used_in_chunks_in_use() * BytesPerWord;
+    free = vsm->sum_free_in_chunks_in_use() * BytesPerWord;
+    waste = vsm->sum_waste_in_chunks_in_use() * BytesPerWord;
+
+    MetadataStats class_stats(capacity, used, free, waste);
+    _total_class.add(class_stats);
+
+    if (anonymous) {
+      _total_anon_class.add(class_stats);
+    }
+
+    _out->print("  Class data ");
+    class_stats.print_on(_out, _scale);
+  }
+}
+
+void PrintCLDMetaspaceInfoClosure::print_summary() const {
+  const char* unit = scale_unit(_scale);
+  _out->cr();
+  _out->print_cr("Summary:");
+
+  MetadataStats total;
+  total.add(_total_metadata);
+  total.add(_total_class);
+
+  _out->print("  Total class loaders=" SIZE_FORMAT_W(6) " ", _total_count);
+  total.print_on(_out, _scale);
+
+  _out->print("                    Metadata ");
+  _total_metadata.print_on(_out, _scale);
+
+  if (Metaspace::using_class_space()) {
+    _out->print("                  Class data ");
+    _total_class.print_on(_out, _scale);
+  }
+  _out->cr();
+
+  MetadataStats total_anon;
+  total_anon.add(_total_anon_metadata);
+  total_anon.add(_total_anon_class);
+
+  _out->print("For anonymous classes=" SIZE_FORMAT_W(6) " ", _total_anon_count);
+  total_anon.print_on(_out, _scale);
+
+  _out->print("                    Metadata ");
+  _total_anon_metadata.print_on(_out, _scale);
+
+  if (Metaspace::using_class_space()) {
+    _out->print("                  Class data ");
+    _total_anon_class.print_on(_out, _scale);
+  }
+}
+
+void MetaspaceAux::print_metadata_for_nmt(outputStream* out, size_t scale) {
+  const char* unit = scale_unit(scale);
+  out->print_cr("Metaspaces:");
+  out->print_cr("  Metadata space: reserved=" SIZE_FORMAT_W(10) "%s committed=" SIZE_FORMAT_W(10) "%s",
+    reserved_bytes(Metaspace::NonClassType) / scale, unit,
+    committed_bytes(Metaspace::NonClassType) / scale, unit);
+  if (Metaspace::using_class_space()) {
+    out->print_cr("  Class    space: reserved=" SIZE_FORMAT_W(10) "%s committed=" SIZE_FORMAT_W(10) "%s",
+    reserved_bytes(Metaspace::ClassType) / scale, unit,
+    committed_bytes(Metaspace::ClassType) / scale, unit);
+  }
+
+  out->cr();
+  ChunkManager::print_all_chunkmanagers(out, scale);
+
+  out->cr();
+  out->print_cr("Per-classloader metadata:");
+  out->cr();
+
+  PrintCLDMetaspaceInfoClosure cl(out, scale);
+  ClassLoaderDataGraph::cld_do(&cl);
+}
+
+
+
 // Dump global metaspace things from the end of ClassLoaderDataGraph
 void MetaspaceAux::dump(outputStream* out) {
   out->print_cr("All Metaspace:");
@@ -3743,6 +4060,7 @@ void Metaspace::report_metadata_oome(ClassLoaderData* loader_data, size_t word_s
       loader_data->dump(gclog_or_tty);
     }
     MetaspaceAux::dump(gclog_or_tty);
+    ChunkManager::print_all_chunkmanagers(gclog_or_tty);
   }
 
   bool out_of_compressed_class_space = false;
