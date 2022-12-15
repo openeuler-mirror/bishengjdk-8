@@ -562,6 +562,7 @@ bool os::create_thread(Thread* thread, ThreadType thr_type, size_t stack_size) {
     case os::pgc_thread:
     case os::cgc_thread:
     case os::watcher_thread:
+    case os::asynclog_thread:
       if (VMThreadStackSize > 0) stack_size = (size_t)(VMThreadStackSize * K);
       break;
     }

@@ -32,6 +32,7 @@
 #include "runtime/handles.inline.hpp"
 #include "runtime/icache.hpp"
 #include "runtime/init.hpp"
+#include "runtime/logAsyncWriter.hpp"
 #include "runtime/safepoint.hpp"
 #include "runtime/sharedRuntime.hpp"
 #include "services/memTracker.hpp"
@@ -106,6 +107,7 @@ jint init_globals() {
   if (status != JNI_OK)
     return status;
 
+  AsyncLogWriter::initialize();
   interpreter_init(); // before any methods loaded
   invocationCounter_init();  // before any methods loaded
   marksweep_init();
