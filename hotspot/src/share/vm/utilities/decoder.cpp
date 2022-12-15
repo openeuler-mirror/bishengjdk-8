@@ -143,6 +143,15 @@ bool Decoder::can_decode_C_frame_in_vm() {
   return decoder->can_decode_C_frame_in_vm();
 }
 
+bool Decoder::get_source_info(address pc, char* filename, size_t filename_len, int* line, bool is_pc_after_call) {
+  if (VMError::is_error_reported_in_current_thread()) {
+    return get_error_handler_instance()->get_source_info(pc, filename, filename_len, line, is_pc_after_call);
+  } else {
+    MutexLockerEx locker(shared_decoder_lock(), Mutex::_no_safepoint_check_flag);
+    return get_shared_instance()->get_source_info(pc, filename, filename_len, line, is_pc_after_call);
+  }
+}
+
 /*
  * Shutdown shared decoder and replace it with
  * _do_nothing_decoder. Do nothing with error handler

@@ -1209,3 +1209,9 @@ void VMError::report_java_out_of_memory() {
     VMThread::execute(&op);
   }
 }
+
+// Returns true if the current thread reported a fatal error.
+bool VMError::is_error_reported_in_current_thread() {
+  return first_error_tid == os::current_thread_id();
+}
+

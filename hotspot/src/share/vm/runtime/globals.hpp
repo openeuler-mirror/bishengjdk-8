@@ -546,6 +546,9 @@ class CommandLineFlags {
   develop(bool, CleanChunkPoolAsync, falseInEmbedded,                       \
           "Clean the chunk pool asynchronously")                            \
                                                                             \
+  develop(intx, TraceDwarfLevel, 0,                                         \
+          "Debug levels for the dwarf parser")                              \
+                                                                            \
   /* Temporary: See 6948537 */                                              \
   experimental(bool, UseMemSetInBOT, true,                                  \
           "(Unstable) uses memset in BOT updates in GC code")               \

@@ -51,6 +51,7 @@
 #include "utilities/events.hpp"
 #include "utilities/top.hpp"
 #include "utilities/vmError.hpp"
+#include "utilities/decoder.hpp"
 #ifdef TARGET_OS_FAMILY_linux
 # include "os_linux.inline.hpp"
 #endif
@@ -751,7 +752,15 @@ void print_native_stack(outputStream* st, frame fr, Thread* t, char* buf, int bu
     int count = 0;
     while (count++ < StackPrintLimit) {
       fr.print_on_error(st, buf, buf_size);
+
+      char filename[128];
+      int line_no;
+      if (Decoder::get_source_info(fr.pc(), filename, sizeof(filename), &line_no, count != 1)) {
+        st->print("  (%s:%d)", filename, line_no);
+      }
+
       st->cr();
+
       // Compiled code may use EBP register on x86 so it looks like
       // non-walkable C frame. Use frame.sender() for java frames.
       if (t && t->is_Java_thread()) {

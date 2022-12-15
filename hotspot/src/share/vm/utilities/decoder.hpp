@@ -68,6 +68,11 @@ public:
     return (status > 0);
   }
 
+  // Get filename and line number information.
+  virtual bool get_source_info(address pc, char* filename, size_t filename_len, int* line, bool is_pc_after_call) {
+    return false;
+  }
+
 protected:
   decoder_status  _decoder_status;
 };
@@ -97,6 +102,11 @@ public:
   virtual bool can_decode_C_frame_in_vm() const {
     return false;
   }
+
+  // Get filename and line number information.
+  virtual bool get_source_info(address pc, char* filename, size_t filename_len, int* line, bool is_pc_after_call) {
+    return false;
+  }
 };
 
 
@@ -106,6 +116,13 @@ public:
   static bool decode(address pc, char* buf, int buflen, int* offset, const void* base);
   static bool demangle(const char* symbol, char* buf, int buflen);
   static bool can_decode_C_frame_in_vm();
+
+  // Attempts to retrieve source file name and line number associated with a pc.
+  // If filename != NULL, points to a buffer of size filename_len which will receive the
+  // file name. File name will be silently truncated if output buffer is too small.
+  // If is_pc_after_call is true, then pc is treated as pointing to the next instruction
+  // after a call. The source information for the call instruction is fetched in that case.
+  static bool get_source_info(address pc, char* filename, size_t filename_len, int* line, bool is_pc_after_call = false);
 
   // shutdown shared instance
   static void shutdown();
