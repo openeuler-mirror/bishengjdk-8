@@ -98,6 +98,7 @@
   template(RotateGCLog)                           \
   template(WhiteBoxOperation)                     \
   template(ClassLoaderStatsOperation)             \
+  template(ClassLoaderHierarchyOperation)         \
   template(JFROldObject)                          \
   template(PrintClasses)                          \
 
