@@ -476,8 +476,7 @@ void SafepointSynchronize::begin() {
   GC_locker::set_jni_lock_count(_current_jni_active_count);
 
   if (TraceSafepoint) {
-    VM_Operation *op = VMThread::vm_operation();
-    tty->print_cr("Entering safepoint region: %s", (op != NULL) ? op->name() : "no vm operation");
+    tty->print_cr("Entering safepoint region: %s", VMThread::vm_safepoint_description());
   }
 
   RuntimeService::record_safepoint_synchronized();
@@ -929,11 +928,23 @@ void SafepointSynchronize::print_safepoint_timeout(SafepointTimeoutReason reason
   // To debug the long safepoint, specify both AbortVMOnSafepointTimeout &
   // ShowMessageBoxOnError.
   if (AbortVMOnSafepointTimeout) {
+    // Send the blocking thread a signal to terminate and write an error file.
+    for (JavaThread *cur_thread = Threads::first(); cur_thread;
+         cur_thread = cur_thread->next()) {
+      ThreadSafepointState *cur_state = cur_thread->safepoint_state();
+      if (cur_thread->thread_state() != _thread_blocked &&
+          ((reason == _spinning_timeout && cur_state->is_running()) ||
+             (reason == _blocking_timeout && !cur_state->has_called_back()))) {
+        if (!os::signal_thread(cur_thread, SIGILL, "blocking a safepoint")) {
+          break; // Could not send signal. Report fatal error.
+        }
+        // Give cur_thread a chance to report the error and terminate the VM.
+        os::sleep(Thread::current(), 3000, false);
+      }
+    }
     char msg[1024];
-    VM_Operation *op = VMThread::vm_operation();
     sprintf(msg, "Safepoint sync time longer than " INTX_FORMAT "ms detected when executing %s.",
-            SafepointTimeoutDelay,
-            op != NULL ? op->name() : "no vm operation");
+            SafepointTimeoutDelay, VMThread::vm_safepoint_description());
     fatal(msg);
   }
 }

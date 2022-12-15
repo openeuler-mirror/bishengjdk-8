@@ -492,6 +492,9 @@ class os: AllStatic {
   static void pd_start_thread(Thread* thread);
   static void start_thread(Thread* thread);
 
+  // Returns true if successful.
+  static bool signal_thread(Thread* thread, int sig, const char* reason);
+
   static void initialize_thread(Thread* thr);
   static void free_thread(OSThread* osthread);
 
@@ -653,6 +656,7 @@ class os: AllStatic {
   static void print_environment_variables(outputStream* st, const char** env_list, char* buffer, int len);
   static void print_context(outputStream* st, void* context);
   static void print_register_info(outputStream* st, void* context);
+  static bool signal_sent_by_kill(const void* siginfo);
   static void print_siginfo(outputStream* st, void* siginfo);
   static void print_signal_handlers(outputStream* st, char* buf, size_t buflen);
   static void print_date_and_time(outputStream* st, char* buf, size_t buflen);
