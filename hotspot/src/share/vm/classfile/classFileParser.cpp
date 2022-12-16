@@ -4323,9 +4323,28 @@ instanceKlassHandle ClassFileParser::parseClassFile(Symbol* name,
     if (TraceClassLoading) {
       ResourceMark rm;
       // print in a single call to reduce interleaving of output
-      if (cfs->source() != NULL) {
-        tty->print("[Loaded %s from %s]\n", this_klass->external_name(),
-                   cfs->source());
+      const char* source = cfs->source();
+      if (source != NULL && PrintClassLoadingDetails) {
+        tty->date_stamp(true);
+        OSThread* osThread = THREAD->osthread();
+        if (osThread != NULL) {
+          tty->print("%d ", osThread->thread_id());
+        }
+        const char* loader_name = class_loader.is_null()
+                                ? "bootstrap"
+                                : InstanceKlass::cast(class_loader->klass())->external_name();
+        const char* klass_name = this_klass->external_name();
+        tty->print(" [Loaded %s from %s by classloader %s]\n", klass_name,
+                   source, loader_name);
+        if (PrintThreadStackOnLoadingClass != NULL && klass_name != NULL &&
+            strstr(klass_name, PrintThreadStackOnLoadingClass) && THREAD->is_Java_thread()) {
+          JavaThread* javaThread = ((JavaThread*) THREAD);
+          javaThread->print_on(tty);
+          javaThread->print_stack_on(tty);
+        }
+      } else if (source != NULL) {
+          tty->print("[Loaded %s from %s]\n", this_klass->external_name(),
+                     source);
       } else if (class_loader.is_null()) {
         Klass* caller =
             THREAD->is_Java_thread()

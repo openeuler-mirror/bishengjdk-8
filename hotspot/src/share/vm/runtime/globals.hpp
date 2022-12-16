@@ -951,6 +951,14 @@ class CommandLineFlags {
   product(ccstrlist, OnOutOfMemoryError, "",                                \
           "Run user-defined commands on first java.lang.OutOfMemoryError")  \
                                                                             \
+  manageable(bool, PrintClassLoadingDetails, false,                         \
+          "Print class loading details (including date stamps, thread id "  \
+          "and effective class loaders) when enable TraceClassLoading")     \
+                                                                            \
+  manageable(ccstr, PrintThreadStackOnLoadingClass, NULL,                   \
+          "Print thread stack when the specified class is loaded when "     \
+          "enable PrintClassLoadingDetails")                                \
+                                                                            \
   manageable(bool, HeapDumpBeforeFullGC, false,                             \
           "Dump heap to file before any major stop-the-world GC")           \
                                                                             \
