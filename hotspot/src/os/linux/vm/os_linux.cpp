@@ -2159,9 +2159,10 @@ static bool _print_ascii_file(const char* filename, outputStream* st) {
      return false;
   }
 
-  char buf[32];
+  char buf[33];
   int bytes;
-  while ((bytes = ::read(fd, buf, sizeof(buf))) > 0) {
+  buf[32] = '\0';
+  while ((bytes = ::read(fd, buf, sizeof(buf) - 1)) > 0) {
     st->print_raw(buf, bytes);
   }
 

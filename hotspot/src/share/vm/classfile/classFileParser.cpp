@@ -1085,9 +1085,11 @@ class FieldAllocationCount: public ResourceObj {
 
   FieldAllocationType update(bool is_static, BasicType type) {
     FieldAllocationType atype = basic_type_to_atype(is_static, type);
-    // Make sure there is no overflow with injected fields.
-    assert(count[atype] < 0xFFFF, "More than 65535 fields");
-    count[atype]++;
+    if (atype != BAD_ALLOCATION_TYPE) {
+      // Make sure there is no overflow with injected fields.
+      assert(count[atype] < 0xFFFF, "More than 65535 fields");
+      count[atype]++;
+    }
     return atype;
   }
 };
@@ -3087,8 +3089,9 @@ void ClassFileParser::parse_classfile_attributes(ClassFileParser::ClassAnnotatio
         }
       } else if (tag == vmSymbols::tag_bootstrap_methods() &&
                  _major_version >= Verifier::INVOKEDYNAMIC_MAJOR_VERSION) {
-        if (parsed_bootstrap_methods_attribute)
+        if (parsed_bootstrap_methods_attribute) {
           classfile_parse_error("Multiple BootstrapMethods attributes in class file %s", CHECK);
+        }
         parsed_bootstrap_methods_attribute = true;
         parse_classfile_bootstrap_methods_attribute(attribute_length, CHECK);
       } else if (tag == vmSymbols::tag_runtime_visible_type_annotations()) {
