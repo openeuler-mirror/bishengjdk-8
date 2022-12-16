@@ -54,6 +54,7 @@
 #include "runtime/init.hpp"
 #include "runtime/interfaceSupport.hpp"
 #include "runtime/java.hpp"
+#include "runtime/logAsyncWriter.hpp"
 #include "runtime/memprofiler.hpp"
 #include "runtime/sharedRuntime.hpp"
 #include "runtime/statSampler.hpp"
@@ -514,6 +515,11 @@ void before_exit(JavaThread * thread) {
 
   // Stop concurrent GC threads
   Universe::heap()->stop();
+
+  // Stop async log writer thread
+  if (UseAsyncGCLog) {
+    AsyncLogWriter::instance()->stop();
+  }
 
   // Print GC/heap related information.
   if (PrintGCDetails) {

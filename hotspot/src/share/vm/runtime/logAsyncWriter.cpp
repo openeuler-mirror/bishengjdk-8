@@ -63,7 +63,7 @@ void AsyncLogWriter::enqueue(const char* msg) {
 AsyncLogWriter::AsyncLogWriter()
   : NamedThread(),
   _lock(1), _sem(0), _io_sem(1),
-  _initialized(false),
+  _initialized(false),_should_terminate(false),_has_terminated(false),
   _buffer_max_size(AsyncLogBufferSize / sizeof(AsyncLogMessage)) {
   if (os::create_thread(this, os::asynclog_thread)) {
     _initialized = true;
@@ -124,6 +124,10 @@ void AsyncLogWriter::run() {
     // The value of a semphore cannot be negative. Therefore, the current thread falls asleep
     // when its value is zero. It will be waken up when new messages are enqueued.
     _sem.wait();
+    if (_should_terminate) {
+      terminate();
+      break;
+    }
     write();
   }
 }
@@ -161,4 +165,33 @@ void AsyncLogWriter::print_on(outputStream* st) const{
   st->print("\"%s\" ", name());
   Thread::print_on(st);
   st->cr();
+}
+
+void AsyncLogWriter::stop() {
+  {
+    MutexLockerEx ml(Terminator_lock);
+    _should_terminate = true;
+  }
+  {
+    _sem.signal();
+  }
+  {
+    MutexLockerEx ml(Terminator_lock);
+    while (!_has_terminated) {
+      Terminator_lock->wait();
+    }
+  }
+}
+
+void AsyncLogWriter::terminate() {
+  // Signal that it is terminated
+  {
+    MutexLockerEx mu(Terminator_lock,
+                     Mutex::_no_safepoint_check_flag);
+    _has_terminated = true;
+    Terminator_lock->notify();
+  }
+
+  // Thread destructor usually does this..
+  ThreadLocalStorage::set_thread(NULL);
 }

@@ -136,6 +136,8 @@ class AsyncLogWriter : public NamedThread {
   Semaphore _io_sem;
 
   volatile bool _initialized;
+  volatile bool _should_terminate;
+  volatile bool _has_terminated;
   AsyncLogBuffer _buffer;
 
   const size_t _buffer_max_size;
@@ -153,6 +155,8 @@ class AsyncLogWriter : public NamedThread {
   static void flush();
   // Printing
   void print_on(outputStream* st) const;
+  void stop();
+  void terminate();
 
 };
 
