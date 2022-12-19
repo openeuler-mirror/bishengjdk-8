@@ -516,11 +516,6 @@ void before_exit(JavaThread * thread) {
   // Stop concurrent GC threads
   Universe::heap()->stop();
 
-  // Stop async log writer thread
-  if (UseAsyncGCLog) {
-    AsyncLogWriter::instance()->stop();
-  }
-
   // Print GC/heap related information.
   if (PrintGCDetails) {
     Universe::print();
@@ -582,6 +577,11 @@ void before_exit(JavaThread * thread) {
       tty->print_cr("ERROR: fail_cnt=%d", fail_cnt);
       guarantee(fail_cnt == 0, "unexpected StringTable verification failures");
     }
+  }
+
+  // Stop async log writer thread
+  if (UseAsyncGCLog) {
+    AsyncLogWriter::instance()->stop();
   }
 
   #undef BEFORE_EXIT_NOT_RUN
