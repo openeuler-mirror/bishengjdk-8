@@ -2,7 +2,7 @@
  * @test TestNUMANodes.java
  * @library /testlibrary
  * @build CPUSetsReader TestNUMANodes
- * @run main/othervm TestNUMANodes 1 -XX:+UseNUMA -XX:NUMANodes=1 -XX:-LogNUMANodes
+ * @run main/othervm TestNUMANodes 1 -XX:+UseNUMA -XX:NUMANodes=0 -XX:-LogNUMANodes
  * @run main/othervm TestNUMANodes 2 -XX:+UseNUMA -XX:NUMANodes=all -XX:+LogNUMANodes
  * @run main/othervm TestNUMANodes 3 -XX:+UseNUMA -XX:NUMANodesRandom=1 -XX:+LogNUMANodes
  * @run main/othervm TestNUMANodes 4 -XX:+UseNUMA -XX:NUMANodesRandom=4 -XX:+LogNUMANodes
@@ -85,7 +85,9 @@ public class TestNUMANodes {
                 Asserts.assertTrue(err.contains("Mempolicy is not changed"));
                 break;
             case 3:
-                Asserts.assertTrue(err.contains("NUMANodes is converted to"));
+		if (numas > 1) {
+                    Asserts.assertTrue(err.contains("NUMANodes is converted to"));
+		}
                 break;
             case 4:
                 Asserts.assertTrue(err.contains("The count of nodes to bind should be"));

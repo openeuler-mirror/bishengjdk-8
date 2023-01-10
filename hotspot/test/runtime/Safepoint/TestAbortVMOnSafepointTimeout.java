@@ -22,14 +22,13 @@
  * questions.
  */
 
-import jdk.test.lib.*;
-import jdk.test.lib.process.*;
+import com.oracle.java.testlibrary.*;
 
 /*
  * @test TestAbortVMOnSafepointTimeout
  * @summary Check if VM can kill thread which doesn't reach safepoint.
  * @bug 8219584 8227528
- * @library /test/lib
+ * @library /testlibrary
  *
  */
 
