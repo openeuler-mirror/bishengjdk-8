@@ -241,6 +241,8 @@ void FileMapInfo::FileMapHeader::populate(FileMapInfo* mapinfo, size_t alignment
   _alignment = alignment;
   _obj_alignment = ObjectAlignmentInBytes;
 
+  _compressed_oops = UseCompressedOops;
+  _compressed_class_ptrs = UseCompressedClassPointers;
   if (!DynamicDumpSharedSpaces) {
     _classpath_entry_table_size = mapinfo->_classpath_entry_table_size;
     _classpath_entry_table = mapinfo->_classpath_entry_table;
@@ -985,6 +987,16 @@ bool FileMapInfo::FileMapHeader::validate() {
     FileMapInfo::fail_continue("The shared archive file's ObjectAlignmentInBytes of %d"
                   " does not equal the current ObjectAlignmentInBytes of %d.",
                   _obj_alignment, ObjectAlignmentInBytes);
+    return false;
+  }
+  if (PrintSharedSpaces) {
+    tty->print_cr("Archive was created with UseCompressedOops = %d, UseCompressedClassPointers = %d",
+                          compressed_oops(), compressed_class_pointers());
+  }
+
+  if (compressed_oops() != UseCompressedOops || compressed_class_pointers() != UseCompressedClassPointers) {
+    FileMapInfo::fail_continue("Unable to use shared archive.\nThe saved state of UseCompressedOops and UseCompressedClassPointers is "
+                               "different from runtime, CDS will be disabled.");
     return false;
   }
 

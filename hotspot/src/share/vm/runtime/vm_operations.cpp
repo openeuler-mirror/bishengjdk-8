@@ -195,7 +195,7 @@ bool VM_PrintThreads::doit_prologue() {
 }
 
 void VM_PrintThreads::doit() {
-  Threads::print_on(_out, true, false, _print_concurrent_locks);
+  Threads::print_on(_out, true, false, _print_concurrent_locks, _print_extended_info);
 }
 
 void VM_PrintThreads::doit_epilogue() {
@@ -207,6 +207,10 @@ void VM_PrintThreads::doit_epilogue() {
 
 void VM_PrintJNI::doit() {
   JNIHandles::print_on(_out);
+}
+
+void VM_PrintMetadata::doit() {
+  MetaspaceAux::print_metadata_for_nmt(_out, _scale);
 }
 
 VM_FindDeadlocks::~VM_FindDeadlocks() {

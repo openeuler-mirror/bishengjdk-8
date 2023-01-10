@@ -103,6 +103,9 @@
 # include <stdint.h>
 # include <inttypes.h>
 # include <sys/ioctl.h>
+#ifdef __GLIBC__
+# include <malloc.h>
+#endif
 
 PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 
@@ -130,6 +133,8 @@ PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 #define LARGEPAGES_BIT (1 << 6)
 ////////////////////////////////////////////////////////////////////////////////
 // global variables
+extern char** argv_for_execvp;
+
 julong os::Linux::_physical_memory = 0;
 
 address   os::Linux::_initial_thread_stack_bottom = NULL;
@@ -148,6 +153,31 @@ bool os::Linux::_supports_fast_thread_cpu_time = false;
 const char * os::Linux::_glibc_version = NULL;
 const char * os::Linux::_libpthread_version = NULL;
 pthread_condattr_t os::Linux::_condattr[1];
+
+#ifdef __GLIBC__
+// We want to be runnable with both old and new glibcs.
+// Old glibcs offer mallinfo(). New glibcs deprecate mallinfo() and offer mallinfo2()
+// as replacement. Future glibc's may remove the deprecated mallinfo().
+// Therefore we may have one, both, or possibly neither (?). Code should tolerate all
+// cases, which is why we resolve the functions dynamically. Outside code should use
+// the Linux::get_mallinfo() utility function which exists to hide this mess.
+struct glibc_mallinfo {
+  int arena;
+  int ordblks;
+  int smblks;
+  int hblks;
+  int hblkhd;
+  int usmblks;
+  int fsmblks;
+  int uordblks;
+  int fordblks;
+  int keepcost;
+};
+typedef struct glibc_mallinfo (*mallinfo_func_t)(void);
+typedef struct os::Linux::glibc_mallinfo2 (*mallinfo2_func_t)(void);
+static mallinfo_func_t g_mallinfo = NULL;
+static mallinfo2_func_t g_mallinfo2 = NULL;
+#endif // __GLIBC__
 
 static jlong initial_time_count=0;
 
@@ -2129,9 +2159,10 @@ static bool _print_ascii_file(const char* filename, outputStream* st) {
      return false;
   }
 
-  char buf[32];
+  char buf[33];
   int bytes;
-  while ((bytes = ::read(fd, buf, sizeof(buf))) > 0) {
+  buf[32] = '\0';
+  while ((bytes = ::read(fd, buf, sizeof(buf) - 1)) > 0) {
     st->print_raw(buf, bytes);
   }
 
@@ -2216,7 +2247,12 @@ void os::print_os_info(outputStream* st) {
 
   os::Posix::print_load_average(st);
 
-  os::Linux::print_full_memory_info(st);
+  os::Linux::print_system_memory_info(st);
+  st->cr();
+
+  os::Linux::print_process_memory_info(st);
+
+  os::Linux::print_proc_sys_info(st);
 
   os::Linux::print_container_info(st);
 }
@@ -2278,10 +2314,103 @@ void os::Linux::print_libversion_info(outputStream* st) {
   st->cr();
 }
 
-void os::Linux::print_full_memory_info(outputStream* st) {
+void os::Linux::print_system_memory_info(outputStream* st) {
    st->print("\n/proc/meminfo:\n");
    _print_ascii_file("/proc/meminfo", st);
    st->cr();
+}
+
+bool os::Linux::query_process_memory_info(os::Linux::meminfo_t* info) {
+  FILE* f = ::fopen("/proc/self/status", "r");
+  const int num_values = sizeof(os::Linux::meminfo_t) / sizeof(size_t);
+  int num_found = 0;
+  char buf[256];
+  info->vmsize = info->vmpeak = info->vmrss = info->vmhwm = info->vmswap =
+      info->rssanon = info->rssfile = info->rssshmem = -1;
+  if (f != NULL) {
+    while (::fgets(buf, sizeof(buf), f) != NULL && num_found < num_values) {
+      if ( (info->vmsize == -1    && sscanf(buf, "VmSize: " SSIZE_FORMAT " kB", &info->vmsize) == 1) ||
+           (info->vmpeak == -1    && sscanf(buf, "VmPeak: " SSIZE_FORMAT " kB", &info->vmpeak) == 1) ||
+           (info->vmswap == -1    && sscanf(buf, "VmSwap: " SSIZE_FORMAT " kB", &info->vmswap) == 1) ||
+           (info->vmhwm == -1     && sscanf(buf, "VmHWM: " SSIZE_FORMAT " kB", &info->vmhwm) == 1) ||
+           (info->vmrss == -1     && sscanf(buf, "VmRSS: " SSIZE_FORMAT " kB", &info->vmrss) == 1) ||
+           (info->rssanon == -1   && sscanf(buf, "RssAnon: " SSIZE_FORMAT " kB", &info->rssanon) == 1) || // Needs Linux 4.5
+           (info->rssfile == -1   && sscanf(buf, "RssFile: " SSIZE_FORMAT " kB", &info->rssfile) == 1) || // Needs Linux 4.5
+           (info->rssshmem == -1  && sscanf(buf, "RssShmem: " SSIZE_FORMAT " kB", &info->rssshmem) == 1)  // Needs Linux 4.5
+           )
+      {
+        num_found ++;
+      }
+    }
+    fclose(f);
+    return true;
+  }
+  return false;
+}
+
+void os::Linux::print_process_memory_info(outputStream* st) {
+
+  st->print_cr("Process Memory:");
+
+  // Print virtual and resident set size; peak values; swap; and for
+  //  rss its components if the kernel is recent enough.
+  meminfo_t info;
+  if (query_process_memory_info(&info)) {
+    st->print_cr("Virtual Size: " SSIZE_FORMAT "K (peak: " SSIZE_FORMAT "K)", info.vmsize, info.vmpeak);
+    st->print("Resident Set Size: " SSIZE_FORMAT "K (peak: " SSIZE_FORMAT "K)", info.vmrss, info.vmhwm);
+    if (info.rssanon != -1) { // requires kernel >= 4.5
+      st->print(" (anon: " SSIZE_FORMAT "K, file: " SSIZE_FORMAT "K, shmem: " SSIZE_FORMAT "K)",
+                info.rssanon, info.rssfile, info.rssshmem);
+    }
+    st->cr();
+    if (info.vmswap != -1) { // requires kernel >= 2.6.34
+      st->print_cr("Swapped out: " SSIZE_FORMAT "K", info.vmswap);
+    }
+  } else {
+    st->print_cr("Could not open /proc/self/status to get process memory related information");
+  }
+
+  // Print glibc outstanding allocations.
+  // (note: there is no implementation of mallinfo for muslc)
+#ifdef __GLIBC__
+  bool might_have_wrapped = false;
+  glibc_mallinfo2 mi;
+  mallinfo_retval_t mirc = os::Linux::get_mallinfo(&mi);
+  if (mirc != os::Linux::error) {
+    size_t total_allocated = mi.uordblks + mi.hblkhd;
+    size_t free_retained = mi.fordblks;
+#ifdef _LP64
+    // If all we had is old mallinf(3), the values may have wrapped. Since that can confuse readers
+    // of this output, print a hint.
+    // We do this by checking virtual size of the process: if that is <4g, we could not have wrapped.
+    might_have_wrapped = (mirc == os::Linux::ok_but_possibly_wrapped) &&
+                         ((info.vmsize * K) > UINT_MAX);
+#endif
+    st->print_cr("C-Heap outstanding allocations: " SIZE_FORMAT "K, retained: " SIZE_FORMAT "K%s",
+                 total_allocated / K, free_retained / K,
+                 might_have_wrapped ? " (may have wrapped)" : "");
+  }
+
+#endif // __GLIBC__
+
+}
+
+void os::Linux::print_proc_sys_info(outputStream* st) {
+  st->cr();
+  st->print_cr("/proc/sys/kernel/threads-max (system-wide limit on the number of threads):");
+  _print_ascii_file("/proc/sys/kernel/threads-max", st);
+  st->cr();
+  st->cr();
+
+  st->print_cr("/proc/sys/vm/max_map_count (maximum number of memory map areas a process may have):");
+  _print_ascii_file("/proc/sys/vm/max_map_count", st);
+  st->cr();
+  st->cr();
+
+  st->print_cr("/proc/sys/kernel/pid_max (system-wide limit on number of process identifiers):");
+  _print_ascii_file("/proc/sys/kernel/pid_max", st);
+  st->cr();
+  st->cr();
 }
 
 void os::Linux::print_container_info(outputStream* st) {
@@ -3003,6 +3132,77 @@ void* os::Linux::libnuma_v2_dlsym(void* handle, const char* name) {
   return dlvsym(handle, name, "libnuma_1.2");
 }
 
+void os::Linux::parse_numa_nodes() {
+  if (NUMANodes == NULL && NUMANodesRandom == 0) {
+    return;
+  }
+  const char* numa_nodes = NUMANodes;
+  // Max length for "%d-%d" is 24
+  char buf[24] = {0};
+  if (NUMANodesRandom != 0) {
+    int nodes_to_bind = NUMANodesRandom;
+    int nodes_num = Linux::numa_max_node() + 1;
+    const int MAX_NUMA = 1000000;
+    if (nodes_num > 0 &&
+        nodes_num < MAX_NUMA &&
+        nodes_to_bind > 0 &&
+        nodes_to_bind < nodes_num) {
+      int bound = 1;
+      while (bound < nodes_to_bind) {
+        bound *= 2;
+      }
+      struct timeval tv;
+      gettimeofday(&tv,NULL);
+      srand(tv.tv_usec);
+      int first = 0;
+      if (nodes_num > bound) {
+        first = rand() % (nodes_num / bound) * bound;
+      }
+      if (bound != nodes_to_bind) {
+        first += rand() % (1 + bound - nodes_to_bind);
+      }
+      sprintf(buf, "%d-%d", first, first + nodes_to_bind - 1);
+      numa_nodes = buf;
+      if (LogNUMANodes) {
+        warning("NUMANodes is converted to %s, with total %d nodes!", buf, nodes_num);
+      }
+    } else {
+      if (LogNUMANodes) {
+        warning("The count of nodes to bind should be less that the count of all nodes, Skip!");
+      }
+      return;
+    }
+  }
+  bitmask* mask = os::Linux::numa_parse_nodestring_all(numa_nodes);
+  if (!mask) {
+    if (LogNUMANodes) {
+      warning("<%s> is invalid", numa_nodes);
+    }
+    return;
+  }
+  if (os::Linux::numa_bitmask_equal(mask, os::Linux::_numa_membind_bitmask)) {
+    os::Linux::numa_bitmask_free(mask);
+    if (LogNUMANodes) {
+      warning("Mempolicy is not changed, param: %s",  numa_nodes);
+    }
+    return;
+  }
+  errno = 0;
+  os::Linux::numa_run_on_node_mask(mask);
+  if (errno) {
+    perror("sched_setaffinity");
+  }
+  errno = 0;
+  os::Linux::numa_set_membind(mask);
+  int errtmp = errno;
+  os::Linux::numa_bitmask_free(mask);
+  if (errtmp) {
+    perror("numa_set_membind");
+  } else {
+    execvp(*argv_for_execvp, argv_for_execvp);
+  }
+}
+
 bool os::Linux::libnuma_init() {
   // sched_getcpu() should be in libc.
   set_sched_getcpu(CAST_TO_FN_PTR(sched_getcpu_func_t,
@@ -3043,6 +3243,16 @@ bool os::Linux::libnuma_init() {
                                          libnuma_dlsym(handle, "numa_move_pages")));
       set_numa_run_on_node(CAST_TO_FN_PTR(numa_run_on_node_func_t,
                                          libnuma_dlsym(handle, "numa_run_on_node")));
+      set_numa_parse_nodestring_all(CAST_TO_FN_PTR(numa_parse_nodestring_all_func_t,
+                                         libnuma_dlsym(handle, "numa_parse_nodestring_all")));
+      set_numa_run_on_node_mask(CAST_TO_FN_PTR(numa_run_on_node_mask_func_t,
+                                         libnuma_v2_dlsym(handle, "numa_run_on_node_mask")));
+      set_numa_bitmask_equal(CAST_TO_FN_PTR(numa_bitmask_equal_func_t,
+                                         libnuma_v2_dlsym(handle, "numa_bitmask_equal")));
+      set_numa_set_membind(CAST_TO_FN_PTR(numa_set_membind_func_t,
+                                         libnuma_v2_dlsym(handle, "numa_set_membind")));
+      set_numa_bitmask_free(CAST_TO_FN_PTR(numa_bitmask_free_func_t,
+                                         libnuma_dlsym(handle, "numa_bitmask_free")));
 
       if (numa_available() != -1) {
         set_numa_all_nodes((unsigned long*)libnuma_dlsym(handle, "numa_all_nodes"));
@@ -3050,6 +3260,9 @@ bool os::Linux::libnuma_init() {
         set_numa_nodes_ptr((struct bitmask **)libnuma_dlsym(handle, "numa_nodes_ptr"));
         set_numa_interleave_bitmask(_numa_get_interleave_mask());
         set_numa_membind_bitmask(_numa_get_membind());
+        if (isbound_to_all_node()) {
+          parse_numa_nodes();
+        }
         // Create an index -> node mapping, since nodes are not always consecutive
         _nindex_to_node = new (ResourceObj::C_HEAP, mtInternal) GrowableArray<int>(0, true);
         rebuild_nindex_to_node_map();
@@ -3169,6 +3382,11 @@ os::Linux::numa_get_membind_func_t os::Linux::_numa_get_membind;
 os::Linux::numa_get_interleave_mask_func_t os::Linux::_numa_get_interleave_mask;
 os::Linux::numa_move_pages_func_t os::Linux::_numa_move_pages;
 os::Linux::numa_run_on_node_func_t os::Linux::_numa_run_on_node;
+os::Linux::numa_parse_nodestring_all_func_t os::Linux::_numa_parse_nodestring_all;
+os::Linux::numa_run_on_node_mask_func_t os::Linux::_numa_run_on_node_mask;
+os::Linux::numa_bitmask_equal_func_t os::Linux::_numa_bitmask_equal;
+os::Linux::numa_set_membind_func_t os::Linux::_numa_set_membind;
+os::Linux::numa_bitmask_free_func_t os::Linux::_numa_bitmask_free;
 os::Linux::NumaAllocationPolicy os::Linux::_current_numa_policy;
 unsigned long* os::Linux::_numa_all_nodes;
 struct bitmask* os::Linux::_numa_all_nodes_ptr;
@@ -5098,6 +5316,11 @@ void os::init(void) {
 
   Linux::initialize_system_info();
 
+#ifdef __GLIBC__
+  g_mallinfo = CAST_TO_FN_PTR(mallinfo_func_t, dlsym(RTLD_DEFAULT, "mallinfo"));
+  g_mallinfo2 = CAST_TO_FN_PTR(mallinfo2_func_t, dlsym(RTLD_DEFAULT, "mallinfo2"));
+#endif // __GLIBC__
+
   // _main_thread points to the thread that created/loaded the JVM.
   Linux::_main_thread = pthread_self();
 
@@ -6727,3 +6950,94 @@ void TestReserveMemorySpecial_test() {
 }
 
 #endif
+
+#ifdef __GLIBC__
+os::Linux::mallinfo_retval_t os::Linux::get_mallinfo(glibc_mallinfo2* out) {
+  if (g_mallinfo2) {
+    glibc_mallinfo2 mi = g_mallinfo2();
+    *out = mi;
+    return os::Linux::ok;
+  } else if (g_mallinfo) {
+    // mallinfo() returns 32-bit values. Not perfect but still useful if
+    // process virt size < 4g
+    glibc_mallinfo mi = g_mallinfo();
+    out->arena = (int) mi.arena;
+    out->ordblks = (int) mi.ordblks;
+    out->smblks = (int) mi.smblks;
+    out->hblks = (int) mi.hblks;
+    out->hblkhd = (int) mi.hblkhd;
+    out->usmblks = (int) mi.usmblks;
+    out->fsmblks = (int) mi.fsmblks;
+    out->uordblks = (int) mi.uordblks;
+    out->fordblks = (int) mi.fordblks;
+    out->keepcost = (int) mi.keepcost;
+    return os::Linux::ok_but_possibly_wrapped;
+  }
+  return os::Linux::ok;
+}
+#endif // __GLIBC__
+
+// Trim-native support
+bool os::can_trim_native_heap() {
+#ifdef __GLIBC__
+  return true;
+#else
+  return false; // musl
+#endif
+}
+
+static const size_t retain_size = 2 * M;
+
+bool os::should_trim_native_heap() {
+#ifdef __GLIBC__
+  bool rc = true;
+  // We try, using mallinfo, to predict whether a malloc_trim(3) will be beneficial.
+  //
+  // "mallinfo::keepcost" is no help even if manpage claims this to be the projected
+  // trim size. In practice it is just a very small value with no relation to the actual
+  // effect trimming will have.
+  //
+  // Our best bet is "mallinfo::fordblks", the total chunk size of free blocks. Since
+  // only free blocks can be trimmed, a very low bar is to require their combined size
+  // to be higher than our retain size. Note, however, that "mallinfo::fordblks" includes
+  // already-trimmed blocks, since glibc trims by calling madvice(MADV_DONT_NEED) on free
+  // chunks but does not update its bookkeeping.
+  //
+  // In the end we want to prevent obvious bogus attempts to trim, and for that fordblks
+  // is good enough.
+  os::Linux::glibc_mallinfo2 mi;
+  os::Linux::mallinfo_retval_t mirc = os::Linux::get_mallinfo(&mi);
+  const size_t total_free = mi.fordblks;
+  if (mirc == os::Linux::ok) {
+    rc = retain_size < total_free;
+  }
+  return rc;
+#else
+  return false; // musl
+#endif
+}
+
+bool os::trim_native_heap(os::size_change_t* rss_change) {
+#ifdef __GLIBC__
+  os::Linux::meminfo_t info1;
+  os::Linux::meminfo_t info2;
+
+  bool have_info1 = os::Linux::query_process_memory_info(&info1);
+  ::malloc_trim(retain_size);
+  bool have_info2 = have_info1 && os::Linux::query_process_memory_info(&info2);
+
+  if (have_info1 && have_info2 &&
+    info1.vmrss != -1 && info2.vmrss != -1 &&
+    info1.vmswap != -1 && info2.vmswap != -1) {
+    // Note: query_process_memory_info returns values in K
+    rss_change->before = (info1.vmrss + info1.vmswap) * K;
+    rss_change->after = (info2.vmrss + info2.vmswap) * K;
+  } else {
+    rss_change->after = rss_change->before = SIZE_MAX;
+  }
+
+  return true;
+#else
+  return false; // musl
+#endif
+}

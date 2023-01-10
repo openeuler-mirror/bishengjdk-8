@@ -265,7 +265,7 @@ class CompileBroker: AllStatic {
     name_buffer_length = 100
   };
 
-  // Compile type Information for print_last_compile() and CompilerCounters
+  // Compile type Information for CompilerCounters
   enum { no_compile, normal_compile, osr_compile, native_compile };
   static int assign_compile_id (methodHandle method, int osr_bci);
 
@@ -283,10 +283,6 @@ class CompileBroker: AllStatic {
   // These counters are used for assigning id's to each compilation
   static volatile jint _compilation_id;
   static volatile jint _osr_compilation_id;
-
-  static int  _last_compile_type;
-  static int  _last_compile_level;
-  static char _last_method_compiled[name_buffer_length];
 
   static CompileQueue* _c2_compile_queue;
   static CompileQueue* _c1_compile_queue;
@@ -356,7 +352,7 @@ class CompileBroker: AllStatic {
   static void wait_for_completion(CompileTask* task);
 
   static void invoke_compiler_on_method(CompileTask* task);
-  static void set_last_compile(CompilerThread *thread, methodHandle method, bool is_osr, int comp_level);
+  static void update_compile_perf_data(CompilerThread *thread, const methodHandle& method, bool is_osr);
   static void push_jni_handle_block();
   static void pop_jni_handle_block();
   static bool check_break_at(methodHandle method, int compile_id, bool is_osr);
@@ -453,9 +449,6 @@ class CompileBroker: AllStatic {
 
   // Print a detailed accounting of compilation time
   static void print_times();
-
-  // Debugging output for failure
-  static void print_last_compile();
 
   static void print_compiler_threads_on(outputStream* st);
 

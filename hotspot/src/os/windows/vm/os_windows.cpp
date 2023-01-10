@@ -562,6 +562,7 @@ bool os::create_thread(Thread* thread, ThreadType thr_type, size_t stack_size) {
     case os::pgc_thread:
     case os::cgc_thread:
     case os::watcher_thread:
+    case os::asynclog_thread:
       if (VMThreadStackSize > 0) stack_size = (size_t)(VMThreadStackSize * K);
       break;
     }
@@ -1876,6 +1877,11 @@ void os::print_memory_info(outputStream* st) {
   st->cr();
 }
 
+bool os::signal_sent_by_kill(const void* siginfo) {
+  // TODO: Is this possible?
+  return false;
+}
+
 void os::print_siginfo(outputStream *st, void *siginfo) {
   EXCEPTION_RECORD* er = (EXCEPTION_RECORD*)siginfo;
   st->print("siginfo:");
@@ -1910,6 +1916,10 @@ void os::print_siginfo(outputStream *st, void *siginfo) {
   st->cr();
 }
 
+bool os::signal_thread(Thread* thread, int sig, const char* reason) {
+  // TODO: Can we kill thread?
+  return false;
+}
 
 int os::vsnprintf(char* buf, size_t len, const char* fmt, va_list args) {
 #if _MSC_VER >= 1900
@@ -5957,3 +5967,7 @@ void TestReserveMemorySpecial_test() {
 }
 #endif // PRODUCT
 
+// stubbed-out trim-native support
+bool os::can_trim_native_heap() { return false; }
+bool os::should_trim_native_heap() { return false; }
+bool os::trim_native_heap(os::size_change_t* rss_change) { return false; }

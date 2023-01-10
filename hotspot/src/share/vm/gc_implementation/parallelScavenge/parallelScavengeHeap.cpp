@@ -36,6 +36,7 @@
 #include "gc_implementation/parallelScavenge/psScavenge.hpp"
 #include "gc_implementation/parallelScavenge/vmPSOperations.hpp"
 #include "gc_implementation/shared/gcHeapSummary.hpp"
+#include "gc_implementation/shared/gcTrimNativeHeap.hpp"
 #include "gc_implementation/shared/gcWhen.hpp"
 #include "memory/gcLocker.inline.hpp"
 #include "oops/oop.inline.hpp"
@@ -147,6 +148,8 @@ void ParallelScavengeHeap::post_initialize() {
     PSMarkSweep::initialize();
   }
   PSPromotionManager::initialize();
+
+  GCTrimNative::initialize(true);
 }
 
 void ParallelScavengeHeap::update_counters() {

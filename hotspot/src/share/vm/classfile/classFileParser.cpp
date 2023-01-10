@@ -1085,9 +1085,11 @@ class FieldAllocationCount: public ResourceObj {
 
   FieldAllocationType update(bool is_static, BasicType type) {
     FieldAllocationType atype = basic_type_to_atype(is_static, type);
-    // Make sure there is no overflow with injected fields.
-    assert(count[atype] < 0xFFFF, "More than 65535 fields");
-    count[atype]++;
+    if (atype != BAD_ALLOCATION_TYPE) {
+      // Make sure there is no overflow with injected fields.
+      assert(count[atype] < 0xFFFF, "More than 65535 fields");
+      count[atype]++;
+    }
     return atype;
   }
 };
@@ -3087,8 +3089,9 @@ void ClassFileParser::parse_classfile_attributes(ClassFileParser::ClassAnnotatio
         }
       } else if (tag == vmSymbols::tag_bootstrap_methods() &&
                  _major_version >= Verifier::INVOKEDYNAMIC_MAJOR_VERSION) {
-        if (parsed_bootstrap_methods_attribute)
+        if (parsed_bootstrap_methods_attribute) {
           classfile_parse_error("Multiple BootstrapMethods attributes in class file %s", CHECK);
+        }
         parsed_bootstrap_methods_attribute = true;
         parse_classfile_bootstrap_methods_attribute(attribute_length, CHECK);
       } else if (tag == vmSymbols::tag_runtime_visible_type_annotations()) {
@@ -3843,6 +3846,10 @@ instanceKlassHandle ClassFileParser::parseClassFile(Symbol* name,
   ClassFileStream* cfs = stream();
   // Timing
   assert(THREAD->is_Java_thread(), "must be a JavaThread");
+
+  // increment counter
+  THREAD->statistical_info().incr_define_class_count();
+
   JavaThread* jt = (JavaThread*) THREAD;
 
   PerfClassTraceTime ctimer(ClassLoader::perf_class_parse_time(),
@@ -4323,9 +4330,28 @@ instanceKlassHandle ClassFileParser::parseClassFile(Symbol* name,
     if (TraceClassLoading) {
       ResourceMark rm;
       // print in a single call to reduce interleaving of output
-      if (cfs->source() != NULL) {
-        tty->print("[Loaded %s from %s]\n", this_klass->external_name(),
-                   cfs->source());
+      const char* source = cfs->source();
+      if (source != NULL && PrintClassLoadingDetails) {
+        tty->date_stamp(true);
+        OSThread* osThread = THREAD->osthread();
+        if (osThread != NULL) {
+          tty->print("%d ", osThread->thread_id());
+        }
+        const char* loader_name = class_loader.is_null()
+                                ? "bootstrap"
+                                : InstanceKlass::cast(class_loader->klass())->external_name();
+        const char* klass_name = this_klass->external_name();
+        tty->print(" [Loaded %s from %s by classloader %s]\n", klass_name,
+                   source, loader_name);
+        if (PrintThreadStackOnLoadingClass != NULL && klass_name != NULL &&
+            strstr(klass_name, PrintThreadStackOnLoadingClass) && THREAD->is_Java_thread()) {
+          JavaThread* javaThread = ((JavaThread*) THREAD);
+          javaThread->print_on(tty);
+          javaThread->print_stack_on(tty);
+        }
+      } else if (source != NULL) {
+          tty->print("[Loaded %s from %s]\n", this_klass->external_name(),
+                     source);
       } else if (class_loader.is_null()) {
         Klass* caller =
             THREAD->is_Java_thread()

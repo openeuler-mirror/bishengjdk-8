@@ -245,6 +245,7 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
 
     ifn.CreateJavaVM = 0;
     ifn.GetDefaultJavaVMInitArgs = 0;
+    ifn.raw_argv = argv;
 
     if (JLI_IsTraceLauncher()) {
         start = CounterGet();
@@ -1237,6 +1238,7 @@ InitializeJVM(JavaVM **pvm, JNIEnv **penv, InvocationFunctions *ifn)
                    i, args.options[i].optionString);
     }
 
+    ifn->SetCParam(ifn->raw_argv);
     r = ifn->CreateJavaVM(pvm, (void **)penv, &args);
     JLI_MemFree(options);
     return r == JNI_OK;

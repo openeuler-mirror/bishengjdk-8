@@ -140,6 +140,9 @@ public:
   static jlong get_first_error_tid() {
     return first_error_tid;
   }
+
+  // Returns true if the current thread reported a fatal error.
+  static bool is_error_reported_in_current_thread();
 };
 
 #endif // SHARE_VM_UTILITIES_VMERROR_HPP

@@ -105,6 +105,8 @@ public:
     size_t       _alignment;                // how shared archive should be aligned
     int          _obj_alignment;            // value of ObjectAlignmentInBytes
     bool         _is_default_jsa;           // indicates whether is the default jsa file
+    bool         _compressed_oops;          // save the flag UseCompressedOops
+    bool         _compressed_class_ptrs;    // save the flag UseCompressedClassPointers
 
     struct space_info {
       int    _crc;           // crc checksum of the current space
@@ -156,6 +158,8 @@ public:
     int compute_crc();
     unsigned int magic()                    const { return _magic; }
     const char* jvm_ident()                 const { return _jvm_ident; }
+    bool  compressed_oops()                 const { return _compressed_oops; }
+    bool  compressed_class_pointers()       const { return _compressed_class_ptrs; }
   };
 
   // Fixme

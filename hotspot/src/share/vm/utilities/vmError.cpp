@@ -460,6 +460,9 @@ void VMError::report(outputStream* st) {
        st->print("%s", buf);
        st->print(" (0x%x)", _id);                // signal number
        st->print(" at pc=" PTR_FORMAT, _pc);
+       if (_siginfo != NULL && os::signal_sent_by_kill(_siginfo)) {
+         st->print(" (sent by kill)");
+       }
      } else {
        if (should_report_bug(_id)) {
          st->print("Internal Error");
@@ -1206,3 +1209,9 @@ void VMError::report_java_out_of_memory() {
     VMThread::execute(&op);
   }
 }
+
+// Returns true if the current thread reported a fatal error.
+bool VMError::is_error_reported_in_current_thread() {
+  return first_error_tid == os::current_thread_id();
+}
+

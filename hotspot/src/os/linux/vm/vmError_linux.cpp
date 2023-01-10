@@ -42,19 +42,19 @@ void VMError::show_message_box(char *buf, int buflen) {
     char *p = &buf[len];
 
     jio_snprintf(p, buflen - len,
-               "\n\n"
-               "Do you want to debug the problem?\n\n"
-               "To debug, run 'gdb /proc/%d/exe %d'; then switch to thread " UINTX_FORMAT " (" INTPTR_FORMAT ")\n"
-               "Enter 'yes' to launch gdb automatically (PATH must include gdb)\n"
-               "Otherwise, press RETURN to abort...",
-               os::current_process_id(), os::current_process_id(),
-               os::current_thread_id(), os::current_thread_id());
+                 "\n\n"
+                 "Do you want to debug the problem?\n\n"
+                 "To debug, run 'gdb /proc/%d/exe %d'; then switch to thread " UINTX_FORMAT " (" INTPTR_FORMAT ")\n"
+                 "Enter 'yes' to launch gdb automatically (PATH must include gdb)\n"
+                 "Otherwise, press RETURN to abort...",
+                 os::current_process_id(), os::current_process_id(),
+                 os::current_thread_id(), os::current_thread_id());
 
     yes = os::message_box("Unexpected Error", buf);
 
     if (yes) {
       // yes, user asked VM to launch debugger
-      jio_snprintf(buf, buflen, "gdb /proc/%d/exe %d",
+      jio_snprintf(buf, sizeof(char)*buflen, "gdb /proc/%d/exe %d",
                    os::current_process_id(), os::current_process_id());
 
       os::fork_and_exec(buf);

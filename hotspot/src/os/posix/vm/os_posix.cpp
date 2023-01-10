@@ -26,6 +26,7 @@
 #include "prims/jvm.h"
 #include "runtime/frame.inline.hpp"
 #include "runtime/os.hpp"
+#include "utilities/events.hpp"
 #include "utilities/vmError.hpp"
 
 #include <signal.h>
@@ -814,6 +815,15 @@ static bool get_signal_code_description(const siginfo_t* si, enum_sigcode_desc_t
   return true;
 }
 
+bool os::signal_sent_by_kill(const void* siginfo) {
+  const siginfo_t* const si = (const siginfo_t*)siginfo;
+  return si->si_code == SI_USER || si->si_code == SI_QUEUE
+#ifdef SI_TKILL
+         || si->si_code == SI_TKILL
+#endif
+  ;
+}
+
 // A POSIX conform, platform-independend siginfo print routine.
 // Short print out on one line.
 void os::Posix::print_siginfo_brief(outputStream* os, const siginfo_t* si) {
@@ -844,7 +854,7 @@ void os::Posix::print_siginfo_brief(outputStream* os, const siginfo_t* si) {
   const int me = (int) ::getpid();
   const int pid = (int) si->si_pid;
 
-  if (si->si_code == SI_USER || si->si_code == SI_QUEUE) {
+  if (signal_sent_by_kill(si)) {
     if (IS_VALID_PID(pid) && pid != me) {
       os->print(", sent from pid: %d (uid: %d)", pid, (int) si->si_uid);
     }
@@ -858,6 +868,25 @@ void os::Posix::print_siginfo_brief(outputStream* os, const siginfo_t* si) {
   } else if (sig == SIGCHLD) {
     os->print_cr(", si_pid: %d, si_uid: %d, si_status: %d", (int) si->si_pid, si->si_uid, si->si_status);
   }
+}
+
+bool os::signal_thread(Thread* thread, int sig, const char* reason) {
+  OSThread* osthread = thread->osthread();
+  if (osthread) {
+#if defined (SOLARIS)
+    // Note: we cannot use pthread_kill on Solaris - not because
+    // its missing, but because we do not have the pthread_t id.
+    int status = thr_kill(osthread->thread_id(), sig);
+#else
+    int status = pthread_kill(osthread->pthread_id(), sig);
+#endif
+    if (status == 0) {
+      Events::log(Thread::current(), "sent signal %d to Thread " INTPTR_FORMAT " because %s.",
+                  sig, p2i(thread), reason);
+      return true;
+    }
+  }
+  return false;
 }
 
 bool os::Posix::is_root(uid_t uid){

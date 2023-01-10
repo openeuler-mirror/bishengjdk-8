@@ -1937,6 +1937,9 @@ JNI_GetDefaultJavaVMInitArgs(void *args);
 _JNI_IMPORT_OR_EXPORT_ jint JNICALL
 JNI_CreateJavaVM(JavaVM **pvm, void **penv, void *args);
 
+_JNI_IMPORT_OR_EXPORT_ void JNICALL
+JNI_SetCParam(char**raw_argv);
+
 _JNI_IMPORT_OR_EXPORT_ jint JNICALL
 JNI_GetCreatedJavaVMs(JavaVM **, jsize, jsize *);
 

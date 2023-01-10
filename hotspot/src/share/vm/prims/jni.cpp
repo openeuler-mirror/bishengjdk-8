@@ -5188,6 +5188,12 @@ DT_RETURN_MARK_DECL(CreateJavaVM, jint
                     , HOTSPOT_JNI_CREATEJAVAVM_RETURN(_ret_ref));
 #endif /* USDT2 */
 
+const char** argv_for_execvp;
+
+_JNI_IMPORT_OR_EXPORT_ void JNICALL JNI_SetCParam(char** raw_argv) {
+  argv_for_execvp = (const char**)raw_argv;
+}
+
 _JNI_IMPORT_OR_EXPORT_ jint JNICALL JNI_CreateJavaVM(JavaVM **vm, void **penv, void *args) {
 #ifndef USDT2
   HS_DTRACE_PROBE3(hotspot_jni, CreateJavaVM__entry, vm, penv, args);

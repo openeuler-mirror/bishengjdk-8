@@ -333,6 +333,17 @@ class os: AllStatic {
   static bool   uncommit_memory(char* addr, size_t bytes);
   static bool   release_memory(char* addr, size_t bytes);
 
+  // Does the platform support trimming the native heap?
+  static bool can_trim_native_heap();
+
+  // Does the platform recommend trimming?
+  static bool should_trim_native_heap();
+
+  // Trim the C-heap. Returns RSS size change and optionally return the rss size change.
+  // If trim was done but size change could not be obtained, SIZE_MAX is returned for after size.
+  struct size_change_t { size_t before; size_t after; };
+  static bool trim_native_heap(size_change_t* rss_change);
+
   // Touch memory pages that cover the memory range from start to end (exclusive)
   // to make the OS back the memory range with actual memory.
   // Current implementation may not touch the last page if unaligned addresses
@@ -452,6 +463,7 @@ class os: AllStatic {
     java_thread,
     compiler_thread,
     watcher_thread,
+    asynclog_thread, // dedicated to flushing logs
     os_thread
   };
 
@@ -479,6 +491,9 @@ class os: AllStatic {
   static bool create_attached_thread(JavaThread* thread);
   static void pd_start_thread(Thread* thread);
   static void start_thread(Thread* thread);
+
+  // Returns true if successful.
+  static bool signal_thread(Thread* thread, int sig, const char* reason);
 
   static void initialize_thread(Thread* thr);
   static void free_thread(OSThread* osthread);
@@ -641,6 +656,7 @@ class os: AllStatic {
   static void print_environment_variables(outputStream* st, const char** env_list, char* buffer, int len);
   static void print_context(outputStream* st, void* context);
   static void print_register_info(outputStream* st, void* context);
+  static bool signal_sent_by_kill(const void* siginfo);
   static void print_siginfo(outputStream* st, void* siginfo);
   static void print_signal_handlers(outputStream* st, char* buf, size_t buflen);
   static void print_date_and_time(outputStream* st, char* buf, size_t buflen);

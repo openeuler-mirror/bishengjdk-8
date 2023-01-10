@@ -99,7 +99,6 @@ public:
   virtual void do_field(fieldDescriptor* fd) = 0;
 };
 
-#ifndef PRODUCT
 // Print fields.
 // If "obj" argument to constructor is NULL, prints static fields, otherwise prints non-static fields.
 class FieldPrinter: public FieldClosure {
@@ -109,7 +108,6 @@ class FieldPrinter: public FieldClosure {
    FieldPrinter(outputStream* st, oop obj = NULL) : _obj(obj), _st(st) {}
    void do_field(fieldDescriptor* fd);
 };
-#endif  // !PRODUCT
 
 // ValueObjs embedded in klass. Describes where oops are located in instances of
 // this klass.
@@ -462,6 +460,7 @@ class InstanceKlass: public Klass {
   bool is_in_error_state() const           { return _init_state == initialization_error; }
   bool is_reentrant_initialization(Thread *thread)  { return thread == _init_thread; }
   ClassState  init_state()                 { return (ClassState)_init_state; }
+  const char* init_state_name() const;
   bool is_rewritten() const                { return (_misc_flags & _misc_rewritten) != 0; }
 
   // defineClass specified verification
@@ -1174,16 +1173,13 @@ public:
 
  public:
   // Printing
-#ifndef PRODUCT
   void print_on(outputStream* st) const;
-#endif
   void print_value_on(outputStream* st) const;
 
   void oop_print_value_on(oop obj, outputStream* st);
 
-#ifndef PRODUCT
   void oop_print_on      (oop obj, outputStream* st);
-
+#ifndef PRODUCT
   void print_dependent_nmethods(bool verbose = false);
   bool is_dependent_nmethod(nmethod* nm);
 #endif
@@ -1217,6 +1213,15 @@ inline u2 InstanceKlass::next_method_idnum() {
   }
 }
 
+class PrintClassClosure : public KlassClosure {
+private:
+  outputStream* _st;
+  bool _verbose;
+public:
+  PrintClassClosure(outputStream* st, bool verbose);
+
+  void do_klass(Klass* k);
+};
 
 /* JNIid class for jfieldIDs only */
 class JNIid: public CHeapObj<mtClass> {

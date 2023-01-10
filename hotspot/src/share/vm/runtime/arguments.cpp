@@ -242,7 +242,9 @@ bool Arguments::init_shared_archive_paths() {
     }
   }
 
-  if (SharedArchiveFile != NULL) {
+  if (SharedArchiveFile == NULL) {
+    SharedArchivePath = get_default_shared_archive_path();
+  } else {
     int archives = num_archives(SharedArchiveFile);
     if (is_dumping_archive()) {
       if (archives > 1) {
@@ -2269,6 +2271,16 @@ bool Arguments::verify_percentage(uintx value, const char* name) {
 // no gc log rotation when log file not supplied or
 // NumberOfGCLogFiles is 0
 void check_gclog_consistency() {
+  if (UseAsyncGCLog) {
+    if (Arguments::gc_log_filename() == NULL) {
+      jio_fprintf(defaultStream::output_stream(),
+                  "To enable Async GC log, use -Xloggc:<filename> -XX:UseAsyncGCLog\n"
+                  "Async GC log is turned off\n");
+      UseAsyncGCLog = false;
+
+    }
+  }
+
   if (UseGCLogFileRotation) {
     if ((Arguments::gc_log_filename() == NULL) || (NumberOfGCLogFiles == 0)) {
       jio_fprintf(defaultStream::output_stream(),
@@ -3998,7 +4010,7 @@ jint Arguments::parse_options_environment_variable(const char* name, SysClassPat
   return JNI_OK;
 }
 
-void Arguments::set_shared_spaces_flags() {
+jint Arguments::set_shared_spaces_flags() {
   if (DumpSharedSpaces) {
     if (FailOverToOldVerifier) {
       // Don't fall back to the old verifier on verification failure. If a
@@ -4012,22 +4024,16 @@ void Arguments::set_shared_spaces_flags() {
       warning("cannot dump shared archive while using shared archive");
     }
     UseSharedSpaces = false;
-#ifdef _LP64
-    if (!UseCompressedOops || !UseCompressedClassPointers) {
-      vm_exit_during_initialization(
-        "Cannot dump shared archive when UseCompressedOops or UseCompressedClassPointers is off.", NULL);
-    }
-  } else {
-    if (!UseCompressedOops || !UseCompressedClassPointers) {
-      no_shared_spaces("UseCompressedOops and UseCompressedClassPointers must be on for UseSharedSpaces.");
-    }
-#endif
   }
 
 #if INCLUDE_CDS
   // Initialize shared archive paths which could include both base and dynamic archive paths
-  init_shared_archive_paths();
+  // This must be after set_ergonomics_flags() called so flag UseCompressedOops is set properly.
+  if(!init_shared_archive_paths()) {
+    return   JNI_ENOMEM;
+  }
 #endif  // INCLUDE_CDS
+  return JNI_OK;
 }
 
 #if !INCLUDE_ALL_GCS
@@ -4055,23 +4061,12 @@ char* Arguments::get_default_shared_archive_path() {
   const size_t len = jvm_path_len + file_sep_len + 20;
   default_archive_path = NEW_C_HEAP_ARRAY(char, len, mtInternal);
   if (default_archive_path != NULL) {
-    jio_snprintf(default_archive_path, len, "%s%sclasses.jsa",
+    jio_snprintf(default_archive_path, len,
+      UseCompressedClassPointers ? "%s%sclasses.jsa" : "%s%sclasses_nocoops.jsa",
       jvm_path, os::file_separator());
   }
   Arguments::set_is_default_jsa(true);
   return default_archive_path;
-}
-
-// Sharing support
-// Construct the path to the archive
-static char* get_shared_archive_path() {
-  char *shared_archive_path;
-  if (SharedArchiveFile == NULL) {
-    shared_archive_path = Arguments::get_default_shared_archive_path();
-  } else {
-    shared_archive_path = os::strdup(SharedArchiveFile, mtInternal);
-  }
-  return shared_archive_path;
 }
 
 
@@ -4211,13 +4206,6 @@ jint Arguments::parse(const JavaVMInitArgs* args) {
     return result;
   }
 
-  // Call get_shared_archive_path() here, after possible SharedArchiveFile option got parsed.
-  SharedArchivePath = get_shared_archive_path();
-  if (SharedArchivePath == NULL) {
-    return JNI_ENOMEM;
-  }
-
-
   // Set up VerifySharedSpaces
   if (FLAG_IS_DEFAULT(VerifySharedSpaces) && SharedArchiveFile != NULL) {
     VerifySharedSpaces = true;
@@ -4311,7 +4299,8 @@ jint Arguments::apply_ergo() {
   // Set flags based on ergonomics.
   set_ergonomics_flags();
 
-  set_shared_spaces_flags();
+  jint result = set_shared_spaces_flags();
+  if (result != JNI_OK) return result;
 
 #if defined(SPARC)
   // BIS instructions require 'membar' instruction regardless of the number

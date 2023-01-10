@@ -65,6 +65,7 @@ class MetaspaceTracer;
 class MetaWord;
 class Mutex;
 class outputStream;
+class PrintCLDMetaspaceInfoClosure;
 class SpaceManager;
 class VirtualSpaceList;
 
@@ -88,6 +89,7 @@ class Metaspace : public CHeapObj<mtClass> {
   friend class VM_CollectForMetadataAllocation;
   friend class MetaspaceGC;
   friend class MetaspaceAux;
+  friend class PrintCLDMetaspaceInfoClosure;
 
  public:
   enum MetadataType {
@@ -371,6 +373,8 @@ class MetaspaceAux : AllStatic {
   static size_t min_chunk_size_bytes() {
     return min_chunk_size_words() * BytesPerWord;
   }
+
+  static void print_metadata_for_nmt(outputStream* out, size_t scale = K);
 
   static bool has_chunk_free_list(Metaspace::MetadataType mdtype);
   static MetaspaceChunkFreeListSummary chunk_free_list_summary(Metaspace::MetadataType mdtype);

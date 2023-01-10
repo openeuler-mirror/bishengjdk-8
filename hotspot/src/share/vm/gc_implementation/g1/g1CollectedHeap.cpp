@@ -53,6 +53,7 @@
 #include "gc_implementation/shared/gcTimer.hpp"
 #include "gc_implementation/shared/gcTrace.hpp"
 #include "gc_implementation/shared/gcTraceTime.hpp"
+#include "gc_implementation/shared/gcTrimNativeHeap.hpp"
 #include "gc_implementation/shared/isGCActiveMark.hpp"
 #include "memory/allocation.hpp"
 #include "memory/heapInspection.hpp"
@@ -1304,6 +1305,9 @@ bool G1CollectedHeap::do_collection(bool explicit_gc,
       TraceCollectorStats tcs(g1mm()->full_collection_counters());
       TraceMemoryManagerStats tms(true /* fullGC */, gc_cause());
 
+      // Pause native trimming for the duration of the GC
+      GCTrimNative::pause_periodic_trim();
+
       double start = os::elapsedTime();
       g1_policy()->record_full_collection_start();
 
@@ -1546,6 +1550,8 @@ bool G1CollectedHeap::do_collection(bool explicit_gc,
 
     gc_timer->register_gc_end();
     gc_tracer->report_gc_end(gc_timer->gc_end(), gc_timer->time_partitions());
+
+    GCTrimNative::schedule_trim();
   }
   return true;
 }

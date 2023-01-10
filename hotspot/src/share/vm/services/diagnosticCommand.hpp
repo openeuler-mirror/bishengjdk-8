@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2011, 2018, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -314,6 +314,29 @@ public:
   virtual void execute(DCmdSource source, TRAPS);
 };
 
+class ClassesDCmd : public DCmdWithParser {
+protected:
+  DCmdArgument<bool> _verbose;
+public:
+  ClassesDCmd(outputStream* output, bool heap);
+  static const char* name() {
+    return "VM.classes";
+  }
+  static const char* description() {
+    return "Print all loaded classes";
+  }
+  static const char* impact() {
+      return "Medium: Depends on number of loaded classes.";
+  }
+  static const JavaPermission permission() {
+    JavaPermission p = {"java.lang.management.ManagementPermission",
+                        "monitor", NULL};
+    return p;
+  }
+  static int num_arguments();
+  virtual void execute(DCmdSource source, TRAPS);
+};
+
 class ClassStatsDCmd : public DCmdWithParser {
 protected:
   DCmdArgument<bool> _all;
@@ -339,6 +362,7 @@ public:
 class ThreadDumpDCmd : public DCmdWithParser {
 protected:
   DCmdArgument<bool> _locks;
+  DCmdArgument<bool> _extended;
 public:
   ThreadDumpDCmd(outputStream* output, bool heap);
   static const char* name() { return "Thread.print"; }
@@ -462,6 +486,27 @@ public:
                         "control", NULL};
     return p;
   }
+};
+
+class MetaspaceDCmd : public DCmd {
+public:
+  MetaspaceDCmd(outputStream* output, bool heap);
+  static const char* name() {
+    return "VM.metaspace";
+  }
+  static const char* description() {
+    return "Prints the statistics for the metaspace";
+  }
+  static const char* impact() {
+      return "Medium: Depends on number of classes loaded.";
+  }
+  static const JavaPermission permission() {
+    JavaPermission p = {"java.lang.management.ManagementPermission",
+                        "monitor", NULL};
+    return p;
+  }
+  static int num_arguments() { return 0; }
+  virtual void execute(DCmdSource source, TRAPS);
 };
 
 #endif // SHARE_VM_SERVICES_DIAGNOSTICCOMMAND_HPP

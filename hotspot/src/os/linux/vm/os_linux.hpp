@@ -120,10 +120,12 @@ class Linux {
   static bool release_memory_special_shm(char* base, size_t bytes);
   static bool release_memory_special_huge_tlbfs(char* base, size_t bytes);
 
-  static void print_full_memory_info(outputStream* st);
+  static void print_process_memory_info(outputStream* st);
+  static void print_system_memory_info(outputStream* st);
   static void print_container_info(outputStream* st);
   static void print_distro_info(outputStream* st);
   static void print_libversion_info(outputStream* st);
+  static void print_proc_sys_info(outputStream* st);
 
  public:
   static bool _stack_is_executable;
@@ -193,6 +195,7 @@ class Linux {
   static bool is_floating_stack()             { return _is_floating_stack; }
 
   static void libpthread_init();
+  static void parse_numa_nodes();
   static bool libnuma_init();
   static void* libnuma_dlsym(void* handle, const char* name);
   // libnuma v2 (libnuma_1.2) symbols
@@ -242,6 +245,23 @@ class Linux {
   public:
   static pthread_condattr_t* condAttr() { return _condattr; }
 
+  // Output structure for query_process_memory_info() (all values in KB)
+  struct meminfo_t {
+    ssize_t vmsize;     // current virtual size
+    ssize_t vmpeak;     // peak virtual size
+    ssize_t vmrss;      // current resident set size
+    ssize_t vmhwm;      // peak resident set size
+    ssize_t vmswap;     // swapped out
+    ssize_t rssanon;    // resident set size (anonymous mappings, needs 4.5)
+    ssize_t rssfile;    // resident set size (file mappings, needs 4.5)
+    ssize_t rssshmem;   // resident set size (shared mappings, needs 4.5)
+  };
+
+  // Attempts to query memory information about the current process and return it in the output structure.
+  // May fail (returns false) or succeed (returns true) but not all output fields are available; unavailable
+  // fields will contain -1.
+  static bool query_process_memory_info(meminfo_t* info);
+
   // Stack repair handling
 
   // none present
@@ -264,6 +284,11 @@ private:
   typedef struct bitmask* (*numa_get_interleave_mask_func_t)(void);
   typedef long (*numa_move_pages_func_t)(int pid, unsigned long count, void **pages, const int *nodes, int *status, int flags);
   typedef int (*numa_run_on_node_func_t)(int node);
+  typedef struct bitmask* (*numa_parse_nodestring_all_func_t)(const char*);
+  typedef int (*numa_run_on_node_mask_func_t)(struct bitmask* mask);
+  typedef void (*numa_set_membind_func_t)(struct bitmask* mask);
+  typedef int (*numa_bitmask_equal_func_t)(struct bitmask* mask, struct bitmask* mask1);
+  typedef void (*numa_bitmask_free_func_t)(struct bitmask* mask);
 
   typedef void (*numa_set_bind_policy_func_t)(int policy);
   typedef int (*numa_bitmask_isbitset_func_t)(struct bitmask *bmp, unsigned int n);
@@ -284,6 +309,11 @@ private:
   static numa_get_interleave_mask_func_t _numa_get_interleave_mask;
   static numa_move_pages_func_t _numa_move_pages;
   static numa_run_on_node_func_t _numa_run_on_node;
+  static numa_parse_nodestring_all_func_t _numa_parse_nodestring_all;
+  static numa_run_on_node_mask_func_t _numa_run_on_node_mask;
+  static numa_bitmask_equal_func_t _numa_bitmask_equal;
+  static numa_set_membind_func_t _numa_set_membind;
+  static numa_bitmask_free_func_t _numa_bitmask_free;
 
   static unsigned long* _numa_all_nodes;
   static struct bitmask* _numa_all_nodes_ptr;
@@ -306,6 +336,11 @@ private:
   static void set_numa_get_interleave_mask(numa_get_interleave_mask_func_t func) { _numa_get_interleave_mask = func; }
   static void set_numa_move_pages(numa_move_pages_func_t func) { _numa_move_pages = func; }
   static void set_numa_run_on_node(numa_run_on_node_func_t func) { _numa_run_on_node = func; }
+  static void set_numa_parse_nodestring_all(numa_parse_nodestring_all_func_t func) { _numa_parse_nodestring_all = func; }
+  static void set_numa_run_on_node_mask(numa_run_on_node_mask_func_t func) { _numa_run_on_node_mask = func; }
+  static void set_numa_bitmask_equal(numa_bitmask_equal_func_t func) { _numa_bitmask_equal = func; }
+  static void set_numa_set_membind(numa_set_membind_func_t func) { _numa_set_membind = func; }
+  static void set_numa_bitmask_free(numa_bitmask_free_func_t func) { _numa_bitmask_free = func; }
   static void set_numa_all_nodes(unsigned long* ptr) { _numa_all_nodes = ptr; }
   static void set_numa_all_nodes_ptr(struct bitmask **ptr) { _numa_all_nodes_ptr = (ptr == NULL ? NULL : *ptr); }
   static void set_numa_nodes_ptr(struct bitmask **ptr) { _numa_nodes_ptr = (ptr == NULL ? NULL : *ptr); }
@@ -430,6 +465,62 @@ public:
       return true;
     } else {
       return false;
+    }
+  }
+
+#ifdef __GLIBC__
+  struct glibc_mallinfo2 {
+    size_t arena;
+    size_t ordblks;
+    size_t smblks;
+    size_t hblks;
+    size_t hblkhd;
+    size_t usmblks;
+    size_t fsmblks;
+    size_t uordblks;
+    size_t fordblks;
+    size_t keepcost;
+  };
+  enum mallinfo_retval_t { ok, error, ok_but_possibly_wrapped };
+  // get_mallinfo() is a wrapper for mallinfo/mallinfo2. It will prefer mallinfo2() if found.
+  // If we only have mallinfo(), values may be 32-bit truncated, which is signaled via
+  // "ok_but_possibly_wrapped".
+  static mallinfo_retval_t get_mallinfo(glibc_mallinfo2* out);
+#endif
+
+  static bool isbound_to_all_node() {
+    if (_numa_membind_bitmask != NULL && _numa_max_node != NULL && _numa_bitmask_isbitset != NULL) {
+      unsigned int highest_node_number = _numa_max_node();
+      for (unsigned int node = 0; node <= highest_node_number; node++) {
+        if (!_numa_bitmask_isbitset(_numa_membind_bitmask, node)) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  static bitmask* numa_parse_nodestring_all(const char* s) {
+    return _numa_parse_nodestring_all != NULL ? _numa_parse_nodestring_all(s) : NULL;
+  }
+
+  static int numa_run_on_node_mask(bitmask* bitmask) {
+    return _numa_run_on_node_mask != NULL ? _numa_run_on_node_mask(bitmask) : -1;
+  }
+
+  static int numa_bitmask_equal(bitmask* bitmask, struct bitmask* bitmask1) {
+    return _numa_bitmask_equal != NULL ? _numa_bitmask_equal(bitmask, bitmask1) : 1;
+  }
+
+  static void numa_set_membind(bitmask* bitmask) {
+    if (_numa_set_membind != NULL) {
+      _numa_set_membind(bitmask);
+    }
+  }
+
+  static void numa_bitmask_free(bitmask* bitmask) {
+    if (_numa_bitmask_free != NULL) {
+      _numa_bitmask_free(bitmask);
     }
   }
 };

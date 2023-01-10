@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2014, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2016, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -32,6 +32,7 @@
 #include "runtime/handles.inline.hpp"
 #include "runtime/icache.hpp"
 #include "runtime/init.hpp"
+#include "runtime/logAsyncWriter.hpp"
 #include "runtime/safepoint.hpp"
 #include "runtime/sharedRuntime.hpp"
 #include "services/memTracker.hpp"
@@ -106,6 +107,7 @@ jint init_globals() {
   if (status != JNI_OK)
     return status;
 
+  AsyncLogWriter::initialize();
   interpreter_init(); // before any methods loaded
   invocationCounter_init();  // before any methods loaded
   marksweep_init();
@@ -166,8 +168,7 @@ void exit_globals() {
   }
 }
 
-
-static bool _init_completed = false;
+static volatile bool _init_completed = false;
 
 bool is_init_completed() {
   return _init_completed;

@@ -97,6 +97,7 @@
 #include "runtime/sharedRuntime.hpp"
 #include "runtime/stubRoutines.hpp"
 #include "runtime/thread.inline.hpp"
+#include "runtime/logAsyncWriter.hpp"
 #include "runtime/virtualspace.hpp"
 #include "runtime/vmStructs.hpp"
 #include "utilities/array.hpp"
@@ -1599,6 +1600,7 @@ typedef TwoOopHashtable<Symbol*, mtClass>     SymbolTwoOopHashtable;
            declare_type(Thread, ThreadShadow)                             \
            declare_type(NamedThread, Thread)                              \
            declare_type(WatcherThread, Thread)                            \
+           declare_type(AsyncLogWriter, Thread)                           \
            declare_type(JavaThread, Thread)                               \
            declare_type(JvmtiAgentThread, JavaThread)                     \
            declare_type(ServiceThread, JavaThread)                        \

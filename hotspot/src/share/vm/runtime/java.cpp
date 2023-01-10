@@ -30,6 +30,7 @@
 #include "code/codeCache.hpp"
 #include "compiler/compileBroker.hpp"
 #include "compiler/compilerOracle.hpp"
+#include "gc_implementation/shared/gcTrimNativeHeap.hpp"
 #include "interpreter/bytecodeHistogram.hpp"
 #include "jfr/jfrEvents.hpp"
 #include "jfr/support/jfrThreadId.hpp"
@@ -53,6 +54,7 @@
 #include "runtime/init.hpp"
 #include "runtime/interfaceSupport.hpp"
 #include "runtime/java.hpp"
+#include "runtime/logAsyncWriter.hpp"
 #include "runtime/memprofiler.hpp"
 #include "runtime/sharedRuntime.hpp"
 #include "runtime/statSampler.hpp"
@@ -509,6 +511,8 @@ void before_exit(JavaThread * thread) {
   StatSampler::disengage();
   StatSampler::destroy();
 
+  GCTrimNative::cleanup();
+
   // Stop concurrent GC threads
   Universe::heap()->stop();
 
@@ -573,6 +577,11 @@ void before_exit(JavaThread * thread) {
       tty->print_cr("ERROR: fail_cnt=%d", fail_cnt);
       guarantee(fail_cnt == 0, "unexpected StringTable verification failures");
     }
+  }
+
+  // Stop async log writer thread
+  if (UseAsyncGCLog) {
+    AsyncLogWriter::instance()->stop();
   }
 
   #undef BEFORE_EXIT_NOT_RUN

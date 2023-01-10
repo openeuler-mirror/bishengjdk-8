@@ -546,6 +546,9 @@ class CommandLineFlags {
   develop(bool, CleanChunkPoolAsync, falseInEmbedded,                       \
           "Clean the chunk pool asynchronously")                            \
                                                                             \
+  develop(intx, TraceDwarfLevel, 0,                                         \
+          "Debug levels for the dwarf parser")                              \
+                                                                            \
   /* Temporary: See 6948537 */                                              \
   experimental(bool, UseMemSetInBOT, true,                                  \
           "(Unstable) uses memset in BOT updates in GC code")               \
@@ -610,6 +613,19 @@ class CommandLineFlags {
   product(uintx, NUMAPageScanRate, 256,                                     \
           "Maximum number of pages to include in the page scan procedure")  \
                                                                             \
+  product(bool, LogNUMANodes, false,                                        \
+          "Print NUMANodes")                                                \
+                                                                            \
+  product(ccstr, NUMANodes, NULL,                                           \
+          "This parameter provides the same functionality as"               \
+          "'numactl --all -N <nodes> -m <nodes>'."                          \
+          "<nodes> can be '0-2', '0,1,2', 'all' and so on.")                \
+                                                                            \
+  product(uintx, NUMANodesRandom, 0,                                        \
+          "Number of continuous nodes to bind"                              \
+          "with the first node randomly chosen."                            \
+          "NUMANodesRandom has higher priority than NUMANodes")             \
+                                                                            \
   product_pd(bool, NeedsDeoptSuspend,                                       \
           "True for register window machines (sparc/ia64)")                 \
                                                                             \
@@ -650,7 +666,7 @@ class CommandLineFlags {
           "Print out every time compilation is longer than "                \
           "a given threshold")                                              \
                                                                             \
-  develop(bool, SafepointALot, false,                                       \
+  diagnostic(bool, SafepointALot, false,                                    \
           "Generate a lot of safepoints. This works with "                  \
           "GuaranteedSafepointInterval")                                    \
                                                                             \
@@ -948,6 +964,14 @@ class CommandLineFlags {
   product(ccstrlist, OnOutOfMemoryError, "",                                \
           "Run user-defined commands on first java.lang.OutOfMemoryError")  \
                                                                             \
+  manageable(bool, PrintClassLoadingDetails, false,                         \
+          "Print class loading details (including date stamps, thread id "  \
+          "and effective class loaders) when enable TraceClassLoading")     \
+                                                                            \
+  manageable(ccstr, PrintThreadStackOnLoadingClass, NULL,                   \
+          "Print thread stack when the specified class is loaded when "     \
+          "enable PrintClassLoadingDetails")                                \
+                                                                            \
   manageable(bool, HeapDumpBeforeFullGC, false,                             \
           "Dump heap to file before any major stop-the-world GC")           \
                                                                             \
@@ -989,6 +1013,9 @@ class CommandLineFlags {
                                                                             \
   product(bool, PrintCompilation, false,                                    \
           "Print compilations")                                             \
+                                                                            \
+  product(bool, PrintExtendedThreadInfo, false,                             \
+          "Print more information in thread dump")                          \
                                                                             \
   diagnostic(bool, TraceNMethodInstalls, false,                             \
           "Trace nmethod installation")                                     \
@@ -3097,7 +3124,7 @@ class CommandLineFlags {
   notproduct(intx, MaxElementPrintSize, 256,                                \
           "maximum number of elements to print")                            \
                                                                             \
-  notproduct(intx, MaxSubklassPrintSize, 4,                                 \
+  product(intx, MaxSubklassPrintSize, 4,                                 \
           "maximum number of subklasses to print when printing klass")      \
                                                                             \
   product(intx, MaxInlineLevel, 9,                                          \
@@ -3386,6 +3413,16 @@ class CommandLineFlags {
   product(uintx, GCDrainStackTargetSize, 64,                                \
           "Number of entries we will try to leave on the stack "            \
           "during parallel gc")                                             \
+                                                                            \
+  experimental(bool, GCTrimNativeHeap, false,                               \
+          "GC will attempt to trim the native heap periodically and at "    \
+          "full GCs.")                                                      \
+                                                                            \
+  experimental(uintx, GCTrimNativeHeapInterval, 60,                          \
+          "If GCTrimNativeHeap is enabled: interval time, in seconds, in "  \
+          "which the VM will attempt to trim the native heap. A value of "  \
+          "0 disables periodic trimming while leaving trimming at full gc " \
+          "enabled.")                                                       \
                                                                             \
   /* stack parameters */                                                    \
   product_pd(intx, StackYellowPages,                                        \
@@ -4094,6 +4131,15 @@ class CommandLineFlags {
                                                                             \
   JFR_ONLY(product(bool, LogJFR, false,                                     \
           "Enable JFR logging (consider +Verbose)"))                        \
+                                                                            \
+  product(bool, UseAsyncGCLog, false,                                       \
+          "Enable asynchronous GC logging")                                 \
+                                                                            \
+  product(uintx, AsyncLogBufferSize, 2*M,                                   \
+          "Memory budget (in bytes) for the buffer of Asynchronous")        \
+                                                                            \
+  diagnostic(bool, PrintAsyncGCLog, false,                                  \
+          "Print some information of Async GC Log")                         \
 
 /*
  *  Macros for factoring of globals

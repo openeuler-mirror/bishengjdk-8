@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001, 2012, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2001, 2016, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -40,12 +40,12 @@ ConcurrentGCThread::ConcurrentGCThread() :
   _should_terminate(false), _has_terminated(false) {
 };
 
-void ConcurrentGCThread::create_and_start() {
+void ConcurrentGCThread::create_and_start(ThreadPriority prio) {
   if (os::create_thread(this, os::cgc_thread)) {
     // XXX: need to set this to low priority
     // unless "agressive mode" set; priority
     // should be just less than that of VMThread.
-    os::set_priority(this, NearMaxPriority);
+    os::set_priority(this, prio);
     if (!_should_terminate && !DisableStartThread) {
       os::start_thread(this);
     }
@@ -63,7 +63,7 @@ void ConcurrentGCThread::initialize_in_thread() {
 void ConcurrentGCThread::wait_for_universe_init() {
   MutexLockerEx x(CGC_lock, Mutex::_no_safepoint_check_flag);
   while (!is_init_completed() && !_should_terminate) {
-    CGC_lock->wait(Mutex::_no_safepoint_check_flag, 200);
+    CGC_lock->wait(Mutex::_no_safepoint_check_flag, 1);
   }
 }
 

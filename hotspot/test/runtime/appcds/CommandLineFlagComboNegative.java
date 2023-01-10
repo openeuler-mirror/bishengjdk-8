@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2014, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2022, Huawei Technologies Co., Ltd. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -64,9 +65,9 @@ public class CommandLineFlagComboNegative {
             testTable.add( new TestVector("-XX:ObjectAlignmentInBytes=64", "-XX:ObjectAlignmentInBytes=32",
                     "An error has occurred while processing the shared archive file", 1) );
             testTable.add( new TestVector("-XX:+UseCompressedOops", "-XX:-UseCompressedOops",
-                    "Class data sharing is inconsistent with other specified options", 1) );
+                    "The saved state of UseCompressedOops and UseCompressedClassPointers is different from runtime, CDS will be disabled", 1) );
             testTable.add( new TestVector("-XX:+UseCompressedClassPointers", "-XX:-UseCompressedClassPointers",
-                    "Class data sharing is inconsistent with other specified options", 1) );
+                    "The saved state of UseCompressedOops and UseCompressedClassPointers is different from runtime, CDS will be disabled", 1) );
         }
     }
 
