@@ -30,14 +30,14 @@ import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import jdk.test.lib.util.FileUtils;
+import jdk.testlibrary.FileUtils;
 
 /*
  * @test
  * @bug 8166253
  * @summary Verify that OverlappingFileLockException is thrown when expected.
- * @library .. /test/lib
- * @build jdk.test.lib.util.FileUtils
+ * @library /lib/testlibrary
+ * @build jdk.testlibrary.Utils
  * @run main/othervm FileLockGC
  */
 public class FileLockGC {

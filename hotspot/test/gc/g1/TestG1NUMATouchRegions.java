@@ -21,25 +21,23 @@
  * questions.
  */
 
-package gc.g1;
+package gc;
 
 /**
  * @test TestG1NUMATouchRegions
  * @summary Ensure the bottom of the given heap regions are properly touched with requested NUMA id.
  * @key gc
- * @requires vm.gc.G1
  * @requires os.family == "linux"
- * @library /test/lib
+ * @library /testlibrary /testlibrary/whitebox
  * @modules java.base/jdk.internal.misc
  *          java.management
  * @build sun.hotspot.WhiteBox
  * @run driver ClassFileInstaller sun.hotspot.WhiteBox
- * @run main/othervm -XX:+UseG1GC -Xbootclasspath/a:. -XX:+UseNUMA -XX:+UnlockDiagnosticVMOptions -XX:+WhiteBoxAPI gc.g1.TestG1NUMATouchRegions
+ * @run main/othervm -XX:+UseG1GC -Xbootclasspath/a:. -XX:+UseNUMA -XX:+UnlockDiagnosticVMOptions -XX:+WhiteBoxAPI gc.TestG1NUMATouchRegions
  */
 
 import java.util.LinkedList;
-import jdk.test.lib.process.OutputAnalyzer;
-import jdk.test.lib.process.ProcessTools;
+import com.oracle.java.testlibrary.*;
 import sun.hotspot.WhiteBox;
 
 public class TestG1NUMATouchRegions {

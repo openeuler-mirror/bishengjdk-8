@@ -48,7 +48,7 @@ floobydust (void *p) {
 int
 main (int argc, const char** argv) {
   JavaVMOption options[1];
-  options[0].optionString = (char*) "-Xss512k";
+  options[0].optionString = (char*) "-Xss320k";
 
   JavaVMInitArgs vm_args;
   vm_args.version = JNI_VERSION_1_2;

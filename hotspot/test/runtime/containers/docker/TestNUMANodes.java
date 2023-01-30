@@ -85,9 +85,9 @@ public class TestNUMANodes {
                 Asserts.assertTrue(err.contains("Mempolicy is not changed"));
                 break;
             case 3:
-		if (numas > 1) {
+                if (numas > 1) {
                     Asserts.assertTrue(err.contains("NUMANodes is converted to"));
-		}
+                }
                 break;
             case 4:
                 Asserts.assertTrue(err.contains("The count of nodes to bind should be"));

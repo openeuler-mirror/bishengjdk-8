@@ -49,8 +49,6 @@ if [ "x$gcc_cmd" = "x" ]; then
     exit 0;
 fi
 
-CFLAGS="-m${VM_BITS}"
-
 if [ "${VM_CPU}" == "aarch64" ]; then
     CFLAGS=""
 fi
@@ -63,12 +61,11 @@ cp ${TESTSRC}${FS}invoke.cxx .
 # Copy the result of our @compile action:
 cp ${TESTCLASSES}${FS}DoOverflow.class .
 
-echo "Compilation flag: ${COMP_FLAG}"
 # Note pthread may not be found thus invoke creation will fail to be created.
 # Check to ensure you have a /usr/lib/libpthread.so if you don't please look
 # for /usr/lib/`uname -m`-linux-gnu version ensure to add that path to below compilation.
 
-$gcc_cmd -DLINUX ${CFLAGS} -o invoke \
+$gcc_cmd -DLINUX ${CFLAGBITS} -o invoke \
     -I${COMPILEJAVA}/include -I${COMPILEJAVA}/include/linux \
     -L${COMPILEJAVA}/jre/lib/${VM_CPU}/${VM_TYPE} \
     invoke.cxx -ljvm -lpthread
