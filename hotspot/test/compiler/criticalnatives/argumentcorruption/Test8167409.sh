@@ -78,7 +78,7 @@ THIS_DIR=.
 cp ${TESTSRC}${FS}*.java ${THIS_DIR}
 ${TESTJAVA}${FS}bin${FS}javac *.java
 
-$cc_cmd ${M32} -fPIC -shared -o libCNCheckLongArgs.so \
+$cc_cmd ${M32} ${CFLAGBITS} -fPIC -shared -o libCNCheckLongArgs.so \
     -I${TESTJAVA}${FS}include -I${TESTJAVA}${FS}include${FS}linux \
     ${TESTSRC}${FS}libCNCheckLongArgs.c
 

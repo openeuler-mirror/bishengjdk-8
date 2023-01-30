@@ -55,6 +55,7 @@ void ConcurrentGCThread::create_and_start(ThreadPriority prio) {
 void ConcurrentGCThread::initialize_in_thread() {
   this->record_stack_base_and_size();
   this->initialize_thread_local_storage();
+  this->initialize_named_thread();
   this->set_active_handles(JNIHandleBlock::allocate_block());
   // From this time Thread::current() should be working.
   assert(this == Thread::current(), "just checking");

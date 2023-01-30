@@ -23,7 +23,6 @@
  */
 
 /*
- * @test
  * @bug 7092821
  * @library ../testlibrary
  * @summary make sure that Sun providers do not miss any algorithms after

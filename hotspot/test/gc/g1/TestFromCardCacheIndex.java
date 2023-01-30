@@ -3,15 +3,12 @@
  * @bug 8196485
  * @summary Ensure that G1 does not miss a remembered set entry due to from card cache default value indices.
  * @key gc
- * @requires vm.gc.G1
- * @requires vm.debug
  * @requires vm.bits != "32"
- * @library /test/lib
- * @modules java.base/jdk.internal.misc
- *          java.management
+ * @library /testlibrary/whitebox /testlibrary
+ * @modules java.base/jdk.internal.misc java.management
  * @build sun.hotspot.WhiteBox
  * @run driver ClassFileInstaller sun.hotspot.WhiteBox
- * @run main/othervm -XX:+UnlockDiagnosticVMOptions -XX:+WhiteBoxAPI -Xbootclasspath/a:. -Xms20M -Xmx20M -XX:+UseCompressedOops -XX:G1HeapRegionSize=1M -XX:HeapBaseMinAddress=2199011721216 -XX:+UseG1GC -verbose:gc TestFromCardCacheIndex
+ * @run main/othervm -XX:+IgnoreUnrecognizedVMOptions -XX:+UnlockDiagnosticVMOptions -XX:+WhiteBoxAPI -Xbootclasspath/a:. -Xms20M -Xmx20M -XX:+UseCompressedOops -XX:G1HeapRegionSize=1M -XX:HeapBaseMinAddress=2199011721216 -XX:+UseG1GC -verbose:gc TestFromCardCacheIndex
  */
 
 import sun.hotspot.WhiteBox;

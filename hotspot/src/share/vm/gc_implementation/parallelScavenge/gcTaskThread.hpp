@@ -54,7 +54,8 @@ private:
                               uint           processor_id) {
     return new GCTaskThread(manager, which, processor_id);
   }
- public:
+
+public:
   static void destroy(GCTaskThread* manager) {
     if (manager != NULL) {
       delete manager;
@@ -67,8 +68,6 @@ private:
   virtual void run();
 
   void print_task_time_stamps();
-  void print_on(outputStream* st) const;
-  void print() const                                { print_on(tty); }
 
 protected:
   // Constructor.  Clients use factory, but there could be subclasses.
