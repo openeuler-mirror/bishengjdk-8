@@ -14729,10 +14729,6 @@ $as_echo_n "checking if a default CDS archive should be generated... " >&6; }
     { $as_echo "$as_me:${as_lineno-$LINENO}: result: no, not possible with cross compilation" >&5
 $as_echo "no, not possible with cross compilation" >&6; }
     BUILD_CDS_ARCHIVE="false"
-  elif test "x$OPENJDK_TARGET_CPU_BITS" = "x32"; then
-    { $as_echo "$as_me:${as_lineno-$LINENO}: result: no, not possible with x32" >&5
-$as_echo "no, not possible with x32" >&6; }
-    BUILD_CDS_ARCHIVE="false"
   elif test "x$enable_cds_archive" = "xyes"; then
     { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes, forced" >&5
 $as_echo "yes, forced" >&6; }
