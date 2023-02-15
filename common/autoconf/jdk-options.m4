@@ -814,6 +814,9 @@ AC_DEFUN_ONCE([JDKOPT_ENABLE_DISABLE_CDS_ARCHIVE],
   if test "x$COMPILE_TYPE" = "xcross"; then
     AC_MSG_RESULT([no, not possible with cross compilation])
     BUILD_CDS_ARCHIVE="false"
+  elif test "x$OPENJDK_TARGET_CPU_BITS" = "x32"; then
+    AC_MSG_RESULT([no, not possible with cross x32])
+    BUILD_CDS_ARCHIVE="false"
   elif test "x$enable_cds_archive" = "xyes"; then
     AC_MSG_RESULT([yes, forced])
     BUILD_CDS_ARCHIVE="true"
