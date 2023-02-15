@@ -36,27 +36,6 @@
 
 #ifdef _LP64
 
-#ifdef ASSERT
-// Helper macros to print different log levels during DWARF parsing
-#define DWARF_LOG_SUMMARY(format, ...) DWARF_LOG_WITH_LEVEL(1, format, ##__VA_ARGS__) // Same level as error logging
-#define DWARF_LOG_ERROR(format, ...) DWARF_LOG_WITH_LEVEL(1, format, ##__VA_ARGS__)
-#define DWARF_LOG_INFO(format, ...) DWARF_LOG_WITH_LEVEL(2, format, ##__VA_ARGS__)
-#define DWARF_LOG_DEBUG(format, ...) DWARF_LOG_WITH_LEVEL(3, format, ##__VA_ARGS__)
-#define DWARF_LOG_TRACE(format, ...) DWARF_LOG_WITH_LEVEL(4, format, ##__VA_ARGS__)
-
-#define DWARF_LOG_WITH_LEVEL(level, format, ...) \
-    if (TraceDwarfLevel >= level) {         \
-      tty->print("[dwarf] ");               \
-      tty->print_cr(format, ##__VA_ARGS__); \
-    }
-#else
-#define DWARF_LOG_SUMMARY(format, ...)
-#define DWARF_LOG_ERROR(format, ...)
-#define DWARF_LOG_INFO(format, ...)
-#define DWARF_LOG_DEBUG(format, ...)
-#define DWARF_LOG_TRACE(format, ...)
-#endif
-
 typedef Elf64_Half      Elf_Half;
 typedef Elf64_Word      Elf_Word;
 typedef Elf64_Off       Elf_Off;
@@ -93,6 +72,26 @@ typedef Elf32_Sym       Elf_Sym;
 #include "memory/allocation.hpp"
 #include "utilities/decoder.hpp"
 
+#ifdef ASSERT
+// Helper macros to print different log levels during DWARF parsing
+#define DWARF_LOG_SUMMARY(format, ...) DWARF_LOG_WITH_LEVEL(1, format, ##__VA_ARGS__) // Same level as error logging
+#define DWARF_LOG_ERROR(format, ...) DWARF_LOG_WITH_LEVEL(1, format, ##__VA_ARGS__)
+#define DWARF_LOG_INFO(format, ...) DWARF_LOG_WITH_LEVEL(2, format, ##__VA_ARGS__)
+#define DWARF_LOG_DEBUG(format, ...) DWARF_LOG_WITH_LEVEL(3, format, ##__VA_ARGS__)
+#define DWARF_LOG_TRACE(format, ...) DWARF_LOG_WITH_LEVEL(4, format, ##__VA_ARGS__)
+
+#define DWARF_LOG_WITH_LEVEL(level, format, ...) \
+    if (TraceDwarfLevel >= level) {         \
+      tty->print("[dwarf] ");               \
+      tty->print_cr(format, ##__VA_ARGS__); \
+    }
+#else
+#define DWARF_LOG_SUMMARY(format, ...)
+#define DWARF_LOG_ERROR(format, ...)
+#define DWARF_LOG_INFO(format, ...)
+#define DWARF_LOG_DEBUG(format, ...)
+#define DWARF_LOG_TRACE(format, ...)
+#endif
 
 class ElfStringTable;
 class ElfSymbolTable;
