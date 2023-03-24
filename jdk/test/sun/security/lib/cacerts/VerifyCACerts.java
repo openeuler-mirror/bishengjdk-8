@@ -53,12 +53,12 @@ public class VerifyCACerts {
             + File.separator + "security" + File.separator + "cacerts";
 
     // The numbers of certs now.
-    private static final int COUNT = 84;
+    private static final int COUNT = 83;
 
     // SHA-256 of cacerts, can be generated with
     // shasum -a 256 cacerts | sed -e 's/../&:/g' | tr '[:lower:]' '[:upper:]' | cut -c1-95
     private static final String CHECKSUM
-            = "D3:05:21:64:FA:D7:CD:29:E8:CB:57:E7:47:ED:79:9B:47:D8:0E:75:2D:CA:83:BB:86:AF:D9:43:FD:3E:17:85";
+            = "2D:04:88:6C:52:53:54:EB:38:2D:BC:E0:AF:B7:82:F4:9E:32:A8:1A:1B:A3:AE:CF:25:CB:C2:F6:0F:4E:E1:20";
 
     // map of cert alias to SHA-256 fingerprint
     @SuppressWarnings("serial")
@@ -111,8 +111,6 @@ public class VerifyCACerts {
                     "7E:37:CB:8B:4C:47:09:0C:AB:36:55:1B:A6:F4:5D:B8:40:68:0F:BA:16:6A:95:2D:B1:00:71:7F:43:05:3F:C2");
             put("digicerthighassuranceevrootca [jdk]",
                     "74:31:E5:F4:C3:C1:CE:46:90:77:4F:0B:61:E0:54:40:88:3B:A9:A0:1E:D0:0B:A6:AB:D7:80:6E:D3:B1:18:CF");
-	    put("geotrustglobalca [jdk]",
-                    "FF:85:6A:2D:25:1D:CD:88:D3:66:56:F4:50:12:67:98:CF:AB:AA:DE:40:79:9C:72:2D:E4:D2:B5:DB:36:A7:3A");
 	    put("geotrustprimaryca [jdk]",
                     "37:D5:10:06:C5:12:EA:AB:62:64:21:F1:EC:8C:92:01:3F:C5:F8:2A:E9:8E:E5:33:EB:46:19:B8:DE:B4:D0:6C");
             put("geotrustprimarycag2 [jdk]",
@@ -242,7 +240,6 @@ public class VerifyCACerts {
     private static final HashSet<String> EXPIRY_EXC_ENTRIES = new HashSet<String>() {
         {
             // Valid until: Sat May 21 04:00:00 GMT 2022
-            add("geotrustglobalca [jdk]");
         }
     };
 
