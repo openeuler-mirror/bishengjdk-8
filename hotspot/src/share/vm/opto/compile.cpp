@@ -2347,7 +2347,11 @@ void Compile::Code_Gen() {
   {
     TracePhase t2("matcher", &_t_matcher, true);
     matcher.match();
+    if (failing()) {
+      return;
+    }
   }
+  
   // In debug mode can dump m._nodes.dump() for mapping of ideal to machine
   // nodes.  Mapping is only valid at the root of each matched subtree.
   NOT_PRODUCT( verify_graph_edges(); )
