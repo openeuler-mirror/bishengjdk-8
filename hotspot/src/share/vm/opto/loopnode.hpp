@@ -1071,7 +1071,9 @@ private:
   Node *place_near_use( Node *useblock ) const;
   Node* try_move_store_before_loop(Node* n, Node *n_ctrl);
   void try_move_store_after_loop(Node* n);
-
+  bool cannot_split_division(const Node* n, const Node* region) const;
+  static bool is_divisor_counted_loop_phi(const Node* divisor, const Node* loop);
+  bool loop_phi_backedge_type_contains_zero(const Node* phi_divisor, const Type* zero) const;
   bool _created_loop_node;
 public:
   void set_created_loop_node() { _created_loop_node = true; }

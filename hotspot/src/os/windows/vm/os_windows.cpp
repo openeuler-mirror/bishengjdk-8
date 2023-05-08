@@ -22,8 +22,8 @@
  *
  */
 
-// Must be at least Windows 2000 or XP to use IsDebuggerPresent
-#define _WIN32_WINNT 0x500
+// Must be at least Windows Vista or Server 2008 to use InitOnceExecuteOnce
+#define _WIN32_WINNT 0x0600
 
 // no precompiled headers
 #include "classfile/classLoader.hpp"
@@ -432,6 +432,11 @@ static unsigned __stdcall java_start(Thread* thread) {
     }
   }
 
+  // Diagnostic code to investigate JDK-6573254
+  int res = 90115;  // non-java thread
+  if (thread->is_Java_thread()) {
+    res = 60115;    // java thread
+  }
 
   // Install a win32 structured exception handler around every thread created
   // by VM, so VM can genrate error dump when an exception occurred in non-
@@ -450,7 +455,9 @@ static unsigned __stdcall java_start(Thread* thread) {
     Atomic::dec_ptr((intptr_t*)&os::win32::_os_thread_count);
   }
 
-  return 0;
+  // Thread must not return from exit_process_or_thread(), but if it does,
+  // let it proceed to exit normally
+  return (unsigned)os::win32::exit_process_or_thread(os::win32::EPT_THREAD, res);
 }
 
 static OSThread* create_os_thread(Thread* thread, HANDLE thread_handle, int thread_id) {
@@ -980,7 +987,43 @@ void os::shutdown() {
 static BOOL  (WINAPI *_MiniDumpWriteDump)  ( HANDLE, DWORD, HANDLE, MINIDUMP_TYPE, PMINIDUMP_EXCEPTION_INFORMATION,
                                             PMINIDUMP_USER_STREAM_INFORMATION, PMINIDUMP_CALLBACK_INFORMATION);
 
-void os::check_or_create_dump(void* exceptionRecord, void* contextRecord, char* buffer, size_t bufferSize) {
+static HANDLE dumpFile = NULL;
+
+// Check if dump file can be created.
+void os::check_dump_limit(char* buffer, size_t buffsz) {
+  bool status = true;
+  if (!FLAG_IS_DEFAULT(CreateCoredumpOnCrash) && !CreateCoredumpOnCrash) {
+    jio_snprintf(buffer, buffsz, "CreateCoredumpOnCrash is disabled from command line");
+    status = false;
+  }
+
+#ifndef ASSERT
+  if (!os::win32::is_windows_server() && FLAG_IS_DEFAULT(CreateCoredumpOnCrash)) {
+    jio_snprintf(buffer, buffsz, "Minidumps are not enabled by default on client versions of Windows");
+    status = false;
+  }
+#endif
+
+  if (status) {
+    const char* cwd = get_current_directory(NULL, 0);
+    int pid = current_process_id();
+    if (cwd != NULL) {
+      jio_snprintf(buffer, buffsz, "%s\\hs_err_pid%u.mdmp", cwd, pid);
+    } else {
+      jio_snprintf(buffer, buffsz, ".\\hs_err_pid%u.mdmp", pid);
+    }
+
+    if (dumpFile == NULL &&
+       (dumpFile = CreateFile(buffer, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL))
+                 == INVALID_HANDLE_VALUE) {
+      jio_snprintf(buffer, buffsz, "Failed to create minidump file (0x%x).", GetLastError());
+      status = false;
+    }
+  }
+  VMError::record_coredump_status(buffer, status);
+}
+
+void os::abort(bool dump_core, void* siginfo, void* context) {
   HINSTANCE dbghelp;
   EXCEPTION_POINTERS ep;
   MINIDUMP_EXCEPTION_INFORMATION mei;
@@ -988,33 +1031,22 @@ void os::check_or_create_dump(void* exceptionRecord, void* contextRecord, char* 
 
   HANDLE hProcess = GetCurrentProcess();
   DWORD processId = GetCurrentProcessId();
-  HANDLE dumpFile;
   MINIDUMP_TYPE dumpType;
-  static const char* cwd;
 
-// Default is to always create dump for debug builds, on product builds only dump on server versions of Windows.
-#ifndef ASSERT
-  // If running on a client version of Windows and user has not explicitly enabled dumping
-  if (!os::win32::is_windows_server() && !CreateMinidumpOnCrash) {
-    VMError::report_coredump_status("Minidumps are not enabled by default on client versions of Windows", false);
-    return;
-    // If running on a server version of Windows and user has explictly disabled dumping
-  } else if (os::win32::is_windows_server() && !FLAG_IS_DEFAULT(CreateMinidumpOnCrash) && !CreateMinidumpOnCrash) {
-    VMError::report_coredump_status("Minidump has been disabled from the command line", false);
-    return;
+  shutdown();
+  if (!dump_core || dumpFile == NULL) {
+    if (dumpFile != NULL) {
+      CloseHandle(dumpFile);
+    }
+    win32::exit_process_or_thread(win32::EPT_PROCESS, 1);
   }
-#else
-  if (!FLAG_IS_DEFAULT(CreateMinidumpOnCrash) && !CreateMinidumpOnCrash) {
-    VMError::report_coredump_status("Minidump has been disabled from the command line", false);
-    return;
-  }
-#endif
 
   dbghelp = os::win32::load_Windows_dll("DBGHELP.DLL", NULL, 0);
 
   if (dbghelp == NULL) {
-    VMError::report_coredump_status("Failed to load dbghelp.dll", false);
-    return;
+    jio_fprintf(stderr, "Failed to load dbghelp.dll\n");
+    CloseHandle(dumpFile);
+    win32::exit_process_or_thread(win32::EPT_PROCESS, 1);
   }
 
   _MiniDumpWriteDump = CAST_TO_FN_PTR(
@@ -1023,30 +1055,22 @@ void os::check_or_create_dump(void* exceptionRecord, void* contextRecord, char* 
     GetProcAddress(dbghelp, "MiniDumpWriteDump"));
 
   if (_MiniDumpWriteDump == NULL) {
-    VMError::report_coredump_status("Failed to find MiniDumpWriteDump() in module dbghelp.dll", false);
-    return;
+    jio_fprintf(stderr, "Failed to find MiniDumpWriteDump() in module dbghelp.dll.\n");
+    CloseHandle(dumpFile);
+    win32::exit_process_or_thread(win32::EPT_PROCESS, 1);
   }
 
   dumpType = (MINIDUMP_TYPE)(MiniDumpWithFullMemory | MiniDumpWithHandleData);
 
-// Older versions of dbghelp.h doesn't contain all the dumptypes we want, dbghelp.h with
-// API_VERSION_NUMBER 11 or higher contains the ones we want though
+  // Older versions of dbghelp.h do not contain all the dumptypes we want, dbghelp.h with
+  // API_VERSION_NUMBER 11 or higher contains the ones we want though
 #if API_VERSION_NUMBER >= 11
   dumpType = (MINIDUMP_TYPE)(dumpType | MiniDumpWithFullMemoryInfo | MiniDumpWithThreadInfo |
     MiniDumpWithUnloadedModules);
 #endif
-
-  cwd = get_current_directory(NULL, 0);
-  jio_snprintf(buffer, bufferSize, "%s\\hs_err_pid%u.mdmp",cwd, current_process_id());
-  dumpFile = CreateFile(buffer, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-
-  if (dumpFile == INVALID_HANDLE_VALUE) {
-    VMError::report_coredump_status("Failed to create file for dumping", false);
-    return;
-  }
-  if (exceptionRecord != NULL && contextRecord != NULL) {
-    ep.ContextRecord = (PCONTEXT) contextRecord;
-    ep.ExceptionRecord = (PEXCEPTION_RECORD) exceptionRecord;
+  if (siginfo != NULL && context != NULL) {
+    ep.ContextRecord = (PCONTEXT) context;
+    ep.ExceptionRecord = (PEXCEPTION_RECORD) siginfo;
 
     mei.ThreadId = GetCurrentThreadId();
     mei.ExceptionPointers = &ep;
@@ -1055,45 +1079,23 @@ void os::check_or_create_dump(void* exceptionRecord, void* contextRecord, char* 
     pmei = NULL;
   }
 
-
   // Older versions of dbghelp.dll (the one shipped with Win2003 for example) may not support all
   // the dump types we really want. If first call fails, lets fall back to just use MiniDumpWithFullMemory then.
   if (_MiniDumpWriteDump(hProcess, processId, dumpFile, dumpType, pmei, NULL, NULL) == false &&
       _MiniDumpWriteDump(hProcess, processId, dumpFile, (MINIDUMP_TYPE)MiniDumpWithFullMemory, pmei, NULL, NULL) == false) {
-        DWORD error = GetLastError();
-        LPTSTR msgbuf = NULL;
-
-        if (FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER |
-                      FORMAT_MESSAGE_FROM_SYSTEM |
-                      FORMAT_MESSAGE_IGNORE_INSERTS,
-                      NULL, error, 0, (LPTSTR)&msgbuf, 0, NULL) != 0) {
-
-          jio_snprintf(buffer, bufferSize, "Call to MiniDumpWriteDump() failed (Error 0x%x: %s)", error, msgbuf);
-          LocalFree(msgbuf);
-        } else {
-          // Call to FormatMessage failed, just include the result from GetLastError
-          jio_snprintf(buffer, bufferSize, "Call to MiniDumpWriteDump() failed (Error 0x%x)", error);
-        }
-        VMError::report_coredump_status(buffer, false);
-  } else {
-    VMError::report_coredump_status(buffer, true);
+    jio_fprintf(stderr, "Call to MiniDumpWriteDump() failed (Error 0x%x)\n", GetLastError());
   }
-
   CloseHandle(dumpFile);
+  win32::exit_process_or_thread(win32::EPT_PROCESS, 1);
 }
 
-
-
-void os::abort(bool dump_core)
-{
-  os::shutdown();
-  // no core dump on Windows
-  ::exit(1);
+void os::abort(bool dump_core) {
+  abort(dump_core, NULL, NULL);
 }
 
 // Die immediately, no exit hook, no abort hook, no cleanup.
 void os::die() {
-  _exit(-1);
+  win32::exit_process_or_thread(win32::EPT_PROCESS_DIE, -1);
 }
 
 // Directory routines copied from src/win32/native/java/io/dirent_md.c
@@ -3860,6 +3862,11 @@ bool   os::win32::_is_nt              = false;
 bool   os::win32::_is_windows_2003    = false;
 bool   os::win32::_is_windows_server  = false;
 
+// 6573254
+// Currently, the bug is observed across all the supported Windows releases,
+// including the latest one (as of this writing - Windows Server 2012 R2)
+bool   os::win32::_has_exit_bug       = true;
+
 void os::win32::initialize_system_info() {
   SYSTEM_INFO si;
   GetSystemInfo(&si);
@@ -3953,6 +3960,69 @@ HINSTANCE os::win32::load_Windows_dll(const char* name, char *ebuf, int ebuflen)
     "os::win32::load_windows_dll() cannot load %s from system directories.", name);
   return NULL;
 }
+
+#define MIN_EXIT_MUTEXES 1
+#define MAX_EXIT_MUTEXES 16
+
+struct ExitMutexes {
+  DWORD count;
+  HANDLE handles[MAX_EXIT_MUTEXES];
+};
+
+static BOOL CALLBACK init_muts_call(PINIT_ONCE, PVOID ppmuts, PVOID*) {
+  static ExitMutexes muts;
+
+  muts.count = os::processor_count();
+  if (muts.count < MIN_EXIT_MUTEXES) {
+    muts.count = MIN_EXIT_MUTEXES;
+  } else if (muts.count > MAX_EXIT_MUTEXES) {
+    muts.count = MAX_EXIT_MUTEXES;
+  }
+
+  for (DWORD i = 0; i < muts.count; ++i) {
+    muts.handles[i] = CreateMutex(NULL, FALSE, NULL);
+    if (muts.handles[i] == NULL) {
+      return FALSE;
+    }
+  }
+  *((ExitMutexes**)ppmuts) = &muts;
+  return TRUE;
+}
+
+int os::win32::exit_process_or_thread(Ept what, int exit_code) {
+  if (os::win32::has_exit_bug()) {
+    static INIT_ONCE init_once_muts = INIT_ONCE_STATIC_INIT;
+    static ExitMutexes* pmuts;
+
+    if (!InitOnceExecuteOnce(&init_once_muts, init_muts_call, &pmuts, NULL)) {
+      warning("ExitMutex initialization failed in %s: %d\n", __FILE__, __LINE__);
+    } else if (WaitForMultipleObjects(pmuts->count, pmuts->handles,
+                                      (what != EPT_THREAD), // exiting process waits for all mutexes
+                                      INFINITE) == WAIT_FAILED) {
+      warning("ExitMutex acquisition failed in %s: %d\n", __FILE__, __LINE__);
+    }
+  }
+
+  switch (what) {
+    case EPT_THREAD:
+      _endthreadex((unsigned)exit_code);
+      break;
+
+    case EPT_PROCESS:
+      ::exit(exit_code);
+      break;
+
+    case EPT_PROCESS_DIE:
+      _exit(exit_code);
+      break;
+  }
+
+  // should not reach here
+  return exit_code;
+}
+
+#undef MIN_EXIT_MUTEXES
+#undef MAX_EXIT_MUTEXES
 
 void os::win32::setmode_streams() {
   _setmode(_fileno(stdin), _O_BINARY);

@@ -24,6 +24,7 @@
 #include "precompiled.hpp"
 
 #include "memory/allocation.hpp"
+#include "services/nmtDCmd.hpp"
 #include "services/mallocTracker.hpp"
 #include "services/memReporter.hpp"
 #include "services/virtualMemoryTracker.hpp"
@@ -294,7 +295,19 @@ void MemDetailReporter::report_virtual_memory_region(const ReservedMemoryRegion*
 void MemSummaryDiffReporter::report_diff() {
   const char* scale = current_scale();
   outputStream* out = output();
-  out->print_cr("\nNative Memory Tracking:\n");
+  time_t startTime = NMTDCmd::get_start_time();
+  time_t endTime = time(0);
+  struct tm endTimeTm = {0};
+  if (os::localtime_pd(&endTime, &endTimeTm) == NULL) {
+    out->print_cr("\nNative Memory Tracking:\n");
+  } else {
+    out->print_cr("\nNative Memory Tracking: end time is %d-%02d-%02d %02d:%02d:%02d, elapsed time is %d secs\n",
+    static_cast<int>(endTimeTm.tm_year) + START_YEAR,
+    static_cast<int>(endTimeTm.tm_mon) + 1,
+    static_cast<int>(endTimeTm.tm_mday), static_cast<int>(endTimeTm.tm_hour),
+    static_cast<int>(endTimeTm.tm_min), static_cast<int>(endTimeTm.tm_sec),
+    static_cast<int>(endTime - startTime));
+  }
 
   // Overall diff
   out->print("Total: ");

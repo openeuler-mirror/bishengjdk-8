@@ -223,4 +223,9 @@ inline int os::set_sock_opt(int fd, int level, int optname,
                             const char *optval, socklen_t optlen) {
   return ::setsockopt(fd, level, optname, optval, optlen);
 }
+
+inline void os::exit(int num) {
+  ::exit(num);
+}
+
 #endif // OS_SOLARIS_VM_OS_SOLARIS_INLINE_HPP
