@@ -625,7 +625,7 @@ void notify_vm_shutdown() {
 void vm_direct_exit(int code) {
   notify_vm_shutdown();
   os::wait_for_keypress_at_exit();
-  ::exit(code);
+  os::exit(code);
 }
 
 void vm_perform_shutdown_actions() {

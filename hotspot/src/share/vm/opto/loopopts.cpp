@@ -51,6 +51,10 @@ Node *PhaseIdealLoop::split_thru_phi( Node *n, Node *region, int policy ) {
     return NULL;
   }
 
+  if (cannot_split_division(n, region)) {
+    return NULL;
+  }
+
   int wins = 0;
   assert(!n->is_CFG(), "");
   assert(region->is_Region(), "");
@@ -198,6 +202,42 @@ Node *PhaseIdealLoop::split_thru_phi( Node *n, Node *region, int policy ) {
   }
 
   return phi;
+}
+
+// Return true if 'n' is a Div or Mod node (without zero check If node which was removed earlier) with a loop phi divisor
+// of a trip-counted (integer or long) loop with a backedge input that could be zero (include zero in its type range). In
+// this case, we cannot split the division to the backedge as it could freely float above the loop exit check resulting in
+// a division by zero. This situation is possible because the type of an increment node of an iv phi (trip-counter) could
+// include zero while the iv phi does not (see PhiNode::Value() for trip-counted loops where we improve types of iv phis).
+// We also need to check other loop phis as they could have been created in the same split-if pass when applying
+// PhaseIdealLoop::split_thru_phi() to split nodes through an iv phi.
+bool PhaseIdealLoop::cannot_split_division(const Node* n, const Node* region) const {
+  const Type* zero;
+  switch (n->Opcode()) {
+    case Op_DivI:
+    case Op_ModI:
+      zero = TypeInt::ZERO;
+      break;
+    case Op_DivL:
+    case Op_ModL:
+      zero = TypeLong::ZERO;
+      break;
+    default:
+      return false;
+  }
+
+  assert(n->in(0) == NULL, "divisions with zero check should already have bailed out earlier in split-if");
+  Node* divisor = n->in(2);
+  return is_divisor_counted_loop_phi(divisor, region) &&
+         loop_phi_backedge_type_contains_zero(divisor, zero);
+}
+
+bool PhaseIdealLoop::is_divisor_counted_loop_phi(const Node* divisor, const Node* loop) {
+  return loop->is_CountedLoop() && divisor->is_Phi() && divisor->in(0) == loop;
+}
+
+bool PhaseIdealLoop::loop_phi_backedge_type_contains_zero(const Node* phi_divisor, const Type* zero) const {
+  return _igvn.type(phi_divisor->in(LoopNode::LoopBackControl))->filter_speculative(zero) != Type::TOP;
 }
 
 //------------------------------dominated_by------------------------------------

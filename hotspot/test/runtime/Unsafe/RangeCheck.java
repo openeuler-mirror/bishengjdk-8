@@ -43,6 +43,7 @@ public class RangeCheck {
                 true,
                 "-Xmx32m",
                 "-XX:-TransmitErrorReport",
+                "-XX:-CreateCoredumpOnCrash",
                 DummyClassWithMainRangeCheck.class.getName());
 
         OutputAnalyzer output = new OutputAnalyzer(pb.start());

@@ -48,7 +48,7 @@ PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 #define ROOT_UID 0
 
 // Check core dump limit and report possible place where core can be found
-void os::check_or_create_dump(void* exceptionRecord, void* contextRecord, char* buffer, size_t bufferSize) {
+void os::check_dump_limit(char* buffer, size_t bufferSize) {
   int n;
   struct rlimit rlim;
   bool success;
@@ -74,7 +74,7 @@ void os::check_or_create_dump(void* exceptionRecord, void* contextRecord, char* 
         break;
     }
   }
-  VMError::report_coredump_status(buffer, success);
+  VMError::record_coredump_status(buffer, success);
 }
 
 int os::get_native_stack(address* stack, int frames, int toSkip) {

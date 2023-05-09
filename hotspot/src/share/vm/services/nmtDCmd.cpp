@@ -73,6 +73,7 @@ size_t NMTDCmd::get_scale(const char* scale) const {
   return NMTUtil::scale_from_name(scale);
 }
 
+time_t NMTDCmd::_start_time = 0;
 void NMTDCmd::execute(DCmdSource source, TRAPS) {
   // Check NMT state
   //  native memory tracking has to be on
@@ -128,7 +129,18 @@ void NMTDCmd::execute(DCmdSource source, TRAPS) {
     if (!baseline.baseline(MemTracker::tracking_level() != NMT_detail)) {
       output()->print_cr("Baseline failed");
     } else {
-      output()->print_cr("Baseline succeeded");
+      NMTDCmd::set_start_time(time(0));
+      time_t startTime = NMTDCmd::get_start_time();
+      struct tm startTimeTm = {0};
+      if (os::localtime_pd(&startTime, &startTimeTm) == NULL) {
+        output()->print_cr("Baseline succeeded");
+      } else {
+        output()->print_cr("Baseline succeeded, start time is %d-%02d-%02d %02d:%02d:%02d",
+        static_cast<int>(startTimeTm.tm_year) + START_YEAR,
+        static_cast<int>(startTimeTm.tm_mon) + 1,
+        static_cast<int>(startTimeTm.tm_mday), static_cast<int>(startTimeTm.tm_hour),
+        static_cast<int>(startTimeTm.tm_min), static_cast<int>(startTimeTm.tm_sec));
+      }
     }
   } else if (_summary_diff.value()) {
     MemBaseline& baseline = MemTracker::get_baseline();

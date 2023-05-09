@@ -247,4 +247,8 @@ inline int os::set_sock_opt(int fd, int level, int optname,
   return ::setsockopt(fd, level, optname, optval, optlen);
 }
 
+inline void os::exit(int num) {
+  ::exit(num);
+}
+
 #endif // OS_BSD_VM_OS_BSD_INLINE_HPP

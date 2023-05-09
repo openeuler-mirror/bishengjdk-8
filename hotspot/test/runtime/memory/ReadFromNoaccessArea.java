@@ -45,6 +45,7 @@ public class ReadFromNoaccessArea {
           "-Xbootclasspath/a:.",
           "-XX:+UnlockDiagnosticVMOptions",
           "-XX:+WhiteBoxAPI",
+          "-XX:-CreateCoredumpOnCrash",
           "-XX:+UseCompressedOops",
           "-XX:HeapBaseMinAddress=33G",
           DummyClassWithMainTryingToReadFromNoaccessArea.class.getName());

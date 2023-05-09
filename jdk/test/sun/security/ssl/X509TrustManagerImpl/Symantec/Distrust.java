@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -58,7 +58,7 @@ public class Distrust {
 
     // Each of the subCAs with a delayed distrust date have a test certificate
     // chain stored in a file named "<subCA>-chain.pem".
-    private static String[] subCAsToTest = new String[] {"appleistca8g1"};
+    private static String[] subCAsToTest = new String[]{"appleistca8g1"};
 
     // A date that is after the restrictions take affect
     private static final Date APRIL_17_2019 =
