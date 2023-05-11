@@ -125,6 +125,7 @@ void AsyncLogWriter::run() {
     // when its value is zero. It will be waken up when new messages are enqueued.
     _sem.wait();
     if (_should_terminate) {
+      write();
       terminate();
       break;
     }
