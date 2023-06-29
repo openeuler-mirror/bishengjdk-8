@@ -411,26 +411,37 @@ public class PrincipalName implements Cloneable {
         case KRB_NT_SRV_HST:
             if (nameParts.length >= 2) {
                 String hostName = nameParts[1];
+                Boolean option;
                 try {
-                    // RFC4120 does not recommend canonicalizing a hostname.
-                    // However, for compatibility reason, we will try
-                    // canonicalize it and see if the output looks better.
-
-                    String canonicalized = (InetAddress.getByName(hostName)).
-                            getCanonicalHostName();
-
-                    // Looks if canonicalized is a longer format of hostName,
-                    // we accept cases like
-                    //     bunny -> bunny.rabbit.hole
-                    if (canonicalized.toLowerCase(Locale.ENGLISH).startsWith(
-                                hostName.toLowerCase(Locale.ENGLISH)+".")) {
-                        hostName = canonicalized;
-                    }
-                } catch (UnknownHostException | SecurityException e) {
-                    // not canonicalized or no permission to do so, use old
+                    // If true, try canonicalizing and accept it if it starts
+                    // with the short name. Otherwise, never. Default true.
+                    option = Config.getInstance().getBooleanObject(
+                            "libdefaults", "dns_canonicalize_hostname");
+                } catch (KrbException e) {
+                    option = null;
                 }
-                if (hostName.endsWith(".")) {
-                    hostName = hostName.substring(0, hostName.length() - 1);
+                if (option != Boolean.FALSE) {
+                    try {
+                        // RFC4120 does not recommend canonicalizing a hostname.
+                        // However, for compatibility reason, we will try
+                        // canonicalizing it and see if the output looks better.
+
+                        String canonicalized = (InetAddress.getByName(hostName)).
+                                getCanonicalHostName();
+
+                        // Looks if canonicalized is a longer format of hostName,
+                        // we accept cases like
+                        //     bunny -> bunny.rabbit.hole
+                        if (canonicalized.toLowerCase(Locale.ENGLISH).startsWith(
+                                hostName.toLowerCase(Locale.ENGLISH) + ".")) {
+                            hostName = canonicalized;
+                        }
+                    } catch (UnknownHostException | SecurityException e) {
+                        // not canonicalized or no permission to do so, use old
+                    }
+                    if (hostName.endsWith(".")) {
+                        hostName = hostName.substring(0, hostName.length() - 1);
+                    }
                 }
                 nameParts[1] = hostName.toLowerCase(Locale.ENGLISH);
             }
