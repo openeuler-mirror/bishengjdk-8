@@ -2171,6 +2171,13 @@ static bool _print_ascii_file(const char* filename, outputStream* st) {
   return true;
 }
 
+static void _print_ascii_file_h(const char* header, const char* filename, outputStream* st) {
+  st->print("%s", header);
+  if (!_print_ascii_file(filename, st)) {
+    st->print_cr("<Not Available>");
+  }
+}
+
 void os::print_dll_info(outputStream *st) {
    st->print_cr("Dynamic libraries:");
 
@@ -2484,12 +2491,61 @@ void os::print_memory_info(outputStream* st) {
   st->cr();
 }
 
+// additional information about CPU e.g. available frequency ranges
+static void print_sys_devices_cpu_info(outputStream* st) {
+  _print_ascii_file_h("Online cpus:", "/sys/devices/system/cpu/online", st);
+  _print_ascii_file_h("Offline cpus:", "/sys/devices/system/cpu/offline", st);
+
+  if (ExtensiveErrorReports) {
+    // cache related info (cpu 0, should be similar for other CPUs)
+    for (unsigned int i=0; i < 10; i++) { // handle max. 10 cache entries
+      char hbuf_level[60];
+      char hbuf_type[60];
+      char hbuf_size[60];
+      char hbuf_coherency_line_size[80];
+      snprintf(hbuf_level, 60, "/sys/devices/system/cpu/cpu0/cache/index%u/level", i);
+      snprintf(hbuf_type, 60, "/sys/devices/system/cpu/cpu0/cache/index%u/type", i);
+      snprintf(hbuf_size, 60, "/sys/devices/system/cpu/cpu0/cache/index%u/size", i);
+      snprintf(hbuf_coherency_line_size, 80, "/sys/devices/system/cpu/cpu0/cache/index%u/coherency_line_size", i);
+      if (file_exists(hbuf_level)) {
+        _print_ascii_file_h("cache level:", hbuf_level, st);
+        _print_ascii_file_h("cache type:", hbuf_type, st);
+        _print_ascii_file_h("cache size:", hbuf_size, st);
+        _print_ascii_file_h("cache coherency line size:", hbuf_coherency_line_size, st);
+      }
+    }
+  }
+
+  // we miss the cpufreq entries on Power and s390x
+#if defined(IA32) || defined(AMD64)
+  _print_ascii_file_h("BIOS frequency limitation:", "/sys/devices/system/cpu/cpu0/cpufreq/bios_limit", st);
+  _print_ascii_file_h("Frequency switch latency (ns):", "/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_transition_latency", st);
+  _print_ascii_file_h("Available cpu frequencies:", "/sys/devices/system/cpu/cpu0/cpufreq/scaling_available_frequencies", st);
+  // min and max should be in the Available range but still print them (not all info might be available for all kernels)
+  if (ExtensiveErrorReports) {
+    _print_ascii_file_h("Maximum cpu frequency:", "/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq", st);
+    _print_ascii_file_h("Minimum cpu frequency:", "/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_min_freq", st);
+    _print_ascii_file_h("Current cpu frequency:", "/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq", st);
+  }
+  // governors are power schemes, see https://wiki.archlinux.org/index.php/CPU_frequency_scaling
+  if (ExtensiveErrorReports) {
+    _print_ascii_file_h("Available governors:", "/sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors", st);
+  }
+  _print_ascii_file_h("Current governor:", "/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor", st);
+  // Core performance boost, see https://www.kernel.org/doc/Documentation/cpu-freq/boost.txt
+  // Raise operating frequency of some cores in a multi-core package if certain conditions apply, e.g.
+  // whole chip is not fully utilized
+  _print_ascii_file_h("Core performance/turbo boost:", "/sys/devices/system/cpu/cpufreq/boost", st);
+#endif
+}
+
 void os::pd_print_cpu_info(outputStream* st) {
   st->print("\n/proc/cpuinfo:\n");
   if (!_print_ascii_file("/proc/cpuinfo", st)) {
     st->print("  <Not Available>");
   }
   st->cr();
+  print_sys_devices_cpu_info(st);
 }
 
 void os::print_siginfo(outputStream* st, void* siginfo) {
