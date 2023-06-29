@@ -2586,7 +2586,7 @@ void os::pd_print_file_descriptor(outputStream* st) {
   // Scan the directory, get symbolic link value
   struct dirent *ptr;
   ssize_t readlink_ret = 0;
-  char symbolic_link_value[MAX_PATH_LEN] = {0};
+  char symbolic_link_value[MAX_PATH_LEN + 1] = {0};
   char filename[MAX_PATH_LEN] = {0};
   unsigned long file_count = 0;
   while ((ptr = readdir(dir)) != NULL) {
@@ -2595,6 +2595,7 @@ void os::pd_print_file_descriptor(outputStream* st) {
       (void) snprintf(filename, MAX_PATH_LEN, "%s%s", process_path, ptr->d_name);
       readlink_ret = readlink(filename, symbolic_link_value, MAX_PATH_LEN);
       if (readlink_ret > 0) {
+        symbolic_link_value[readlink_ret] = '\0';
         st->print_cr("%s -> %s", ptr->d_name, symbolic_link_value);
       } else {
         st->print_cr("%s: readlink failed, errno: %d", ptr->d_name, errno);
