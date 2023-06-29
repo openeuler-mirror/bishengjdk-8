@@ -149,6 +149,8 @@ SystemProperty *Arguments::_sun_boot_class_path = NULL;
 char* Arguments::_meta_index_path = NULL;
 char* Arguments::_meta_index_dir = NULL;
 
+bool Arguments::_transletEnhance = false;
+
 // Check if head of 'option' matches 'name', and sets 'tail' remaining part of option string
 
 static bool match_option(const JavaVMOption *option, const char* name,

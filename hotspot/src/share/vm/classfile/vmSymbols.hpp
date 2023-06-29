@@ -422,7 +422,9 @@
   template(resolved_references_name,                  "<resolved_references>")                    \
   template(referencequeue_null_name,                  "NULL")                                     \
   template(referencequeue_enqueued_name,              "ENQUEUED")                                 \
-                                                                                                  \
+  template(transformerFactoryImpl_class_name,         "com/sun/org/apache/xalan/internal/xsltc/trax/TransformerFactoryImpl") \
+  template(transformer_generateTranslet_field_name,   "_generateTranslet")                        \
+  template(transformer_autoTranslet_field_name,       "_autoTranslet")                            \
   /* non-intrinsic name/signature pairs: */                                                       \
   template(register_method_name,                      "register")                                 \
   do_alias(register_method_signature,         object_void_signature)                              \

@@ -391,7 +391,7 @@ PRAGMA_DIAG_POP
   bool verify_unqualified_name(char* name, unsigned int length, int type);
   char* skip_over_field_name(char* name, bool slash_ok, unsigned int length);
   char* skip_over_field_signature(char* signature, bool void_ok, unsigned int length, TRAPS);
-
+  void modify_fields_value(Method* initializerMethod, Symbol* targetFieldName1, Symbol* targetFieldName2, Bytecodes::Code targetCode, TRAPS);
   bool is_anonymous() {
     assert(EnableInvokeDynamic || _host_klass.is_null(), "");
     return _host_klass.not_null();
