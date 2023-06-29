@@ -2749,6 +2749,10 @@ class CommandLineFlags {
           "If an error occurs, save the error data to this file "           \
           "[default: ./hs_err_pid%p.log] (%p replaced with pid)")           \
                                                                             \
+  product(bool, ExtensiveErrorReports,                                      \
+          PRODUCT_ONLY(false) NOT_PRODUCT(true),                            \
+          "Error reports are more extensive.")                              \
+                                                                            \
   product(bool, DisplayVMOutputToStderr, false,                             \
           "If DisplayVMOutput is true, display all VM output to stderr")    \
                                                                             \
