@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2014, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2023, Huawei Technologies Co., Ltd. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,9 +25,12 @@
 /**
  * @test
  * @bug 8035968
- * @summary Verify that SHA-1 intrinsic is actually used.
+ * @summary Verify that MD5 intrinsic is actually used.
  * @library /testlibrary /testlibrary/whitebox /compiler/testlibrary ../
- * @build TestDigest intrinsics.Verifier TestSHA1Intrinsics
+ * @modules java.base/jdk.internal.misc
+ *          java.management
+ *
+ * @build TestDigest TestMD5Intrinsics intrinsics.Verifier
  * @run main ClassFileInstaller sun.hotspot.WhiteBox
  *                              sun.hotspot.WhiteBox$WhiteBoxPermission
  * @run main/othervm -Xbootclasspath/a:. -XX:+UnlockDiagnosticVMOptions
@@ -34,25 +38,29 @@
  *                   -XX:Tier4InvocationThreshold=500
  *                   -XX:+LogCompilation -XX:LogFile=positive.log
  *                   -XX:CompileOnly=sun/security/provider/DigestBase
- *                   -XX:CompileOnly=sun/security/provider/SHA
- *                   -XX:+UseSHA1Intrinsics
- *                   -Dalgorithm=SHA-1 TestSHA1Intrinsics
+ *                   -XX:CompileOnly=sun/security/provider/MD5
+ *                   -XX:+UseMD5Intrinsics
+ *                   -Dalgorithm=MD5
+ *                   TestMD5Intrinsics
  * @run main/othervm -Xbootclasspath/a:. -XX:+UnlockDiagnosticVMOptions
  *                   -XX:+WhiteBoxAPI -Xbatch -XX:CompileThreshold=500
  *                   -XX:Tier4InvocationThreshold=500
  *                   -XX:+LogCompilation -XX:LogFile=negative.log
  *                   -XX:CompileOnly=sun/security/provider/DigestBase
- *                   -XX:CompileOnly=sun/security/provider/SHA
- *                   -XX:-UseSHA1Intrinsics
- *                   -Dalgorithm=SHA-1 TestSHA1Intrinsics
+ *                   -XX:CompileOnly=sun/security/provider/MD5
+ *                   -XX:-UseMD5Intrinsics
+ *                   -Dalgorithm=MD5
+ *                   TestMD5Intrinsics
  * @run main/othervm -DverificationStrategy=VERIFY_INTRINSIC_USAGE
  *                   intrinsics.Verifier positive.log negative.log
  */
+
+
 import sha.predicate.IntrinsicPredicates;
 
-public class TestSHA1Intrinsics {
+public class TestMD5Intrinsics {
     public static void main(String args[]) throws Exception {
-        new DigestSanityTestBase(IntrinsicPredicates.SHA1_INTRINSICS_AVAILABLE,
-                DigestSanityTestBase.SHA1_INTRINSIC_ID).test();
+        new DigestSanityTestBase(IntrinsicPredicates.isMD5IntrinsicAvailable(),
+                DigestSanityTestBase.MD5_INTRINSIC_ID).test();
     }
 }

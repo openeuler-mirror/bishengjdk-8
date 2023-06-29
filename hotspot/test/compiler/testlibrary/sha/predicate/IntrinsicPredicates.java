@@ -29,6 +29,7 @@ import com.oracle.java.testlibrary.cli.predicate.CPUSpecificPredicate;
 import com.oracle.java.testlibrary.cli.predicate.OrPredicate;
 import sun.hotspot.WhiteBox;
 
+import java.lang.reflect.Method;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -57,6 +58,13 @@ public class IntrinsicPredicates {
                 == IntrinsicPredicates.TIERED_MAX_LEVEL);
         return Platform.isServer() && (!isTiered || maxLevelIsReachable);
     };
+
+    public static final BooleanSupplier MD5_INSTRUCTION_AVAILABLE
+            = new OrPredicate(new CPUSpecificPredicate("aarch64.*", null, null),
+              // x86 variants
+              new OrPredicate(new CPUSpecificPredicate("amd64.*",   null, null),
+                              new CPUSpecificPredicate("x86.*",     null, null)));
+
 
     public static final BooleanSupplier SHA1_INSTRUCTION_AVAILABLE
             = new OrPredicate(
@@ -92,6 +100,13 @@ public class IntrinsicPredicates {
                             IntrinsicPredicates.SHA256_INSTRUCTION_AVAILABLE,
                             IntrinsicPredicates.SHA512_INSTRUCTION_AVAILABLE));
 
+    public static BooleanSupplier isMD5IntrinsicAvailable() {
+        return new AndPredicate(new AndPredicate(
+                IntrinsicPredicates.MD5_INSTRUCTION_AVAILABLE,
+                IntrinsicPredicates.COMPILABLE_BY_C2),
+            IntrinsicPredicates.booleanOptionValue("UseMD5Intrinsics"));
+    }
+
     public static final BooleanSupplier SHA1_INTRINSICS_AVAILABLE
             = new AndPredicate(new AndPredicate(
                     IntrinsicPredicates.SHA1_INSTRUCTION_AVAILABLE,
@@ -116,4 +131,13 @@ public class IntrinsicPredicates {
 
     private IntrinsicPredicates() {
     }
+
+        private static BooleanSupplier isIntrinsicAvailable(String klass, String method) {
+        try {
+            Method m = Class.forName(klass).getDeclaredMethod(method, byte[].class, int.class);
+            return () -> WHITE_BOX.isIntrinsicAvailable(m, (int)IntrinsicPredicates.TIERED_MAX_LEVEL);
+        } catch (Exception e) {
+            throw new RuntimeException("Intrinsified method " +  klass + "::" + method + " not found!");
+        }
+    };
 }

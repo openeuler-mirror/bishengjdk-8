@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2014, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2023, Huawei Technologies Co., Ltd. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,27 +25,27 @@
 /**
  * @test
  * @bug 8035968
- * @summary Verify UseSHA1Intrinsics option processing on unsupported CPU,
+ * @summary Verify UseMD5Intrinsics option processing on unsupported CPU.
  * @library /testlibrary /testlibrary/whitebox /compiler/testlibrary testcases
- * @build TestUseSHA1IntrinsicsOptionOnUnsupportedCPU
+ * @modules java.base/jdk.internal.misc
+ *          java.management
+ *
+ * @build TestUseMD5IntrinsicsOptionOnUnsupportedCPU
  * @run main ClassFileInstaller sun.hotspot.WhiteBox
  *                              sun.hotspot.WhiteBox$WhiteBoxPermission
  * @run main/othervm -Xbootclasspath/a:. -XX:+UnlockDiagnosticVMOptions
  *                   -XX:+WhiteBoxAPI
- *                   TestUseSHA1IntrinsicsOptionOnUnsupportedCPU
+ *                   TestUseMD5IntrinsicsOptionOnUnsupportedCPU
  */
-public class TestUseSHA1IntrinsicsOptionOnUnsupportedCPU {
+
+public class TestUseMD5IntrinsicsOptionOnUnsupportedCPU {
     public static void main(String args[]) throws Throwable {
         new DigestOptionsBase(
-                new GenericTestCaseForUnsupportedSparcCPU(
-                        DigestOptionsBase.USE_SHA1_INTRINSICS_OPTION),
-                new UseSHAIntrinsicsSpecificTestCaseForUnsupportedSparcCPU(
-                        DigestOptionsBase.USE_SHA1_INTRINSICS_OPTION),
-                new GenericTestCaseForUnsupportedAArch64CPU(
-                        DigestOptionsBase.USE_SHA1_INTRINSICS_OPTION),
                 new GenericTestCaseForUnsupportedX86CPU(
-                        DigestOptionsBase.USE_SHA1_INTRINSICS_OPTION),
+                        DigestOptionsBase.USE_MD5_INTRINSICS_OPTION),
+                new GenericTestCaseForUnsupportedAArch64CPU(
+                        DigestOptionsBase.USE_MD5_INTRINSICS_OPTION),
                 new GenericTestCaseForOtherCPU(
-                        DigestOptionsBase.USE_SHA1_INTRINSICS_OPTION)).test();
+                        DigestOptionsBase.USE_MD5_INTRINSICS_OPTION)).test();
     }
 }

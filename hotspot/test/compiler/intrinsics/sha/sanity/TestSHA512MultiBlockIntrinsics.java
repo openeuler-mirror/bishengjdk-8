@@ -28,7 +28,7 @@ import sha.predicate.IntrinsicPredicates;
  * @bug 8035968
  * @summary Verify that SHA-512 multi block intrinsic is actually used.
  * @library /testlibrary /testlibrary/whitebox /compiler/testlibrary ../
- * @build TestSHA intrinsics.Verifier TestSHA512MultiBlockIntrinsics
+ * @build TestDigest intrinsics.Verifier TestSHA512MultiBlockIntrinsics
  * @run main ClassFileInstaller sun.hotspot.WhiteBox
  *                              sun.hotspot.WhiteBox$WhiteBoxPermission
  * @run main/othervm -Xbootclasspath/a:. -XX:+UnlockDiagnosticVMOptions
@@ -37,8 +37,8 @@ import sha.predicate.IntrinsicPredicates;
  *                   -XX:+LogCompilation -XX:LogFile=positive_384.log
  *                   -XX:CompileOnly=sun/security/provider/DigestBase
  *                   -XX:CompileOnly=sun/security/provider/SHA
- *                   -XX:+UseSHA512Intrinsics -XX:-UseSHA1Intrinsics
- *                   -XX:-UseSHA256Intrinsics
+ *                   -XX:+UseSHA1Intrinsics -XX:-UseMD5Intrinsics
+ *                   -XX:-UseSHA256Intrinsics -XX:-UseSHA512Intrinsics
  *                   -Dalgorithm=SHA-384 TestSHA512MultiBlockIntrinsics
  * @run main/othervm -Xbootclasspath/a:. -XX:+UnlockDiagnosticVMOptions
  *                   -XX:+WhiteBoxAPI -Xbatch -XX:CompileThreshold=500
@@ -61,8 +61,8 @@ import sha.predicate.IntrinsicPredicates;
  *                   -XX:+LogCompilation -XX:LogFile=positive_512.log
  *                   -XX:CompileOnly=sun/security/provider/DigestBase
  *                   -XX:CompileOnly=sun/security/provider/SHA
- *                   -XX:+UseSHA512Intrinsics -XX:-UseSHA1Intrinsics
- *                   -XX:-UseSHA256Intrinsics
+ *                   -XX:+UseSHA1Intrinsics -XX:-UseMD5Intrinsics
+ *                   -XX:-UseSHA256Intrinsics -XX:-UseSHA512Intrinsics
  *                   -Dalgorithm=SHA-512 TestSHA512MultiBlockIntrinsics
  * @run main/othervm -Xbootclasspath/a:. -XX:+UnlockDiagnosticVMOptions
  *                   -XX:+WhiteBoxAPI -Xbatch -XX:CompileThreshold=500
@@ -86,7 +86,7 @@ import sha.predicate.IntrinsicPredicates;
  */
 public class TestSHA512MultiBlockIntrinsics {
     public static void main(String args[]) throws Exception {
-        new SHASanityTestBase(IntrinsicPredicates.SHA512_INTRINSICS_AVAILABLE,
-                SHASanityTestBase.MB_INTRINSIC_ID).test();
+        new DigestSanityTestBase(IntrinsicPredicates.SHA512_INTRINSICS_AVAILABLE,
+                DigestSanityTestBase.MB_INTRINSIC_ID).test();
     }
 }

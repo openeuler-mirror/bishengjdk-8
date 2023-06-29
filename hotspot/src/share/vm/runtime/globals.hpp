@@ -750,6 +750,9 @@ class CommandLineFlags {
   product(bool, UseAESIntrinsics, false,                                    \
           "Use intrinsics for AES versions of crypto")                      \
                                                                             \
+  diagnostic(bool, UseMD5Intrinsics, false,                                 \
+          "Use intrinsics for MD5 crypto hash function")                    \
+                                                                            \
   product(bool, UseAESCTRIntrinsics, false,                                 \
           "Use intrinsics for the paralleled version of AES/CTR crypto")    \
                                                                             \

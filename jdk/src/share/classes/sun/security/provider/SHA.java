@@ -134,12 +134,12 @@ public final class SHA extends DigestBase {
 
         // The checks performed by the method 'b2iBig64'
         // are sufficient for the case when the method
-        // 'implCompressImpl' is replaced with a compiler
+        // 'implCompress0' is replaced with a compiler
         // intrinsic.
         b2iBig64(buf, ofs, W);
     }
 
-    // The method 'implCompressImpl seems not to use its parameters.
+    // The method 'implCompress0 seems not to use its parameters.
     // The method can, however, be replaced with a compiler intrinsic
     // that operates directly on the array 'buf' (starting from
     // offset 'ofs') and not on array 'W', therefore 'buf' and 'ofs'

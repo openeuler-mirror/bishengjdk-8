@@ -417,6 +417,7 @@ bool C2Compiler::is_intrinsic_supported(methodHandle method, bool is_virtual) {
   case vmIntrinsics::_cipherBlockChaining_encryptAESCrypt:
   case vmIntrinsics::_cipherBlockChaining_decryptAESCrypt:
   case vmIntrinsics::_counterMode_AESCrypt:
+  case vmIntrinsics::_md5_implCompress:
   case vmIntrinsics::_sha_implCompress:
   case vmIntrinsics::_sha2_implCompress:
   case vmIntrinsics::_sha5_implCompress:

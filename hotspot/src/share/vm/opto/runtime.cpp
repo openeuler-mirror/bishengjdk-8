@@ -1053,7 +1053,7 @@ const TypeFunc* OptoRuntime::counterMode_aescrypt_Type() {
 /*
  * void implCompress(byte[] buf, int ofs)
  */
-const TypeFunc* OptoRuntime::sha_implCompress_Type() {
+const TypeFunc* OptoRuntime::digestBase_implCompress_Type() {
   // create input type (domain)
   int num_args = 2;
   int argcnt = num_args;

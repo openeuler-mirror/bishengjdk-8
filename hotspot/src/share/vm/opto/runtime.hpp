@@ -301,7 +301,7 @@ private:
   static const TypeFunc* cipherBlockChaining_aescrypt_Type();
   static const TypeFunc* counterMode_aescrypt_Type();
 
-  static const TypeFunc* sha_implCompress_Type();
+  static const TypeFunc* digestBase_implCompress_Type();
   static const TypeFunc* digestBase_implCompressMB_Type();
 
   static const TypeFunc* multiplyToLen_Type();

@@ -848,11 +848,15 @@
    do_intrinsic(_counterMode_AESCrypt, com_sun_crypto_provider_counterMode, crypt_name, byteArray_int_int_byteArray_int_signature, F_R)   \
    do_name(     crypt_name,                                 "implCrypt")                                                    \
                                                                                                                         \
+  /* support for sun.security.provider.MD5 */                                                                           \
+  do_class(sun_security_provider_md5,                              "sun/security/provider/MD5")                         \
+  do_intrinsic(_md5_implCompress, sun_security_provider_md5, implCompress_name, implCompress_signature, F_R)            \
+   do_name(     implCompress_name,                                 "implCompress0")                                     \
+   do_signature(implCompress_signature,                            "([BI)V")                                            \
+                                                                                                                        \
   /* support for sun.security.provider.SHA */                                                                           \
   do_class(sun_security_provider_sha,                              "sun/security/provider/SHA")                         \
   do_intrinsic(_sha_implCompress, sun_security_provider_sha, implCompress_name, implCompress_signature, F_R)            \
-   do_name(     implCompress_name,                                 "implCompress0")                                     \
-   do_signature(implCompress_signature,                            "([BI)V")                                            \
                                                                                                                         \
   /* support for com.github.fommil.netlib.F2jBLAS */                                                                    \
   do_class(com_github_fommil_netlib_f2jblas,                       "com/github/fommil/netlib/F2jBLAS")                  \
@@ -1359,6 +1363,9 @@ public:
   // false otherwise. Implements functionality common to the C1
   // and the C2 compiler.
   static bool is_disabled_by_flags(vmIntrinsics::ID id);
+  static bool is_intrinsic_available(vmIntrinsics::ID id) {
+    return !is_disabled_by_flags(id);
+  }
 };
 
 #endif // SHARE_VM_CLASSFILE_VMSYMBOLS_HPP

@@ -32,10 +32,10 @@ import com.oracle.java.testlibrary.cli.predicate.NotPredicate;
  * support instruction required by the tested option.
  */
 public class GenericTestCaseForUnsupportedSparcCPU extends
-        SHAOptionsBase.TestCase {
+        DigestOptionsBase.TestCase {
     public GenericTestCaseForUnsupportedSparcCPU(String optionName) {
         super(optionName, new AndPredicate(Platform::isSparc,
-                new NotPredicate(SHAOptionsBase.getPredicateForOption(
+                new NotPredicate(DigestOptionsBase.getPredicateForOption(
                         optionName))));
     }
 
@@ -43,24 +43,28 @@ public class GenericTestCaseForUnsupportedSparcCPU extends
     protected void verifyWarnings() throws Throwable {
         //Verify that option could be disabled without any warnings.
         CommandLineOptionTest.verifySameJVMStartup(null, new String[] {
-                        SHAOptionsBase.getWarningForUnsupportedCPU(optionName)
+                        DigestOptionsBase.getWarningForUnsupportedCPU(optionName)
                 }, ExitCode.OK,
+                DigestOptionsBase.UNLOCK_DIAGNOSTIC_VM_OPTIONS,
                 CommandLineOptionTest.prepareBooleanFlag(optionName, false));
     }
 
     @Override
     protected void verifyOptionValues() throws Throwable {
         // Verify that option is disabled by default.
-        CommandLineOptionTest.verifyOptionValueForSameVM(optionName, "false");
+        CommandLineOptionTest.verifyOptionValueForSameVM(optionName, "false",
+                                DigestOptionsBase.UNLOCK_DIAGNOSTIC_VM_OPTIONS);
 
         // Verify that option is disabled even if it was explicitly enabled
         // using CLI options.
         CommandLineOptionTest.verifyOptionValueForSameVM(optionName, "false",
+                DigestOptionsBase.UNLOCK_DIAGNOSTIC_VM_OPTIONS,
                 CommandLineOptionTest.prepareBooleanFlag(optionName, true));
 
         // Verify that option is disabled when +UseSHA was passed to JVM.
         CommandLineOptionTest.verifyOptionValueForSameVM(optionName, "false",
+                DigestOptionsBase.UNLOCK_DIAGNOSTIC_VM_OPTIONS,
                 CommandLineOptionTest.prepareBooleanFlag(
-                        SHAOptionsBase.USE_SHA_OPTION, true));
+                        DigestOptionsBase.USE_SHA_OPTION, true));
     }
 }

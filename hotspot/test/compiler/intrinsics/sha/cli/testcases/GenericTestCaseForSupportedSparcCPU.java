@@ -31,63 +31,71 @@ import com.oracle.java.testlibrary.cli.predicate.AndPredicate;
  * support instructions required by the tested option.
  */
 public class GenericTestCaseForSupportedSparcCPU extends
-        SHAOptionsBase.TestCase {
+        DigestOptionsBase.TestCase {
     public GenericTestCaseForSupportedSparcCPU(String optionName) {
         super(optionName, new AndPredicate(Platform::isSparc,
-                SHAOptionsBase.getPredicateForOption(optionName)));
+                DigestOptionsBase.getPredicateForOption(optionName)));
     }
 
     @Override
     protected void verifyWarnings() throws Throwable {
         // Verify that there are no warning when option is explicitly enabled.
         CommandLineOptionTest.verifySameJVMStartup(null, new String[] {
-                        SHAOptionsBase.getWarningForUnsupportedCPU(optionName)
+                        DigestOptionsBase.getWarningForUnsupportedCPU(optionName)
                 }, ExitCode.OK,
+                DigestOptionsBase.UNLOCK_DIAGNOSTIC_VM_OPTIONS,
                 CommandLineOptionTest.prepareBooleanFlag(optionName, true));
 
         // Verify that option could be disabled even if +UseSHA was passed to
         // JVM.
         CommandLineOptionTest.verifySameJVMStartup(null, new String[] {
-                        SHAOptionsBase.getWarningForUnsupportedCPU(optionName)
+                        DigestOptionsBase.getWarningForUnsupportedCPU(optionName)
                 }, ExitCode.OK,
+                DigestOptionsBase.UNLOCK_DIAGNOSTIC_VM_OPTIONS,
                 CommandLineOptionTest.prepareBooleanFlag(
-                        SHAOptionsBase.USE_SHA_OPTION, true),
+                        DigestOptionsBase.USE_SHA_OPTION, true),
                 CommandLineOptionTest.prepareBooleanFlag(optionName, false));
 
         // Verify that it is possible to enable the tested option and disable
         // all SHA intrinsics via -UseSHA without any warnings.
         CommandLineOptionTest.verifySameJVMStartup(null, new String[] {
-                        SHAOptionsBase.getWarningForUnsupportedCPU(optionName)
+                        DigestOptionsBase.getWarningForUnsupportedCPU(optionName)
                 }, ExitCode.OK,
+                DigestOptionsBase.UNLOCK_DIAGNOSTIC_VM_OPTIONS,
                 CommandLineOptionTest.prepareBooleanFlag(
-                        SHAOptionsBase.USE_SHA_OPTION, false),
+                        DigestOptionsBase.USE_SHA_OPTION, false),
                 CommandLineOptionTest.prepareBooleanFlag(optionName, true));
     }
 
     @Override
     protected void verifyOptionValues() throws Throwable {
         // Verify that on supported CPU option is enabled by default.
-        CommandLineOptionTest.verifyOptionValueForSameVM(optionName, "true");
+        CommandLineOptionTest.verifyOptionValueForSameVM(optionName, "true",
+                                DigestOptionsBase.UNLOCK_DIAGNOSTIC_VM_OPTIONS);
 
         // Verify that it is possible to explicitly enable the option.
         CommandLineOptionTest.verifyOptionValueForSameVM(optionName, "true",
+                DigestOptionsBase.UNLOCK_DIAGNOSTIC_VM_OPTIONS,
                 CommandLineOptionTest.prepareBooleanFlag(optionName, true));
 
         // Verify that it is possible to explicitly disable the option.
         CommandLineOptionTest.verifyOptionValueForSameVM(optionName, "false",
+                DigestOptionsBase.UNLOCK_DIAGNOSTIC_VM_OPTIONS,
                 CommandLineOptionTest.prepareBooleanFlag(optionName, false));
 
         // verify that option is disabled when -UseSHA was passed to JVM.
         CommandLineOptionTest.verifyOptionValueForSameVM(optionName, "false",
+                DigestOptionsBase.UNLOCK_DIAGNOSTIC_VM_OPTIONS,
                 CommandLineOptionTest.prepareBooleanFlag(optionName, true),
                 CommandLineOptionTest.prepareBooleanFlag(
-                        SHAOptionsBase.USE_SHA_OPTION, false));
+                        DigestOptionsBase.USE_SHA_OPTION, false));
 
         // Verify that it is possible to explicitly disable the tested option
         // even if +UseSHA was passed to JVM.
         CommandLineOptionTest.verifyOptionValueForSameVM(optionName, "false",
+                DigestOptionsBase.UNLOCK_DIAGNOSTIC_VM_OPTIONS,
                 CommandLineOptionTest.prepareBooleanFlag(
-                        SHAOptionsBase.USE_SHA_OPTION, true),
+                        DigestOptionsBase.USE_SHA_OPTION, true),
                 CommandLineOptionTest.prepareBooleanFlag(optionName, false));
     }
 }

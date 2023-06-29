@@ -32,7 +32,7 @@ import com.oracle.java.testlibrary.cli.predicate.OrPredicate;
  * non-SPARC CPUs.
  */
 public class GenericTestCaseForOtherCPU extends
-        SHAOptionsBase.TestCase {
+        DigestOptionsBase.TestCase {
     public GenericTestCaseForOtherCPU(String optionName) {
         // Execute the test case on any CPU except SPARC and X86
         super(optionName, new NotPredicate(new OrPredicate(Platform::isSparc,
@@ -47,26 +47,31 @@ public class GenericTestCaseForOtherCPU extends
         // options will not cause any warnings.
         CommandLineOptionTest.verifySameJVMStartup(null,
                 new String[] { ".*" + optionName + ".*" }, ExitCode.OK,
+                DigestOptionsBase.UNLOCK_DIAGNOSTIC_VM_OPTIONS,
                 CommandLineOptionTest.prepareBooleanFlag(optionName, true));
 
         CommandLineOptionTest.verifySameJVMStartup(null,
                 new String[] { ".*" + optionName + ".*" }, ExitCode.OK,
+                DigestOptionsBase.UNLOCK_DIAGNOSTIC_VM_OPTIONS,
                 CommandLineOptionTest.prepareBooleanFlag(optionName, false));
     }
 
     @Override
     protected void verifyOptionValues() throws Throwable {
         // Verify that option is disabled by default.
-        CommandLineOptionTest.verifyOptionValueForSameVM(optionName, "false");
+        CommandLineOptionTest.verifyOptionValueForSameVM(optionName, "false",
+                                DigestOptionsBase.UNLOCK_DIAGNOSTIC_VM_OPTIONS);
 
         // Verify that option is disabled even if it was explicitly enabled
         // using CLI options.
         CommandLineOptionTest.verifyOptionValueForSameVM(optionName, "false",
+                DigestOptionsBase.UNLOCK_DIAGNOSTIC_VM_OPTIONS,
                 CommandLineOptionTest.prepareBooleanFlag(optionName, true));
 
         // Verify that option is disabled when it explicitly disabled
         // using CLI options.
         CommandLineOptionTest.verifyOptionValueForSameVM(optionName, "false",
+                DigestOptionsBase.UNLOCK_DIAGNOSTIC_VM_OPTIONS,
                 CommandLineOptionTest.prepareBooleanFlag(optionName, false));
     }
 }
