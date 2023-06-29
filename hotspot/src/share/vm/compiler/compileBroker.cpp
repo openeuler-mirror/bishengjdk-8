@@ -1504,7 +1504,7 @@ bool CompileBroker::compilation_is_prohibited(methodHandle method, int osr_bci, 
   // The method may be explicitly excluded by the user.
   bool quietly;
   if (CompilerOracle::should_exclude(method, quietly)) {
-    if (!quietly) {
+    if (PrintCompilation && !quietly) {
       // This does not happen quietly...
       ResourceMark rm;
       tty->print("### Excluding %s:%s",
