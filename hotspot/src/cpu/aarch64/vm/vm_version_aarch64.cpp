@@ -234,7 +234,7 @@ void VM_Version::get_processor_features() {
       UseAES = true;
     }
     if (FLAG_IS_DEFAULT(UseAESCTRIntrinsics)) {
-      FLAG_SET_DEFAULT(UseAESCTRIntrinsics, false);
+      FLAG_SET_DEFAULT(UseAESCTRIntrinsics, true);
     }
   } else {
     if (UseAES) {
