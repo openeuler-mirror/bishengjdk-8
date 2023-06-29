@@ -218,9 +218,7 @@ class SparsePRT VALUE_OBJ_CLASS_SPEC {
 
   HeapRegion* _hr;
 
-  enum SomeAdditionalPrivateConstants {
-    InitialCapacity = 16
-  };
+  static const size_t InitialCapacity = 8;
 
   void expand();
 
