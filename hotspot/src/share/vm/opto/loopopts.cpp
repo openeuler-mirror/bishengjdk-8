@@ -226,7 +226,6 @@ bool PhaseIdealLoop::cannot_split_division(const Node* n, const Node* region) co
       return false;
   }
 
-  assert(n->in(0) == NULL, "divisions with zero check should already have bailed out earlier in split-if");
   Node* divisor = n->in(2);
   return is_divisor_counted_loop_phi(divisor, region) &&
          loop_phi_backedge_type_contains_zero(divisor, zero);
