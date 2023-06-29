@@ -20447,10 +20447,29 @@ $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK did not contain an rt.ja
             BOOT_JDK_FOUND=no
           else
             # Oh, this is looking good! We probably have found a proper JDK. Is it the correct version?
-            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | head -n 1`
+            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | head -n 1`
 
             # Extra M4 quote needed to protect [] in grep expression.
             FOUND_VERSION_78=`echo $BOOT_JDK_VERSION | grep  '\"1\.[78]\.'`
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Picked up" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&5
+  $as_echo "$as_me: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Java reports: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Java reports: \"$BOOT_JDK_VERSION\"." >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Unrecognized option" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&5
+  $as_echo "$as_me: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Error message: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Error message: \"$BOOT_JDK_VERSION\"." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&5
+  $as_echo "$as_me: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
             if test "x$FOUND_VERSION_78" = x; then
               { $as_echo "$as_me:${as_lineno-$LINENO}: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&5
 $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&6;}
@@ -20599,7 +20618,7 @@ $as_echo_n "checking for Boot JDK... " >&6; }
 $as_echo "$BOOT_JDK" >&6; }
               { $as_echo "$as_me:${as_lineno-$LINENO}: checking Boot JDK version" >&5
 $as_echo_n "checking Boot JDK version... " >&6; }
-              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | $TR '\n\r' '  '`
+              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | $TR '\n\r' '  '`
               { $as_echo "$as_me:${as_lineno-$LINENO}: result: $BOOT_JDK_VERSION" >&5
 $as_echo "$BOOT_JDK_VERSION" >&6; }
             fi # end check jdk version
@@ -20790,10 +20809,29 @@ $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK did not contain an rt.ja
             BOOT_JDK_FOUND=no
           else
             # Oh, this is looking good! We probably have found a proper JDK. Is it the correct version?
-            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | head -n 1`
+            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | head -n 1`
 
             # Extra M4 quote needed to protect [] in grep expression.
             FOUND_VERSION_78=`echo $BOOT_JDK_VERSION | grep  '\"1\.[78]\.'`
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Picked up" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&5
+  $as_echo "$as_me: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Java reports: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Java reports: \"$BOOT_JDK_VERSION\"." >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Unrecognized option" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&5
+  $as_echo "$as_me: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Error message: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Error message: \"$BOOT_JDK_VERSION\"." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&5
+  $as_echo "$as_me: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
             if test "x$FOUND_VERSION_78" = x; then
               { $as_echo "$as_me:${as_lineno-$LINENO}: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&5
 $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&6;}
@@ -20942,7 +20980,7 @@ $as_echo_n "checking for Boot JDK... " >&6; }
 $as_echo "$BOOT_JDK" >&6; }
               { $as_echo "$as_me:${as_lineno-$LINENO}: checking Boot JDK version" >&5
 $as_echo_n "checking Boot JDK version... " >&6; }
-              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | $TR '\n\r' '  '`
+              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | $TR '\n\r' '  '`
               { $as_echo "$as_me:${as_lineno-$LINENO}: result: $BOOT_JDK_VERSION" >&5
 $as_echo "$BOOT_JDK_VERSION" >&6; }
             fi # end check jdk version
@@ -21130,10 +21168,29 @@ $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK did not contain an rt.ja
             BOOT_JDK_FOUND=no
           else
             # Oh, this is looking good! We probably have found a proper JDK. Is it the correct version?
-            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | head -n 1`
+            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | head -n 1`
 
             # Extra M4 quote needed to protect [] in grep expression.
             FOUND_VERSION_78=`echo $BOOT_JDK_VERSION | grep  '\"1\.[78]\.'`
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Picked up" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&5
+  $as_echo "$as_me: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Java reports: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Java reports: \"$BOOT_JDK_VERSION\"." >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Unrecognized option" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&5
+  $as_echo "$as_me: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Error message: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Error message: \"$BOOT_JDK_VERSION\"." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&5
+  $as_echo "$as_me: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
             if test "x$FOUND_VERSION_78" = x; then
               { $as_echo "$as_me:${as_lineno-$LINENO}: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&5
 $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&6;}
@@ -21282,7 +21339,7 @@ $as_echo_n "checking for Boot JDK... " >&6; }
 $as_echo "$BOOT_JDK" >&6; }
               { $as_echo "$as_me:${as_lineno-$LINENO}: checking Boot JDK version" >&5
 $as_echo_n "checking Boot JDK version... " >&6; }
-              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | $TR '\n\r' '  '`
+              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | $TR '\n\r' '  '`
               { $as_echo "$as_me:${as_lineno-$LINENO}: result: $BOOT_JDK_VERSION" >&5
 $as_echo "$BOOT_JDK_VERSION" >&6; }
             fi # end check jdk version
@@ -21329,10 +21386,29 @@ $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK did not contain an rt.ja
             BOOT_JDK_FOUND=no
           else
             # Oh, this is looking good! We probably have found a proper JDK. Is it the correct version?
-            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | head -n 1`
+            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | head -n 1`
 
             # Extra M4 quote needed to protect [] in grep expression.
             FOUND_VERSION_78=`echo $BOOT_JDK_VERSION | grep  '\"1\.[78]\.'`
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Picked up" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&5
+  $as_echo "$as_me: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Java reports: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Java reports: \"$BOOT_JDK_VERSION\"." >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Unrecognized option" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&5
+  $as_echo "$as_me: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Error message: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Error message: \"$BOOT_JDK_VERSION\"." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&5
+  $as_echo "$as_me: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
             if test "x$FOUND_VERSION_78" = x; then
               { $as_echo "$as_me:${as_lineno-$LINENO}: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&5
 $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&6;}
@@ -21481,7 +21557,7 @@ $as_echo_n "checking for Boot JDK... " >&6; }
 $as_echo "$BOOT_JDK" >&6; }
               { $as_echo "$as_me:${as_lineno-$LINENO}: checking Boot JDK version" >&5
 $as_echo_n "checking Boot JDK version... " >&6; }
-              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | $TR '\n\r' '  '`
+              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | $TR '\n\r' '  '`
               { $as_echo "$as_me:${as_lineno-$LINENO}: result: $BOOT_JDK_VERSION" >&5
 $as_echo "$BOOT_JDK_VERSION" >&6; }
             fi # end check jdk version
@@ -21668,10 +21744,29 @@ $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK did not contain an rt.ja
             BOOT_JDK_FOUND=no
           else
             # Oh, this is looking good! We probably have found a proper JDK. Is it the correct version?
-            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | head -n 1`
+            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | head -n 1`
 
             # Extra M4 quote needed to protect [] in grep expression.
             FOUND_VERSION_78=`echo $BOOT_JDK_VERSION | grep  '\"1\.[78]\.'`
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Picked up" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&5
+  $as_echo "$as_me: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Java reports: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Java reports: \"$BOOT_JDK_VERSION\"." >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Unrecognized option" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&5
+  $as_echo "$as_me: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Error message: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Error message: \"$BOOT_JDK_VERSION\"." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&5
+  $as_echo "$as_me: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
             if test "x$FOUND_VERSION_78" = x; then
               { $as_echo "$as_me:${as_lineno-$LINENO}: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&5
 $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&6;}
@@ -21820,7 +21915,7 @@ $as_echo_n "checking for Boot JDK... " >&6; }
 $as_echo "$BOOT_JDK" >&6; }
               { $as_echo "$as_me:${as_lineno-$LINENO}: checking Boot JDK version" >&5
 $as_echo_n "checking Boot JDK version... " >&6; }
-              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | $TR '\n\r' '  '`
+              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | $TR '\n\r' '  '`
               { $as_echo "$as_me:${as_lineno-$LINENO}: result: $BOOT_JDK_VERSION" >&5
 $as_echo "$BOOT_JDK_VERSION" >&6; }
             fi # end check jdk version
@@ -21894,10 +21989,29 @@ $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK did not contain an rt.ja
             BOOT_JDK_FOUND=no
           else
             # Oh, this is looking good! We probably have found a proper JDK. Is it the correct version?
-            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | head -n 1`
+            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | head -n 1`
 
             # Extra M4 quote needed to protect [] in grep expression.
             FOUND_VERSION_78=`echo $BOOT_JDK_VERSION | grep  '\"1\.[78]\.'`
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Picked up" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&5
+  $as_echo "$as_me: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Java reports: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Java reports: \"$BOOT_JDK_VERSION\"." >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Unrecognized option" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&5
+  $as_echo "$as_me: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Error message: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Error message: \"$BOOT_JDK_VERSION\"." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&5
+  $as_echo "$as_me: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
             if test "x$FOUND_VERSION_78" = x; then
               { $as_echo "$as_me:${as_lineno-$LINENO}: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&5
 $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&6;}
@@ -22046,7 +22160,7 @@ $as_echo_n "checking for Boot JDK... " >&6; }
 $as_echo "$BOOT_JDK" >&6; }
               { $as_echo "$as_me:${as_lineno-$LINENO}: checking Boot JDK version" >&5
 $as_echo_n "checking Boot JDK version... " >&6; }
-              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | $TR '\n\r' '  '`
+              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | $TR '\n\r' '  '`
               { $as_echo "$as_me:${as_lineno-$LINENO}: result: $BOOT_JDK_VERSION" >&5
 $as_echo "$BOOT_JDK_VERSION" >&6; }
             fi # end check jdk version
@@ -22085,10 +22199,29 @@ $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK did not contain an rt.ja
             BOOT_JDK_FOUND=no
           else
             # Oh, this is looking good! We probably have found a proper JDK. Is it the correct version?
-            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | head -n 1`
+            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | head -n 1`
 
             # Extra M4 quote needed to protect [] in grep expression.
             FOUND_VERSION_78=`echo $BOOT_JDK_VERSION | grep  '\"1\.[78]\.'`
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Picked up" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&5
+  $as_echo "$as_me: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Java reports: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Java reports: \"$BOOT_JDK_VERSION\"." >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Unrecognized option" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&5
+  $as_echo "$as_me: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Error message: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Error message: \"$BOOT_JDK_VERSION\"." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&5
+  $as_echo "$as_me: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
             if test "x$FOUND_VERSION_78" = x; then
               { $as_echo "$as_me:${as_lineno-$LINENO}: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&5
 $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&6;}
@@ -22237,7 +22370,7 @@ $as_echo_n "checking for Boot JDK... " >&6; }
 $as_echo "$BOOT_JDK" >&6; }
               { $as_echo "$as_me:${as_lineno-$LINENO}: checking Boot JDK version" >&5
 $as_echo_n "checking Boot JDK version... " >&6; }
-              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | $TR '\n\r' '  '`
+              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | $TR '\n\r' '  '`
               { $as_echo "$as_me:${as_lineno-$LINENO}: result: $BOOT_JDK_VERSION" >&5
 $as_echo "$BOOT_JDK_VERSION" >&6; }
             fi # end check jdk version
@@ -22304,10 +22437,29 @@ $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK did not contain an rt.ja
             BOOT_JDK_FOUND=no
           else
             # Oh, this is looking good! We probably have found a proper JDK. Is it the correct version?
-            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | head -n 1`
+            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | head -n 1`
 
             # Extra M4 quote needed to protect [] in grep expression.
             FOUND_VERSION_78=`echo $BOOT_JDK_VERSION | grep  '\"1\.[78]\.'`
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Picked up" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&5
+  $as_echo "$as_me: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Java reports: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Java reports: \"$BOOT_JDK_VERSION\"." >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Unrecognized option" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&5
+  $as_echo "$as_me: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Error message: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Error message: \"$BOOT_JDK_VERSION\"." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&5
+  $as_echo "$as_me: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
             if test "x$FOUND_VERSION_78" = x; then
               { $as_echo "$as_me:${as_lineno-$LINENO}: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&5
 $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&6;}
@@ -22456,7 +22608,7 @@ $as_echo_n "checking for Boot JDK... " >&6; }
 $as_echo "$BOOT_JDK" >&6; }
               { $as_echo "$as_me:${as_lineno-$LINENO}: checking Boot JDK version" >&5
 $as_echo_n "checking Boot JDK version... " >&6; }
-              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | $TR '\n\r' '  '`
+              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | $TR '\n\r' '  '`
               { $as_echo "$as_me:${as_lineno-$LINENO}: result: $BOOT_JDK_VERSION" >&5
 $as_echo "$BOOT_JDK_VERSION" >&6; }
             fi # end check jdk version
@@ -22495,10 +22647,29 @@ $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK did not contain an rt.ja
             BOOT_JDK_FOUND=no
           else
             # Oh, this is looking good! We probably have found a proper JDK. Is it the correct version?
-            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | head -n 1`
+            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | head -n 1`
 
             # Extra M4 quote needed to protect [] in grep expression.
             FOUND_VERSION_78=`echo $BOOT_JDK_VERSION | grep  '\"1\.[78]\.'`
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Picked up" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&5
+  $as_echo "$as_me: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Java reports: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Java reports: \"$BOOT_JDK_VERSION\"." >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Unrecognized option" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&5
+  $as_echo "$as_me: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Error message: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Error message: \"$BOOT_JDK_VERSION\"." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&5
+  $as_echo "$as_me: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
             if test "x$FOUND_VERSION_78" = x; then
               { $as_echo "$as_me:${as_lineno-$LINENO}: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&5
 $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&6;}
@@ -22647,7 +22818,7 @@ $as_echo_n "checking for Boot JDK... " >&6; }
 $as_echo "$BOOT_JDK" >&6; }
               { $as_echo "$as_me:${as_lineno-$LINENO}: checking Boot JDK version" >&5
 $as_echo_n "checking Boot JDK version... " >&6; }
-              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | $TR '\n\r' '  '`
+              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | $TR '\n\r' '  '`
               { $as_echo "$as_me:${as_lineno-$LINENO}: result: $BOOT_JDK_VERSION" >&5
 $as_echo "$BOOT_JDK_VERSION" >&6; }
             fi # end check jdk version
@@ -22714,10 +22885,29 @@ $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK did not contain an rt.ja
             BOOT_JDK_FOUND=no
           else
             # Oh, this is looking good! We probably have found a proper JDK. Is it the correct version?
-            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | head -n 1`
+            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | head -n 1`
 
             # Extra M4 quote needed to protect [] in grep expression.
             FOUND_VERSION_78=`echo $BOOT_JDK_VERSION | grep  '\"1\.[78]\.'`
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Picked up" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&5
+  $as_echo "$as_me: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Java reports: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Java reports: \"$BOOT_JDK_VERSION\"." >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Unrecognized option" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&5
+  $as_echo "$as_me: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Error message: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Error message: \"$BOOT_JDK_VERSION\"." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&5
+  $as_echo "$as_me: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
             if test "x$FOUND_VERSION_78" = x; then
               { $as_echo "$as_me:${as_lineno-$LINENO}: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&5
 $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&6;}
@@ -22866,7 +23056,7 @@ $as_echo_n "checking for Boot JDK... " >&6; }
 $as_echo "$BOOT_JDK" >&6; }
               { $as_echo "$as_me:${as_lineno-$LINENO}: checking Boot JDK version" >&5
 $as_echo_n "checking Boot JDK version... " >&6; }
-              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | $TR '\n\r' '  '`
+              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | $TR '\n\r' '  '`
               { $as_echo "$as_me:${as_lineno-$LINENO}: result: $BOOT_JDK_VERSION" >&5
 $as_echo "$BOOT_JDK_VERSION" >&6; }
             fi # end check jdk version
@@ -22905,10 +23095,29 @@ $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK did not contain an rt.ja
             BOOT_JDK_FOUND=no
           else
             # Oh, this is looking good! We probably have found a proper JDK. Is it the correct version?
-            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | head -n 1`
+            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | head -n 1`
 
             # Extra M4 quote needed to protect [] in grep expression.
             FOUND_VERSION_78=`echo $BOOT_JDK_VERSION | grep  '\"1\.[78]\.'`
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Picked up" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&5
+  $as_echo "$as_me: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Java reports: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Java reports: \"$BOOT_JDK_VERSION\"." >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Unrecognized option" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&5
+  $as_echo "$as_me: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Error message: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Error message: \"$BOOT_JDK_VERSION\"." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&5
+  $as_echo "$as_me: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
             if test "x$FOUND_VERSION_78" = x; then
               { $as_echo "$as_me:${as_lineno-$LINENO}: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&5
 $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&6;}
@@ -23057,7 +23266,7 @@ $as_echo_n "checking for Boot JDK... " >&6; }
 $as_echo "$BOOT_JDK" >&6; }
               { $as_echo "$as_me:${as_lineno-$LINENO}: checking Boot JDK version" >&5
 $as_echo_n "checking Boot JDK version... " >&6; }
-              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | $TR '\n\r' '  '`
+              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | $TR '\n\r' '  '`
               { $as_echo "$as_me:${as_lineno-$LINENO}: result: $BOOT_JDK_VERSION" >&5
 $as_echo "$BOOT_JDK_VERSION" >&6; }
             fi # end check jdk version
@@ -23124,10 +23333,29 @@ $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK did not contain an rt.ja
             BOOT_JDK_FOUND=no
           else
             # Oh, this is looking good! We probably have found a proper JDK. Is it the correct version?
-            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | head -n 1`
+            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | head -n 1`
 
             # Extra M4 quote needed to protect [] in grep expression.
             FOUND_VERSION_78=`echo $BOOT_JDK_VERSION | grep  '\"1\.[78]\.'`
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Picked up" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&5
+  $as_echo "$as_me: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Java reports: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Java reports: \"$BOOT_JDK_VERSION\"." >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Unrecognized option" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&5
+  $as_echo "$as_me: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Error message: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Error message: \"$BOOT_JDK_VERSION\"." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&5
+  $as_echo "$as_me: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
             if test "x$FOUND_VERSION_78" = x; then
               { $as_echo "$as_me:${as_lineno-$LINENO}: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&5
 $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&6;}
@@ -23276,7 +23504,7 @@ $as_echo_n "checking for Boot JDK... " >&6; }
 $as_echo "$BOOT_JDK" >&6; }
               { $as_echo "$as_me:${as_lineno-$LINENO}: checking Boot JDK version" >&5
 $as_echo_n "checking Boot JDK version... " >&6; }
-              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | $TR '\n\r' '  '`
+              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | $TR '\n\r' '  '`
               { $as_echo "$as_me:${as_lineno-$LINENO}: result: $BOOT_JDK_VERSION" >&5
 $as_echo "$BOOT_JDK_VERSION" >&6; }
             fi # end check jdk version
@@ -23315,10 +23543,29 @@ $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK did not contain an rt.ja
             BOOT_JDK_FOUND=no
           else
             # Oh, this is looking good! We probably have found a proper JDK. Is it the correct version?
-            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | head -n 1`
+            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | head -n 1`
 
             # Extra M4 quote needed to protect [] in grep expression.
             FOUND_VERSION_78=`echo $BOOT_JDK_VERSION | grep  '\"1\.[78]\.'`
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Picked up" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&5
+  $as_echo "$as_me: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Java reports: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Java reports: \"$BOOT_JDK_VERSION\"." >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Unrecognized option" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&5
+  $as_echo "$as_me: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Error message: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Error message: \"$BOOT_JDK_VERSION\"." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&5
+  $as_echo "$as_me: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
             if test "x$FOUND_VERSION_78" = x; then
               { $as_echo "$as_me:${as_lineno-$LINENO}: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&5
 $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&6;}
@@ -23467,7 +23714,7 @@ $as_echo_n "checking for Boot JDK... " >&6; }
 $as_echo "$BOOT_JDK" >&6; }
               { $as_echo "$as_me:${as_lineno-$LINENO}: checking Boot JDK version" >&5
 $as_echo_n "checking Boot JDK version... " >&6; }
-              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | $TR '\n\r' '  '`
+              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | $TR '\n\r' '  '`
               { $as_echo "$as_me:${as_lineno-$LINENO}: result: $BOOT_JDK_VERSION" >&5
 $as_echo "$BOOT_JDK_VERSION" >&6; }
             fi # end check jdk version
@@ -23521,10 +23768,29 @@ $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK did not contain an rt.ja
             BOOT_JDK_FOUND=no
           else
             # Oh, this is looking good! We probably have found a proper JDK. Is it the correct version?
-            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | head -n 1`
+            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | head -n 1`
 
             # Extra M4 quote needed to protect [] in grep expression.
             FOUND_VERSION_78=`echo $BOOT_JDK_VERSION | grep  '\"1\.[78]\.'`
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Picked up" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&5
+  $as_echo "$as_me: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Java reports: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Java reports: \"$BOOT_JDK_VERSION\"." >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Unrecognized option" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&5
+  $as_echo "$as_me: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Error message: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Error message: \"$BOOT_JDK_VERSION\"." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&5
+  $as_echo "$as_me: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
             if test "x$FOUND_VERSION_78" = x; then
               { $as_echo "$as_me:${as_lineno-$LINENO}: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&5
 $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&6;}
@@ -23673,7 +23939,7 @@ $as_echo_n "checking for Boot JDK... " >&6; }
 $as_echo "$BOOT_JDK" >&6; }
               { $as_echo "$as_me:${as_lineno-$LINENO}: checking Boot JDK version" >&5
 $as_echo_n "checking Boot JDK version... " >&6; }
-              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | $TR '\n\r' '  '`
+              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | $TR '\n\r' '  '`
               { $as_echo "$as_me:${as_lineno-$LINENO}: result: $BOOT_JDK_VERSION" >&5
 $as_echo "$BOOT_JDK_VERSION" >&6; }
             fi # end check jdk version
@@ -23710,10 +23976,29 @@ $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK did not contain an rt.ja
             BOOT_JDK_FOUND=no
           else
             # Oh, this is looking good! We probably have found a proper JDK. Is it the correct version?
-            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | head -n 1`
+            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | head -n 1`
 
             # Extra M4 quote needed to protect [] in grep expression.
             FOUND_VERSION_78=`echo $BOOT_JDK_VERSION | grep  '\"1\.[78]\.'`
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Picked up" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&5
+  $as_echo "$as_me: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Java reports: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Java reports: \"$BOOT_JDK_VERSION\"." >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Unrecognized option" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&5
+  $as_echo "$as_me: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Error message: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Error message: \"$BOOT_JDK_VERSION\"." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&5
+  $as_echo "$as_me: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
             if test "x$FOUND_VERSION_78" = x; then
               { $as_echo "$as_me:${as_lineno-$LINENO}: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&5
 $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&6;}
@@ -23862,7 +24147,7 @@ $as_echo_n "checking for Boot JDK... " >&6; }
 $as_echo "$BOOT_JDK" >&6; }
               { $as_echo "$as_me:${as_lineno-$LINENO}: checking Boot JDK version" >&5
 $as_echo_n "checking Boot JDK version... " >&6; }
-              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | $TR '\n\r' '  '`
+              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | $TR '\n\r' '  '`
               { $as_echo "$as_me:${as_lineno-$LINENO}: result: $BOOT_JDK_VERSION" >&5
 $as_echo "$BOOT_JDK_VERSION" >&6; }
             fi # end check jdk version
@@ -23917,10 +24202,29 @@ $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK did not contain an rt.ja
             BOOT_JDK_FOUND=no
           else
             # Oh, this is looking good! We probably have found a proper JDK. Is it the correct version?
-            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | head -n 1`
+            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | head -n 1`
 
             # Extra M4 quote needed to protect [] in grep expression.
             FOUND_VERSION_78=`echo $BOOT_JDK_VERSION | grep  '\"1\.[78]\.'`
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Picked up" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&5
+  $as_echo "$as_me: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Java reports: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Java reports: \"$BOOT_JDK_VERSION\"." >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Unrecognized option" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&5
+  $as_echo "$as_me: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Error message: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Error message: \"$BOOT_JDK_VERSION\"." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&5
+  $as_echo "$as_me: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
             if test "x$FOUND_VERSION_78" = x; then
               { $as_echo "$as_me:${as_lineno-$LINENO}: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&5
 $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&6;}
@@ -24069,7 +24373,7 @@ $as_echo_n "checking for Boot JDK... " >&6; }
 $as_echo "$BOOT_JDK" >&6; }
               { $as_echo "$as_me:${as_lineno-$LINENO}: checking Boot JDK version" >&5
 $as_echo_n "checking Boot JDK version... " >&6; }
-              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | $TR '\n\r' '  '`
+              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | $TR '\n\r' '  '`
               { $as_echo "$as_me:${as_lineno-$LINENO}: result: $BOOT_JDK_VERSION" >&5
 $as_echo "$BOOT_JDK_VERSION" >&6; }
             fi # end check jdk version
@@ -24106,10 +24410,29 @@ $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK did not contain an rt.ja
             BOOT_JDK_FOUND=no
           else
             # Oh, this is looking good! We probably have found a proper JDK. Is it the correct version?
-            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | head -n 1`
+            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | head -n 1`
 
             # Extra M4 quote needed to protect [] in grep expression.
             FOUND_VERSION_78=`echo $BOOT_JDK_VERSION | grep  '\"1\.[78]\.'`
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Picked up" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&5
+  $as_echo "$as_me: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Java reports: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Java reports: \"$BOOT_JDK_VERSION\"." >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Unrecognized option" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&5
+  $as_echo "$as_me: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Error message: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Error message: \"$BOOT_JDK_VERSION\"." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&5
+  $as_echo "$as_me: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
             if test "x$FOUND_VERSION_78" = x; then
               { $as_echo "$as_me:${as_lineno-$LINENO}: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&5
 $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&6;}
@@ -24258,7 +24581,7 @@ $as_echo_n "checking for Boot JDK... " >&6; }
 $as_echo "$BOOT_JDK" >&6; }
               { $as_echo "$as_me:${as_lineno-$LINENO}: checking Boot JDK version" >&5
 $as_echo_n "checking Boot JDK version... " >&6; }
-              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | $TR '\n\r' '  '`
+              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | $TR '\n\r' '  '`
               { $as_echo "$as_me:${as_lineno-$LINENO}: result: $BOOT_JDK_VERSION" >&5
 $as_echo "$BOOT_JDK_VERSION" >&6; }
             fi # end check jdk version
@@ -24312,10 +24635,29 @@ $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK did not contain an rt.ja
             BOOT_JDK_FOUND=no
           else
             # Oh, this is looking good! We probably have found a proper JDK. Is it the correct version?
-            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | head -n 1`
+            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | head -n 1`
 
             # Extra M4 quote needed to protect [] in grep expression.
             FOUND_VERSION_78=`echo $BOOT_JDK_VERSION | grep  '\"1\.[78]\.'`
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Picked up" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&5
+  $as_echo "$as_me: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Java reports: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Java reports: \"$BOOT_JDK_VERSION\"." >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Unrecognized option" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&5
+  $as_echo "$as_me: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Error message: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Error message: \"$BOOT_JDK_VERSION\"." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&5
+  $as_echo "$as_me: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
             if test "x$FOUND_VERSION_78" = x; then
               { $as_echo "$as_me:${as_lineno-$LINENO}: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&5
 $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&6;}
@@ -24464,7 +24806,7 @@ $as_echo_n "checking for Boot JDK... " >&6; }
 $as_echo "$BOOT_JDK" >&6; }
               { $as_echo "$as_me:${as_lineno-$LINENO}: checking Boot JDK version" >&5
 $as_echo_n "checking Boot JDK version... " >&6; }
-              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | $TR '\n\r' '  '`
+              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | $TR '\n\r' '  '`
               { $as_echo "$as_me:${as_lineno-$LINENO}: result: $BOOT_JDK_VERSION" >&5
 $as_echo "$BOOT_JDK_VERSION" >&6; }
             fi # end check jdk version
@@ -24501,10 +24843,29 @@ $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK did not contain an rt.ja
             BOOT_JDK_FOUND=no
           else
             # Oh, this is looking good! We probably have found a proper JDK. Is it the correct version?
-            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | head -n 1`
+            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | head -n 1`
 
             # Extra M4 quote needed to protect [] in grep expression.
             FOUND_VERSION_78=`echo $BOOT_JDK_VERSION | grep  '\"1\.[78]\.'`
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Picked up" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&5
+  $as_echo "$as_me: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Java reports: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Java reports: \"$BOOT_JDK_VERSION\"." >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Unrecognized option" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&5
+  $as_echo "$as_me: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Error message: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Error message: \"$BOOT_JDK_VERSION\"." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&5
+  $as_echo "$as_me: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
             if test "x$FOUND_VERSION_78" = x; then
               { $as_echo "$as_me:${as_lineno-$LINENO}: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&5
 $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&6;}
@@ -24653,7 +25014,7 @@ $as_echo_n "checking for Boot JDK... " >&6; }
 $as_echo "$BOOT_JDK" >&6; }
               { $as_echo "$as_me:${as_lineno-$LINENO}: checking Boot JDK version" >&5
 $as_echo_n "checking Boot JDK version... " >&6; }
-              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | $TR '\n\r' '  '`
+              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | $TR '\n\r' '  '`
               { $as_echo "$as_me:${as_lineno-$LINENO}: result: $BOOT_JDK_VERSION" >&5
 $as_echo "$BOOT_JDK_VERSION" >&6; }
             fi # end check jdk version
@@ -24708,10 +25069,29 @@ $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK did not contain an rt.ja
             BOOT_JDK_FOUND=no
           else
             # Oh, this is looking good! We probably have found a proper JDK. Is it the correct version?
-            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | head -n 1`
+            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | head -n 1`
 
             # Extra M4 quote needed to protect [] in grep expression.
             FOUND_VERSION_78=`echo $BOOT_JDK_VERSION | grep  '\"1\.[78]\.'`
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Picked up" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&5
+  $as_echo "$as_me: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Java reports: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Java reports: \"$BOOT_JDK_VERSION\"." >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Unrecognized option" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&5
+  $as_echo "$as_me: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Error message: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Error message: \"$BOOT_JDK_VERSION\"." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&5
+  $as_echo "$as_me: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
             if test "x$FOUND_VERSION_78" = x; then
               { $as_echo "$as_me:${as_lineno-$LINENO}: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&5
 $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&6;}
@@ -24860,7 +25240,7 @@ $as_echo_n "checking for Boot JDK... " >&6; }
 $as_echo "$BOOT_JDK" >&6; }
               { $as_echo "$as_me:${as_lineno-$LINENO}: checking Boot JDK version" >&5
 $as_echo_n "checking Boot JDK version... " >&6; }
-              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | $TR '\n\r' '  '`
+              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | $TR '\n\r' '  '`
               { $as_echo "$as_me:${as_lineno-$LINENO}: result: $BOOT_JDK_VERSION" >&5
 $as_echo "$BOOT_JDK_VERSION" >&6; }
             fi # end check jdk version
@@ -24897,10 +25277,29 @@ $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK did not contain an rt.ja
             BOOT_JDK_FOUND=no
           else
             # Oh, this is looking good! We probably have found a proper JDK. Is it the correct version?
-            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | head -n 1`
+            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | head -n 1`
 
             # Extra M4 quote needed to protect [] in grep expression.
             FOUND_VERSION_78=`echo $BOOT_JDK_VERSION | grep  '\"1\.[78]\.'`
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Picked up" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&5
+  $as_echo "$as_me: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Java reports: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Java reports: \"$BOOT_JDK_VERSION\"." >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Unrecognized option" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&5
+  $as_echo "$as_me: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Error message: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Error message: \"$BOOT_JDK_VERSION\"." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&5
+  $as_echo "$as_me: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
             if test "x$FOUND_VERSION_78" = x; then
               { $as_echo "$as_me:${as_lineno-$LINENO}: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&5
 $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&6;}
@@ -25049,7 +25448,7 @@ $as_echo_n "checking for Boot JDK... " >&6; }
 $as_echo "$BOOT_JDK" >&6; }
               { $as_echo "$as_me:${as_lineno-$LINENO}: checking Boot JDK version" >&5
 $as_echo_n "checking Boot JDK version... " >&6; }
-              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | $TR '\n\r' '  '`
+              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | $TR '\n\r' '  '`
               { $as_echo "$as_me:${as_lineno-$LINENO}: result: $BOOT_JDK_VERSION" >&5
 $as_echo "$BOOT_JDK_VERSION" >&6; }
             fi # end check jdk version
@@ -25085,10 +25484,29 @@ $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK did not contain an rt.ja
             BOOT_JDK_FOUND=no
           else
             # Oh, this is looking good! We probably have found a proper JDK. Is it the correct version?
-            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | head -n 1`
+            BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | head -n 1`
 
             # Extra M4 quote needed to protect [] in grep expression.
             FOUND_VERSION_78=`echo $BOOT_JDK_VERSION | grep  '\"1\.[78]\.'`
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Picked up" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&5
+  $as_echo "$as_me: You have _JAVA_OPTIONS or JAVA_TOOL_OPTIONS set. This can mess up the build. Please use --with-boot-jdk-jvmargs instead." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Java reports: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Java reports: \"$BOOT_JDK_VERSION\"." >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
+            if  [[ "$BOOT_JDK_VERSION" =~ "Unrecognized option" ]] ; then
+              { $as_echo "$as_me:${as_lineno-$LINENO}: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&5
+  $as_echo "$as_me: The specified --with-boot-jdk-jvmargs is invalid for the tested java" >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Error message: \"$BOOT_JDK_VERSION\"." >&5
+  $as_echo "$as_me: Error message: \"$BOOT_JDK_VERSION\"." >&6;}
+              { $as_echo "$as_me:${as_lineno-$LINENO}: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&5
+  $as_echo "$as_me: Please fix arguments, or point to an explicit boot JDK which accept these arguments" >&6;}
+              as_fn_error $? "Cannot continue" "$LINENO" 5
+            fi
+
             if test "x$FOUND_VERSION_78" = x; then
               { $as_echo "$as_me:${as_lineno-$LINENO}: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&5
 $as_echo "$as_me: Potential Boot JDK found at $BOOT_JDK is incorrect JDK version ($BOOT_JDK_VERSION); ignoring" >&6;}
@@ -25237,7 +25655,7 @@ $as_echo_n "checking for Boot JDK... " >&6; }
 $as_echo "$BOOT_JDK" >&6; }
               { $as_echo "$as_me:${as_lineno-$LINENO}: checking Boot JDK version" >&5
 $as_echo_n "checking Boot JDK version... " >&6; }
-              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" -version 2>&1 | $TR '\n\r' '  '`
+              BOOT_JDK_VERSION=`"$BOOT_JDK/bin/java" $USER_BOOT_JDK_OPTIONS -version 2>&1 | $TR '\n\r' '  '`
               { $as_echo "$as_me:${as_lineno-$LINENO}: result: $BOOT_JDK_VERSION" >&5
 $as_echo "$BOOT_JDK_VERSION" >&6; }
             fi # end check jdk version
