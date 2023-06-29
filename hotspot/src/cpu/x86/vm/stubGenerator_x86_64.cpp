@@ -3660,6 +3660,43 @@ class StubGenerator: public StubCodeGenerator {
     return start;
   }
 
+  // ofs and limit are use for multi-block byte array.
+  // int com.sun.security.provider.MD5.implCompress(byte[] b, int ofs)
+  address generate_md5_implCompress(bool multi_block, const char *name) {
+    __ align(CodeEntryAlignment);
+    StubCodeMark mark(this, "StubRoutines", name);
+    address start = __ pc();
+
+    const Register buf_param = r15;
+    const Address state_param(rsp, 0 * wordSize);
+    const Address ofs_param  (rsp, 1 * wordSize    );
+    const Address limit_param(rsp, 1 * wordSize + 4);
+
+    __ enter();
+    __ push(rbx);
+    __ push(rdi);
+    __ push(rsi);
+    __ push(r15);
+    __ subptr(rsp, 2 * wordSize);
+
+    __ movptr(buf_param, c_rarg0);
+    __ movptr(state_param, c_rarg1);
+    if (multi_block) {
+      __ movl(ofs_param, c_rarg2);
+      __ movl(limit_param, c_rarg3);
+    }
+    __ fast_md5(buf_param, state_param, ofs_param, limit_param, multi_block);
+
+    __ addptr(rsp, 2 * wordSize);
+    __ pop(r15);
+    __ pop(rsi);
+    __ pop(rdi);
+    __ pop(rbx);
+    __ leave();
+    __ ret(0);
+    return start;
+  }
+
   // This is a version of CTR/AES crypt which does 6 blocks in a loop at a time
   // to hide instruction latency
   //
@@ -4582,6 +4619,11 @@ class StubGenerator: public StubCodeGenerator {
     if (UseAESCTRIntrinsics){
       StubRoutines::x86::_counter_shuffle_mask_addr = generate_counter_shuffle_mask();
       StubRoutines::_counterMode_AESCrypt = generate_counterMode_AESCrypt_Parallel();
+    }
+
+    if (UseMD5Intrinsics) {
+      StubRoutines::_md5_implCompress = generate_md5_implCompress(false, "md5_implCompress");
+      StubRoutines::_md5_implCompressMB = generate_md5_implCompress(true, "md5_implCompressMB");
     }
 
     // Generate GHASH intrinsics code

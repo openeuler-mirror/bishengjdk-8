@@ -24,7 +24,9 @@
 import com.oracle.java.testlibrary.ExitCode;
 import com.oracle.java.testlibrary.Platform;
 import com.oracle.java.testlibrary.cli.CommandLineOptionTest;
+import com.oracle.java.testlibrary.cli.predicate.AndPredicate;
 import com.oracle.java.testlibrary.cli.predicate.OrPredicate;
+import com.oracle.java.testlibrary.cli.predicate.NotPredicate;
 
 /**
  * Generic test case for SHA-related options targeted to X86 CPUs that don't
@@ -33,7 +35,9 @@ import com.oracle.java.testlibrary.cli.predicate.OrPredicate;
 public class GenericTestCaseForUnsupportedX86CPU
         extends DigestOptionsBase.TestCase {
     public GenericTestCaseForUnsupportedX86CPU(String optionName) {
-        super(optionName, new OrPredicate(Platform::isX64, Platform::isX86));
+        super(optionName, new AndPredicate(new OrPredicate(Platform::isX64, Platform::isX86),
+                new NotPredicate(DigestOptionsBase.getPredicateForOption(
+                        optionName))));
     }
 
     @Override

@@ -669,11 +669,6 @@ void VM_Version::get_processor_features() {
     FLAG_SET_DEFAULT(UseF2jBLASIntrinsics, false);
   }
 
-  if (UseMD5Intrinsics) {
-    warning("MD5 intrinsics are not available on this CPU");
-    FLAG_SET_DEFAULT(UseMD5Intrinsics, false);
-  }
-
   // Adjust RTM (Restricted Transactional Memory) flags
   if (!supports_rtm() && UseRTMLocking) {
     // Can't continue because UseRTMLocking affects UseBiasedLocking flag

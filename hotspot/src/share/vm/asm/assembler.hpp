@@ -287,6 +287,9 @@ class AbstractAssembler : public ResourceObj  {
 
   void emit_int8(   int8_t  x) { code_section()->emit_int8(   x); }
   void emit_int16(  int16_t x) { code_section()->emit_int16(  x); }
+  void emit_int16(  uint8_t x1, uint8_t x2) { code_section()->emit_int16(x1, x2); }
+
+  void emit_int24(  uint8_t x1, uint8_t x2, uint8_t x3) { code_section()->emit_int24(x1, x2, x3); }
   void emit_int32(  int32_t x) { code_section()->emit_int32(  x); }
   void emit_int64(  int64_t x) { code_section()->emit_int64(  x); }
 
