@@ -29,6 +29,8 @@
 
 #ifndef CC_INTERP
 
+# define __ _masm->
+
 // asm based interpreter deoptimization helpers
 int AbstractInterpreter::size_activation(int max_stack,
                                          int temps,
@@ -119,6 +121,68 @@ void AbstractInterpreter::layout_activation(Method* method,
   }
   *interpreter_frame->interpreter_frame_cache_addr() =
     method->constants()->cache();
+}
+
+void AbstractInterpreterGenerator::bang_stack_shadow_pages(bool native_call) {
+  // See more discussion in stackOverflow.hpp.
+
+  // Note that we do the banging after the frame is setup, since the exception
+  // handling code expects to find a valid interpreter frame on the stack.
+  // Doing the banging earlier fails if the caller frame is not an interpreter
+  // frame.
+  // (Also, the exception throwing code expects to unlock any synchronized
+  // method receiver, so do the banging after locking the receiver.)
+
+  const int shadow_zone_size = (int)(JavaThread::stack_shadow_zone_size());
+  const int page_size = os::vm_page_size();
+  const int n_shadow_pages = shadow_zone_size / page_size;
+
+  const Register thread = NOT_LP64(rsi) LP64_ONLY(r15_thread);
+ #ifndef _LP64
+  __ push(thread);
+  __ get_thread(thread);
+#endif
+
+#ifdef ASSERT
+  Label L_good_limit;
+  __ cmpptr(Address(thread, JavaThread::shadow_zone_safe_limit_offset()), (int32_t)NULL_WORD);
+  __ jcc(Assembler::notEqual, L_good_limit);
+  __ stop("shadow zone safe limit is not initialized");
+  __ bind(L_good_limit);
+
+  Label L_good_watermark;
+  __ cmpptr(Address(thread, JavaThread::shadow_zone_growth_watermark_offset()), (int32_t)NULL_WORD);
+  __ jcc(Assembler::notEqual, L_good_watermark);
+  __ stop("shadow zone growth watermark is not initialized");
+  __ bind(L_good_watermark);
+#endif
+
+  Label L_done;
+
+  __ cmpptr(rsp, Address(thread, JavaThread::shadow_zone_growth_watermark_offset()));
+  __ jcc(Assembler::above, L_done);
+
+  for (int p = 1; p <= n_shadow_pages; p++) {
+    __ bang_stack_with_offset(p*page_size);
+  }
+
+  // Record a new watermark, unless the update is above the safe limit.
+  // Otherwise, the next time around a check above would pass the safe limit.
+  __ cmpptr(rsp, Address(thread, JavaThread::shadow_zone_safe_limit_offset()));
+  __ jccb(Assembler::belowEqual, L_done);
+#ifdef _LP64
+  __ movptr(rscratch1, rsp);
+  __ andptr(rscratch1, ~(page_size - 1));
+  __ movptr(Address(thread, JavaThread::shadow_zone_growth_watermark_offset()), rscratch1);
+#else
+  __ movptr(Address(thread, JavaThread::shadow_zone_growth_watermark_offset()), rsp);
+#endif
+
+  __ bind(L_done);
+
+#ifndef _LP64
+  __ pop(thread);
+#endif
 }
 
 #endif // CC_INTERP
