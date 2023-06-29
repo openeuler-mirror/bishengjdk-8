@@ -263,6 +263,7 @@ void CodeCache::flush() {
 #define FOR_ALL_BLOBS(var)       for (CodeBlob *var =       first() ; var != NULL; var =       next(var) )
 #define FOR_ALL_ALIVE_BLOBS(var) for (CodeBlob *var = alive(first()); var != NULL; var = alive(next(var)))
 #define FOR_ALL_ALIVE_NMETHODS(var) for (nmethod *var = alive_nmethod(first()); var != NULL; var = alive_nmethod(next(var)))
+#define FOR_ALL_NMETHODS(var) for (nmethod *var = first_nmethod(); var != NULL; var = next_nmethod(var))
 
 
 bool CodeCache::contains(void *p) {
@@ -1005,6 +1006,25 @@ void CodeCache::print_summary(outputStream* st, bool detailed) {
                  "disabled (interpreter mode)" :
                  "disabled (not enough contiguous free space left)");
   }
+}
+
+void CodeCache::print_codelist(outputStream* st) {
+  assert_locked_or_safepoint(CodeCache_lock);
+
+  FOR_ALL_NMETHODS(p) {
+    ResourceMark rm;
+    char *method_name = p->method()->name_and_sig_as_C_string();
+    st->print_cr("%d %d %s ["INTPTR_FORMAT", "INTPTR_FORMAT" - "INTPTR_FORMAT"]",
+                 p->compile_id(), p->comp_level(), method_name, (intptr_t)p->header_begin(),
+                 (intptr_t)p->code_begin(), (intptr_t)p->code_end());
+  }
+}
+
+void CodeCache::print_layout(outputStream* st) {
+  assert_locked_or_safepoint(CodeCache_lock);
+  ResourceMark rm;
+
+  print_summary(st, true);
 }
 
 void CodeCache::log_state(outputStream* st) {

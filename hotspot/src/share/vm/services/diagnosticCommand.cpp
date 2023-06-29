@@ -73,6 +73,9 @@ void DCmdRegistrant::register_dcmds(){
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<RotateGCLogDCmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<ClassLoaderStatsDCmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<ClassLoaderHierarchyDCmd>(full_export, true, false));
+  DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<CompileQueueDCmd>(full_export, true, false));
+  DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<CodeListDCmd>(full_export, true, false));
+  DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<CodeCacheDCmd>(full_export, true, false));
 #ifdef LINUX
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<TrimCLibcHeapDCmd>(full_export, true, false));
 #endif // LINUX
@@ -814,3 +817,19 @@ void RotateGCLogDCmd::execute(DCmdSource source, TRAPS) {
     output()->print_cr("Target VM does not support GC log file rotation.");
   }
 }
+
+void CompileQueueDCmd::execute(DCmdSource source, TRAPS) {
+  VM_PrintCompileQueue printCompileQueueOp(output());
+  VMThread::execute(&printCompileQueueOp);
+}
+
+void CodeListDCmd::execute(DCmdSource source, TRAPS) {
+  VM_PrintCodeList printCodeListOp(output());
+  VMThread::execute(&printCodeListOp);
+}
+
+void CodeCacheDCmd::execute(DCmdSource source, TRAPS) {
+  VM_PrintCodeCache printCodeCacheOp(output());
+  VMThread::execute(&printCodeCacheOp);
+}
+
