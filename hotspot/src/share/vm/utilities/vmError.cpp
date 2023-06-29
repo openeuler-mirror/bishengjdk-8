@@ -535,7 +535,7 @@ void VMError::report(outputStream* st) {
     st->print("# ");
     if (CreateCoredumpOnCrash) {
       if (coredump_status) {
-        st->print("Core dump will be written. %s", coredump_message);
+        st->print("Core dump will be written, saved as:\n#  %s", coredump_message);
       } else {
         st->print("No core dump will be written. %s", coredump_message);
       }

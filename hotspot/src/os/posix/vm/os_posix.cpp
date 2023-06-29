@@ -61,7 +61,11 @@ void os::check_dump_limit(char* buffer, size_t bufferSize) {
   } else {
     switch(rlim.rlim_cur) {
       case RLIM_INFINITY:
-        jio_snprintf(buffer + n, bufferSize - n, "/core or core.%d", current_process_id());
+        jio_snprintf(buffer + n, bufferSize - n, "/core or core.%d\
+        \n#  or /var/lib/systemd/coredump/* (process core dumps by systemd-coredump)\
+        \n#  or /var/lib/apport/coredump/* (process core dumps by apport)\
+        \n#  or /var/spool/abrt/* (process core dumps by abrt-hook-ccpp)\
+        \n#  or other name defined in /proc/sys/kernel/core_pattern", current_process_id());
         success = true;
         break;
       case 0:
