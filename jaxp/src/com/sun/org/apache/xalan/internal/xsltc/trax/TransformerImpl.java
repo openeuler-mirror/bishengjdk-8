@@ -56,6 +56,7 @@ import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Properties;
 import java.util.StringTokenizer;
 import javax.xml.XMLConstants;
@@ -150,6 +151,11 @@ public final class TransformerImpl extends Transformer
      * A reference to a internal DOM representation of the input.
      */
     private DOM _dom = null;
+
+    /**
+     * A hashMap for DOMS.
+     */
+    private ConcurrentHashMap<String, DOM> _domMaps = new ConcurrentHashMap();
 
     /**
      * Number of indent spaces to add when indentation is on.
@@ -530,8 +536,11 @@ public final class TransformerImpl extends Transformer
     private DOM getDOM(Source source) throws TransformerException {
         try {
             DOM dom;
-
             if (source != null) {
+                String ssId = source.getSystemId();
+                if ((ssId != null) && (_domMaps.containsKey(ssId))) {
+                   return _domMaps.get(ssId);
+                }
                 DTMWSFilter wsfilter;
                 if (_translet != null && _translet instanceof StripFilter) {
                     wsfilter = new DOMWSFilter(_translet);
@@ -549,6 +558,7 @@ public final class TransformerImpl extends Transformer
                  }
                  dom = (DOM)_dtmManager.getDTM(source, false, wsfilter, true,
                                               false, false, 0, hasIdCall);
+                 if ((ssId != null) && (dom != null)) _domMaps.put(ssId, dom);
             } else if (_dom != null) {
                  dom = _dom;
                  _dom = null;  // use only once, so reset to 'null'
