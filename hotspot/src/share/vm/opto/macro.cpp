@@ -853,6 +853,7 @@ bool PhaseMacroExpand::scalar_replacement(AllocateNode *alloc, GrowableArray <Sa
     int start = jvms->debug_start();
     int end   = jvms->debug_end();
     sfpt->replace_edges_in_range(res, sobj, start, end);
+    _igvn._worklist.push(sfpt);
     safepoints_done.append_if_missing(sfpt); // keep it for rollback
   }
   return true;
@@ -1793,6 +1794,7 @@ Node* PhaseMacroExpand::prefetch_allocation(Node* i_o, Node*& needgc_false,
       Node *pf_region = new (C) RegionNode(3);
       Node *pf_phi_rawmem = new (C) PhiNode( pf_region, Type::MEMORY,
                                              TypeRawPtr::BOTTOM );
+      transform_later(pf_region);
 
       // Generate several prefetch instructions.
       uint lines = (length != NULL) ? AllocatePrefetchLines : AllocateInstancePrefetchLines;

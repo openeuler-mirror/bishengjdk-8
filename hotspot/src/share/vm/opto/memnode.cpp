@@ -1521,6 +1521,7 @@ Node *LoadNode::Ideal(PhaseGVN *phase, bool can_reshape) {
 
   Node* ctrl    = in(MemNode::Control);
   Node* address = in(MemNode::Address);
+  bool progress = false;
 
   bool addr_mark = ((phase->type(address)->isa_oopptr() || phase->type(address)->isa_narrowoop()) &&
          phase->type(address)->is_ptr()->offset() == oopDesc::mark_offset_in_bytes());
@@ -1532,6 +1533,7 @@ Node *LoadNode::Ideal(PhaseGVN *phase, bool can_reshape) {
       !addr_mark ) {
     ctrl = ctrl->in(0);
     set_req(MemNode::Control,ctrl);
+    progress = true;
   }
 
   intptr_t ignore = 0;
@@ -1545,6 +1547,7 @@ Node *LoadNode::Ideal(PhaseGVN *phase, bool can_reshape) {
         && all_controls_dominate(base, phase->C->start())) {
       // A method-invariant, non-null address (constant or 'this' argument).
       set_req(MemNode::Control, NULL);
+      progress = true;
     }
   }
 
@@ -1605,7 +1608,7 @@ Node *LoadNode::Ideal(PhaseGVN *phase, bool can_reshape) {
     }
   }
 
-  return NULL;                  // No further progress
+  return progress ? this : NULL;
 }
 
 // Helper to recognize certain Klass fields which are invariant across
@@ -3151,6 +3154,7 @@ Node *MemBarNode::Ideal(PhaseGVN *phase, bool can_reshape) {
     return NULL;
   }
 
+  bool progress = false;
   // Eliminate volatile MemBars for scalar replaced objects.
   if (can_reshape && req() == (Precedent+1)) {
     bool eliminate = false;
@@ -3173,6 +3177,7 @@ Node *MemBarNode::Ideal(PhaseGVN *phase, bool can_reshape) {
           phase->is_IterGVN()->_worklist.push(my_mem); // remove dead node later
           my_mem = NULL;
         }
+        progress = true;
       }
       if (my_mem != NULL && my_mem->is_Mem()) {
         const TypeOopPtr* t_oop = my_mem->in(MemNode::Address)->bottom_type()->isa_oopptr();
@@ -3203,7 +3208,7 @@ Node *MemBarNode::Ideal(PhaseGVN *phase, bool can_reshape) {
       return new (phase->C) ConINode(TypeInt::ZERO);
     }
   }
-  return NULL;
+  return progress ? this : NULL;
 }
 
 //------------------------------Value------------------------------------------
@@ -3840,6 +3845,7 @@ Node* InitializeNode::capture_store(StoreNode* st, intptr_t start,
   // if it redundantly stored the same value (or zero to fresh memory).
 
   // In any case, wire it in:
+  phase->igvn_rehash_node_delayed(this);
   set_req(i, new_st);
 
   // The caller may now kill the old guy.
