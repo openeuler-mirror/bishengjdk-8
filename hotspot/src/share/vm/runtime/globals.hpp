@@ -1331,7 +1331,7 @@ class CommandLineFlags {
   product(bool, UseBiasedLocking, true,                                     \
           "Enable biased locking in JVM")                                   \
                                                                             \
-  product(intx, BiasedLockingStartupDelay, 4000,                            \
+  product(intx, BiasedLockingStartupDelay, 0,                               \
           "Number of milliseconds to wait before enabling biased locking")  \
                                                                             \
   diagnostic(bool, PrintBiasedLockingStatistics, false,                     \
