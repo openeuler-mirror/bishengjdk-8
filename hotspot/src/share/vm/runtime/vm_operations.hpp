@@ -99,6 +99,7 @@
   template(WhiteBoxOperation)                     \
   template(ClassLoaderStatsOperation)             \
   template(ClassLoaderHierarchyOperation)         \
+  template(DumpTouchedMethods)                    \
   template(JFROldObject)                          \
   template(PrintClasses)                          \
   template(PrintMetadata)                         \

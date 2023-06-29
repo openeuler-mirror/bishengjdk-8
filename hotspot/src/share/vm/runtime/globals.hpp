@@ -2694,6 +2694,12 @@ class CommandLineFlags {
   develop(bool, EagerInitialization, false,                                 \
           "Eagerly initialize classes if possible")                         \
                                                                             \
+  diagnostic(bool, LogTouchedMethods, false,                                \
+          "Log methods which have been ever touched in runtime")            \
+                                                                            \
+  diagnostic(bool, PrintTouchedMethodsAtExit, false,                        \
+          "Print all methods that have been ever touched in runtime")       \
+                                                                            \
   develop(bool, TraceMethodReplacement, false,                              \
           "Print when methods are replaced do to recompilation")            \
                                                                             \

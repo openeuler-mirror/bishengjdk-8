@@ -990,7 +990,7 @@ address InterpreterGenerator::generate_CRC32_updateBytes_entry(AbstractInterpret
 
 address InterpreterGenerator::generate_native_entry(bool synchronized) {
   // determine code generation flags
-  bool inc_counter  = UseCompiler || CountCompiledCalls;
+  bool inc_counter  = UseCompiler || CountCompiledCalls || LogTouchedMethods;
 
   // rbx,: Method*
   // rsi: sender sp
@@ -1405,7 +1405,7 @@ address InterpreterGenerator::generate_native_entry(bool synchronized) {
 //
 address InterpreterGenerator::generate_normal_entry(bool synchronized) {
   // determine code generation flags
-  bool inc_counter  = UseCompiler || CountCompiledCalls;
+  bool inc_counter  = UseCompiler || CountCompiledCalls || LogTouchedMethods;
 
   // rbx,: Method*
   // rsi: sender sp

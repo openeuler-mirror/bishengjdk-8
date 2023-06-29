@@ -36,6 +36,7 @@
 #include "services/diagnosticFramework.hpp"
 #include "services/diagnosticCommand_ext.hpp"
 #include "utilities/macros.hpp"
+#include "oops/method.hpp"
 
 class HelpDCmd : public DCmdWithParser {
 protected:
@@ -353,6 +354,22 @@ public:
   }
   static const char* impact() {
     return "High: Depends on Java heap size and content.";
+  }
+  static int num_arguments();
+  virtual void execute(DCmdSource source, TRAPS);
+};
+
+class TouchedMethodsDCmd : public DCmdWithParser {
+public:
+  TouchedMethodsDCmd(outputStream* output, bool heap);
+  static const char* name() {
+    return "VM.print_touched_methods";
+  }
+  static const char* description() {
+    return "Print all methods that have ever been touched during the lifetime of this JVM.";
+  }
+  static const char* impact() {
+    return "Medium: Depends on Java content.";
   }
   static int num_arguments();
   virtual void execute(DCmdSource source, TRAPS);

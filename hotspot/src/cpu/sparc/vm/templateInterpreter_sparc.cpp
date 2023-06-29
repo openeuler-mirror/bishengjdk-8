@@ -823,7 +823,7 @@ address InterpreterGenerator::generate_native_entry(bool synchronized) {
   // the following temporary registers are used during frame creation
   const Register Gtmp1 = G3_scratch ;
   const Register Gtmp2 = G1_scratch;
-  bool inc_counter  = UseCompiler || CountCompiledCalls;
+  bool inc_counter  = UseCompiler || CountCompiledCalls || LogTouchedMethods;
 
   // make sure registers are different!
   assert_different_registers(G2_thread, G5_method, Gargs, Gtmp1, Gtmp2);
@@ -1261,7 +1261,7 @@ address InterpreterGenerator::generate_native_entry(bool synchronized) {
 address InterpreterGenerator::generate_normal_entry(bool synchronized) {
   address entry = __ pc();
 
-  bool inc_counter  = UseCompiler || CountCompiledCalls;
+  bool inc_counter  = UseCompiler || CountCompiledCalls || LogTouchedMethods;
 
   // the following temporary registers are used during frame creation
   const Register Gtmp1 = G3_scratch ;
