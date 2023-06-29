@@ -661,6 +661,8 @@ class os: AllStatic {
   static void print_siginfo(outputStream* st, void* siginfo);
   static void print_signal_handlers(outputStream* st, char* buf, size_t buflen);
   static void print_date_and_time(outputStream* st, char* buf, size_t buflen);
+  static void print_file_descriptor(outputStream* st);
+  static void pd_print_file_descriptor(outputStream* st);
 
   static void print_location(outputStream* st, intptr_t x, bool verbose = false);
   static size_t lasterror(char *buf, size_t len);

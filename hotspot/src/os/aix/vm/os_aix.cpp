@@ -1617,6 +1617,10 @@ void os::pd_print_cpu_info(outputStream* st) {
   st->cr();
 }
 
+void os::pd_print_file_descriptor(outputStream* st) {
+  // Nothing to do for now.
+}
+
 void os::print_siginfo(outputStream* st, void* siginfo) {
   // Use common posix version.
   os::Posix::print_siginfo_brief(st, (const siginfo_t*) siginfo);

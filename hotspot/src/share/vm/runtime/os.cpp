@@ -861,6 +861,13 @@ void os::print_hex_dump(outputStream* st, address start, address end, int unitsi
   st->cr();
 }
 
+void os::print_file_descriptor(outputStream* st) {
+  // file descriptor
+  st->print("File Descriptor:");
+  st->cr();
+  pd_print_file_descriptor(st);
+}
+
 void os::print_environment_variables(outputStream* st, const char** env_list,
                                      char* buffer, int len) {
   if (env_list) {

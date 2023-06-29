@@ -2509,6 +2509,46 @@ void os::print_siginfo(outputStream* st, void* siginfo) {
   st->cr();
 }
 
+// max length of file name in linux
+#define MAX_PATH_LEN 256
+// maximum number of file descriptors to print
+#define MAX_PRINT_FD_SIZE 2000
+
+void os::pd_print_file_descriptor(outputStream* st) {
+  int pid = os::current_process_id();
+  char process_path[MAX_PATH_LEN] = {0};
+  (void) snprintf(process_path, MAX_PATH_LEN, "/proc/%d/fd/", pid);
+  st->print_cr("path: %s", process_path);
+
+  DIR *dir = NULL;
+  dir = opendir(process_path);
+  if (dir == NULL) {
+    st->print_cr("opendir %s failed, errno: %d", process_path, errno);
+    return;
+  }
+
+  // Scan the directory, get symbolic link value
+  struct dirent *ptr;
+  ssize_t readlink_ret = 0;
+  char symbolic_link_value[MAX_PATH_LEN] = {0};
+  char filename[MAX_PATH_LEN] = {0};
+  unsigned long file_count = 0;
+  while ((ptr = readdir(dir)) != NULL) {
+    if (ptr->d_type == DT_DIR) continue;
+    if (file_count < MAX_PRINT_FD_SIZE) {
+      (void) snprintf(filename, MAX_PATH_LEN, "%s%s", process_path, ptr->d_name);
+      readlink_ret = readlink(filename, symbolic_link_value, MAX_PATH_LEN);
+      if (readlink_ret > 0) {
+        st->print_cr("%s -> %s", ptr->d_name, symbolic_link_value);
+      } else {
+        st->print_cr("%s: readlink failed, errno: %d", ptr->d_name, errno);
+      }
+    }
+    file_count++;
+  }
+  st->print_cr("Total fd count: %lu", file_count);
+  (void) closedir(dir);
+}
 
 static void print_signal_handler(outputStream* st, int sig,
                                  char* buf, size_t buflen);
