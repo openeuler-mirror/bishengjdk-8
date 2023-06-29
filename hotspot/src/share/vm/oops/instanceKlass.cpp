@@ -2544,7 +2544,7 @@ int InstanceKlass::oop_update_pointers(ParCompactionManager* cm, oop obj) {
   int size = size_helper();
   InstanceKlass_OOP_MAP_ITERATE( \
     obj, \
-    PSParallelCompact::adjust_pointer(p), \
+    PSParallelCompact::adjust_pointer(p, cm), \
     assert_is_in)
   return size;
 }

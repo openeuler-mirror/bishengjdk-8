@@ -31,6 +31,7 @@
 
 class ParMarkBitMapClosure;
 class PSVirtualSpace;
+class ParCompactionManager;
 
 class ParMarkBitMap: public CHeapObj<mtGC>
 {
@@ -124,7 +125,7 @@ public:
   // the range are included in the result. The end of the range must be a live object,
   // which is the case when updating pointers.  This allows a branch to be removed
   // from inside the loop.
-  size_t live_words_in_range(HeapWord* beg_addr, oop end_obj) const;
+  size_t live_words_in_range(ParCompactionManager* cm, HeapWord* beg_addr, oop end_obj) const;
 
   inline HeapWord* region_start() const;
   inline HeapWord* region_end() const;
@@ -167,6 +168,13 @@ public:
 #endif  // #ifdef ASSERT
 
 private:
+
+  size_t live_words_in_range_helper(HeapWord* beg_addr, oop end_obj) const;
+
+  inline bool is_live_words_in_range_in_cache(ParCompactionManager* cm, HeapWord* beg_addr) const;
+  size_t live_words_in_range_use_cache(ParCompactionManager* cm, HeapWord* beg_addr, oop end_obj) const;
+  inline void update_live_words_in_range_cache(ParCompactionManager* cm, HeapWord* beg_addr, oop end_obj, size_t result) const;
+
   // Each bit in the bitmap represents one unit of 'object granularity.' Objects
   // are double-word aligned in 32-bit VMs, but not in 64-bit VMs, so the 32-bit
   // granularity is 2, 64-bit is 1.

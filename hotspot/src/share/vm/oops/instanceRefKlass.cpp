@@ -429,11 +429,11 @@ template <class T>
 void specialized_oop_update_pointers(InstanceRefKlass *ref,
                                     ParCompactionManager* cm, oop obj) {
   T* referent_addr = (T*)java_lang_ref_Reference::referent_addr(obj);
-  PSParallelCompact::adjust_pointer(referent_addr);
+  PSParallelCompact::adjust_pointer(referent_addr, cm);
   T* next_addr = (T*)java_lang_ref_Reference::next_addr(obj);
-  PSParallelCompact::adjust_pointer(next_addr);
+  PSParallelCompact::adjust_pointer(next_addr, cm);
   T* discovered_addr = (T*)java_lang_ref_Reference::discovered_addr(obj);
-  PSParallelCompact::adjust_pointer(discovered_addr);
+  PSParallelCompact::adjust_pointer(discovered_addr, cm);
   debug_only(trace_reference_gc("InstanceRefKlass::oop_update_ptrs", obj,
                                 referent_addr, next_addr, discovered_addr);)
 }
