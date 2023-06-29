@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2001, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2022, Huawei Technologies Co., Ltd. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -184,7 +185,7 @@ G1CollectorPolicy::G1CollectorPolicy() :
   // the region size on the heap size, but the heap size should be
   // aligned with the region size. To get around this we use the
   // unaligned values for the heap.
-  HeapRegion::setup_heap_region_size(InitialHeapSize, MaxHeapSize);
+  HeapRegion::setup_heap_region_size(MaxHeapSize);
   HeapRegionRemSet::setup_remset_size();
 
   G1ErgoVerbose::initialize();
