@@ -33,6 +33,8 @@
 #include <unistd.h>
 #include <sys/resource.h>
 #include <sys/utsname.h>
+#include <grp.h>
+#include <pwd.h>
 #include <pthread.h>
 #include <signal.h>
 
@@ -234,6 +236,37 @@ void os::Posix::print_uname_info(outputStream* st) {
   st->print("%s ", name.release);
   st->print("%s ", name.version);
   st->print("%s", name.machine);
+  st->cr();
+}
+
+void os::Posix::print_umask(outputStream* st, mode_t umsk) {
+  st->print((umsk & S_IRUSR) ? "r" : "-");
+  st->print((umsk & S_IWUSR) ? "w" : "-");
+  st->print((umsk & S_IXUSR) ? "x" : "-");
+  st->print((umsk & S_IRGRP) ? "r" : "-");
+  st->print((umsk & S_IWGRP) ? "w" : "-");
+  st->print((umsk & S_IXGRP) ? "x" : "-");
+  st->print((umsk & S_IROTH) ? "r" : "-");
+  st->print((umsk & S_IWOTH) ? "w" : "-");
+  st->print((umsk & S_IXOTH) ? "x" : "-");
+}
+
+void os::Posix::print_user_info(outputStream* st) {
+  unsigned id = (unsigned) ::getuid();
+  st->print("uid  : %u ", id);
+  id = (unsigned) ::geteuid();
+  st->print("euid : %u ", id);
+  id = (unsigned) ::getgid();
+  st->print("gid  : %u ", id);
+  id = (unsigned) ::getegid();
+  st->print_cr("egid : %u", id);
+  st->cr();
+
+  mode_t umsk = ::umask(0);
+  (void)::umask(umsk);
+  st->print("umask: %04o (", (unsigned) umsk);
+  print_umask(st, umsk);
+  st->print_cr(")");
   st->cr();
 }
 
