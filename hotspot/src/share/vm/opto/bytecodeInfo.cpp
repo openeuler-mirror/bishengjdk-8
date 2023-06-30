@@ -171,7 +171,7 @@ bool InlineTree::should_inline(ciMethod* callee_method, ciMethod* caller_method,
       is_unboxing_method(callee_method, C) ||
       is_init_with_ea(callee_method, caller_method, C)) {
 
-    max_inline_size = C->freq_inline_size();
+    max_inline_size = (int)FreqInlineSize;
     if (size <= max_inline_size && TraceFrequencyInlining) {
       CompileTask::print_inline_indent(inline_level());
       tty->print_cr("Inlined frequent method (freq=%d count=%d):", freq, call_site_count);

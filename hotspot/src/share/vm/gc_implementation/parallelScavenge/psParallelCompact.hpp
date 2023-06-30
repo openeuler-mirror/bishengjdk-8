@@ -452,10 +452,10 @@ public:
   HeapWord* partial_obj_end(size_t region_idx) const;
 
   // Return the location of the object after compaction.
-  HeapWord* calc_new_pointer(HeapWord* addr);
+  HeapWord* calc_new_pointer(HeapWord* addr, ParCompactionManager* cm);
 
-  HeapWord* calc_new_pointer(oop p) {
-    return calc_new_pointer((HeapWord*) p);
+  HeapWord* calc_new_pointer(oop p, ParCompactionManager* cm) {
+    return calc_new_pointer((HeapWord*) p, cm);
   }
 
 #ifdef  ASSERT
@@ -957,15 +957,28 @@ class PSParallelCompact : AllStatic {
 
   class AdjustPointerClosure: public OopClosure {
    public:
+    AdjustPointerClosure(ParCompactionManager* cm) {
+      assert(cm != NULL, "associate ParCompactionManage should not be NULL");
+      _cm = cm;
+    }
+
     virtual void do_oop(oop* p);
     virtual void do_oop(narrowOop* p);
     // do not walk from thread stacks to the code cache on this phase
     virtual void do_code_blob(CodeBlob* cb) const { }
+   private:
+    ParCompactionManager* _cm;
   };
 
   class AdjustKlassClosure : public KlassClosure {
    public:
+    AdjustKlassClosure(ParCompactionManager* cm) {
+      assert(cm != NULL, "associate ParCompactionManage should not be NULL");
+      _cm = cm;
+    }
     void do_klass(Klass* klass);
+   private:
+    ParCompactionManager* _cm;
   };
 
   friend class KeepAliveClosure;
@@ -989,8 +1002,6 @@ class PSParallelCompact : AllStatic {
   static IsAliveClosure       _is_alive_closure;
   static SpaceInfo            _space_info[last_space_id];
   static bool                 _print_phases;
-  static AdjustPointerClosure _adjust_pointer_closure;
-  static AdjustKlassClosure   _adjust_klass_closure;
 
   // Reference processing (used in ...follow_contents)
   static ReferenceProcessor*  _ref_processor;
@@ -1114,7 +1125,7 @@ class PSParallelCompact : AllStatic {
   static void summary_phase(ParCompactionManager* cm, bool maximum_compaction);
 
   // Adjust addresses in roots.  Does not adjust addresses in heap.
-  static void adjust_roots();
+  static void adjust_roots(ParCompactionManager* cm);
 
   DEBUG_ONLY(static void write_block_fill_histogram(outputStream* const out);)
 
@@ -1184,8 +1195,6 @@ class PSParallelCompact : AllStatic {
   static bool initialize();
 
   // Closure accessors
-  static OopClosure* adjust_pointer_closure()      { return (OopClosure*)&_adjust_pointer_closure; }
-  static KlassClosure* adjust_klass_closure()      { return (KlassClosure*)&_adjust_klass_closure; }
   static BoolObjectClosure* is_alive_closure()     { return (BoolObjectClosure*)&_is_alive_closure; }
 
   // Public accessors
@@ -1205,7 +1214,7 @@ class PSParallelCompact : AllStatic {
   // Check mark and maybe push on marking stack
   template <class T> static inline void mark_and_push(ParCompactionManager* cm,
                                                       T* p);
-  template <class T> static inline void adjust_pointer(T* p);
+  template <class T> static inline void adjust_pointer(T* p, ParCompactionManager* cm);
 
   static inline void follow_klass(ParCompactionManager* cm, Klass* klass);
 
@@ -1368,11 +1377,11 @@ inline void PSParallelCompact::mark_and_push(ParCompactionManager* cm, T* p) {
 }
 
 template <class T>
-inline void PSParallelCompact::adjust_pointer(T* p) {
+inline void PSParallelCompact::adjust_pointer(T* p, ParCompactionManager* cm) {
   T heap_oop = oopDesc::load_heap_oop(p);
   if (!oopDesc::is_null(heap_oop)) {
     oop obj     = oopDesc::decode_heap_oop_not_null(heap_oop);
-    oop new_obj = (oop)summary_data().calc_new_pointer(obj);
+    oop new_obj = (oop)summary_data().calc_new_pointer(obj, cm);
     assert(new_obj != NULL,                    // is forwarding ptr?
            "should be forwarded");
     // Just always do the update unconditionally?

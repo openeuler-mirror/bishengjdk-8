@@ -37,7 +37,7 @@ import sha.predicate.IntrinsicPredicates;
  * sha512.
  */
 public class UseSHAIntrinsicsSpecificTestCaseForUnsupportedSparcCPU
-        extends SHAOptionsBase.TestCase {
+        extends DigestOptionsBase.TestCase {
     public UseSHAIntrinsicsSpecificTestCaseForUnsupportedSparcCPU(
             String optionName) {
         // execute test case on SPARC CPU that support any sha* instructions,
@@ -45,15 +45,16 @@ public class UseSHAIntrinsicsSpecificTestCaseForUnsupportedSparcCPU
         super(optionName, new AndPredicate(Platform::isSparc,
                 new AndPredicate(
                         IntrinsicPredicates.ANY_SHA_INSTRUCTION_AVAILABLE,
-                        new NotPredicate(SHAOptionsBase.getPredicateForOption(
+                        new NotPredicate(DigestOptionsBase.getPredicateForOption(
                                 optionName)))));
     }
     @Override
     protected void verifyWarnings() throws Throwable {
         // Verify that attempt to enable the tested option will cause a warning.
         CommandLineOptionTest.verifySameJVMStartup(new String[] {
-                        SHAOptionsBase.getWarningForUnsupportedCPU(optionName)
+                        DigestOptionsBase.getWarningForUnsupportedCPU(optionName)
                 }, null, ExitCode.OK,
+                DigestOptionsBase.UNLOCK_DIAGNOSTIC_VM_OPTIONS,
                 CommandLineOptionTest.prepareBooleanFlag(optionName, true));
     }
 }

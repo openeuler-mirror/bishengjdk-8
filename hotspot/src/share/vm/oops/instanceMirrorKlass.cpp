@@ -345,7 +345,7 @@ int InstanceMirrorKlass::oop_update_pointers(ParCompactionManager* cm, oop obj) 
 
   InstanceMirrorKlass_OOP_ITERATE(                                            \
     start_of_static_fields(obj), java_lang_Class::static_oop_field_count(obj),\
-    PSParallelCompact::adjust_pointer(p),                                     \
+    PSParallelCompact::adjust_pointer(p, cm),                                     \
     assert_nothing)
   return size;
 }

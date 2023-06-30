@@ -226,7 +226,6 @@ bool PhaseIdealLoop::cannot_split_division(const Node* n, const Node* region) co
       return false;
   }
 
-  assert(n->in(0) == NULL, "divisions with zero check should already have bailed out earlier in split-if");
   Node* divisor = n->in(2);
   return is_divisor_counted_loop_phi(divisor, region) &&
          loop_phi_backedge_type_contains_zero(divisor, zero);
@@ -2825,7 +2824,7 @@ bool PhaseIdealLoop::partial_peel( IdealLoopTree *loop, Node_List &old_new ) {
   new_head->set_unswitch_count(head->unswitch_count()); // Preserve
   _igvn.register_new_node_with_optimizer(new_head);
   assert(first_not_peeled->in(0) == last_peel, "last_peel <- first_not_peeled");
-  first_not_peeled->set_req(0, new_head);
+  _igvn.replace_input_of(first_not_peeled, 0, new_head);
   set_loop(new_head, loop);
   loop->_body.push(new_head);
   not_peel.set(new_head->_idx);

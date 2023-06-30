@@ -30,6 +30,7 @@
 #include "jfr/support/jfrIntrinsics.hpp"
 #include "oops/objArrayKlass.hpp"
 #include "opto/addnode.hpp"
+#include "opto/c2compiler.hpp"
 #include "opto/callGenerator.hpp"
 #include "opto/cfgnode.hpp"
 #include "opto/connode.hpp"
@@ -316,13 +317,13 @@ class LibraryCallKit : public GraphKit {
   Node* get_key_start_from_aescrypt_object(Node* aescrypt_object);
   Node* get_original_key_start_from_aescrypt_object(Node* aescrypt_object);
   bool inline_ghash_processBlocks();
-  bool inline_sha_implCompress(vmIntrinsics::ID id);
+  bool inline_digestBase_implCompress(vmIntrinsics::ID id);
   bool inline_digestBase_implCompressMB(int predicate);
-  bool inline_sha_implCompressMB(Node* digestBaseObj, ciInstanceKlass* instklass_SHA,
-                                 bool long_state, address stubAddr, const char *stubName,
-                                 Node* src_start, Node* ofs, Node* limit);
-  Node* get_state_from_sha_object(Node *sha_object);
-  Node* get_state_from_sha5_object(Node *sha_object);
+  bool inline_digestBase_implCompressMB(Node* digestBaseObj, ciInstanceKlass* instklass,
+                                        bool long_state, address stubAddr, const char *stubName,
+                                        Node* src_start, Node* ofs, Node* limit);
+  Node* get_state_from_digest_object(Node *digestBase_object);
+  Node* get_long_state_from_digest_object(Node *digestBase_object);
   Node* inline_digestBase_implCompressMB_predicate(int predicate);
   bool inline_encodeISOArray();
   bool inline_updateCRC32();
@@ -346,322 +347,35 @@ CallGenerator* Compile::make_vm_intrinsic(ciMethod* m, bool is_virtual) {
   vmIntrinsics::ID id = m->intrinsic_id();
   assert(id != vmIntrinsics::_none, "must be a VM intrinsic");
 
-  ccstr disable_intr = NULL;
-
-  if ((DisableIntrinsic[0] != '\0'
-       && strstr(DisableIntrinsic, vmIntrinsics::name_at(id)) != NULL) ||
-      (method_has_option_value("DisableIntrinsic", disable_intr)
-       && strstr(disable_intr, vmIntrinsics::name_at(id)) != NULL)) {
-    // disabled by a user request on the command line:
-    // example: -XX:DisableIntrinsic=_hashCode,_getClass
-    return NULL;
-  }
-
   if (!m->is_loaded()) {
-    // do not attempt to inline unloaded methods
+    // Do not attempt to inline unloaded methods.
     return NULL;
   }
 
-  // Only a few intrinsics implement a virtual dispatch.
-  // They are expensive calls which are also frequently overridden.
-  if (is_virtual) {
-    switch (id) {
-    case vmIntrinsics::_hashCode:
-    case vmIntrinsics::_clone:
-      // OK, Object.hashCode and Object.clone intrinsics come in both flavors
-      break;
-    default:
-      return NULL;
-    }
+  C2Compiler* compiler = (C2Compiler*)CompileBroker::compiler(CompLevel_full_optimization);
+  bool is_available = false;
+
+  {
+    // For calling is_intrinsic_supported and is_intrinsic_disabled_by_flag
+    // the compiler must transition to '_thread_in_vm' state because both
+    // methods access VM-internal data.
+    VM_ENTRY_MARK;
+    methodHandle mh(THREAD, m->get_Method());
+    methodHandle ct(THREAD, method()->get_Method());
+    is_available = compiler->is_intrinsic_supported(mh, is_virtual) &&
+                   !compiler->is_intrinsic_disabled_by_flag(mh, ct);
   }
 
-  // -XX:-InlineNatives disables nearly all intrinsics:
-  if (!InlineNatives) {
-    switch (id) {
-    case vmIntrinsics::_indexOf:
-    case vmIntrinsics::_compareTo:
-    case vmIntrinsics::_equals:
-    case vmIntrinsics::_equalsC:
-    case vmIntrinsics::_getAndAddInt:
-    case vmIntrinsics::_getAndAddLong:
-    case vmIntrinsics::_getAndSetInt:
-    case vmIntrinsics::_getAndSetLong:
-    case vmIntrinsics::_getAndSetObject:
-    case vmIntrinsics::_loadFence:
-    case vmIntrinsics::_storeFence:
-    case vmIntrinsics::_fullFence:
-      break;  // InlineNatives does not control String.compareTo
-    case vmIntrinsics::_Reference_get:
-      break;  // InlineNatives does not control Reference.get
-    default:
-      return NULL;
-    }
-  }
-
-  int predicates = 0;
-  bool does_virtual_dispatch = false;
-
-  switch (id) {
-  case vmIntrinsics::_compareTo:
-    if (!SpecialStringCompareTo)  return NULL;
-    if (!Matcher::match_rule_supported(Op_StrComp))  return NULL;
-    break;
-  case vmIntrinsics::_indexOf:
-    if (!SpecialStringIndexOf)  return NULL;
-    break;
-  case vmIntrinsics::_equals:
-    if (!SpecialStringEquals)  return NULL;
-    if (!Matcher::match_rule_supported(Op_StrEquals))  return NULL;
-    break;
-  case vmIntrinsics::_equalsC:
-    if (!SpecialArraysEquals)  return NULL;
-    if (!Matcher::match_rule_supported(Op_AryEq))  return NULL;
-    break;
-  case vmIntrinsics::_arraycopy:
-    if (!InlineArrayCopy)  return NULL;
-    break;
-  case vmIntrinsics::_copyMemory:
-    if (StubRoutines::unsafe_arraycopy() == NULL)  return NULL;
-    if (!InlineArrayCopy)  return NULL;
-    break;
-  case vmIntrinsics::_hashCode:
-    if (!InlineObjectHash)  return NULL;
-    does_virtual_dispatch = true;
-    break;
-  case vmIntrinsics::_clone:
-    does_virtual_dispatch = true;
-  case vmIntrinsics::_copyOf:
-  case vmIntrinsics::_copyOfRange:
-    if (!InlineObjectCopy)  return NULL;
-    // These also use the arraycopy intrinsic mechanism:
-    if (!InlineArrayCopy)  return NULL;
-    break;
-  case vmIntrinsics::_encodeISOArray:
-    if (!SpecialEncodeISOArray)  return NULL;
-    if (!Matcher::match_rule_supported(Op_EncodeISOArray))  return NULL;
-    break;
-  case vmIntrinsics::_checkIndex:
-    // We do not intrinsify this.  The optimizer does fine with it.
-    return NULL;
-
-  case vmIntrinsics::_getCallerClass:
-    if (!UseNewReflection)  return NULL;
-    if (!InlineReflectionGetCallerClass)  return NULL;
-    if (SystemDictionary::reflect_CallerSensitive_klass() == NULL)  return NULL;
-    break;
-
-  case vmIntrinsics::_bitCount_i:
-    if (!Matcher::match_rule_supported(Op_PopCountI)) return NULL;
-    break;
-
-  case vmIntrinsics::_bitCount_l:
-    if (!Matcher::match_rule_supported(Op_PopCountL)) return NULL;
-    break;
-
-  case vmIntrinsics::_numberOfLeadingZeros_i:
-    if (!Matcher::match_rule_supported(Op_CountLeadingZerosI)) return NULL;
-    break;
-
-  case vmIntrinsics::_numberOfLeadingZeros_l:
-    if (!Matcher::match_rule_supported(Op_CountLeadingZerosL)) return NULL;
-    break;
-
-  case vmIntrinsics::_numberOfTrailingZeros_i:
-    if (!Matcher::match_rule_supported(Op_CountTrailingZerosI)) return NULL;
-    break;
-
-  case vmIntrinsics::_numberOfTrailingZeros_l:
-    if (!Matcher::match_rule_supported(Op_CountTrailingZerosL)) return NULL;
-    break;
-
-  case vmIntrinsics::_reverseBytes_c:
-    if (!Matcher::match_rule_supported(Op_ReverseBytesUS)) return NULL;
-    break;
-  case vmIntrinsics::_reverseBytes_s:
-    if (!Matcher::match_rule_supported(Op_ReverseBytesS))  return NULL;
-    break;
-  case vmIntrinsics::_reverseBytes_i:
-    if (!Matcher::match_rule_supported(Op_ReverseBytesI))  return NULL;
-    break;
-  case vmIntrinsics::_reverseBytes_l:
-    if (!Matcher::match_rule_supported(Op_ReverseBytesL))  return NULL;
-    break;
-
-  case vmIntrinsics::_Reference_get:
-    // Use the intrinsic version of Reference.get() so that the value in
-    // the referent field can be registered by the G1 pre-barrier code.
-    // Also add memory barrier to prevent commoning reads from this field
-    // across safepoint since GC can change it value.
-    break;
-
-  case vmIntrinsics::_compareAndSwapObject:
-#ifdef _LP64
-    if (!UseCompressedOops && !Matcher::match_rule_supported(Op_CompareAndSwapP)) return NULL;
-#endif
-    break;
-
-  case vmIntrinsics::_compareAndSwapLong:
-    if (!Matcher::match_rule_supported(Op_CompareAndSwapL)) return NULL;
-    break;
-
-  case vmIntrinsics::_getAndAddInt:
-    if (!Matcher::match_rule_supported(Op_GetAndAddI)) return NULL;
-    break;
-
-  case vmIntrinsics::_getAndAddLong:
-    if (!Matcher::match_rule_supported(Op_GetAndAddL)) return NULL;
-    break;
-
-  case vmIntrinsics::_getAndSetInt:
-    if (!Matcher::match_rule_supported(Op_GetAndSetI)) return NULL;
-    break;
-
-  case vmIntrinsics::_getAndSetLong:
-    if (!Matcher::match_rule_supported(Op_GetAndSetL)) return NULL;
-    break;
-
-  case vmIntrinsics::_getAndSetObject:
-#ifdef _LP64
-    if (!UseCompressedOops && !Matcher::match_rule_supported(Op_GetAndSetP)) return NULL;
-    if (UseCompressedOops && !Matcher::match_rule_supported(Op_GetAndSetN)) return NULL;
-    break;
-#else
-    if (!Matcher::match_rule_supported(Op_GetAndSetP)) return NULL;
-    break;
-#endif
-
-  case vmIntrinsics::_aescrypt_encryptBlock:
-  case vmIntrinsics::_aescrypt_decryptBlock:
-    if (!UseAESIntrinsics) return NULL;
-    break;
-
-  case vmIntrinsics::_multiplyToLen:
-    if (!UseMultiplyToLenIntrinsic) return NULL;
-    break;
-
-  case vmIntrinsics::_squareToLen:
-    if (!UseSquareToLenIntrinsic) return NULL;
-    break;
-
-  case vmIntrinsics::_mulAdd:
-    if (!UseMulAddIntrinsic) return NULL;
-    break;
-
-  case vmIntrinsics::_montgomeryMultiply:
-     if (!UseMontgomeryMultiplyIntrinsic) return NULL;
-    break;
-  case vmIntrinsics::_montgomerySquare:
-     if (!UseMontgomerySquareIntrinsic) return NULL;
-    break;
-
-  case vmIntrinsics::_cipherBlockChaining_encryptAESCrypt:
-  case vmIntrinsics::_cipherBlockChaining_decryptAESCrypt:
-    if (!UseAESIntrinsics) return NULL;
-    // these two require the predicated logic
-    predicates = 1;
-    break;
-
-  case vmIntrinsics::_counterMode_AESCrypt:
-    if (!UseAESCTRIntrinsics) {
-      return NULL;
-    }
-    predicates = 1;
-    break;
-
-  case vmIntrinsics::_sha_implCompress:
-    if (!UseSHA1Intrinsics) return NULL;
-    break;
-
-  case vmIntrinsics::_sha2_implCompress:
-    if (!UseSHA256Intrinsics) return NULL;
-    break;
-
-  case vmIntrinsics::_sha5_implCompress:
-    if (!UseSHA512Intrinsics) return NULL;
-    break;
-
-  case vmIntrinsics::_digestBase_implCompressMB:
-    if (!(UseSHA1Intrinsics || UseSHA256Intrinsics || UseSHA512Intrinsics)) return NULL;
-    predicates = 3;
-    break;
-
-  case vmIntrinsics::_ghash_processBlocks:
-    if (!UseGHASHIntrinsics) return NULL;
-    break;
-
-  case vmIntrinsics::_updateCRC32:
-  case vmIntrinsics::_updateBytesCRC32:
-  case vmIntrinsics::_updateByteBufferCRC32:
-    if (!UseCRC32Intrinsics) return NULL;
-    break;
-
-  case vmIntrinsics::_f2jblas_ddot:
-  case vmIntrinsics::_dgemm_dgemm:
-  case vmIntrinsics::_dgemv_dgemv:
-    if (!UseF2jBLASIntrinsics) return NULL;
-    break;
-
-  case vmIntrinsics::_incrementExactI:
-  case vmIntrinsics::_addExactI:
-    if (!Matcher::match_rule_supported(Op_OverflowAddI) || !UseMathExactIntrinsics) return NULL;
-    break;
-  case vmIntrinsics::_incrementExactL:
-  case vmIntrinsics::_addExactL:
-    if (!Matcher::match_rule_supported(Op_OverflowAddL) || !UseMathExactIntrinsics) return NULL;
-    break;
-  case vmIntrinsics::_decrementExactI:
-  case vmIntrinsics::_subtractExactI:
-    if (!Matcher::match_rule_supported(Op_OverflowSubI) || !UseMathExactIntrinsics) return NULL;
-    break;
-  case vmIntrinsics::_decrementExactL:
-  case vmIntrinsics::_subtractExactL:
-    if (!Matcher::match_rule_supported(Op_OverflowSubL) || !UseMathExactIntrinsics) return NULL;
-    break;
-  case vmIntrinsics::_negateExactI:
-    if (!Matcher::match_rule_supported(Op_OverflowSubI) || !UseMathExactIntrinsics) return NULL;
-    break;
-  case vmIntrinsics::_negateExactL:
-    if (!Matcher::match_rule_supported(Op_OverflowSubL) || !UseMathExactIntrinsics) return NULL;
-    break;
-  case vmIntrinsics::_multiplyExactI:
-    if (!Matcher::match_rule_supported(Op_OverflowMulI) || !UseMathExactIntrinsics) return NULL;
-    break;
-  case vmIntrinsics::_multiplyExactL:
-    if (!Matcher::match_rule_supported(Op_OverflowMulL) || !UseMathExactIntrinsics) return NULL;
-    break;
-
- default:
+  if (is_available) {
     assert(id <= vmIntrinsics::LAST_COMPILER_INLINE, "caller responsibility");
     assert(id != vmIntrinsics::_Object_init && id != vmIntrinsics::_invoke, "enum out of order?");
-    break;
+    return new LibraryIntrinsic(m, is_virtual,
+                                vmIntrinsics::predicates_needed(id),
+                                vmIntrinsics::does_virtual_dispatch(id),
+                                (vmIntrinsics::ID) id);
+  } else {
+    return NULL;
   }
-
-  // -XX:-InlineClassNatives disables natives from the Class class.
-  // The flag applies to all reflective calls, notably Array.newArray
-  // (visible to Java programmers as Array.newInstance).
-  if (m->holder()->name() == ciSymbol::java_lang_Class() ||
-      m->holder()->name() == ciSymbol::java_lang_reflect_Array()) {
-    if (!InlineClassNatives)  return NULL;
-  }
-
-  // -XX:-InlineThreadNatives disables natives from the Thread class.
-  if (m->holder()->name() == ciSymbol::java_lang_Thread()) {
-    if (!InlineThreadNatives)  return NULL;
-  }
-
-  // -XX:-InlineMathNatives disables natives from the Math,Float and Double classes.
-  if (m->holder()->name() == ciSymbol::java_lang_Math() ||
-      m->holder()->name() == ciSymbol::java_lang_Float() ||
-      m->holder()->name() == ciSymbol::java_lang_Double()) {
-    if (!InlineMathNatives)  return NULL;
-  }
-
-  // -XX:-InlineUnsafeOps disables natives from the Unsafe class.
-  if (m->holder()->name() == ciSymbol::sun_misc_Unsafe()) {
-    if (!InlineUnsafeOps)  return NULL;
-  }
-
-  return new LibraryIntrinsic(m, is_virtual, predicates, does_virtual_dispatch, (vmIntrinsics::ID) id);
 }
 
 //----------------------register_library_intrinsics-----------------------
@@ -963,10 +677,11 @@ bool LibraryCallKit::try_to_inline(int predicate) {
   case vmIntrinsics::_counterMode_AESCrypt:
     return inline_counterMode_AESCrypt(intrinsic_id());
 
+  case vmIntrinsics::_md5_implCompress:
   case vmIntrinsics::_sha_implCompress:
   case vmIntrinsics::_sha2_implCompress:
   case vmIntrinsics::_sha5_implCompress:
-    return inline_sha_implCompress(intrinsic_id());
+    return inline_digestBase_implCompress(intrinsic_id());
 
   case vmIntrinsics::_digestBase_implCompressMB:
     return inline_digestBase_implCompressMB(predicate);
@@ -7044,7 +6759,10 @@ bool LibraryCallKit::inline_ghash_processBlocks() {
   return true;
 }
 
-//------------------------------inline_sha_implCompress-----------------------
+//------------------------------inline_digestBase_implCompress-----------------------
+//
+// Calculate MD5 for single-block byte[] array.
+// void com.sun.security.provider.MD5.implCompress(byte[] buf, int ofs)
 //
 // Calculate SHA (i.e., SHA-1) for single-block byte[] array.
 // void com.sun.security.provider.SHA.implCompress(byte[] buf, int ofs)
@@ -7055,12 +6773,12 @@ bool LibraryCallKit::inline_ghash_processBlocks() {
 // Calculate SHA5 (i.e., SHA-384 or SHA-512) for single-block byte[] array.
 // void com.sun.security.provider.SHA5.implCompress(byte[] buf, int ofs)
 //
-bool LibraryCallKit::inline_sha_implCompress(vmIntrinsics::ID id) {
+bool LibraryCallKit::inline_digestBase_implCompress(vmIntrinsics::ID id) {
   assert(callee()->signature()->size() == 2, "sha_implCompress has 2 parameters");
 
-  Node* sha_obj = argument(0);
-  Node* src     = argument(1); // type oop
-  Node* ofs     = argument(2); // type int
+  Node* digestBase_obj = argument(0);
+  Node* src            = argument(1); // type oop
+  Node* ofs            = argument(2); // type int
 
   const Type* src_type = src->Value(&_gvn);
   const TypeAryPtr* top_src = src_type->isa_aryptr();
@@ -7080,21 +6798,27 @@ bool LibraryCallKit::inline_sha_implCompress(vmIntrinsics::ID id) {
   const char *stubName;
 
   switch(id) {
+  case vmIntrinsics::_md5_implCompress:
+    assert(UseMD5Intrinsics, "need MD5 instruction support");
+    state = get_state_from_digest_object(digestBase_obj);
+    stubAddr = StubRoutines::md5_implCompress();
+    stubName = "md5_implCompress";
+    break;
   case vmIntrinsics::_sha_implCompress:
     assert(UseSHA1Intrinsics, "need SHA1 instruction support");
-    state = get_state_from_sha_object(sha_obj);
+    state = get_state_from_digest_object(digestBase_obj);
     stubAddr = StubRoutines::sha1_implCompress();
     stubName = "sha1_implCompress";
     break;
   case vmIntrinsics::_sha2_implCompress:
     assert(UseSHA256Intrinsics, "need SHA256 instruction support");
-    state = get_state_from_sha_object(sha_obj);
+    state = get_state_from_digest_object(digestBase_obj);
     stubAddr = StubRoutines::sha256_implCompress();
     stubName = "sha256_implCompress";
     break;
   case vmIntrinsics::_sha5_implCompress:
     assert(UseSHA512Intrinsics, "need SHA512 instruction support");
-    state = get_state_from_sha5_object(sha_obj);
+    state = get_long_state_from_digest_object(digestBase_obj);
     stubAddr = StubRoutines::sha512_implCompress();
     stubName = "sha512_implCompress";
     break;
@@ -7105,7 +6829,7 @@ bool LibraryCallKit::inline_sha_implCompress(vmIntrinsics::ID id) {
   if (state == NULL) return false;
 
   // Call the stub.
-  Node* call = make_runtime_call(RC_LEAF|RC_NO_FP, OptoRuntime::sha_implCompress_Type(),
+  Node* call = make_runtime_call(RC_LEAF|RC_NO_FP, OptoRuntime::digestBase_implCompress_Type(),
                                  stubAddr, stubName, TypePtr::BOTTOM,
                                  src_start, state);
 
@@ -7114,13 +6838,13 @@ bool LibraryCallKit::inline_sha_implCompress(vmIntrinsics::ID id) {
 
 //------------------------------inline_digestBase_implCompressMB-----------------------
 //
-// Calculate SHA/SHA2/SHA5 for multi-block byte[] array.
+// Calculate MD5/SHA/SHA2/SHA5 for multi-block byte[] array.
 // int com.sun.security.provider.DigestBase.implCompressMultiBlock(byte[] b, int ofs, int limit)
 //
 bool LibraryCallKit::inline_digestBase_implCompressMB(int predicate) {
-  assert(UseSHA1Intrinsics || UseSHA256Intrinsics || UseSHA512Intrinsics,
-         "need SHA1/SHA256/SHA512 instruction support");
-  assert((uint)predicate < 3, "sanity");
+  assert(UseMD5Intrinsics || UseSHA1Intrinsics || UseSHA256Intrinsics || UseSHA512Intrinsics,
+         "need MD5/SHA1/SHA256/SHA512 instruction support");
+  assert((uint)predicate < 4, "sanity");
   assert(callee()->signature()->size() == 3, "digestBase_implCompressMB has 3 parameters");
 
   Node* digestBase_obj = argument(0); // The receiver was checked for NULL already.
@@ -7142,64 +6866,71 @@ bool LibraryCallKit::inline_digestBase_implCompressMB(int predicate) {
   // 'src_start' points to src array + offset
   Node* src_start = array_element_address(src, ofs, src_elem);
 
-  const char* klass_SHA_name = NULL;
+  const char* klass_digestBase_name = NULL;
   const char* stub_name = NULL;
   address     stub_addr = NULL;
   bool        long_state = false;
 
   switch (predicate) {
   case 0:
+    if (vmIntrinsics::is_intrinsic_available(vmIntrinsics::_md5_implCompress)) {
+      klass_digestBase_name = "sun/security/provider/MD5";
+      stub_name = "md5_implCompressMB";
+      stub_addr = StubRoutines::md5_implCompressMB();
+    }
+    break;
+  case 1:
     if (UseSHA1Intrinsics) {
-      klass_SHA_name = "sun/security/provider/SHA";
+      klass_digestBase_name = "sun/security/provider/SHA";
       stub_name = "sha1_implCompressMB";
       stub_addr = StubRoutines::sha1_implCompressMB();
     }
     break;
-  case 1:
+  case 2:
     if (UseSHA256Intrinsics) {
-      klass_SHA_name = "sun/security/provider/SHA2";
+      klass_digestBase_name = "sun/security/provider/SHA2";
       stub_name = "sha256_implCompressMB";
       stub_addr = StubRoutines::sha256_implCompressMB();
     }
     break;
-  case 2:
+  case 3:
     if (UseSHA512Intrinsics) {
-      klass_SHA_name = "sun/security/provider/SHA5";
+      klass_digestBase_name = "sun/security/provider/SHA5";
       stub_name = "sha512_implCompressMB";
       stub_addr = StubRoutines::sha512_implCompressMB();
       long_state = true;
     }
     break;
   default:
-    fatal(err_msg_res("unknown SHA intrinsic predicate: %d", predicate));
+    fatal(err_msg_res("unknown DigestBase intrinsic predicate: %d", predicate));
   }
-  if (klass_SHA_name != NULL) {
+  if (klass_digestBase_name != NULL) {
     // get DigestBase klass to lookup for SHA klass
     const TypeInstPtr* tinst = _gvn.type(digestBase_obj)->isa_instptr();
     assert(tinst != NULL, "digestBase_obj is not instance???");
     assert(tinst->klass()->is_loaded(), "DigestBase is not loaded");
 
-    ciKlass* klass_SHA = tinst->klass()->as_instance_klass()->find_klass(ciSymbol::make(klass_SHA_name));
-    assert(klass_SHA->is_loaded(), "predicate checks that this class is loaded");
-    ciInstanceKlass* instklass_SHA = klass_SHA->as_instance_klass();
-    return inline_sha_implCompressMB(digestBase_obj, instklass_SHA, long_state, stub_addr, stub_name, src_start, ofs, limit);
+    ciKlass* klass_digestBase = tinst->klass()->as_instance_klass()->find_klass(ciSymbol::make(klass_digestBase_name));
+    assert(klass_digestBase->is_loaded(), "predicate checks that this class is loaded");
+    ciInstanceKlass* instklass_digestBase = klass_digestBase->as_instance_klass();
+    return inline_digestBase_implCompressMB(digestBase_obj, instklass_digestBase, long_state, stub_addr, stub_name, src_start, ofs, limit);
   }
   return false;
 }
-//------------------------------inline_sha_implCompressMB-----------------------
-bool LibraryCallKit::inline_sha_implCompressMB(Node* digestBase_obj, ciInstanceKlass* instklass_SHA,
-                                               bool long_state, address stubAddr, const char *stubName,
-                                               Node* src_start, Node* ofs, Node* limit) {
-  const TypeKlassPtr* aklass = TypeKlassPtr::make(instklass_SHA);
+//------------------------------inline_digestBase_implCompressMB-----------------------
+bool LibraryCallKit::inline_digestBase_implCompressMB(Node* digestBase_obj, ciInstanceKlass* instklass_digestBase,
+                                                      bool long_state, address stubAddr, const char *stubName,
+                                                      Node* src_start, Node* ofs, Node* limit) {
+  const TypeKlassPtr* aklass = TypeKlassPtr::make(instklass_digestBase);
   const TypeOopPtr* xtype = aklass->as_instance_type();
-  Node* sha_obj = new (C) CheckCastPPNode(control(), digestBase_obj, xtype);
-  sha_obj = _gvn.transform(sha_obj);
+  Node* digest_obj = new (C) CheckCastPPNode(control(), digestBase_obj, xtype);
+  digest_obj = _gvn.transform(digest_obj);
 
   Node* state;
   if (long_state) {
-    state = get_state_from_sha5_object(sha_obj);
+    state = get_long_state_from_digest_object(digest_obj);
   } else {
-    state = get_state_from_sha_object(sha_obj);
+    state = get_state_from_digest_object(digest_obj);
   }
   if (state == NULL) return false;
 
@@ -7223,37 +6954,37 @@ bool LibraryCallKit::inline_sha_implCompressMB(Node* digestBase_obj, ciInstanceK
   return true;
 }
 
-//------------------------------get_state_from_sha_object-----------------------
-Node * LibraryCallKit::get_state_from_sha_object(Node *sha_object) {
-  Node* sha_state = load_field_from_object(sha_object, "state", "[I", /*is_exact*/ false);
-  assert (sha_state != NULL, "wrong version of sun.security.provider.SHA/SHA2");
-  if (sha_state == NULL) return (Node *) NULL;
+//------------------------------get_state_from_digest_object-----------------------
+Node * LibraryCallKit::get_state_from_digest_object(Node *digest_object) {
+  Node* digest_state = load_field_from_object(digest_object, "state", "[I", /*is_exact*/ false);
+  assert (digest_state != NULL, "wrong version of sun.security.provider.MD5/SHA/SHA2");
+  if (digest_state == NULL) return (Node *) NULL;
 
   // now have the array, need to get the start address of the state array
-  Node* state = array_element_address(sha_state, intcon(0), T_INT);
+  Node* state = array_element_address(digest_state, intcon(0), T_INT);
   return state;
 }
 
-//------------------------------get_state_from_sha5_object-----------------------
-Node * LibraryCallKit::get_state_from_sha5_object(Node *sha_object) {
-  Node* sha_state = load_field_from_object(sha_object, "state", "[J", /*is_exact*/ false);
-  assert (sha_state != NULL, "wrong version of sun.security.provider.SHA5");
-  if (sha_state == NULL) return (Node *) NULL;
+//------------------------------get_long_state_from_digest_object-----------------------
+Node * LibraryCallKit::get_long_state_from_digest_object(Node *digest_object) {
+  Node* digest_state = load_field_from_object(digest_object, "state", "[J", /*is_exact*/ false);
+  assert (digest_state != NULL, "wrong version of sun.security.provider.SHA5");
+  if (digest_state == NULL) return (Node *) NULL;
 
   // now have the array, need to get the start address of the state array
-  Node* state = array_element_address(sha_state, intcon(0), T_LONG);
+  Node* state = array_element_address(digest_state, intcon(0), T_LONG);
   return state;
 }
 
 //----------------------------inline_digestBase_implCompressMB_predicate----------------------------
 // Return node representing slow path of predicate check.
 // the pseudo code we want to emulate with this predicate is:
-//    if (digestBaseObj instanceof SHA/SHA2/SHA5) do_intrinsic, else do_javapath
+//    if (digestBaseObj instanceof MD5/SHA/SHA2/SHA5) do_intrinsic, else do_javapath
 //
 Node* LibraryCallKit::inline_digestBase_implCompressMB_predicate(int predicate) {
-  assert(UseSHA1Intrinsics || UseSHA256Intrinsics || UseSHA512Intrinsics,
-         "need SHA1/SHA256/SHA512 instruction support");
-  assert((uint)predicate < 3, "sanity");
+  assert(UseMD5Intrinsics || UseSHA1Intrinsics || UseSHA256Intrinsics || UseSHA512Intrinsics,
+         "need MD5/SHA1/SHA256/SHA512 instruction support");
+  assert((uint)predicate < 4, "sanity");
 
   // The receiver was checked for NULL already.
   Node* digestBaseObj = argument(0);
@@ -7263,44 +6994,50 @@ Node* LibraryCallKit::inline_digestBase_implCompressMB_predicate(int predicate) 
   assert(tinst != NULL, "digestBaseObj is null");
   assert(tinst->klass()->is_loaded(), "DigestBase is not loaded");
 
-  const char* klass_SHA_name = NULL;
+  const char* klass_name = NULL;
   switch (predicate) {
   case 0:
-    if (UseSHA1Intrinsics) {
-      // we want to do an instanceof comparison against the SHA class
-      klass_SHA_name = "sun/security/provider/SHA";
+    if (UseMD5Intrinsics) {
+      // we want to do an instanceof comparison against the MD5 class
+      klass_name = "sun/security/provider/MD5";
     }
     break;
   case 1:
-    if (UseSHA256Intrinsics) {
-      // we want to do an instanceof comparison against the SHA2 class
-      klass_SHA_name = "sun/security/provider/SHA2";
+    if (UseSHA1Intrinsics) {
+      // we want to do an instanceof comparison against the SHA class
+      klass_name = "sun/security/provider/SHA";
     }
     break;
   case 2:
+    if (UseSHA256Intrinsics) {
+      // we want to do an instanceof comparison against the SHA2 class
+      klass_name = "sun/security/provider/SHA2";
+    }
+    break;
+  case 3:
     if (UseSHA512Intrinsics) {
       // we want to do an instanceof comparison against the SHA5 class
-      klass_SHA_name = "sun/security/provider/SHA5";
+      klass_name = "sun/security/provider/SHA5";
     }
     break;
   default:
     fatal(err_msg_res("unknown SHA intrinsic predicate: %d", predicate));
   }
 
-  ciKlass* klass_SHA = NULL;
-  if (klass_SHA_name != NULL) {
-    klass_SHA = tinst->klass()->as_instance_klass()->find_klass(ciSymbol::make(klass_SHA_name));
+  ciKlass* klass = NULL;
+  if (klass_name != NULL) {
+    klass = tinst->klass()->as_instance_klass()->find_klass(ciSymbol::make(klass_name));
   }
-  if ((klass_SHA == NULL) || !klass_SHA->is_loaded()) {
-    // if none of SHA/SHA2/SHA5 is loaded, we never take the intrinsic fast path
+  if ((klass == NULL) || !klass->is_loaded()) {
+    // if none of MD5/SHA/SHA2/SHA5 is loaded, we never take the intrinsic fast path
     Node* ctrl = control();
     set_control(top()); // no intrinsic path
     return ctrl;
   }
-  ciInstanceKlass* instklass_SHA = klass_SHA->as_instance_klass();
+  ciInstanceKlass* instklass = klass->as_instance_klass();
 
-  Node* instofSHA = gen_instanceof(digestBaseObj, makecon(TypeKlassPtr::make(instklass_SHA)));
-  Node* cmp_instof = _gvn.transform(new (C) CmpINode(instofSHA, intcon(1)));
+  Node* instof = gen_instanceof(digestBaseObj, makecon(TypeKlassPtr::make(instklass)));
+  Node* cmp_instof = _gvn.transform(new (C) CmpINode(instof, intcon(1)));
   Node* bool_instof = _gvn.transform(new (C) BoolNode(cmp_instof, BoolTest::ne));
   Node* instof_false = generate_guard(bool_instof, NULL, PROB_MIN);
 

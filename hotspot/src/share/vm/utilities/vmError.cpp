@@ -312,6 +312,7 @@ void VMError::print_stack_trace(outputStream* st, JavaThread* jt,
 static void print_oom_reasons(outputStream* st) {
   st->print_cr("# Possible reasons:");
   st->print_cr("#   The system is out of physical RAM or swap space");
+  st->print_cr("#   There are unreasonable system configurations which limit the available memory and the number of threads the process can create");
   if (UseCompressedOops) {
     st->print_cr("#   The process is running with CompressedOops enabled, and the Java Heap may be blocking the growth of the native heap");
   }
@@ -322,6 +323,27 @@ static void print_oom_reasons(outputStream* st) {
   st->print_cr("#   Reduce memory load on the system");
   st->print_cr("#   Increase physical memory or swap space");
   st->print_cr("#   Check if swap backing store is full");
+  st->print_cr("#   Check the memory info part of the hs_error log file to see if there is enough available memory");
+  st->print_cr("#   Check the operating system log to confirm whether there is an OOM error message");
+#if defined(LINUX)
+  st->print_cr("#     In linux, please use \"grep 'Out of memory' /var/log/messages\" or ");
+  st->print_cr("#     \"dmesg | egrep -i 'killed process'\" to find the OOM error messages");
+#endif
+  st->print_cr("#   Check the relevant operating system configurations associating with memory allocation");
+#if defined(LINUX)
+  st->print_cr("#     In linux, please check the following configurations:");
+  st->print_cr("#       1) /proc/sys/vm/min_free_kbytes. This is used to force the Linux VM to keep a minimum number");
+  st->print_cr("#       of kilobytes free. If a large value is set, it will leave little memory for JVM to use.");
+  st->print_cr("#       2) vm.overcommit_memory. If 2 is set, overcommit is prohibited and JVM may not get enough memory.");
+  st->print_cr("#       3) /proc/sys/vm/max_map_count. This file contains the maximum number of memory map areas a process may have.");
+  st->print_cr("#       Memory map areas are used as a side-effect of calling malloc, directly by mmap, mprotect, and madvise,");
+  st->print_cr("#       and also when loading shared libraries, so max_map_count should not be too small. Please compare the number of mappings");
+  st->print_cr("#       in the dynamic libraries part of the hs_error log with this value to see if it is the cause of the OOM error.");
+  st->print_cr("#       4) configurations in limits.conf. Please check data, rss and as which limit the maximum memory size JVM can use");
+  st->print_cr("#       and nproc which influences the maximum number of threads JVM can create.");
+  st->print_cr("#       5) Other configurations that may cause a thread creation failure. Please check /proc/sys/kernel/threads-max,");
+  st->print_cr("#       /proc/sys/kernel/pid_max and TasksMax in systemd service file and make sure they are not too small.");
+#endif
   if (LogBytesPerWord == 2) {
     st->print_cr("#   Use 64 bit Java on a 64 bit OS");
   }
@@ -535,7 +557,7 @@ void VMError::report(outputStream* st) {
     st->print("# ");
     if (CreateCoredumpOnCrash) {
       if (coredump_status) {
-        st->print("Core dump will be written. %s", coredump_message);
+        st->print("Core dump will be written, saved as:\n#  %s", coredump_message);
       } else {
         st->print("No core dump will be written. %s", coredump_message);
       }
@@ -691,6 +713,14 @@ void VMError::report(outputStream* st) {
        st->cr();
      }
 
+#ifndef _WIN32
+  STEP(165, "(printing user info)" )
+
+     if (ExtensiveErrorReports && _verbose) {
+       os::Posix::print_user_info(st);
+     }
+#endif
+
   STEP(170, "(printing all threads)" )
 
      // all threads
@@ -779,6 +809,16 @@ void VMError::report(outputStream* st) {
        os::print_dll_info(st);
        st->cr();
      }
+
+#if defined(AARCH64) || defined(X86)
+  STEP(207, "(printing file descriptor)" )
+
+     if (ExtensiveErrorReports && _verbose) {
+       // File Descriptor
+       os::print_file_descriptor(st);
+       st->cr();
+     }
+#endif
 
   STEP(210, "(printing VM options)" )
 

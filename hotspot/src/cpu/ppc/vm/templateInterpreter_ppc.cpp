@@ -726,7 +726,7 @@ address TemplateInterpreterGenerator::generate_native_entry(bool synchronized) {
 
   address entry = __ pc();
 
-  const bool inc_counter = UseCompiler || CountCompiledCalls;
+  const bool inc_counter = UseCompiler || CountCompiledCalls || LogTouchedMethods;
 
   // -----------------------------------------------------------------------------
   // Allocate a new frame that represents the native callee (i2n frame).
@@ -1176,7 +1176,7 @@ address TemplateInterpreterGenerator::generate_native_entry(bool synchronized) {
 // Generic interpreted method entry to (asm) interpreter.
 //
 address TemplateInterpreterGenerator::generate_normal_entry(bool synchronized) {
-  bool inc_counter = UseCompiler || CountCompiledCalls;
+  bool inc_counter = UseCompiler || CountCompiledCalls || LogTouchedMethods;
   address entry = __ pc();
   // Generate the code to allocate the interpreter stack frame.
   Register Rsize_of_parameters = R4_ARG2, // Written by generate_fixed_frame.
@@ -2030,5 +2030,25 @@ void TemplateInterpreterGenerator::stop_interpreter_at() {
   __ bind(L);
 }
 
+void AbstractInterpreterGenerator::bang_stack_shadow_pages(bool native_call) {
+  // Quick & dirty stack overflow checking: bang the stack & handle trap.
+  // Note that we do the banging after the frame is setup, since the exception
+  // handling code expects to find a valid interpreter frame on the stack.
+  // Doing the banging earlier fails if the caller frame is not an interpreter
+  // frame.
+  // (Also, the exception throwing code expects to unlock any synchronized
+  // method receiever, so do the banging after locking the receiver.)
+
+  // Bang each page in the shadow zone. We can't assume it's been done for
+  // an interpreter frame with greater than a page of locals, so each page
+  // needs to be checked.  Only true for non-native.
+  if (UseStackBanging) {
+    const int start_page = native_call ? StackShadowPages : 1;
+    const int page_size = os::vm_page_size();
+    for (int pages = start_page; pages <= StackShadowPages ; pages++) {
+      __ bang_stack_with_offset(pages*page_size);
+    }
+  }
+}
 #endif // !PRODUCT
 #endif // !CC_INTERP

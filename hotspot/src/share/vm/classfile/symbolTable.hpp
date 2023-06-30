@@ -75,11 +75,25 @@ class TempNewSymbol : public StackObj {
   operator Symbol*()                             { return _temp; }
 };
 
+inline bool symbol_equals_compact_hashtable_entry(Symbol* value, const char* key, int len) {
+  if (value->equals(key, len)) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
 class SymbolTable : public RehashableHashtable<Symbol*, mtSymbol> {
   friend class VMStructs;
   friend class ClassFileParser;
 
 private:
+  // The dynamic shared table
+  static OffsetCompactHashtable<
+          const char*, Symbol*,
+          symbol_equals_compact_hashtable_entry
+  > _dynamic_shared_table;
+
   // The symbol table
   static SymbolTable* _the_table;
 

@@ -28,7 +28,7 @@ import sha.predicate.IntrinsicPredicates;
  * @bug 8035968
  * @summary Verify that SHA-256 intrinsic is actually used.
  * @library /testlibrary /testlibrary/whitebox /compiler/testlibrary ../
- * @build TestSHA intrinsics.Verifier TestSHA256Intrinsics
+ * @build TestDigest intrinsics.Verifier TestSHA256Intrinsics
  * @run main ClassFileInstaller sun.hotspot.WhiteBox
  *                              sun.hotspot.WhiteBox$WhiteBoxPermission
  * @run main/othervm -Xbootclasspath/a:. -XX:+UnlockDiagnosticVMOptions
@@ -69,7 +69,7 @@ import sha.predicate.IntrinsicPredicates;
  */
 public class TestSHA256Intrinsics {
     public static void main(String args[]) throws Exception {
-        new SHASanityTestBase(IntrinsicPredicates.SHA256_INTRINSICS_AVAILABLE,
-                SHASanityTestBase.SHA256_INTRINSIC_ID).test();
+        new DigestSanityTestBase(IntrinsicPredicates.SHA256_INTRINSICS_AVAILABLE,
+                DigestSanityTestBase.SHA256_INTRINSIC_ID).test();
     }
 }

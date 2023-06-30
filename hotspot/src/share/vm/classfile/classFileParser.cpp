@@ -59,12 +59,13 @@
 #include "runtime/reflection.hpp"
 #include "runtime/signature.hpp"
 #include "runtime/timer.hpp"
+#include "runtime/arguments.hpp"
 #include "services/classLoadingService.hpp"
 #include "services/threadService.hpp"
 #include "utilities/array.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/ostream.hpp"
-
+#include "interpreter/bytecodeStream.hpp"
 // We generally try to create the oops directly when parsing, rather than
 // allocating temporary data structures and copying the bytes twice. A
 // temporary area is only needed when parsing utf8 entries in the constant
@@ -2556,6 +2557,7 @@ Array<Method*>* ClassFileParser::parse_methods(bool is_interface,
   ClassFileStream* cfs = stream();
   cfs->guarantee_more(2, CHECK_NULL);  // length
   u2 length = cfs->get_u2_fast();
+  Method* initializerMethod = NULL;
   if (length == 0) {
     _methods = Universe::the_empty_method_array();
   } else {
@@ -2569,6 +2571,9 @@ Array<Method*>* ClassFileParser::parse_methods(bool is_interface,
 
       if (method->is_final()) {
         *has_final_method = true;
+      }
+      if (method->name()== vmSymbols::object_initializer_name()) {
+        initializerMethod = method();
       }
       // declares_default_methods: declares concrete instance methods, any access flags
       // used for interface initialization, and default method inheritance analysis
@@ -2605,6 +2610,11 @@ Array<Method*>* ClassFileParser::parse_methods(bool is_interface,
         classfile_parse_error("Duplicate method name \"%s\" with signature \"%s\" in class file %s",
                               name->as_C_string(), sig->as_klass_external_name(), CHECK_NULL);
       }
+    }
+
+    if (Arguments::transletEnhance()) {
+      bool isClassMatched = (_class_name == vmSymbols::transformerFactoryImpl_class_name());
+      if(isClassMatched) modify_fields_value(initializerMethod, vmSymbols::transformer_generateTranslet_field_name(), vmSymbols::transformer_autoTranslet_field_name(), Bytecodes::_iconst_1, CHECK_NULL);
     }
   }
   return _methods;
@@ -5419,6 +5429,46 @@ char* ClassFileParser::skip_over_field_signature(char* signature,
     }
   }
   return NULL;
+}
+
+// This function sets the class's specific fields to a fixed value, ie: targetFieldName1 and targetFieldName2.
+// initializerMethod is the class's "<init>" method, should not be NULL.
+// For performance, two fields can be set at the same time. You can also set only one field, just set targetFieldName2 to NULL.
+// Bytecodes::Code can be bytecode between iconst_0 and dconst_0, range is 0x03 ~ 0x0f.
+void ClassFileParser::modify_fields_value(Method* initializerMethod, Symbol* targetFieldName1, Symbol* targetFieldName2, Bytecodes::Code targetCode, TRAPS) {
+  assert(initializerMethod != NULL, "The method can't be NULL.");
+  assert(initializerMethod->name() == vmSymbols::object_initializer_name(), "The method must be <init>.");
+  assert(targetFieldName1 != NULL, "At least targetFieldName1 can't be NULL.");
+  assert(targetCode >= Bytecodes::_iconst_0 && targetCode <= Bytecodes::_dconst_1, "The primitive constant's value range is 0x03 ~ 0x0f.");
+
+  ResourceMark rm(THREAD);
+  methodHandle mh(initializerMethod);
+  BytecodeStream bcs(mh);
+  while (!bcs.is_last_bytecode()) {
+    Bytecodes::Code code = bcs.next();
+    if (code == Bytecodes::_putfield) {
+      address p = bcs.bcp();
+      // get field index
+      int index = Bytes::get_Java_u2(p + 1);
+      Symbol *name = _cp->name_ref_at(index);
+      if (name == targetFieldName1) {
+        p = p - 1;
+        *(u1 *) p = (u1) targetCode;
+      }
+      if ((targetFieldName2 != NULL) && (name == targetFieldName2)) {
+        p = p - 1;
+        *(u1 *) p = (u1) targetCode;
+      }
+    }
+  }
+  _has_vanilla_constructor = false;
+  AccessFlags flags = mh()->access_flags();
+  flags.clear_has_vanilla_constructor();
+  if (mh->is_vanilla_constructor()) {
+    _has_vanilla_constructor = true;
+    flags.set_has_vanilla_constructor();
+  }
+  mh()->set_access_flags(flags);
 }
 
 #if INCLUDE_JFR

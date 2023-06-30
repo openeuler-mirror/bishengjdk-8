@@ -1087,17 +1087,46 @@ address InterpreterGenerator::generate_Dgemv_dgemv_entry() {
 }
 
 void InterpreterGenerator::bang_stack_shadow_pages(bool native_call) {
-  // Bang each page in the shadow zone. We can't assume it's been done for
-  // an interpreter frame with greater than a page of locals, so each page
-  // needs to be checked.  Only true for non-native.
-  if (UseStackBanging) {
-    const int start_page = native_call ? StackShadowPages : 1;
-    const int page_size = os::vm_page_size();
-    for (int pages = start_page; pages <= StackShadowPages ; pages++) {
-      __ sub(rscratch2, sp, pages*page_size);
-      __ str(zr, Address(rscratch2));
-    }
+  // See more discussion in stackOverflow.hpp.
+
+  const int shadow_zone_size = (int)(JavaThread::stack_shadow_zone_size());
+  const int page_size = os::vm_page_size();
+  const int n_shadow_pages = shadow_zone_size / page_size;
+
+#ifdef ASSERT
+  Label L_good_limit;
+  __ ldr(rscratch1, Address(rthread, JavaThread::shadow_zone_safe_limit_offset()));
+  __ cbnz(rscratch1, L_good_limit);
+  __ stop("shadow zone safe limit is not initialized");
+  __ bind(L_good_limit);
+
+  Label L_good_watermark;
+  __ ldr(rscratch1, Address(rthread, JavaThread::shadow_zone_growth_watermark_offset()));
+  __ cbnz(rscratch1, L_good_watermark);
+  __ stop("shadow zone growth watermark is not initialized");
+  __ bind(L_good_watermark);
+#endif
+
+  Label L_done;
+
+  __ ldr(rscratch1, Address(rthread, JavaThread::shadow_zone_growth_watermark_offset()));
+  __ cmp(sp, rscratch1);
+  __ br(Assembler::HI, L_done);
+
+  for (int p = 1; p <= n_shadow_pages; p++) {
+    __ sub(rscratch2, sp, p*page_size);
+    __ str(zr, Address(rscratch2));
   }
+
+  // Record the new watermark, but only if the update is above the safe limit.
+  // Otherwise, the next time around the check above would pass the safe limit.
+  __ ldr(rscratch1, Address(rthread, JavaThread::shadow_zone_safe_limit_offset()));
+  __ cmp(sp, rscratch1);
+  __ br(Assembler::LS, L_done);
+  __ mov(rscratch1, sp);
+  __ str(rscratch1, Address(rthread, JavaThread::shadow_zone_growth_watermark_offset()));
+
+  __ bind(L_done);
 }
 
 
@@ -1106,7 +1135,7 @@ void InterpreterGenerator::bang_stack_shadow_pages(bool native_call) {
 // native method than the typical interpreter frame setup.
 address InterpreterGenerator::generate_native_entry(bool synchronized) {
   // determine code generation flags
-  bool inc_counter  = UseCompiler || CountCompiledCalls;
+  bool inc_counter  = UseCompiler || CountCompiledCalls || LogTouchedMethods;
 
   // r1: Method*
   // rscratch1: sender sp
@@ -1562,7 +1591,7 @@ address InterpreterGenerator::generate_native_entry(bool synchronized) {
 //
 address InterpreterGenerator::generate_normal_entry(bool synchronized) {
   // determine code generation flags
-  bool inc_counter  = UseCompiler || CountCompiledCalls;
+  bool inc_counter  = UseCompiler || CountCompiledCalls || LogTouchedMethods;
 
   // rscratch1: sender sp
   address entry_point = __ pc();

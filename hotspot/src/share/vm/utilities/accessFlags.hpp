@@ -209,6 +209,7 @@ class AccessFlags VALUE_OBJ_CLASS_SPEC {
   void clear_not_c2_osr_compilable()   { atomic_clear_bits(JVM_ACC_NOT_C2_OSR_COMPILABLE);   }
   // Klass* flags
   void set_has_vanilla_constructor()   { atomic_set_bits(JVM_ACC_HAS_VANILLA_CONSTRUCTOR); }
+  void clear_has_vanilla_constructor()  { atomic_clear_bits(JVM_ACC_HAS_VANILLA_CONSTRUCTOR); }
   void set_has_finalizer()             { atomic_set_bits(JVM_ACC_HAS_FINALIZER);           }
   void set_has_final_method()          { atomic_set_bits(JVM_ACC_HAS_FINAL_METHOD);        }
   void set_is_cloneable()              { atomic_set_bits(JVM_ACC_IS_CLONEABLE);            }

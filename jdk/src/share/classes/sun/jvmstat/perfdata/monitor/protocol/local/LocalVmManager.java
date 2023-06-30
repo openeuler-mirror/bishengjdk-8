@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004, 2007, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2004, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -45,7 +45,6 @@ import java.io.*;
  */
 public class LocalVmManager {
     private String userName;                 // user name for monitored jvm
-    private File tmpdir;
     private Pattern userPattern;
     private Matcher userMatcher;
     private FilenameFilter userFilter;
@@ -78,7 +77,6 @@ public class LocalVmManager {
         this.userName = user;
 
         if (userName == null) {
-            tmpdir = new File(PerfDataFile.getTempDirectory());
             userPattern = Pattern.compile(PerfDataFile.userDirNamePattern);
             userMatcher = userPattern.matcher("");
 
@@ -88,8 +86,6 @@ public class LocalVmManager {
                     return userMatcher.lookingAt();
                 }
             };
-        } else {
-            tmpdir = new File(PerfDataFile.getTempDirectory(userName));
         }
 
         filePattern = Pattern.compile(PerfDataFile.fileNamePattern);
@@ -133,62 +129,71 @@ public class LocalVmManager {
          * we'd see strange file names being matched by the matcher.
          */
         Set<Integer> jvmSet = new HashSet<Integer>();
+        List<String> tmpdirs = PerfDataFile.getTempDirectories(userName, 0);
 
-        if (! tmpdir.isDirectory()) {
-            return jvmSet;
-        }
+        for (String dir : tmpdirs) {
+            File tmpdir = new File(dir);
+            if (! tmpdir.isDirectory()) {
+                continue;
+            }
 
-        if (userName == null) {
-            /*
-             * get a list of all of the user temporary directories and
-             * iterate over the list to find any files within those directories.
-             */
-            File[] dirs = tmpdir.listFiles(userFilter);
+            if (userName == null) {
+                /*
+                 * get a list of all of the user temporary directories and
+                 * iterate over the list to find any files within those directories.
+                 */
+                File[] dirs = tmpdir.listFiles(userFilter);
+                for (int i = 0 ; i < dirs.length; i ++) {
+                    if (!dirs[i].isDirectory()) {
+                        continue;
+                    }
 
-            for (int i = 0 ; i < dirs.length; i ++) {
-                if (!dirs[i].isDirectory()) {
-                    continue;
+                    // get a list of files from the directory
+                    File[] files = dirs[i].listFiles(fileFilter);
+                    if (files != null) {
+                        for (int j = 0; j < files.length; j++) {
+                            if (files[j].isFile() && files[j].canRead()) {
+                                int vmid = PerfDataFile.getLocalVmId(files[j]);
+                                if (vmid != -1) {
+                                    jvmSet.add(vmid);
+                                }
+                            }
+                        }
+                    }
                 }
+            } else {
+                /*
+                 * Check if the user directory can be accessed. Any of these
+                 * conditions may have asynchronously changed between subsequent
+                 * calls to this method.
+                 */
 
-                // get a list of files from the directory
-                File[] files = dirs[i].listFiles(fileFilter);
+                // get the list of files from the specified user directory
+                File[] files = tmpdir.listFiles(fileFilter);
 
                 if (files != null) {
                     for (int j = 0; j < files.length; j++) {
                         if (files[j].isFile() && files[j].canRead()) {
-                            jvmSet.add(new Integer(
-                                    PerfDataFile.getLocalVmId(files[j])));
+                            int vmid = PerfDataFile.getLocalVmId(files[j]);
+                            if (vmid != -1) {
+                                jvmSet.add(vmid);
+                            }
                         }
                     }
                 }
             }
-        } else {
-            /*
-             * Check if the user directory can be accessed. Any of these
-             * conditions may have asynchronously changed between subsequent
-             * calls to this method.
-             */
 
-            // get the list of files from the specified user directory
-            File[] files = tmpdir.listFiles(fileFilter);
+            // look for any 1.4.1 files
+            File[] files = tmpdir.listFiles(tmpFileFilter);
 
             if (files != null) {
                 for (int j = 0; j < files.length; j++) {
                     if (files[j].isFile() && files[j].canRead()) {
-                        jvmSet.add(new Integer(
-                                PerfDataFile.getLocalVmId(files[j])));
+                        int vmid = PerfDataFile.getLocalVmId(files[j]);
+                        if (vmid != -1) {
+                            jvmSet.add(vmid);
+                        }
                     }
-                }
-            }
-        }
-
-        // look for any 1.4.1 files
-        File[] files = tmpdir.listFiles(tmpFileFilter);
-        if (files != null) {
-            for (int j = 0; j < files.length; j++) {
-                if (files[j].isFile() && files[j].canRead()) {
-                    jvmSet.add(new Integer(
-                            PerfDataFile.getLocalVmId(files[j])));
                 }
             }
         }

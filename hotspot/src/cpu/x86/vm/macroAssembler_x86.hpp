@@ -907,6 +907,9 @@ class MacroAssembler: public Assembler {
   // computes pow(x,y). Fallback to runtime call included.
   void pow_with_fallback(int num_fpu_regs_in_use) { pow_or_exp(false, num_fpu_regs_in_use); }
 
+  void fast_md5(Register buf, Address state, Address ofs, Address limit,
+                bool multi_block);
+
 private:
 
   // call runtime as a fallback for trig functions and pow/exp.

@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2014, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2023, Huawei Technologies Co., Ltd. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -33,29 +34,34 @@ import java.util.function.BooleanSupplier;
  * Instead of using huge complex tests for each option, each test is constructed
  * from several test cases shared among different tests.
  */
-public class SHAOptionsBase extends CommandLineOptionTest {
-    protected static final String USE_SHA_OPTION = "UseSHA";
-    protected static final String USE_SHA1_INTRINSICS_OPTION
+public class DigestOptionsBase extends CommandLineOptionTest {
+    public static final String USE_MD5_INTRINSICS_OPTION
+            = "UseMD5Intrinsics";
+    public static final String USE_SHA_OPTION = "UseSHA";
+    public static final String USE_SHA1_INTRINSICS_OPTION
             = "UseSHA1Intrinsics";
-    protected static final String USE_SHA256_INTRINSICS_OPTION
+    public static final String USE_SHA256_INTRINSICS_OPTION
             = "UseSHA256Intrinsics";
-    protected static final String USE_SHA512_INTRINSICS_OPTION
+    public static final String USE_SHA512_INTRINSICS_OPTION
             = "UseSHA512Intrinsics";
+
+    // Intrinsics flags are of diagnostic type
+    // and must be preceded by UnlockDiagnosticVMOptions.
+    public static final String UNLOCK_DIAGNOSTIC_VM_OPTIONS
+            = "-XX:+UnlockDiagnosticVMOptions";
 
     // Note that strings below will be passed to
     // CommandLineOptionTest.verifySameJVMStartup and thus are regular
     // expressions, not just a plain strings.
+    protected static final String MD5_INTRINSICS_ARE_NOT_AVAILABLE
+            = "MD5 intrinsics are not available on this CPU";
     protected static final String SHA_INSTRUCTIONS_ARE_NOT_AVAILABLE
             = "SHA instructions are not available on this CPU";
-    protected static final String SHA1_INSTRUCTION_IS_NOT_AVAILABLE
-            = "SHA1 instruction is not available on this CPU\\.";
-    protected static final String SHA256_INSTRUCTION_IS_NOT_AVAILABLE
-            = "SHA256 instruction \\(for SHA-224 and SHA-256\\) "
-            + "is not available on this CPU\\.";
-    protected static final String SHA512_INSTRUCTION_IS_NOT_AVAILABLE
-            = "SHA512 instruction \\(for SHA-384 and SHA-512\\) "
-            + "is not available on this CPU\\.";
-    protected static final String SHA_INTRINSICS_ARE_NOT_AVAILABLE
+    protected static final String SHA1_INTRINSICS_ARE_NOT_AVAILABLE
+            = "SHA intrinsics are not available on this CPU";
+    protected static final String SHA256_INTRINSICS_ARE_NOT_AVAILABLE
+            = "SHA intrinsics are not available on this CPU";
+    protected static final String SHA512_INTRINSICS_ARE_NOT_AVAILABLE
             = "SHA intrinsics are not available on this CPU";
 
     private final TestCase[] testCases;
@@ -70,47 +76,20 @@ public class SHAOptionsBase extends CommandLineOptionTest {
      * @return A warning message that will be printed out to VM output if CPU
      *         instructions required by the option are not supported.
      */
-    protected static String getWarningForUnsupportedCPU(String optionName) {
-        if (Platform.isSparc()) {
-            switch (optionName) {
-                case SHAOptionsBase.USE_SHA_OPTION:
-                    return SHAOptionsBase.SHA_INSTRUCTIONS_ARE_NOT_AVAILABLE;
-                case SHAOptionsBase.USE_SHA1_INTRINSICS_OPTION:
-                    return SHAOptionsBase.SHA1_INSTRUCTION_IS_NOT_AVAILABLE;
-                case SHAOptionsBase.USE_SHA256_INTRINSICS_OPTION:
-                    return SHAOptionsBase.SHA256_INSTRUCTION_IS_NOT_AVAILABLE;
-                case SHAOptionsBase.USE_SHA512_INTRINSICS_OPTION:
-                    return SHAOptionsBase.SHA512_INSTRUCTION_IS_NOT_AVAILABLE;
-                default:
-                    throw new Error("Unexpected option " + optionName);
-            }
-        } else if (Platform.isX64() || Platform.isX86()) {
-            switch (optionName) {
-                case SHAOptionsBase.USE_SHA_OPTION:
-                    return SHAOptionsBase.SHA_INSTRUCTIONS_ARE_NOT_AVAILABLE;
-                case SHAOptionsBase.USE_SHA1_INTRINSICS_OPTION:
-                case SHAOptionsBase.USE_SHA256_INTRINSICS_OPTION:
-                case SHAOptionsBase.USE_SHA512_INTRINSICS_OPTION:
-                    return SHAOptionsBase.SHA_INTRINSICS_ARE_NOT_AVAILABLE;
-                default:
-                    throw new Error("Unexpected option " + optionName);
-            }
-        } else if (Platform.isAArch64()) {
-            switch (optionName) {
-                case SHAOptionsBase.USE_SHA_OPTION:
-                    return SHAOptionsBase.SHA_INSTRUCTIONS_ARE_NOT_AVAILABLE;
-                case SHAOptionsBase.USE_SHA1_INTRINSICS_OPTION:
-                    return SHAOptionsBase.SHA1_INSTRUCTION_IS_NOT_AVAILABLE;
-                case SHAOptionsBase.USE_SHA256_INTRINSICS_OPTION:
-                    return SHAOptionsBase.SHA256_INSTRUCTION_IS_NOT_AVAILABLE;
-                case SHAOptionsBase.USE_SHA512_INTRINSICS_OPTION:
-                    return SHAOptionsBase.SHA512_INSTRUCTION_IS_NOT_AVAILABLE;
-                default:
-                    throw new Error("Unexpected option " + optionName);
-            }
-        } else {
-            throw new Error("Support for CPUs other then X86 or SPARC is not "
-                    + "implemented.");
+    public static String getWarningForUnsupportedCPU(String optionName) {
+        switch (optionName) {
+        case DigestOptionsBase.USE_MD5_INTRINSICS_OPTION:
+            return DigestOptionsBase.MD5_INTRINSICS_ARE_NOT_AVAILABLE;
+        case DigestOptionsBase.USE_SHA_OPTION:
+            return DigestOptionsBase.SHA_INSTRUCTIONS_ARE_NOT_AVAILABLE;
+        case DigestOptionsBase.USE_SHA1_INTRINSICS_OPTION:
+            return DigestOptionsBase.SHA1_INTRINSICS_ARE_NOT_AVAILABLE;
+        case DigestOptionsBase.USE_SHA256_INTRINSICS_OPTION:
+            return DigestOptionsBase.SHA256_INTRINSICS_ARE_NOT_AVAILABLE;
+        case DigestOptionsBase.USE_SHA512_INTRINSICS_OPTION:
+            return DigestOptionsBase.SHA512_INTRINSICS_ARE_NOT_AVAILABLE;
+        default:
+            throw new Error("Unexpected option " + optionName);
         }
     }
 
@@ -123,22 +102,24 @@ public class SHAOptionsBase extends CommandLineOptionTest {
      * @return The predicate on availability of CPU instructions required by the
      *         option.
      */
-    protected static BooleanSupplier getPredicateForOption(String optionName) {
+    public static BooleanSupplier getPredicateForOption(String optionName) {
         switch (optionName) {
-            case SHAOptionsBase.USE_SHA_OPTION:
+            case DigestOptionsBase.USE_MD5_INTRINSICS_OPTION:
+                return IntrinsicPredicates.MD5_INSTRUCTION_AVAILABLE;
+            case DigestOptionsBase.USE_SHA_OPTION:
                 return IntrinsicPredicates.ANY_SHA_INSTRUCTION_AVAILABLE;
-            case SHAOptionsBase.USE_SHA1_INTRINSICS_OPTION:
+            case DigestOptionsBase.USE_SHA1_INTRINSICS_OPTION:
                 return IntrinsicPredicates.SHA1_INSTRUCTION_AVAILABLE;
-            case SHAOptionsBase.USE_SHA256_INTRINSICS_OPTION:
+            case DigestOptionsBase.USE_SHA256_INTRINSICS_OPTION:
                 return IntrinsicPredicates.SHA256_INSTRUCTION_AVAILABLE;
-            case SHAOptionsBase.USE_SHA512_INTRINSICS_OPTION:
+            case DigestOptionsBase.USE_SHA512_INTRINSICS_OPTION:
                 return IntrinsicPredicates.SHA512_INSTRUCTION_AVAILABLE;
             default:
                 throw new Error("Unexpected option " + optionName);
         }
     }
 
-    public SHAOptionsBase(TestCase... testCases) {
+    public DigestOptionsBase(TestCase... testCases) {
         super(Boolean.TRUE::booleanValue);
         this.testCases = testCases;
     }

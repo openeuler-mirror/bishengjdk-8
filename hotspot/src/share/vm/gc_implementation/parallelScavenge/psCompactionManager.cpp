@@ -65,6 +65,8 @@ ParCompactionManager::ParCompactionManager() :
 
   marking_stack()->initialize();
   _objarray_stack.initialize();
+
+  reset_bitmap_query_cache();
 }
 
 ParCompactionManager::~ParCompactionManager() {
@@ -120,6 +122,14 @@ void ParCompactionManager::initialize(ParMarkBitMap* mbm) {
   assert(PSParallelCompact::gc_task_manager()->workers() != 0,
     "Not initialized?");
 }
+
+void ParCompactionManager::reset_all_bitmap_query_caches() {
+  uint parallel_gc_threads = PSParallelCompact::gc_task_manager()->workers();
+  for (uint i=0; i<=parallel_gc_threads; i++) {
+    _manager_array[i]->reset_bitmap_query_cache();
+  }
+}
+
 
 int ParCompactionManager::pop_recycled_stack_index() {
   assert(_recycled_bottom <= _recycled_top, "list is empty");

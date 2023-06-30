@@ -34,12 +34,12 @@
  */
 public class TestUseSHAOptionOnSupportedCPU {
     public static void main(String args[]) throws Throwable {
-        new SHAOptionsBase(
+        new DigestOptionsBase(
                 new GenericTestCaseForSupportedSparcCPU(
-                        SHAOptionsBase.USE_SHA_OPTION),
+                        DigestOptionsBase.USE_SHA_OPTION),
                 new UseSHASpecificTestCaseForSupportedSparcCPU(
-                        SHAOptionsBase.USE_SHA_OPTION),
+                        DigestOptionsBase.USE_SHA_OPTION),
                 new GenericTestCaseForSupportedAArch64CPU(
-                        SHAOptionsBase.USE_SHA_OPTION)).test();
+                        DigestOptionsBase.USE_SHA_OPTION)).test();
     }
 }

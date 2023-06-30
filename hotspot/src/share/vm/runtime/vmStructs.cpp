@@ -23,6 +23,7 @@
  */
 
 #include "precompiled.hpp"
+#include "classfile/symbolTable.hpp"
 #include "classfile/dictionary.hpp"
 #include "classfile/javaClasses.hpp"
 #include "classfile/loaderConstraints.hpp"
@@ -251,6 +252,8 @@ typedef TwoOopHashtable<Klass*, mtClass>      KlassTwoOopHashtable;
 typedef Hashtable<Klass*, mtClass>            KlassHashtable;
 typedef HashtableEntry<Klass*, mtClass>       KlassHashtableEntry;
 typedef TwoOopHashtable<Symbol*, mtClass>     SymbolTwoOopHashtable;
+
+typedef OffsetCompactHashtable<const char*, Symbol*, symbol_equals_compact_hashtable_entry>  SymbolOffsetCompactHashtable;
 
 //--------------------------------------------------------------------------------
 // VM_STRUCTS
@@ -628,8 +631,18 @@ typedef TwoOopHashtable<Symbol*, mtClass>     SymbolTwoOopHashtable;
   /***************/                                                                                                                  \
   /* SymbolTable */                                                                                                                  \
   /***************/                                                                                                                  \
-                                                                                                                                     \
+     static_field(SymbolTable,                  _dynamic_shared_table,                        SymbolOffsetCompactHashtable)          \
      static_field(SymbolTable,                  _the_table,                                   SymbolTable*)                          \
+                                                                                                                                     \
+  /********************************/                                                                                                 \
+  /* SymbolOffsetCompactHashtable */                                                                                                 \
+  /********************************/                                                                                                 \
+                                                                                                                                     \
+     nonstatic_field(SymbolOffsetCompactHashtable,      _base_address,                         address)                              \
+     nonstatic_field(SymbolOffsetCompactHashtable,      _entry_count,                          u4)                                   \
+     nonstatic_field(SymbolOffsetCompactHashtable,      _bucket_count,                         u4)                                   \
+     nonstatic_field(SymbolOffsetCompactHashtable,      _buckets,                              u4*)                                  \
+     nonstatic_field(SymbolOffsetCompactHashtable,      _entries,                              u4*)                                  \
                                                                                                                                      \
   /***************/                                                                                                                  \
   /* StringTable */                                                                                                                  \
@@ -1574,6 +1587,7 @@ typedef TwoOopHashtable<Symbol*, mtClass>     SymbolTwoOopHashtable;
     declare_type(KlassTwoOopHashtable, KlassHashtable)                    \
     declare_type(Dictionary, KlassTwoOopHashtable)                        \
     declare_type(PlaceholderTable, SymbolTwoOopHashtable)                 \
+  declare_toplevel_type(SymbolOffsetCompactHashtable)                     \
   declare_toplevel_type(BasicHashtableEntry<mtInternal>)                  \
   declare_type(IntptrHashtableEntry, BasicHashtableEntry<mtInternal>)     \
     declare_type(DictionaryEntry, KlassHashtableEntry)                    \

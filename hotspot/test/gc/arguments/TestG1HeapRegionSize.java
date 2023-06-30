@@ -1,5 +1,6 @@
 /*
 * Copyright (c) 2013, 2018, Oracle and/or its affiliates. All rights reserved.
+* Copyright (c) 2022, Huawei Technologies Co., Ltd. All rights reserved.
 * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
 *
 * This code is free software; you can redistribute it and/or modify it
@@ -28,7 +29,7 @@
  * @summary Verify that the flag G1HeapRegionSize is updated properly
  * @run main/othervm -Xmx64m TestG1HeapRegionSize 1048576
  * @run main/othervm -XX:G1HeapRegionSize=2m -Xmx64m TestG1HeapRegionSize 2097152
- * @run main/othervm -XX:G1HeapRegionSize=3m -Xmx64m TestG1HeapRegionSize 2097152
+ * @run main/othervm -XX:G1HeapRegionSize=3m -Xmx64m TestG1HeapRegionSize 4194304
  * @run main/othervm -XX:G1HeapRegionSize=64m -Xmx256m TestG1HeapRegionSize 33554432
  */
 

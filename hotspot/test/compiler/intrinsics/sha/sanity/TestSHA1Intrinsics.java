@@ -26,7 +26,7 @@
  * @bug 8035968
  * @summary Verify that SHA-1 intrinsic is actually used.
  * @library /testlibrary /testlibrary/whitebox /compiler/testlibrary ../
- * @build TestSHA intrinsics.Verifier TestSHA1Intrinsics
+ * @build TestDigest intrinsics.Verifier TestSHA1Intrinsics
  * @run main ClassFileInstaller sun.hotspot.WhiteBox
  *                              sun.hotspot.WhiteBox$WhiteBoxPermission
  * @run main/othervm -Xbootclasspath/a:. -XX:+UnlockDiagnosticVMOptions
@@ -52,7 +52,7 @@ import sha.predicate.IntrinsicPredicates;
 
 public class TestSHA1Intrinsics {
     public static void main(String args[]) throws Exception {
-        new SHASanityTestBase(IntrinsicPredicates.SHA1_INTRINSICS_AVAILABLE,
-                SHASanityTestBase.SHA1_INTRINSIC_ID).test();
+        new DigestSanityTestBase(IntrinsicPredicates.SHA1_INTRINSICS_AVAILABLE,
+                DigestSanityTestBase.SHA1_INTRINSIC_ID).test();
     }
 }

@@ -47,6 +47,24 @@ instruct $2$1_reg_$4_reg(iReg$1NoSp dst,
 
   ins_pipe(ialu_reg_reg_shift);
 %}')dnl
+define(`NEG_SHIFT_INSN',
+`// This pattern is automatically generated from aarch64_ad.m4
+// DO NOT EDIT ANYTHING IN THIS SECTION OF THE FILE
+instruct Neg$1_reg_$2_reg(iReg$1NoSp dst,
+                              imm$1`0' zero, iReg$1`'ORL2I($1) src1, immI src2) %{
+  match(Set dst (Sub$1 zero ($2$1 src1 src2)));
+
+  ins_cost(1.9 * INSN_COST);
+  format %{ "ifelse($1, I, negw, neg)  $dst, $src1, $3 $src2" %}
+
+  ins_encode %{
+    __ ifelse($1, I, negw, neg)(as_Register($dst$$reg), as_Register($src1$$reg),
+            Assembler::$3, $src2$$constant & ifelse($1,I,0x1f,0x3f));
+  %}
+
+  ins_pipe(ialu_reg_shift);
+%}
+')dnl
 define(`BASE_INVERTED_INSN',
 `
 instruct $2$1_reg_not_reg(iReg$1NoSp dst,
@@ -110,6 +128,11 @@ define(`NOT_INSN',
   ins_pipe(ialu_reg);
 %}')dnl
 dnl
+define(`BOTH_NEG_SHIFT_INSNS',
+`NEG_SHIFT_INSN($1, URShift, LSR)
+NEG_SHIFT_INSN($1, RShift, ASR)
+NEG_SHIFT_INSN($1, LShift, LSL)')dnl
+dnl
 define(`BOTH_SHIFT_INSNS',
 `BASE_SHIFT_INSN(I, $1, ifelse($2,andr,andw,$2w), $3, $4)
 BASE_SHIFT_INSN(L, $1, $2, $3, $4)')dnl
@@ -134,6 +157,8 @@ BOTH_INVERTED_SHIFT_INSNS($1, $2, LShift, LSL)')dnl
 dnl
 NOT_INSN(L, eon)
 NOT_INSN(I, eonw)
+BOTH_NEG_SHIFT_INSNS(I)
+BOTH_NEG_SHIFT_INSNS(L)
 BOTH_INVERTED_INSNS(And, bic)
 BOTH_INVERTED_INSNS(Or, orn)
 BOTH_INVERTED_INSNS(Xor, eon)

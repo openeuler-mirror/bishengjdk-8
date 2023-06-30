@@ -246,7 +246,7 @@ class SharedRuntime: AllStatic {
 #endif // PRODUCT
 
   // Helper routine for full-speed JVMTI exception throwing support
-  static void throw_and_post_jvmti_exception(JavaThread *thread, Handle h_exception);
+  static void throw_and_post_jvmti_exception(JavaThread *thread, Handle h_exception, const char *message = NULL);
   static void throw_and_post_jvmti_exception(JavaThread *thread, Symbol* name, const char *message = NULL);
 
   // RedefineClasses() tracing support for obsolete method entry

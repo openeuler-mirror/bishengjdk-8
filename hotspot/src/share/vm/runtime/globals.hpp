@@ -750,6 +750,9 @@ class CommandLineFlags {
   product(bool, UseAESIntrinsics, false,                                    \
           "Use intrinsics for AES versions of crypto")                      \
                                                                             \
+  diagnostic(bool, UseMD5Intrinsics, false,                                 \
+          "Use intrinsics for MD5 crypto hash function")                    \
+                                                                            \
   product(bool, UseAESCTRIntrinsics, false,                                 \
           "Use intrinsics for the paralleled version of AES/CTR crypto")    \
                                                                             \
@@ -1328,7 +1331,7 @@ class CommandLineFlags {
   product(bool, UseBiasedLocking, true,                                     \
           "Enable biased locking in JVM")                                   \
                                                                             \
-  product(intx, BiasedLockingStartupDelay, 4000,                            \
+  product(intx, BiasedLockingStartupDelay, 0,                               \
           "Number of milliseconds to wait before enabling biased locking")  \
                                                                             \
   diagnostic(bool, PrintBiasedLockingStatistics, false,                     \
@@ -1504,9 +1507,10 @@ class CommandLineFlags {
   product(uintx, ParallelGCThreads, 0,                                      \
           "Number of parallel threads parallel gc will use")                \
                                                                             \
-  product(bool, UseDynamicNumberOfGCThreads, false,                         \
-          "Dynamically choose the number of parallel threads "              \
-          "parallel gc will use")                                           \
+  product(bool, UseDynamicNumberOfGCThreads, true,                          \
+          "Dynamically choose the number of threads up to a maximum of "    \
+          "ParallelGCThreads parallel collectors will use for garbage "     \
+          "collection work")                                                \
                                                                             \
   diagnostic(bool, ForceDynamicNumberOfGCThreads, false,                    \
           "Force dynamic selection of the number of "                       \
@@ -2581,7 +2585,7 @@ class CommandLineFlags {
   develop(bool, CIPrintCompilerName, false,                                 \
           "when CIPrint is active, print the name of the active compiler")  \
                                                                             \
-  develop(bool, CIPrintCompileQueue, false,                                 \
+  diagnostic(bool, CIPrintCompileQueue, false,                              \
           "display the contents of the compile queue whenever a "           \
           "compilation is enqueued")                                        \
                                                                             \
@@ -2690,6 +2694,12 @@ class CommandLineFlags {
   develop(bool, EagerInitialization, false,                                 \
           "Eagerly initialize classes if possible")                         \
                                                                             \
+  diagnostic(bool, LogTouchedMethods, false,                                \
+          "Log methods which have been ever touched in runtime")            \
+                                                                            \
+  diagnostic(bool, PrintTouchedMethodsAtExit, false,                        \
+          "Print all methods that have been ever touched in runtime")       \
+                                                                            \
   develop(bool, TraceMethodReplacement, false,                              \
           "Print when methods are replaced do to recompilation")            \
                                                                             \
@@ -2744,6 +2754,10 @@ class CommandLineFlags {
   product(ccstr, ErrorFile, NULL,                                           \
           "If an error occurs, save the error data to this file "           \
           "[default: ./hs_err_pid%p.log] (%p replaced with pid)")           \
+                                                                            \
+  product(bool, ExtensiveErrorReports,                                      \
+          PRODUCT_ONLY(false) NOT_PRODUCT(true),                            \
+          "Error reports are more extensive.")                              \
                                                                             \
   product(bool, DisplayVMOutputToStderr, false,                             \
           "If DisplayVMOutput is true, display all VM output to stderr")    \

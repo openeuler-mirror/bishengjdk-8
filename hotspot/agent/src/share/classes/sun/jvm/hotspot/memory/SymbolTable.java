@@ -44,15 +44,21 @@ public class SymbolTable extends sun.jvm.hotspot.utilities.Hashtable {
   private static synchronized void initialize(TypeDataBase db) {
     Type type = db.lookupType("SymbolTable");
     theTableField  = type.getAddressField("_the_table");
+    dynamicSharedTableField = type.getAddressField("_dynamic_shared_table");
   }
 
   // Fields
   private static AddressField theTableField;
+  private static AddressField dynamicSharedTableField;
+  private OffsetCompactHashTable dynamicSharedTable;
 
   // Accessors
   public static SymbolTable getTheTable() {
     Address tmp = theTableField.getValue();
-    return (SymbolTable) VMObjectFactory.newObject(SymbolTable.class, tmp);
+    SymbolTable table = (SymbolTable) VMObjectFactory.newObject(SymbolTable.class, tmp);
+    Address dynamicShared = dynamicSharedTableField.getStaticFieldAddress();
+    table.dynamicSharedTable = (OffsetCompactHashTable)VMObjectFactory.newObject(OffsetCompactHashTable.class, dynamicShared);
+    return table;
   }
 
   public SymbolTable(Address addr) {
@@ -77,13 +83,19 @@ public class SymbolTable extends sun.jvm.hotspot.utilities.Hashtable {
       table. */
   public Symbol probe(byte[] name) {
     long hashValue = hashSymbol(name);
+
+    Symbol sym = null;
     for (HashtableEntry e = (HashtableEntry) bucket(hashToIndex(hashValue)); e != null; e = (HashtableEntry) e.next()) {
       if (e.hash() == hashValue) {
-         Symbol sym = Symbol.create(e.literalValue());
+         sym = Symbol.create(e.literalValue());
          if (sym.equals(name)) {
            return sym;
          }
       }
+    }
+    if(sym == null && dynamicSharedTable != null) {
+      sym = dynamicSharedTable.probe(name, hashValue);
+      return sym;
     }
     return null;
   }

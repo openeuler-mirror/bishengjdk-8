@@ -281,13 +281,13 @@ G1NodeIndexCheckClosure::G1NodeIndexCheckClosure(const char* desc, G1NUMA* numa)
 }
 
 G1NodeIndexCheckClosure::~G1NodeIndexCheckClosure() {
-  if (G1Log::finer()) {
-    gclog_or_tty->print("%s: NUMA region verification (id: matched/mismatched/total): ", _desc);
+  if (UseNUMA && G1Log::finer()) {
+    gclog_or_tty->print(" [%s: NUMA region verification (id: matched/mismatched/total): ", _desc);
     const int* numa_ids = _numa->node_ids();
     for (uint i = 0; i < _numa->num_active_nodes(); i++) {
-      gclog_or_tty->print("%d: %u/%u/%u ", numa_ids[i], _matched[i], _mismatched[i], _total[i]);
+      gclog_or_tty->print("%d: %u/%u/%u", numa_ids[i], _matched[i], _mismatched[i], _total[i]);
     }
-    gclog_or_tty->print_cr(" ");
+    gclog_or_tty->print("]");
   }
   FREE_C_HEAP_ARRAY(uint, _matched, mtGC);
   FREE_C_HEAP_ARRAY(uint, _mismatched, mtGC);

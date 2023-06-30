@@ -559,6 +559,24 @@ WB_ENTRY(jboolean, WB_IsMethodQueuedForCompilation(JNIEnv* env, jobject o, jobje
   return mh->queued_for_compilation();
 WB_END
 
+WB_ENTRY(jboolean, WB_IsIntrinsicAvailable(JNIEnv* env, jobject /* o */, jobject method, jobject compilation_context, jint compLevel))
+  if (compLevel < CompLevel_none || compLevel > CompLevel_highest_tier) {
+    return false; // Intrinsic is not available on a non-existent compilation level.
+  }
+  jmethodID method_id, compilation_context_id;
+  method_id = reflected_method_to_jmid(thread, env, method);
+  CHECK_JNI_EXCEPTION_(env, JNI_FALSE);
+  methodHandle mh(THREAD, Method::checked_resolve_jmethod_id(method_id));
+  if (compilation_context != NULL) {
+    compilation_context_id = reflected_method_to_jmid(thread, env, compilation_context);
+    CHECK_JNI_EXCEPTION_(env, JNI_FALSE);
+    methodHandle cch(THREAD, Method::checked_resolve_jmethod_id(compilation_context_id));
+    return CompileBroker::compiler(compLevel)->is_intrinsic_available(mh, cch);
+  } else {
+    return CompileBroker::compiler(compLevel)->is_intrinsic_available(mh, NULL);
+  }
+WB_END
+
 WB_ENTRY(jint, WB_GetMethodCompilationLevel(JNIEnv* env, jobject o, jobject method, jboolean is_osr))
   jmethodID jmid = reflected_method_to_jmid(thread, env, method);
   CHECK_JNI_EXCEPTION_(env, CompLevel_none);
@@ -1341,6 +1359,8 @@ static JNINativeMethod methods[] = {
                                                       (void*)&WB_IsMethodCompilable},
   {CC"isMethodQueuedForCompilation",
       CC"(Ljava/lang/reflect/Executable;)Z",          (void*)&WB_IsMethodQueuedForCompilation},
+  {CC"isIntrinsicAvailable0", CC"(Ljava/lang/reflect/Executable;Ljava/lang/reflect/Executable;I)Z",
+                                                      (void*)&WB_IsIntrinsicAvailable},
   {CC"makeMethodNotCompilable",
       CC"(Ljava/lang/reflect/Executable;IZ)V",        (void*)&WB_MakeMethodNotCompilable},
   {CC"testSetDontInlineMethod",

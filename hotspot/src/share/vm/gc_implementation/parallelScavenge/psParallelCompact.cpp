@@ -748,7 +748,7 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
   return true;
 }
 
-HeapWord* ParallelCompactData::calc_new_pointer(HeapWord* addr) {
+HeapWord* ParallelCompactData::calc_new_pointer(HeapWord* addr, ParCompactionManager* cm) {
   assert(addr != NULL, "Should detect NULL oop earlier");
   assert(PSParallelCompact::gc_heap()->is_in(addr), "not in heap");
   assert(PSParallelCompact::mark_bitmap()->is_marked(addr), "not marked");
@@ -785,7 +785,7 @@ HeapWord* ParallelCompactData::calc_new_pointer(HeapWord* addr) {
   const size_t block_offset = addr_to_block_ptr(addr)->offset();
 
   const ParMarkBitMap* bitmap = PSParallelCompact::mark_bitmap();
-  const size_t live = bitmap->live_words_in_range(search_start, oop(addr));
+  const size_t live = bitmap->live_words_in_range(cm, search_start, oop(addr));
   result += block_offset + live;
   DEBUG_ONLY(PSParallelCompact::check_new_location(addr, result));
   return result;
@@ -825,11 +825,8 @@ bool PSParallelCompact::IsAliveClosure::do_object_b(oop p) { return mark_bitmap(
 void PSParallelCompact::KeepAliveClosure::do_oop(oop* p)       { PSParallelCompact::KeepAliveClosure::do_oop_work(p); }
 void PSParallelCompact::KeepAliveClosure::do_oop(narrowOop* p) { PSParallelCompact::KeepAliveClosure::do_oop_work(p); }
 
-PSParallelCompact::AdjustPointerClosure PSParallelCompact::_adjust_pointer_closure;
-PSParallelCompact::AdjustKlassClosure PSParallelCompact::_adjust_klass_closure;
-
-void PSParallelCompact::AdjustPointerClosure::do_oop(oop* p)       { adjust_pointer(p); }
-void PSParallelCompact::AdjustPointerClosure::do_oop(narrowOop* p) { adjust_pointer(p); }
+void PSParallelCompact::AdjustPointerClosure::do_oop(oop* p)       { adjust_pointer(p, _cm); }
+void PSParallelCompact::AdjustPointerClosure::do_oop(narrowOop* p) { adjust_pointer(p, _cm); }
 
 void PSParallelCompact::FollowStackClosure::do_void() { _compaction_manager->follow_marking_stacks(); }
 
@@ -842,7 +839,8 @@ void PSParallelCompact::FollowKlassClosure::do_klass(Klass* klass) {
   klass->oops_do(_mark_and_push_closure);
 }
 void PSParallelCompact::AdjustKlassClosure::do_klass(Klass* klass) {
-  klass->oops_do(&PSParallelCompact::_adjust_pointer_closure);
+  PSParallelCompact::AdjustPointerClosure closure(_cm);
+  klass->oops_do(&closure);
 }
 
 void PSParallelCompact::post_initialize() {
@@ -1021,6 +1019,8 @@ void PSParallelCompact::pre_compact(PreGCValues* pre_gc_values)
 
   // Have worker threads release resources the next time they run a task.
   gc_task_manager()->release_all_resources();
+
+  ParCompactionManager::reset_all_bitmap_query_caches();
 }
 
 void PSParallelCompact::post_compact()
@@ -2093,7 +2093,7 @@ bool PSParallelCompact::invoke_no_policy(bool maximum_heap_compaction) {
 
     // adjust_roots() updates Universe::_intArrayKlassObj which is
     // needed by the compaction for filling holes in the dense prefix.
-    adjust_roots();
+    adjust_roots(vmthread_cm);
 
     compaction_start.update();
     compact();
@@ -2450,40 +2450,46 @@ void PSParallelCompact::follow_class_loader(ParCompactionManager* cm,
   cld->oops_do(&mark_and_push_closure, &follow_klass_closure, true);
 }
 
-void PSParallelCompact::adjust_roots() {
+void PSParallelCompact::adjust_roots(ParCompactionManager* cm) {
   // Adjust the pointers to reflect the new locations
   GCTraceTime tm("adjust roots", print_phases(), true, &_gc_timer, _gc_tracer.gc_id());
 
   // Need new claim bits when tracing through and adjusting pointers.
   ClassLoaderDataGraph::clear_claimed_marks();
 
+  PSParallelCompact::AdjustPointerClosure oop_closure(cm);
+  PSParallelCompact::AdjustKlassClosure klass_closure(cm);
+
   // General strong roots.
-  Universe::oops_do(adjust_pointer_closure());
-  JNIHandles::oops_do(adjust_pointer_closure());   // Global (strong) JNI handles
-  CLDToOopClosure adjust_from_cld(adjust_pointer_closure());
-  Threads::oops_do(adjust_pointer_closure(), &adjust_from_cld, NULL);
-  ObjectSynchronizer::oops_do(adjust_pointer_closure());
-  FlatProfiler::oops_do(adjust_pointer_closure());
-  Management::oops_do(adjust_pointer_closure());
-  JvmtiExport::oops_do(adjust_pointer_closure());
-  SystemDictionary::oops_do(adjust_pointer_closure());
-  ClassLoaderDataGraph::oops_do(adjust_pointer_closure(), adjust_klass_closure(), true);
+  Universe::oops_do(&oop_closure);
+  JNIHandles::oops_do(&oop_closure);   // Global (strong) JNI handles
+  CLDToOopClosure adjust_from_cld(&oop_closure);
+  Threads::oops_do(&oop_closure, &adjust_from_cld, NULL);
+  ObjectSynchronizer::oops_do(&oop_closure);
+  FlatProfiler::oops_do(&oop_closure);
+  Management::oops_do(&oop_closure);
+  JvmtiExport::oops_do(&oop_closure);
+  SystemDictionary::oops_do(&oop_closure);
+  ClassLoaderDataGraph::oops_do(&oop_closure, &klass_closure, true);
+
 
   // Now adjust pointers in remaining weak roots.  (All of which should
   // have been cleared if they pointed to non-surviving objects.)
   // Global (weak) JNI handles
-  JNIHandles::weak_oops_do(adjust_pointer_closure());
-  JFR_ONLY(Jfr::weak_oops_do(adjust_pointer_closure()));
+  JNIHandles::weak_oops_do(&oop_closure);
+  // adjust weak pointers in jfr oops. for TestJcmdDump.java
+  JFR_ONLY(Jfr::weak_oops_do(&oop_closure));
 
-  CodeBlobToOopClosure adjust_from_blobs(adjust_pointer_closure(), CodeBlobToOopClosure::FixRelocations);
+  CodeBlobToOopClosure adjust_from_blobs(&oop_closure, CodeBlobToOopClosure::FixRelocations);
   CodeCache::blobs_do(&adjust_from_blobs);
-  StringTable::oops_do(adjust_pointer_closure());
-  ref_processor()->weak_oops_do(adjust_pointer_closure());
+  StringTable::oops_do(&oop_closure);
+  ref_processor()->weak_oops_do(&oop_closure);
+
   // Roots were visited so references into the young gen in roots
   // may have been scanned.  Process them also.
   // Should the reference processor have a span that excludes
   // young gen objects?
-  PSScavenge::reference_processor()->weak_oops_do(adjust_pointer_closure());
+  PSScavenge::reference_processor()->weak_oops_do(&oop_closure);
 }
 
 void PSParallelCompact::enqueue_region_draining_tasks(GCTaskQueue* q,
@@ -3342,7 +3348,7 @@ MoveAndUpdateClosure::do_addr(HeapWord* addr, size_t words) {
   assert(bitmap()->obj_size(addr) == words, "bad size");
 
   _source = addr;
-  assert(PSParallelCompact::summary_data().calc_new_pointer(source()) ==
+  assert(PSParallelCompact::summary_data().calc_new_pointer(source(), compaction_manager()) ==
          destination(), "wrong destination");
 
   if (words > words_remaining()) {

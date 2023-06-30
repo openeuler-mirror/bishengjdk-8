@@ -36,6 +36,7 @@
 #include "services/diagnosticFramework.hpp"
 #include "services/diagnosticCommand_ext.hpp"
 #include "utilities/macros.hpp"
+#include "oops/method.hpp"
 
 class HelpDCmd : public DCmdWithParser {
 protected:
@@ -358,6 +359,22 @@ public:
   virtual void execute(DCmdSource source, TRAPS);
 };
 
+class TouchedMethodsDCmd : public DCmdWithParser {
+public:
+  TouchedMethodsDCmd(outputStream* output, bool heap);
+  static const char* name() {
+    return "VM.print_touched_methods";
+  }
+  static const char* description() {
+    return "Print all methods that have ever been touched during the lifetime of this JVM.";
+  }
+  static const char* impact() {
+    return "Medium: Depends on Java content.";
+  }
+  static int num_arguments();
+  virtual void execute(DCmdSource source, TRAPS);
+};
+
 // See also: thread_dump in attachListener.cpp
 class ThreadDumpDCmd : public DCmdWithParser {
 protected:
@@ -499,6 +516,70 @@ public:
   }
   static const char* impact() {
       return "Medium: Depends on number of classes loaded.";
+  }
+  static const JavaPermission permission() {
+    JavaPermission p = {"java.lang.management.ManagementPermission",
+                        "monitor", NULL};
+    return p;
+  }
+  static int num_arguments() { return 0; }
+  virtual void execute(DCmdSource source, TRAPS);
+};
+
+class CompileQueueDCmd : public DCmd {
+public:
+  CompileQueueDCmd(outputStream* output, bool heap) : DCmd(output, heap) {}
+  static const char* name() {
+    return "Compiler.queue";
+  }
+  static const char* description() {
+    return "Print methods queued for compilation.";
+  }
+  static const char* impact() {
+    return "Low";
+  }
+  static const JavaPermission permission() {
+    JavaPermission p = {"java.lang.management.ManagementPermission",
+                        "monitor", NULL};
+    return p;
+  }
+  static int num_arguments() { return 0; }
+  virtual void execute(DCmdSource source, TRAPS);
+};
+
+class CodeListDCmd : public DCmd {
+public:
+  CodeListDCmd(outputStream* output, bool heap) : DCmd(output, heap) {}
+  static const char* name() {
+    return "Compiler.codelist";
+  }
+  static const char* description() {
+    return "Print all compiled methods in code cache.";
+  }
+  static const char* impact() {
+    return "Medium";
+  }
+  static const JavaPermission permission() {
+    JavaPermission p = {"java.lang.management.ManagementPermission",
+                        "monitor", NULL};
+    return p;
+  }
+  static int num_arguments() { return 0; }
+  virtual void execute(DCmdSource source, TRAPS);
+};
+
+
+class CodeCacheDCmd : public DCmd {
+public:
+  CodeCacheDCmd(outputStream* output, bool heap) : DCmd(output, heap) {}
+  static const char* name() {
+    return "Compiler.codecache";
+  }
+  static const char* description() {
+    return "Print code cache layout and bounds.";
+  }
+  static const char* impact() {
+    return "Low";
   }
   static const JavaPermission permission() {
     JavaPermission p = {"java.lang.management.ManagementPermission",

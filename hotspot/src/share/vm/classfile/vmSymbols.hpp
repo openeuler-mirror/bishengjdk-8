@@ -422,7 +422,9 @@
   template(resolved_references_name,                  "<resolved_references>")                    \
   template(referencequeue_null_name,                  "NULL")                                     \
   template(referencequeue_enqueued_name,              "ENQUEUED")                                 \
-                                                                                                  \
+  template(transformerFactoryImpl_class_name,         "com/sun/org/apache/xalan/internal/xsltc/trax/TransformerFactoryImpl") \
+  template(transformer_generateTranslet_field_name,   "_generateTranslet")                        \
+  template(transformer_autoTranslet_field_name,       "_autoTranslet")                            \
   /* non-intrinsic name/signature pairs: */                                                       \
   template(register_method_name,                      "register")                                 \
   do_alias(register_method_signature,         object_void_signature)                              \
@@ -848,11 +850,15 @@
    do_intrinsic(_counterMode_AESCrypt, com_sun_crypto_provider_counterMode, crypt_name, byteArray_int_int_byteArray_int_signature, F_R)   \
    do_name(     crypt_name,                                 "implCrypt")                                                    \
                                                                                                                         \
+  /* support for sun.security.provider.MD5 */                                                                           \
+  do_class(sun_security_provider_md5,                              "sun/security/provider/MD5")                         \
+  do_intrinsic(_md5_implCompress, sun_security_provider_md5, implCompress_name, implCompress_signature, F_R)            \
+   do_name(     implCompress_name,                                 "implCompress0")                                     \
+   do_signature(implCompress_signature,                            "([BI)V")                                            \
+                                                                                                                        \
   /* support for sun.security.provider.SHA */                                                                           \
   do_class(sun_security_provider_sha,                              "sun/security/provider/SHA")                         \
   do_intrinsic(_sha_implCompress, sun_security_provider_sha, implCompress_name, implCompress_signature, F_R)            \
-   do_name(     implCompress_name,                                 "implCompress0")                                     \
-   do_signature(implCompress_signature,                            "([BI)V")                                            \
                                                                                                                         \
   /* support for com.github.fommil.netlib.F2jBLAS */                                                                    \
   do_class(com_github_fommil_netlib_f2jblas,                       "com/github/fommil/netlib/F2jBLAS")                  \
@@ -1339,6 +1345,29 @@ public:
   static ID for_raw_conversion(BasicType src, BasicType dest);
 
   static bool should_be_pinned(vmIntrinsics::ID id);
+
+  // The methods below provide information related to compiling intrinsics.
+
+  // (1) Information needed by the C1 compiler.
+
+  static bool preserves_state(vmIntrinsics::ID id);
+  static bool can_trap(vmIntrinsics::ID id);
+
+  // (2) Information needed by the C2 compiler.
+
+  // Returns true if the intrinsic for method 'method' will perform a virtual dispatch.
+  static bool does_virtual_dispatch(vmIntrinsics::ID id);
+  // A return value larger than 0 indicates that the intrinsic for method
+  // 'method' requires predicated logic.
+  static int predicates_needed(vmIntrinsics::ID id);
+
+  // Returns true if an intrinsic is disabled by command-line flags and
+  // false otherwise. Implements functionality common to the C1
+  // and the C2 compiler.
+  static bool is_disabled_by_flags(vmIntrinsics::ID id);
+  static bool is_intrinsic_available(vmIntrinsics::ID id) {
+    return !is_disabled_by_flags(id);
+  }
 };
 
 #endif // SHARE_VM_CLASSFILE_VMSYMBOLS_HPP

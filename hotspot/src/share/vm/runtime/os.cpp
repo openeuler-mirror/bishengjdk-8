@@ -861,6 +861,13 @@ void os::print_hex_dump(outputStream* st, address start, address end, int unitsi
   st->cr();
 }
 
+void os::print_file_descriptor(outputStream* st) {
+  // file descriptor
+  st->print("File Descriptor:");
+  st->cr();
+  pd_print_file_descriptor(st);
+}
+
 void os::print_environment_variables(outputStream* st, const char** env_list,
                                      char* buffer, int len) {
   if (env_list) {
@@ -1371,11 +1378,10 @@ bool os::stack_shadow_pages_available(Thread *thread, methodHandle method) {
   // respectively.
   const int framesize_in_bytes =
     Interpreter::size_top_interpreter_activation(method()) * wordSize;
-  int reserved_area = ((StackShadowPages + StackRedPages + StackYellowPages)
-                      * vm_page_size()) + framesize_in_bytes;
+
   // The very lower end of the stack
-  address stack_limit = thread->stack_base() - thread->stack_size();
-  return (sp > (stack_limit + reserved_area));
+  address stack_limit = ((JavaThread*)thread)->shadow_zone_safe_limit();
+  return (sp > (stack_limit + framesize_in_bytes));
 }
 
 size_t os::page_size_for_region(size_t region_size, size_t min_pages, bool must_be_aligned) {

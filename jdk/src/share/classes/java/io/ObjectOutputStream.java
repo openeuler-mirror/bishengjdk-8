@@ -240,7 +240,7 @@ public class ObjectOutputStream
      * Value of "UseFastSerializer" property. The fastSerializer is turned
      * on when it is true.
      */
-    private static final boolean useFastSerializer = UNSAFE.getUseFastSerializer();
+    private final boolean useFastSerializer = UNSAFE.getUseFastSerializer();
 
     /**
      * value of  "printFastSerializer" property,

@@ -267,6 +267,7 @@ class Arguments : AllStatic {
   static char* _meta_index_path;
   static char* _meta_index_dir;
 
+  static bool _transletEnhance;
   // java.vendor.url.bug, bug reporting URL for fatal errors.
   static const char* _java_vendor_url_bug;
 
@@ -633,6 +634,8 @@ class Arguments : AllStatic {
   static Mode mode()                { return _mode; }
   static bool is_interpreter_only() { return mode() == _int; }
 
+  static void set_transletEnhance(bool arg) { _transletEnhance = arg; }
+  static bool transletEnhance() { return _transletEnhance; }
 
   // Utility: copies src into buf, replacing "%%" with "%" and "%p" with pid.
   static bool copy_expand_pid(const char* src, size_t srclen, char* buf, size_t buflen);

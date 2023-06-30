@@ -53,6 +53,26 @@ public:
 
   // Print compilation timers and statistics
   void print_timers();
+
+  // Check the availability of an intrinsic for 'method' given a compilation context.
+  virtual bool is_intrinsic_available(methodHandle method, methodHandle compilation_context);
+
+  // Return true if the intrinsification of a method supported by the compiler
+  // assuming a non-virtual dispatch. Return false otherwise.
+  virtual bool is_intrinsic_supported(methodHandle method) {
+    return is_intrinsic_supported(method, false);
+  }
+
+  // Check if the compiler supports an intrinsic for 'method' given the
+  // the dispatch mode specified by the 'is_virtual' parameter.
+  virtual bool is_intrinsic_supported(methodHandle method, bool is_virtual);
+
+  // Processing of command-line flags specific to the C2 compiler.
+  virtual bool is_intrinsic_disabled_by_flag(methodHandle method) {
+    return is_intrinsic_disabled_by_flag(method, NULL);
+  }
+
+  virtual bool is_intrinsic_disabled_by_flag(methodHandle method, methodHandle compilation_context);
 };
 
 #endif // SHARE_VM_OPTO_C2COMPILER_HPP
