@@ -633,19 +633,7 @@ public class KDC {
      */
     private static EncryptionKey generateRandomKey(int eType)
             throws KrbException  {
-        // Is 32 enough for AES256? I should have generated the keys directly
-        // but different cryptos have different rules on what keys are valid.
-        char[] pass = randomPassword();
-        String algo;
-        switch (eType) {
-            case EncryptedData.ETYPE_DES_CBC_MD5: algo = "DES"; break;
-            case EncryptedData.ETYPE_DES3_CBC_HMAC_SHA1_KD: algo = "DESede"; break;
-            case EncryptedData.ETYPE_AES128_CTS_HMAC_SHA1_96: algo = "AES128"; break;
-            case EncryptedData.ETYPE_ARCFOUR_HMAC: algo = "ArcFourHMAC"; break;
-            case EncryptedData.ETYPE_AES256_CTS_HMAC_SHA1_96: algo = "AES256"; break;
-            default: algo = "DES"; break;
-        }
-        return new EncryptionKey(pass, "NOTHING", algo);    // Silly
+        return genKey0(randomPassword(), "NOTHING", null, eType, null);
     }
 
     /**
@@ -709,6 +697,8 @@ public class KDC {
         switch (etype) {
             case EncryptedData.ETYPE_AES128_CTS_HMAC_SHA1_96:
             case EncryptedData.ETYPE_AES256_CTS_HMAC_SHA1_96:
+            case EncryptedData.ETYPE_AES128_CTS_HMAC_SHA256_128:
+            case EncryptedData.ETYPE_AES256_CTS_HMAC_SHA384_192:
                 String pn = p.toString();
                 if (p.getRealmString() == null) {
                     pn = pn + "@" + getRealm();
@@ -716,7 +706,11 @@ public class KDC {
                 if (s2kparamses.containsKey(pn)) {
                     return s2kparamses.get(pn);
                 }
-                return new byte[] {0, 0, 0x10, 0};
+                if (etype < EncryptedData.ETYPE_AES128_CTS_HMAC_SHA256_128) {
+                    return new byte[]{0, 0, 0x10, 0};
+                } else {
+                    return new byte[]{0, 0, (byte) 0x80, 0};
+                }
             default:
                 return null;
         }
@@ -744,9 +738,8 @@ public class KDC {
                     kvno = pass[pass.length-1] - '0';
                 }
             }
-            return new EncryptionKey(EncryptionKeyDotStringToKey(
-                    getPassword(p, server), getSalt(p), getParams(p, etype), etype),
-                    etype, kvno);
+            return genKey0(getPassword(p, server), getSalt(p),
+                    getParams(p, etype), etype, kvno);
         } catch (KrbException ke) {
             throw ke;
         } catch (Exception e) {
@@ -761,6 +754,17 @@ public class KDC {
      */
     private static KerberosTime timeAfter(int offset) {
         return new KerberosTime(new Date().getTime() + offset * 1000L);
+    }
+
+    /**
+     * Generates key from password.
+     */
+    private static EncryptionKey genKey0(
+            char[] pass, String salt, byte[] s2kparams,
+            int etype, Integer kvno) throws KrbException {
+        return new EncryptionKey(EncryptionKeyDotStringToKey(
+                pass, salt, s2kparams, etype),
+                etype, kvno);
     }
 
     /**
@@ -1258,8 +1262,8 @@ public class KDC {
                 }
                 boolean allOld = true;
                 for (int i: eTypes) {
-                    if (i == EncryptedData.ETYPE_AES128_CTS_HMAC_SHA1_96 ||
-                            i == EncryptedData.ETYPE_AES256_CTS_HMAC_SHA1_96) {
+                    if (i >= EncryptedData.ETYPE_AES128_CTS_HMAC_SHA1_96 &&
+                            i != EncryptedData.ETYPE_ARCFOUR_HMAC) {
                         allOld = false;
                         break;
                     }
