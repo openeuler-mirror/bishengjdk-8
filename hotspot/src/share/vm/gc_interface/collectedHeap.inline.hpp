@@ -156,8 +156,16 @@ HeapWord* CollectedHeap::common_mem_allocate_noinit(KlassHandle klass, size_t si
 
 
   if (!gc_overhead_limit_was_exceeded) {
+    ResourceMark rm;
+    tty->print_cr("OOM caused by java heap space occurred, allocate size: %zu bytes, type: %s", size * HeapWordSize, klass->signature_name());
+    Universe::heap()->print_on(tty);
+
+    if (THREAD->is_Java_thread()) {
+      tty->print_cr("current stack trace:");
+      ((JavaThread*)THREAD)->print_stack_on(tty);
+    }
     // -XX:+HeapDumpOnOutOfMemoryError and -XX:OnOutOfMemoryError support
-    report_java_out_of_memory("Java heap space");
+    report_java_out_of_memory(err_msg("Java heap space, allocate size: %zu bytes, type: %s", size * HeapWordSize, klass->signature_name()));
 
     if (JvmtiExport::should_post_resource_exhausted()) {
       JvmtiExport::post_resource_exhausted(

@@ -85,6 +85,18 @@ public abstract class CksumType {
                 "sun.security.krb5.internal.crypto.HmacSha1Aes256CksumType";
             break;
 
+        case Checksum.CKSUMTYPE_HMAC_SHA256_128_AES128:
+            cksumType = new HmacSha2Aes128CksumType();
+            cksumTypeName =
+                    "sun.security.krb5.internal.crypto.HmacSha2Aes128CksumType";
+            break;
+
+        case Checksum.CKSUMTYPE_HMAC_SHA384_192_AES256:
+            cksumType = new HmacSha2Aes256CksumType();
+            cksumTypeName =
+                    "sun.security.krb5.internal.crypto.HmacSha2Aes256CksumType";
+            break;
+
         case Checksum.CKSUMTYPE_HMAC_MD5_ARCFOUR:
             cksumType = new HmacMd5ArcFourCksumType();
             cksumTypeName =

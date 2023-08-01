@@ -66,6 +66,10 @@ public class Checksum {
     public static final int CKSUMTYPE_HMAC_SHA1_96_AES128 = 15;        // 96
     public static final int CKSUMTYPE_HMAC_SHA1_96_AES256 = 16;        // 96
 
+    // rfc8009
+    public static final int CKSUMTYPE_HMAC_SHA256_128_AES128 = 19;        // 96
+    public static final int CKSUMTYPE_HMAC_SHA384_192_AES256 = 20;        // 96
+
     // draft-brezak-win2k-krb-rc4-hmac-04.txt
     public static final int CKSUMTYPE_HMAC_MD5_ARCFOUR = -138;
 
