@@ -277,22 +277,15 @@ public class EncryptionKey
                          String salt,
                          String algorithm) throws KrbCryptoException {
 
-        if (algorithm == null || algorithm.equalsIgnoreCase("DES")
-                || algorithm.equalsIgnoreCase("des-cbc-md5")) {
+        if (algorithm == null || algorithm.equalsIgnoreCase("DES")) {
             keyType = EncryptedData.ETYPE_DES_CBC_MD5;
-        } else if (algorithm.equalsIgnoreCase("des-cbc-crc")) {
-            keyType = EncryptedData.ETYPE_DES_CBC_CRC;
-        } else if (algorithm.equalsIgnoreCase("DESede")
-                || algorithm.equalsIgnoreCase("des3-cbc-sha1-kd")) {
+        } else if (algorithm.equalsIgnoreCase("DESede")) {
             keyType = EncryptedData.ETYPE_DES3_CBC_HMAC_SHA1_KD;
-        } else if (algorithm.equalsIgnoreCase("AES128")
-                || algorithm.equalsIgnoreCase("aes128-cts-hmac-sha1-96")) {
+        } else if (algorithm.equalsIgnoreCase("AES128")) {
             keyType = EncryptedData.ETYPE_AES128_CTS_HMAC_SHA1_96;
-        } else if (algorithm.equalsIgnoreCase("ArcFourHmac")
-                || algorithm.equalsIgnoreCase("rc4-hmac")) {
+        } else if (algorithm.equalsIgnoreCase("ArcFourHmac")) {
             keyType = EncryptedData.ETYPE_ARCFOUR_HMAC;
-        } else if (algorithm.equalsIgnoreCase("AES256")
-                || algorithm.equalsIgnoreCase("aes256-cts-hmac-sha1-96")) {
+        } else if (algorithm.equalsIgnoreCase("AES256")) {
             keyType = EncryptedData.ETYPE_AES256_CTS_HMAC_SHA1_96;
             // validate if AES256 is enabled
             if (!EType.isSupported(keyType)) {

@@ -36,6 +36,7 @@ import sun.security.krb5.PrincipalName;
 import sun.security.krb5.EncryptionKey;
 import sun.security.krb5.EncryptedData;
 import sun.security.krb5.KrbException;
+import sun.security.krb5.KrbCryptoException;
 import sun.security.util.DerValue;
 
 /**
@@ -85,12 +86,8 @@ class KeyImpl implements SecretKey, Destroyable, Serializable {
 
         try {
             PrincipalName princ = new PrincipalName(principal.getName());
-            EncryptionKey key;
-            if ("none".equalsIgnoreCase(algorithm)) {
-                key = EncryptionKey.NULL_KEY;
-            } else {
-                key = new EncryptionKey(password, princ.getSalt(), algorithm);
-            }
+            EncryptionKey key =
+                new EncryptionKey(password, princ.getSalt(), algorithm);
             this.keyBytes = key.getBytes();
             this.keyType = key.getEType();
         } catch (KrbException e) {
@@ -121,22 +118,20 @@ class KeyImpl implements SecretKey, Destroyable, Serializable {
 
         switch (eType) {
         case EncryptedData.ETYPE_DES_CBC_CRC:
-            return "des-cbc-crc";
-
         case EncryptedData.ETYPE_DES_CBC_MD5:
-            return "des-cbc-md5";
+            return "DES";
 
         case EncryptedData.ETYPE_DES3_CBC_HMAC_SHA1_KD:
-            return "des3-cbc-sha1-kd";
+            return "DESede";
 
         case EncryptedData.ETYPE_ARCFOUR_HMAC:
-            return "rc4-hmac";
+            return "ArcFourHmac";
 
         case EncryptedData.ETYPE_AES128_CTS_HMAC_SHA1_96:
-            return "aes128-cts-hmac-sha1-96";
+            return "AES128";
 
         case EncryptedData.ETYPE_AES256_CTS_HMAC_SHA1_96:
-            return "aes256-cts-hmac-sha1-96";
+            return "AES256";
 
         case EncryptedData.ETYPE_AES128_CTS_HMAC_SHA256_128:
             return "aes128-cts-hmac-sha256-128";
@@ -145,10 +140,11 @@ class KeyImpl implements SecretKey, Destroyable, Serializable {
             return "aes256-cts-hmac-sha384-192";
 
         case EncryptedData.ETYPE_NULL:
-            return "none";
+            return "NULL";
 
         default:
-            return eType > 0 ? "unknown" : "private";
+            throw new IllegalArgumentException(
+                "Unsupported encryption type: " + eType);
         }
     }
 
