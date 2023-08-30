@@ -1507,10 +1507,9 @@ class CommandLineFlags {
   product(uintx, ParallelGCThreads, 0,                                      \
           "Number of parallel threads parallel gc will use")                \
                                                                             \
-  product(bool, UseDynamicNumberOfGCThreads, true,                          \
-          "Dynamically choose the number of threads up to a maximum of "    \
-          "ParallelGCThreads parallel collectors will use for garbage "     \
-          "collection work")                                                \
+  product(bool, UseDynamicNumberOfGCThreads, false,                         \
+          "Dynamically choose the number of parallel threads "              \
+          "parallel gc will use")                                           \
                                                                             \
   diagnostic(bool, ForceDynamicNumberOfGCThreads, false,                    \
           "Force dynamic selection of the number of "                       \
