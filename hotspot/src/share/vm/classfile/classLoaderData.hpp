@@ -211,7 +211,6 @@ class ClassLoaderData : public CHeapObj<mtClass> {
   JFR_ONLY(DEFINE_TRACE_ID_FIELD;)
 
   void set_next(ClassLoaderData* next) { _next = next; }
-  ClassLoaderData* next() const        { return _next; }
 
   ClassLoaderData(Handle h_class_loader, bool is_anonymous, Dependencies dependencies);
   ~ClassLoaderData();
@@ -238,6 +237,7 @@ class ClassLoaderData : public CHeapObj<mtClass> {
   void clear_claimed()          { _claimed = 0; }
   bool claimed() const          { return _claimed == 1; }
   bool claim();
+  ClassLoaderData* next() const        { return _next; }
 
   bool is_alive(BoolObjectClosure* is_alive_closure) const;
 

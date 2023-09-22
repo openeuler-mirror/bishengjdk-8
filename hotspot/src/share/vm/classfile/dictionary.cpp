@@ -196,7 +196,7 @@ void Dictionary::roots_oops_do(OopClosure* strong, OopClosure* weak) {
   _pd_cache_table->roots_oops_do(strong, weak);
 }
 
-void Dictionary::remove_classes_in_error_state() {
+void Dictionary::remove_classes_in_error_state(void f(Klass*)) {
   assert(DynamicDumpSharedSpaces || DumpSharedSpaces, "supported only when dumping");
   DictionaryEntry* probe = NULL;
   for (int index = 0; index < table_size(); index++) {
@@ -209,6 +209,9 @@ void Dictionary::remove_classes_in_error_state() {
           _current_class_entry = NULL;
         }
         free_entry(probe);
+        if (DumpSharedSpaces) {
+          f(ik);
+        }
         ResourceMark rm;
         tty->print_cr("Preload Warning: Removed error class: %s", ik->external_name());
         continue;
@@ -420,6 +423,9 @@ void Dictionary::add_protection_domain(int index, unsigned int hash,
                                        instanceKlassHandle klass,
                                        ClassLoaderData* loader_data, Handle protection_domain,
                                        TRAPS) {
+  if (DumpSharedSpaces) {
+    return;
+  }
   Symbol*  klass_name = klass->name();
   DictionaryEntry* entry = get_entry(index, hash, klass_name, loader_data);
 

@@ -36,9 +36,11 @@
 #include "services/management.hpp"
 #include "utilities/macros.hpp"
 #include "oops/objArrayOop.hpp"
+#include "code/codeCache.hpp"
 
 #ifdef LINUX
 #include "trimCHeapDCmd.hpp"
+#include "mallocInfoDcmd.hpp"
 #endif
 
 PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
@@ -79,6 +81,8 @@ void DCmdRegistrant::register_dcmds(){
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<TouchedMethodsDCmd>(full_export, true, false));
 #ifdef LINUX
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<TrimCLibcHeapDCmd>(full_export, true, false));
+  DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<MallocInfoDcmd>(full_export, true, false));
+  DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<PerfMapDCmd>(full_export, true, false));
 #endif // LINUX
 
   // Enhanced JMX Agent Support
@@ -866,3 +870,8 @@ void CodeCacheDCmd::execute(DCmdSource source, TRAPS) {
   VMThread::execute(&printCodeCacheOp);
 }
 
+#ifdef LINUX
+void PerfMapDCmd::execute(DCmdSource source, TRAPS) {
+  CodeCache::write_perf_map();
+}
+#endif // LINUX

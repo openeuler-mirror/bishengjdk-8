@@ -232,7 +232,6 @@ InstanceKlass* InstanceKlass::allocate_instance_klass(
   // including classes in the bootstrap (NULL) class loader.
   loader_data->add_class(ik);
 
-  Atomic::inc(&_total_instanceKlass_count);
   return ik;
 }
 
@@ -920,25 +919,28 @@ void InstanceKlass::initialize_impl(instanceKlassHandle this_oop, TRAPS) {
 
   bool wait = false;
 
+  assert(THREAD->is_Java_thread(), "non-JavaThread in initialize_impl");
+  JavaThread* jt = (JavaThread*)THREAD;
+
   // refer to the JVM book page 47 for description of steps
   // Step 1
   {
     oop init_lock = this_oop->init_lock();
     ObjectLocker ol(init_lock, THREAD, init_lock != NULL);
 
-    Thread *self = THREAD; // it's passed the current thread
-
     // Step 2
     // If we were to use wait() instead of waitInterruptibly() then
     // we might end up throwing IE from link/symbol resolution sites
     // that aren't expected to throw.  This would wreak havoc.  See 6320309.
-    while(this_oop->is_being_initialized() && !this_oop->is_reentrant_initialization(self)) {
-        wait = true;
-      ol.waitUninterruptibly(CHECK);
+    while (this_oop->is_being_initialized() && !this_oop->is_reentrant_initialization(jt)) {
+      wait = true;
+      jt->set_class_to_be_initialized(this_oop());
+      ol.waitUninterruptibly(jt);
+      jt->set_class_to_be_initialized(NULL);
     }
 
     // Step 3
-    if (this_oop->is_being_initialized() && this_oop->is_reentrant_initialization(self)) {
+    if (this_oop->is_being_initialized() && this_oop->is_reentrant_initialization(jt)) {
       DTRACE_CLASSINIT_PROBE_WAIT(recursive, InstanceKlass::cast(this_oop()), -1,wait);
       return;
     }
@@ -968,7 +970,7 @@ void InstanceKlass::initialize_impl(instanceKlassHandle this_oop, TRAPS) {
 
     // Step 6
     this_oop->set_init_state(being_initialized);
-    this_oop->set_init_thread(self);
+    this_oop->set_init_thread(jt);
   }
 
   // Step 7
@@ -1004,8 +1006,6 @@ void InstanceKlass::initialize_impl(instanceKlassHandle this_oop, TRAPS) {
 
   // Step 8
   {
-    assert(THREAD->is_Java_thread(), "non-JavaThread in initialize_impl");
-    JavaThread* jt = (JavaThread*)THREAD;
     DTRACE_CLASSINIT_PROBE_WAIT(clinit, InstanceKlass::cast(this_oop()), -1,wait);
     // Timer includes any side effects of class initialization (resolution,
     // etc), but not recursive entry into call_class_initializer().
@@ -1031,14 +1031,14 @@ void InstanceKlass::initialize_impl(instanceKlassHandle this_oop, TRAPS) {
     CLEAR_PENDING_EXCEPTION;
     // JVMTI has already reported the pending exception
     // JVMTI internal flag reset is needed in order to report ExceptionInInitializerError
-    JvmtiExport::clear_detected_exception((JavaThread*)THREAD);
+    JvmtiExport::clear_detected_exception(jt);
     {
       EXCEPTION_MARK;
       this_oop->set_initialization_state_and_notify(initialization_error, THREAD);
       CLEAR_PENDING_EXCEPTION;   // ignore any exception thrown, class initialization error is thrown below
       // JVMTI has already reported the pending exception
       // JVMTI internal flag reset is needed in order to report ExceptionInInitializerError
-      JvmtiExport::clear_detected_exception((JavaThread*)THREAD);
+      JvmtiExport::clear_detected_exception(jt);
     }
     DTRACE_CLASSINIT_PROBE_WAIT(error, InstanceKlass::cast(this_oop()), -1,wait);
     if (e->is_a(SystemDictionary::Error_klass())) {

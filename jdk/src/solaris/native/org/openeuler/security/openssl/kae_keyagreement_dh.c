@@ -117,7 +117,7 @@ JNIEXPORT jbyteArray JNICALL Java_org_openeuler_security_openssl_KAEDHKeyAgreeme
         KAE_ThrowRuntimeException(env, "GetByteArrayFromBigNum failed in nativeComputeKey.");
         goto cleanup;
     }
-    KAE_TRACE("Java_org_openeuler_security_openssl_KAEDHKeyAgreement_nativeGenerateSecret finished!");
+    KAE_TRACE("Java_org_openeuler_security_openssl_KAEDHKeyAgreement_nativeComputeKey finished!");
 
 cleanup:
     if (dh != NULL)
@@ -130,8 +130,10 @@ cleanup:
         KAE_ReleaseBigNumFromByteArray(p_bn);
     if (g_bn != NULL)
         KAE_ReleaseBigNumFromByteArray(g_bn);
-    if (secret != NULL)
+    if (secret != NULL) {
+        memset(secret, 0, pSizeInByte);
         free(secret);
+    }
     if (computeKeyRetBn != NULL)
         BN_free(computeKeyRetBn);
 

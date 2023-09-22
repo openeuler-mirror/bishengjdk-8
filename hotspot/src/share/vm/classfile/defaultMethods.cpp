@@ -909,7 +909,11 @@ static void switchover_constant_pool(BytecodeConstantPool* bpool,
   if (new_methods->length() > 0) {
     ConstantPool* cp = bpool->create_constant_pool(CHECK);
     if (cp != klass->constants()) {
-      klass->class_loader_data()->add_to_deallocate_list(klass->constants());
+      ClassLoaderData* loader_data = klass->class_loader_data();
+      while (DumpSharedSpaces && loader_data->next() != NULL) {
+        loader_data = loader_data->next();
+      }
+      loader_data->add_to_deallocate_list(klass->constants());
       klass->set_constants(cp);
       cp->set_pool_holder(klass);
 

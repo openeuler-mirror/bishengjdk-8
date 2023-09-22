@@ -1538,6 +1538,8 @@ void JavaThread::initialize() {
   _popframe_preserved_args_size = 0;
   _frames_to_pop_failed_realloc = 0;
 
+_class_to_be_initialized = NULL;
+
   pd_initialize();
 }
 

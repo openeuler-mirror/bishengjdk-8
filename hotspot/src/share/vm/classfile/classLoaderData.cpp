@@ -64,6 +64,7 @@
 #include "utilities/growableArray.hpp"
 #include "utilities/macros.hpp"
 #include "utilities/ostream.hpp"
+#include "oops/instanceKlass.hpp"
 
 ClassLoaderData * ClassLoaderData::_the_null_class_loader_data = NULL;
 
@@ -304,7 +305,9 @@ void ClassLoaderData::add_class(Klass* k) {
   k->set_next_link(old_value);
   // link the new item into the list
   _klasses = k;
-
+  if(k->oop_is_instance()){
+    InstanceKlass::inc_instance_classes();
+  }
   if (TraceClassLoaderData && Verbose && k->class_loader_data() != NULL) {
     ResourceMark rm;
     tty->print_cr("[TraceClassLoaderData] Adding k: " PTR_FORMAT " %s to CLD: "

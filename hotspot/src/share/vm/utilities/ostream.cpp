@@ -843,6 +843,48 @@ gcLogFileStream::~gcLogFileStream() {
   delete _file_lock;
 }
 
+static uintx next_file_number(const char*  filename) {
+  uintx next_num;
+  uintx index;
+  char gclog[JVM_MAXPATHLEN];
+  struct stat st;
+  long oldestTime = LONG_MAX;
+  bool normal_file_exist;
+  bool current_file_exist;
+  for (index = 0; index < NumberOfGCLogFiles; ++index) {
+    // normal gc log file
+    jio_snprintf(gclog, JVM_MAXPATHLEN, "%s.%d", filename, index);
+    normal_file_exist = (os::stat(gclog, &st) == 0);
+    if (normal_file_exist && oldestTime > st.st_mtime) {
+      oldestTime = st.st_mtime;
+      next_num = index;
+    }
+
+    // current gc log file
+    jio_snprintf(gclog, JVM_MAXPATHLEN, "%s.%d" CURRENTAPPX, filename, index);
+    current_file_exist = (os::stat(gclog, &st) == 0);
+    if (current_file_exist && oldestTime > st.st_mtime) {
+      oldestTime = st.st_mtime;
+      next_num = index;
+    }
+
+    // Stop looking if we find an unused file name
+    if (!normal_file_exist && !current_file_exist) {
+      next_num = index;
+      break;
+    }
+  }
+  // remove the existing normal file
+  char exist_file_name[JVM_MAXPATHLEN];
+  jio_snprintf(exist_file_name, JVM_MAXPATHLEN, "%s.%d", filename, next_num);
+  if (access(exist_file_name, F_OK) == 0) {
+    if (remove(exist_file_name) != 0) {
+      warning("Could not delete existing normal file %s\n", exist_file_name);
+    }
+  }
+  return next_num;
+}
+
 gcLogFileStream::gcLogFileStream(const char* file_name) : _file_lock(NULL) {
   _cur_file_num = 0;
   _bytes_written = 0L;
@@ -857,6 +899,9 @@ gcLogFileStream::gcLogFileStream(const char* file_name) : _file_lock(NULL) {
 
   // gc log file rotation
   if (UseGCLogFileRotation && NumberOfGCLogFiles > 1) {
+    if (OverWriteOldestGCLog) {
+      _cur_file_num = next_file_number(_file_name);
+    }
     char tempbuf[JVM_MAXPATHLEN];
     jio_snprintf(tempbuf, sizeof(tempbuf), "%s.%d" CURRENTAPPX, _file_name, _cur_file_num);
     _file = fopen(tempbuf, "w");

@@ -26,7 +26,8 @@ package com.oracle.java.testlibrary;
 import java.util.regex.Pattern;
 
 import com.oracle.java.testlibrary.Utils;
-
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 public class Platform {
     private static final String osName      = System.getProperty("os.name");
     private static final String dataModel   = System.getProperty("sun.arch.data.model");
@@ -98,7 +99,20 @@ public class Platform {
     public static String getVMVersion() {
         return vmVersion;
     }
-
+ 
+    public static boolean isMusl() {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("ldd", "--version");
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            BufferedReader b = new BufferedReader(new InputStreamReader(p.getInputStream()));
+            String l = b.readLine();
+            if (l != null && l.contains("musl")) { return true; }
+        } catch(Exception e) {
+        }
+        return false;
+    }
+ 
     // Returns true for sparc and sparcv9.
     public static boolean isSparc() {
         return isArch("sparc.*");

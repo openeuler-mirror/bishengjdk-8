@@ -124,6 +124,7 @@ class Linux {
   static void print_container_info(outputStream* st);
   static void print_distro_info(outputStream* st);
   static void print_libversion_info(outputStream* st);
+  static void print_system_process_count(outputStream* st);
   static void print_proc_sys_info(outputStream* st);
 
  public:
@@ -488,6 +489,10 @@ public:
   // If we only have mallinfo(), values may be 32-bit truncated, which is signaled via
   // "ok_but_possibly_wrapped".
   static mallinfo_retval_t get_mallinfo(glibc_mallinfo2* out);
+  
+  // Calls out to GNU extension malloc_info if available
+  // otherwise does nothing and returns -2.
+  static int malloc_info(FILE* stream);
 #endif
 
   static bool isbound_to_all_node() {

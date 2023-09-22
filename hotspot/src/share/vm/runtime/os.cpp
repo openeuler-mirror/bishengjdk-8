@@ -770,7 +770,7 @@ void os::init_random(long initval) {
 }
 
 
-long os::random() {
+long os::random(bool skip) {
   /* standard, well-known linear congruential random generator with
    * next_rand = (16807*seed) mod (2**31-1)
    * see
@@ -800,6 +800,9 @@ long os::random() {
   if (lo > m) {
     lo &= m;
     ++lo;
+  }
+  if (skip) {
+    return lo;
   }
   return (_rand_seed = lo);
 }

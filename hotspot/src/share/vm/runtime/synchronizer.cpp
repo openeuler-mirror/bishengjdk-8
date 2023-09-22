@@ -1657,7 +1657,7 @@ void ObjectSynchronizer::deflate_idle_monitors() {
 
   // TODO: Add objectMonitor leak detection.
   // Audit/inventory the objectMonitors -- make sure they're all accounted for.
-  GVars.stwRandom = os::random() ;
+  GVars.stwRandom = os::random(DumpSharedSpaces) ;
   GVars.stwCycle ++ ;
 }
 

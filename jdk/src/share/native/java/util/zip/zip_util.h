@@ -229,7 +229,6 @@ typedef struct jzfile {   /* Zip file */
     char **metanames;     /* array of meta names (may have null names) */
     jint metacurrent;     /* the next empty slot in metanames array */
     jint metacount;       /* number of slots in metanames array */
-    jint manifestNum;     /* number of META-INF/MANIFEST.MF, case insensitive */
     jlong lastModified;   /* last modified time */
     jlong locpos;         /* position of first LOC header (usually 0) */
 } jzfile;

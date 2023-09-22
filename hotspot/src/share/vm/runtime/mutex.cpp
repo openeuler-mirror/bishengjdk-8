@@ -276,7 +276,7 @@ PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 // Useful for spin loops as the compiler can't optimize it away.
 
 static inline jint MarsagliaXORV (jint x) {
-  if (x == 0) x = 1|os::random() ;
+  if (x == 0) x = 1|os::random(DumpSharedSpaces) ;
   x ^= x << 6;
   x ^= ((unsigned)x) >> 21;
   x ^= x << 7 ;
