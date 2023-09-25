@@ -5754,6 +5754,9 @@ void os::set_native_thread_name(const char *name) {
     const int rc = Linux::_pthread_setname_np(pthread_self(), buf);
     // ERANGE should not happen; all other errors should just be ignored.
     assert(rc != ERANGE, "pthread_setname_np failed");
+#ifdef AARCH64
+    ((JavaThread*)Thread::current())->os_linux_aarch64_options(name);
+#endif
   }
 }
 
