@@ -216,6 +216,10 @@ static void patch_deallocate_meta_vtables(void** vtbl_list, void* new_vtable_sta
         ((ConstantPool*)m)->remove_unshareable_info();
         *(void**)m = find_matching_vtbl_ptr(vtbl_list, new_vtable_start, m);
       }
+      else if (m->is_method()) {
+        ((Method*)m)->remove_unshareable_info();
+        *(void**)m = find_matching_vtbl_ptr(vtbl_list, new_vtable_start, m);
+      }
     }
   }
 }
@@ -442,6 +446,7 @@ public:
     _md_vs.initialize(md_rs, SharedMiscDataSize);
     _mc_vs.initialize(mc_rs, SharedMiscCodeSize);
     _class_promote_order = class_promote_order;
+    _global_klass_objects = new GrowableArray<Klass*>(1000);
   }
 
   VMOp_Type type() const { return VMOp_PopulateDumpSharedSpace; }
@@ -464,13 +469,6 @@ void VM_PopulateDumpSharedSpace::doit() {
   guarantee(SystemDictionary::invoke_method_table() == NULL ||
             SystemDictionary::invoke_method_table()->number_of_entries() == 0,
             "invoke method table is not saved");
-
-  // At this point, many classes have been loaded.
-  // Gather systemDictionary classes in a global array and do everything to
-  // that so we don't have to walk the SystemDictionary again.
-  _global_klass_objects = new GrowableArray<Klass*>(1000);
-  Universe::basic_type_classes_do(collect_classes);
-  SystemDictionary::classes_do(collect_classes);
 
   tty->print_cr("Number of classes %d", _global_klass_objects->length());
   {
@@ -702,7 +700,7 @@ void MetaspaceShared::link_and_cleanup_shared_classes(TRAPS) {
 
     // record error message, remove error state, and continue to dump jsa file
     tty->print_cr("Please remove the unverifiable classes from your class list and try again");
-    SystemDictionary::remove_classes_in_error_state();
+    SystemDictionary::remove_classes_in_error_state(collect_classes);
   }
 
   // Copy the dependencies from C_HEAP-alloced GrowableArrays to RO-alloced
@@ -785,6 +783,9 @@ void MetaspaceShared::preload_and_dump(TRAPS) {
   // Rewrite and link classes
   tty->print_cr("Rewriting and linking classes ...");
 
+  // Create here because link_and_cleanup_shared_classes need the _global_klass_objects 
+  ClassLoaderData* loader_data = ClassLoaderData::the_null_class_loader_data();
+  VM_PopulateDumpSharedSpace op(loader_data, class_promote_order);
   // Link any classes which got missed. This would happen if we have loaded classes that
   // were not explicitly specified in the classlist. E.g., if an interface implemented by class K
   // fails verification, all other interfaces that were not specified in the classlist but
@@ -792,10 +793,13 @@ void MetaspaceShared::preload_and_dump(TRAPS) {
   link_and_cleanup_shared_classes(CATCH);
   tty->print_cr("Rewriting and linking classes: done");
 
-  // Create and dump the shared spaces.   Everything so far is loaded
-  // with the null class loader.
-  ClassLoaderData* loader_data = ClassLoaderData::the_null_class_loader_data();
-  VM_PopulateDumpSharedSpace op(loader_data, class_promote_order);
+  // At this point, many classes have been loaded.
+  // Gather systemDictionary classes in a global array and do everything to
+  // that so we don't have to walk the SystemDictionary again.
+  Universe::basic_type_classes_do(collect_classes);
+  SystemDictionary::classes_do(collect_classes);
+
+  // Dump the shared spaces.
   VMThread::execute(&op);
 
   // Since various initialization steps have been undone by this process,
@@ -825,6 +829,10 @@ int MetaspaceShared::preload_and_dump(const char * class_list_path,
       TempNewSymbol class_name_symbol = SymbolTable::new_permanent_symbol(class_name, THREAD);
       guarantee(!HAS_PENDING_EXCEPTION, "Exception creating a symbol.");
 
+      // If preload_and_dump has anonymous class failed ,pls del this class_name in classlist
+      if (TraceClassLoading) {
+        tty->print_cr("preload_and_dump start: %s", class_name);
+      }
       Handle loader = UseAppCDS ? SystemDictionary::java_system_loader() : Handle();
       Klass* klass = SystemDictionary::resolve_or_null(class_name_symbol,
                                                        loader,

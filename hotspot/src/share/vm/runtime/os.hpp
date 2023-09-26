@@ -800,7 +800,7 @@ class os: AllStatic {
   static int   sigexitnum_pd();
 
   // random number generation
-  static long random();                    // return 32bit pseudorandom number
+  static long random(bool skip = false);                    // return 32bit pseudorandom number
   static void init_random(long initval);   // initialize random sequence
 
   // Structured OS Exception support

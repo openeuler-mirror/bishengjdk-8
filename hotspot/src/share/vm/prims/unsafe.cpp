@@ -1042,6 +1042,7 @@ Unsafe_DefineAnonymousClass_impl(JNIEnv *env,
 
   if (DumpSharedSpaces) {
     tty->print_cr("failed: must not create anonymous classes when dumping.");
+    tty->print_cr("Please delete the last class_name prefixed with \"preload_and_dump start\" from -XX:SharedClassListFile to avoid anonymous classes.");
     JVM_Halt(0);
   }
 

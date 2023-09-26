@@ -74,6 +74,8 @@ private:
   bool    _is_mapped;
   int     _fd;
   size_t  _file_offset;
+  int     _lock_fd;
+  bool    _lock_file_open;
 
 private:
   static SharedClassPathEntry* _classpath_entry_table;

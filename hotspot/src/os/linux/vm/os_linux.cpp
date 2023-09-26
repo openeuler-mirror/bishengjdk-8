@@ -177,6 +177,8 @@ typedef struct glibc_mallinfo (*mallinfo_func_t)(void);
 typedef struct os::Linux::glibc_mallinfo2 (*mallinfo2_func_t)(void);
 static mallinfo_func_t g_mallinfo = NULL;
 static mallinfo2_func_t g_mallinfo2 = NULL;
+typedef int (*malloc_info_func_t)(int options, FILE *stream);
+static malloc_info_func_t g_malloc_info = NULL;
 #endif // __GLIBC__
 
 static jlong initial_time_count=0;
@@ -2254,6 +2256,10 @@ void os::print_os_info(outputStream* st) {
 
   os::Posix::print_load_average(st);
 
+  if (ExtensiveErrorReports) {
+    os::Linux::print_system_process_count(st);
+  }
+
   os::Linux::print_system_memory_info(st);
   st->cr();
 
@@ -2318,6 +2324,26 @@ void os::Linux::print_libversion_info(outputStream* st) {
   if (os::Linux::is_LinuxThreads()) {
      st->print("(%s stack)", os::Linux::is_floating_stack() ? "floating" : "fixed");
   }
+  st->cr();
+}
+
+void os::Linux::print_system_process_count(outputStream* st) {
+  // system process count
+  DIR *dir = opendir("/proc");
+  if (dir == NULL) {
+    return;
+  }
+
+  st->print("system process count:");
+  uint count = 0;
+  struct dirent *ptr;
+  while ((ptr = readdir(dir)) != NULL) {
+    if(ptr->d_type == DT_DIR && isdigit((ptr->d_name)[0])) {
+      count++;
+    }
+  }
+  (void) closedir(dir);
+  st->print("%u", count);
   st->cr();
 }
 
@@ -5416,6 +5442,7 @@ void os::init(void) {
 #ifdef __GLIBC__
   g_mallinfo = CAST_TO_FN_PTR(mallinfo_func_t, dlsym(RTLD_DEFAULT, "mallinfo"));
   g_mallinfo2 = CAST_TO_FN_PTR(mallinfo2_func_t, dlsym(RTLD_DEFAULT, "mallinfo2"));
+  g_malloc_info = CAST_TO_FN_PTR(malloc_info_func_t, dlsym(RTLD_DEFAULT, "malloc_info"));
 #endif // __GLIBC__
 
   // _main_thread points to the thread that created/loaded the JVM.
@@ -5621,6 +5648,12 @@ jint os::init_2(void)
   // initialize thread priority policy
   prio_init();
 
+  if (DumpPerfMapAtExit && FLAG_IS_DEFAULT(UseCodeCacheFlushing)) {
+    // Disable code cache flushing to ensure the map file written at
+    // exit contains all nmethods generated during execution.
+    FLAG_SET_DEFAULT(UseCodeCacheFlushing, false);
+  }
+
   return JNI_OK;
 }
 
@@ -5721,6 +5754,9 @@ void os::set_native_thread_name(const char *name) {
     const int rc = Linux::_pthread_setname_np(pthread_self(), buf);
     // ERANGE should not happen; all other errors should just be ignored.
     assert(rc != ERANGE, "pthread_setname_np failed");
+#ifdef AARCH64
+    ((JavaThread*)Thread::current())->os_linux_aarch64_options(name);
+#endif
   }
 }
 
@@ -7071,6 +7107,13 @@ os::Linux::mallinfo_retval_t os::Linux::get_mallinfo(glibc_mallinfo2* out) {
     return os::Linux::ok_but_possibly_wrapped;
   }
   return os::Linux::ok;
+}
+
+int os::Linux::malloc_info(FILE* stream) {
+  if (g_malloc_info == NULL) {
+    return -2;
+  }
+  return g_malloc_info(0, stream);
 }
 #endif // __GLIBC__
 

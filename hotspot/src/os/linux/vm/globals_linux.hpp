@@ -55,7 +55,10 @@
   product(bool, PreferContainerQuotaForCPUCount, true,                  \
           "Calculate the container CPU availability based on the value" \
           " of quotas (if set), when true. Otherwise, use the CPU"      \
-          " shares value, provided it is less than quota.")
+          " shares value, provided it is less than quota.")             \
+                                                                        \
+  diagnostic(bool, DumpPerfMapAtExit, false,                            \
+          "Write map file for Linux perf tool at exit")
 
 //
 // Defines Linux-specific default values. The flags are available on all

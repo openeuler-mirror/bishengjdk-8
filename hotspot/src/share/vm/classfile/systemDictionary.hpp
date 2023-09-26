@@ -347,7 +347,7 @@ public:
   static bool do_unloading(BoolObjectClosure* is_alive, bool clean_alive = true);
 
   // Used by DumpSharedSpaces only to remove classes that failed verification
-  static void remove_classes_in_error_state();
+  static void remove_classes_in_error_state(void f(Klass*));
 
   static int calculate_systemdictionary_size(int loadedclasses);
 

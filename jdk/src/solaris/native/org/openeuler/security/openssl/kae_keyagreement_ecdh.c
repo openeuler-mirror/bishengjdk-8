@@ -30,7 +30,7 @@
 #include "org_openeuler_security_openssl_KAEECDHKeyAgreement.h"
 
 static void FreeGenerateSecretParam(BIGNUM* s, BIGNUM* wX, BIGNUM* wY,
-    EC_POINT* pub, EC_KEY* eckey, EC_GROUP* group, unsigned char* shareKey)
+    EC_POINT* pub, EC_KEY* eckey, EC_GROUP* group, unsigned char* shareKey, int shareKeyLen)
 {
     KAE_ReleaseBigNumFromByteArray(s);
     KAE_ReleaseBigNumFromByteArray(wX);
@@ -45,6 +45,7 @@ static void FreeGenerateSecretParam(BIGNUM* s, BIGNUM* wX, BIGNUM* wY,
         EC_GROUP_free(group);
     }
     if (shareKey != NULL) {
+        memset(shareKey, 0, shareKeyLen);
         free(shareKey);
     }
 }
@@ -106,10 +107,10 @@ JNIEXPORT jbyteArray JNICALL Java_org_openeuler_security_openssl_KAEECDHKeyAgree
         goto cleanup;
     }
     (*env)->SetByteArrayRegion(env, javaBytes, 0, expectSecretLen, (jbyte*)shareKey);
-    FreeGenerateSecretParam(s, wX, wY, pub, eckey, group, shareKey);
+    FreeGenerateSecretParam(s, wX, wY, pub, eckey, group, shareKey, expectSecretLen);
     return javaBytes;
 
 cleanup:
-    FreeGenerateSecretParam(s, wX, wY, pub, eckey, group, shareKey);
+    FreeGenerateSecretParam(s, wX, wY, pub, eckey, group, shareKey, expectSecretLen);
     return NULL;
 }

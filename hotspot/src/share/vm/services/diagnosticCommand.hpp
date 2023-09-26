@@ -590,4 +590,27 @@ public:
   virtual void execute(DCmdSource source, TRAPS);
 };
 
+#ifdef LINUX
+class PerfMapDCmd : public DCmd {
+public:
+    PerfMapDCmd(outputStream* output, bool heap) : DCmd(output, heap) {}
+    static const char* name() {
+      return "Compiler.perfmap";
+    }
+    static const char* description() {
+      return "Write map file for Linux perf tool.";
+    }
+    static const char* impact() {
+      return "Low";
+    }
+    static const JavaPermission permission() {
+      JavaPermission p = {"java.lang.management.ManagementPermission",
+                          "monitor", NULL};
+      return p;
+    }
+    static int num_arguments() { return 0; }
+    virtual void execute(DCmdSource source, TRAPS);
+};
+#endif // LINUX
+
 #endif // SHARE_VM_SERVICES_DIAGNOSTICCOMMAND_HPP

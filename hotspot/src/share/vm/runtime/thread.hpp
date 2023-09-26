@@ -1802,11 +1802,19 @@ public:
   bool is_attaching_via_jni() const { return _jni_attach_state == _attaching_via_jni; }
   bool has_attached_via_jni() const { return is_attaching_via_jni() || _jni_attach_state == _attached_via_jni; }
   inline void set_done_attaching_via_jni();
+
+  // Stack dump assistance: Track the class we want to initialize but for which we have to wait
+  // on its init_lock() because it is already being initialized.
+  inline void set_class_to_be_initialized(InstanceKlass* k);
+  inline InstanceKlass* class_to_be_initialized() const;
+
 private:
   // This field is used to determine if a thread has claimed
   // a par_id: it is UINT_MAX if the thread has not claimed a par_id;
   // otherwise its value is the par_id that has been claimed.
   uint _claimed_par_id;
+
+  InstanceKlass* _class_to_be_initialized;
 public:
   uint get_claimed_par_id() { return _claimed_par_id; }
   void set_claimed_par_id(uint id) { _claimed_par_id = id;}

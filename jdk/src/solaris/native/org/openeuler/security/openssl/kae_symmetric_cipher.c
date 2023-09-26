@@ -119,13 +119,15 @@ static const EVP_CIPHER* EVPGetAesCipherByName(JNIEnv* env, const char* algo)
     }
 }
 
-void FreeMemoryFromInit(JNIEnv* env, jbyteArray iv, jbyte* ivBytes, jbyteArray key, jbyte* keyBytes)
+void FreeMemoryFromInit(JNIEnv* env, jbyteArray iv, jbyte* ivBytes, jbyteArray key, jbyte* keyBytes,
+    int keyLength)
 {
     if (ivBytes != NULL) {
         (*env)->ReleaseByteArrayElements(env, iv, ivBytes, 0);
     }
     if (keyBytes != NULL) {
-        (*env)->ReleaseByteArrayElements(env, key, keyBytes, 0);
+        memset(keyBytes, 0, keyLength);
+        (*env)->ReleaseByteArrayElements(env, key, keyBytes, JNI_ABORT);
     }
 }
 
@@ -143,6 +145,7 @@ Java_org_openeuler_security_openssl_KAESymmetricCipherBase_nativeInit(JNIEnv* en
     jbyte* ivBytes = NULL;
     const EVP_CIPHER* cipher = NULL;
     ENGINE* kaeEngine = NULL;
+    int keyLength = (*env)->GetArrayLength(env, key);
 
     const char* algo = (*env)->GetStringUTFChars(env, cipherType, 0);
     if (StartsWith("aes", algo)) {
@@ -180,14 +183,14 @@ Java_org_openeuler_security_openssl_KAESymmetricCipherBase_nativeInit(JNIEnv* en
 
     EVP_CIPHER_CTX_set_padding(ctx, padding ? 1 : 0);
 
-    FreeMemoryFromInit(env, iv, ivBytes, key, keyBytes);
+    FreeMemoryFromInit(env, iv, ivBytes, key, keyBytes, keyLength);
     return (jlong)ctx;
 
 cleanup:
     if (ctx != NULL) {
         EVP_CIPHER_CTX_free(ctx);
     }
-    FreeMemoryFromInit(env, iv, ivBytes, key, keyBytes);
+    FreeMemoryFromInit(env, iv, ivBytes, key, keyBytes, keyLength);
     return 0;
 }
 

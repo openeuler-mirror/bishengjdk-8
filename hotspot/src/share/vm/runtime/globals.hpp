@@ -2571,6 +2571,9 @@ class CommandLineFlags {
           "GC log file size, requires UseGCLogFileRotation. "               \
           "Set to 0 to only trigger rotation via jcmd")                     \
                                                                             \
+  product(bool, OverWriteOldestGCLog, false,                                \
+          "Over write the oldest gclog")                                    \
+                                                                            \
   /* JVMTI heap profiling */                                                \
                                                                             \
   diagnostic(bool, TraceJVMTIObjectTagging, false,                          \

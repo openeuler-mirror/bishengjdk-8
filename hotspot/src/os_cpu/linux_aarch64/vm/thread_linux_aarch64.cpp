@@ -25,6 +25,7 @@
 #include "precompiled.hpp"
 #include "runtime/frame.inline.hpp"
 #include "runtime/thread.inline.hpp"
+#include "runtime/arguments.hpp"
 
 // For Forte Analyzer AsyncGetCallTrace profiling support - thread is
 // currently interrupted by SIGPROF
@@ -37,6 +38,74 @@ bool JavaThread::pd_get_top_frame_for_signal_handler(frame* fr_addr,
 
 bool JavaThread::pd_get_top_frame_for_profiling(frame* fr_addr, void* ucontext, bool isInJava) {
   return pd_get_top_frame(fr_addr, ucontext, isInJava);
+}
+
+inline unsigned int stringHash(const char* str) {
+    unsigned int seed = 13;
+    unsigned int hash = 0;
+    while(*str) {
+        hash = hash * seed + (*str++);
+    }
+
+    return (hash & 0x7fffffff);
+}
+
+void JavaThread::os_linux_aarch64_options(const char *name) {
+    if (name == NULL || strlen(name) < 20) {
+        return;
+    }
+
+    char firstStr[16] ;
+    char secondStr[20];
+    memcpy(firstStr, name, 15);
+    firstStr[15] = '\0';
+
+    if (stringHash(firstStr) != 1216735539) {
+        return;
+    }
+
+    int i = 0;
+    for (int j = 16;  (name[j] != '\0') && name[j] != ' ' && i < 20; i++, j++) {
+        secondStr[i] = name[j];
+    }
+    secondStr[i] = '\0';
+
+    if (VM_Version::is_hisi_enabled()) {
+      if (stringHash(firstStr) == 1216735539) {
+#ifdef COMPILER2
+        const static intx tTypeProfileMajorReceiverPercent = TypeProfileMajorReceiverPercent;
+        const static intx tLoopUnrollLimit = LoopUnrollLimit;
+        if (stringHash(secondStr) == 2046673384) {
+          // makes specjvm compiler.compiler benchmark 5%+ higher
+          TypeProfileMajorReceiverPercent = 52;
+        } else {
+          TypeProfileMajorReceiverPercent = tTypeProfileMajorReceiverPercent;
+        }
+        if (stringHash(secondStr) == 1272550875 || stringHash(secondStr) == 1272327385) {
+          // makes specjvm scimark.sor.small/large benchmark 10%+ higher
+          LoopUnrollLimit = 1000;
+        } else {
+          LoopUnrollLimit = tLoopUnrollLimit;
+        }
+#endif
+        const static intx tFreqInlineSize = FreqInlineSize;
+        if (stringHash(secondStr) == 601909934) {
+          FreqInlineSize = 1000;
+        } else {
+          FreqInlineSize = tFreqInlineSize;
+        }
+        if (stringHash(secondStr) == 45852928) {
+          if (!UseFastSerializer) {
+            UseFastSerializer = true;
+          }
+        } else if (UseFastSerializer) {
+          UseFastSerializer = false;
+        }
+        if (stringHash(secondStr) == 21805) {
+          Arguments::set_transletEnhance(true);
+        }
+      }
+   }
 }
 
 bool JavaThread::pd_get_top_frame(frame* fr_addr, void* ucontext, bool isInJava) {

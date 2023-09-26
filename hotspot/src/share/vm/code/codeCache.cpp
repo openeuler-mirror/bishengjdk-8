@@ -1033,3 +1033,39 @@ void CodeCache::log_state(outputStream* st) {
             unallocated_capacity());
 }
 
+#ifdef LINUX
+void CodeCache::write_perf_map() {
+  MutexLockerEx mu(CodeCache_lock, Mutex::_no_safepoint_check_flag);
+
+  // Perf expects to find the map file at /tmp/perf-<pid>.map.
+  char fname[32];
+  jio_snprintf(fname, sizeof(fname), "/tmp/perf-%d.map", os::current_process_id());
+
+  fileStream fs(fname, "w");
+  if (!fs.is_open()) {
+    DEBUG_ONLY(warning("[codecache] Failed to create %s for perf map", fname));
+    return;
+  }
+
+  FOR_ALL_ALIVE_BLOBS(cb) {
+    if (cb->is_nmethod()) {
+      nmethod *nm = (nmethod *) cb;
+      assert(!nm->is_unloaded(), "Tautology");
+      ResourceMark rm;
+      const char* method_name = nm->method()->name_and_sig_as_C_string();
+      fs.print_cr(INTPTR_FORMAT " " INTPTR_FORMAT " %s",
+                  (intptr_t)cb->code_begin(), (intptr_t)cb->code_size(),
+                  method_name);
+    }
+    if (cb->is_runtime_stub()) {
+      RuntimeStub *stub = (RuntimeStub *) cb;
+      ResourceMark rm;
+      const char* method_name = stub->name();
+      fs.print_cr(INTPTR_FORMAT " " INTPTR_FORMAT " %s",
+                  (intptr_t)cb->code_begin(), (intptr_t)cb->code_size(),
+                  method_name);
+    }
+  }
+}
+
+#endif // LINUX

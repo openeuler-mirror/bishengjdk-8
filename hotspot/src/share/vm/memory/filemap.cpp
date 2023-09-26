@@ -181,6 +181,18 @@ FileMapInfo::~FileMapInfo() {
     _file_open = false;
     _fd = -1;
   }
+
+  if (DumpSharedSpaces && UseAppCDS && AppCDSLockFile != NULL) {
+    // delete appcds.lock 
+    if (_lock_file_open) {
+      if (::close(_lock_fd) < 0) {
+        fail_stop("Unable to close the lock file.");
+      }
+      _lock_file_open = false;
+      _lock_fd = -1;
+    }
+    remove(_appcds_file_lock_path);
+  }
 }
 
 void FileMapInfo::populate_header(size_t alignment) {
@@ -606,6 +618,8 @@ void FileMapInfo::open_for_write() {
                       "2. You have the permission.\n 3. Make sure no other process using the same lock file.\n");
         fail_stop("Failed to create appcds lock file, the lock path is: %s.", _appcds_file_lock_path);
       }
+      _lock_fd = lock_fd;
+      _lock_file_open = true;
       tty->print_cr("You are using file lock %s in concurrent mode", AppCDSLockFile);
     }
 #endif
@@ -772,6 +786,13 @@ void FileMapInfo::write_bytes_aligned(const void* buffer, int nbytes) {
 
 void FileMapInfo::close() {
   if (UseAppCDS && AppCDSLockFile != NULL) {
+    if (_lock_file_open) {
+      if (::close(_lock_fd) < 0) {
+        fail_stop("Unable to close the lock file.");
+      }
+      _lock_file_open = false;
+      _lock_fd = -1;
+    }
     // delete appcds.lock
     remove(_appcds_file_lock_path);
   }

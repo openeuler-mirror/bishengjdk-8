@@ -158,6 +158,7 @@ class CodeCache : AllStatic {
   static void print_trace(const char* event, CodeBlob* cb, int size = 0) PRODUCT_RETURN;
   static void print_summary(outputStream* st, bool detailed = true); // Prints a summary of the code cache usage
   static void log_state(outputStream* st);
+  LINUX_ONLY(static void write_perf_map();)
 
   // Dcmd (Diagnostic commands)
   static void print_codelist(outputStream* st);

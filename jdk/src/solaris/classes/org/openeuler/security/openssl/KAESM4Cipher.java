@@ -356,8 +356,10 @@ abstract class KAESM4Cipher extends KAESymmetricCipherBase {
             throw new InvalidAlgorithmParameterException("Wrong IV length: iv is null ");
         }
         if (mode == Mode.CTR) {
-            if (ivBytes.length < 8) {
-                throw new InvalidAlgorithmParameterException("Wrong IV length: CTR mode requires IV of at least: 8 bytes.");
+            // For compatibility, SM4 CTR allows 8 < IV < blockSize, the remaining bytes will be filled with 0 in engineInit 
+            if (ivBytes.length < 8 || ivBytes.length > blockSize) {
+                throw new InvalidAlgorithmParameterException("Wrong IV length: CTR mode requires IV of at least" +
+                    "8 bytes, and no greater than " + blockSize + "bytes");
             }
             return;
         }

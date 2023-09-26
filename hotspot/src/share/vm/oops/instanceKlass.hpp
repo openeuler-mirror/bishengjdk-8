@@ -175,6 +175,7 @@ class InstanceKlass: public Klass {
     initialization_error                // error happened during initialization
   };
 
+  static void inc_instance_classes() { Atomic::inc(&_total_instanceKlass_count); }
   static int number_of_instance_classes() { return _total_instanceKlass_count; }
 
  private:

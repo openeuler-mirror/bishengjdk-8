@@ -147,11 +147,6 @@ class Metaspace : public CHeapObj<mtClass> {
     return mdtype == ClassType ? class_vsm() : vsm();
   }
 
-  // Allocate space for metadata of type mdtype. This is space
-  // within a Metachunk and is used by
-  //   allocate(ClassLoaderData*, size_t, bool, MetadataType, TRAPS)
-  MetaWord* allocate(size_t word_size, MetadataType mdtype);
-
   // Virtual Space lists for both classes and other metadata
   static VirtualSpaceList* _space_list;
   static VirtualSpaceList* _class_space_list;
@@ -162,6 +157,10 @@ class Metaspace : public CHeapObj<mtClass> {
   static const MetaspaceTracer* _tracer;
 
  public:
+  // Allocate space for metadata of type mdtype. This is space
+  // within a Metachunk and is used by
+  //   allocate(ClassLoaderData*, size_t, bool, MetadataType, TRAPS)
+  MetaWord* allocate(size_t word_size, MetadataType mdtype);
   static VirtualSpaceList* space_list()       { return _space_list; }
   static VirtualSpaceList* class_space_list() { return _class_space_list; }
   static VirtualSpaceList* get_space_list(MetadataType mdtype) {
@@ -174,6 +173,11 @@ class Metaspace : public CHeapObj<mtClass> {
   static ChunkManager* get_chunk_manager(MetadataType mdtype) {
     assert(mdtype != MetadataTypeCount, "MetadaTypeCount can't be used as mdtype");
     return mdtype == ClassType ? chunk_manager_class() : chunk_manager_metadata();
+  }
+
+  // convenience function
+  static ChunkManager* get_chunk_manager(bool is_class) {
+    return is_class ? chunk_manager_class() : chunk_manager_metadata();
   }
 
   static const MetaspaceTracer* tracer() { return _tracer; }
@@ -386,6 +390,10 @@ class MetaspaceAux : AllStatic {
 
   static void print_class_waste(outputStream* out);
   static void print_waste(outputStream* out);
+
+  // Prints an ASCII representation of the given space.
+  static void print_metaspace_map(outputStream* out, Metaspace::MetadataType mdtype);
+
   static void dump(outputStream* out);
   static void verify_free_chunks();
   // Checks that the values returned by allocated_capacity_bytes() and

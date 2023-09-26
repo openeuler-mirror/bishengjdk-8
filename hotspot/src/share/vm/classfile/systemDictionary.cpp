@@ -1170,6 +1170,26 @@ Klass* SystemDictionary::resolve_from_stream(Symbol* class_name,
                               parsed_name,
                               verify,
                               THREAD);
+    if (DumpSharedSpaces && k.is_null()) {
+      if (loader_data) {
+        ClassLoaderData* cld = loader_data;
+        while (cld->next() != NULL)
+          cld = cld->next();
+        ConstantPool* cp = parser._cp;
+        if (cp) {
+          cld->add_to_deallocate_list(cp);
+        }
+        Array<Method*>* m = parser._methods;
+        if (m) {
+          for (int i = 0; i < m->length(); i++) {
+            Method* method = m->at(i);
+            if (method != NULL) {
+              cld->add_to_deallocate_list(method);
+            }
+          }
+        }
+      }
+    }
     const char* pkg = "java/";
     size_t pkglen = strlen(pkg);
     if (!HAS_PENDING_EXCEPTION &&
@@ -2036,8 +2056,8 @@ void SystemDictionary::methods_do(void f(Method*)) {
   invoke_method_table()->methods_do(f);
 }
 
-void SystemDictionary::remove_classes_in_error_state() {
-  dictionary()->remove_classes_in_error_state();
+void SystemDictionary::remove_classes_in_error_state(void f(Klass*)) {
+  dictionary()->remove_classes_in_error_state(f);
 }
 
 // ----------------------------------------------------------------------------

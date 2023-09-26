@@ -42,6 +42,7 @@ class FieldLayoutInfo;
 // The bytes describing the class file structure is read from a Stream object
 
 class ClassFileParser VALUE_OBJ_CLASS_SPEC {
+  friend class SystemDictionary; 
  private:
   bool _need_verify;
   bool _relax_verify;
