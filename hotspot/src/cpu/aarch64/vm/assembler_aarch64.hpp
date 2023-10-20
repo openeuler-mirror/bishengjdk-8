@@ -2140,6 +2140,8 @@ public:
   INSN(sshl, 0, 0b010001);
   INSN(ushl, 1, 0b010001);
 
+  INSN(cmhi, 1, 0b001101);  // accepted arrangements: T8B, T16B, T4H, T8H, T2S, T4S, T2D
+
 #undef INSN
 
 #define INSN(NAME, opc, opc2) \

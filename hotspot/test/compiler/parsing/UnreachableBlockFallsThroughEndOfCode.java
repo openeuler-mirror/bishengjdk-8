@@ -31,12 +31,12 @@
  * @run main/othervm -XX:-TieredCompilation -Xbatch compiler.parsing.UnreachableBlockFallsThroughEndOfCode
  */
 
- package compiler.parsing;
+package compiler.parsing;
 
- public class UnreachableBlockFallsThroughEndOfCode {
-     public static void main(String[] strArr) {
-         for (int i = 0; i < 20000; i++) {
-             Custom.test(i);
-         }
-     }
- }
+public class UnreachableBlockFallsThroughEndOfCode {
+    public static void main(String[] strArr) {
+        for (int i = 0; i < 20000; i++) {
+            Custom.test(i);
+        }
+    }
+}
