@@ -877,7 +877,7 @@ static uintx next_file_number(const char*  filename) {
   // remove the existing normal file
   char exist_file_name[JVM_MAXPATHLEN];
   jio_snprintf(exist_file_name, JVM_MAXPATHLEN, "%s.%d", filename, next_num);
-  if (access(exist_file_name, F_OK) == 0) {
+  if (access(exist_file_name, 0) == 0) { // mode 0: Check whether the file exits, F_OK=0. F_OK will cause Windows build failure. Use 0 instead.
     if (remove(exist_file_name) != 0) {
       warning("Could not delete existing normal file %s\n", exist_file_name);
     }

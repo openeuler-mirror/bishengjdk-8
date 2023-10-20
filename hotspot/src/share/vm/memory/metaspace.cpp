@@ -571,7 +571,7 @@ class OccupancyMap : public CHeapObj<mtInternal> {
     assert(_map_size * 8 >= num_bits, "sanity");
     _map[0] = (uint8_t*) os::malloc(_map_size, mtInternal);
     _map[1] = (uint8_t*) os::malloc(_map_size, mtInternal);
-    assert(_map[0] != NULL && _map[1] != NULL, "Occupancy Map: allocation failed.");
+    guarantee(_map[0] != NULL && _map[1] != NULL, "Metaspace Occupancy Map: allocation failed.");
     memset(_map[1], 0, _map_size);
     memset(_map[0], 0, _map_size);
     // Sanity test: the first respectively last possible chunk start address in
@@ -918,6 +918,14 @@ void VirtualSpaceNode::print_map(outputStream* st, bool is_class) const {
   char* lines[NUM_LINES];
   for (int i = 0; i < NUM_LINES; i ++) {
     lines[i] = (char*)os::malloc(line_len, mtInternal);
+    // Only print the VirtualSpaceNode memory layout during metaspace OOM.
+    // If it fails,we should return instead of hanging the VM.
+    if (lines[i] == NULL) {
+      for (int j = 0; j < i; j ++) {
+        os::free(lines[j]);
+      }
+      return;
+    }
   }
   int pos = 0;
   const MetaWord* p = bottom();
@@ -5712,6 +5720,8 @@ public:
     for (int i = 0; i < NUM_PARALLEL_METASPACES; i ++) {
       if (_spaces[i].space != NULL) {
         delete _spaces[i].space;
+      }
+      if (_spaces[i].lock != NULL) {
         delete _spaces[i].lock;
       }
     }
