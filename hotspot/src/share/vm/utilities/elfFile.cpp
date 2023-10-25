@@ -318,7 +318,6 @@ bool ElfFile::specifies_noexecstack() {
 
 bool ElfFile::get_source_info(const uint32_t offset_in_library, char* filename, const size_t filename_len,
 		              int* line, bool is_pc_after_call) {
-  ResourceMark rm;
   if (!load_dwarf_file()) {
     // Some ELF libraries do not provide separate .debuginfo files. Check if the current ELF file has the required
     // DWARF sections. If so, treat the current ELF file as DWARF file.
