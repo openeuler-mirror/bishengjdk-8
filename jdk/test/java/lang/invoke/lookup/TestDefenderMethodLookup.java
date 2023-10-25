@@ -1,6 +1,6 @@
 /*
  * @test
- * @author zhangli
+ * @author zl
  * @bug 8203699
  * @summary see https://code.huawei.com/HuaweiJDK/JVM-team/JVM/issues/1368
  * @run testng/othervm test.java.lang.invoke.lookup.TestDefenderMethodLookup
