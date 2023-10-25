@@ -6,7 +6,7 @@ package com.huawei.openjdk.adaptiveheap;
   * @build com.huawei.openjdk.adaptiveheap.TestAdaptiveHeap
   * @run main/othervm  com.huawei.openjdk.adaptiveheap.TestAdaptiveHeap  -Xms16G -Xmx16G -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:G1PeriodicGCLoadThreshold=20 -XX:G1PeriodicGCInterval=15000 -XX:+G1Uncommit
   * @summary test adaptheap
-  * @author wangruishun
+  * @author wrs
   */
 
 import com.oracle.java.testlibrary.OutputAnalyzer;

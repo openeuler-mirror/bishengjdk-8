@@ -3805,7 +3805,7 @@ jni_Get##Result##ArrayRegion(JNIEnv *env, ElementType##Array array, jsize start,
       int sc = TypeArrayKlass::cast(src->klass())->log2_element_size(); \
       memcpy((u_char*) buf, \
              (u_char*) src->Tag##_at_addr(start), \
-             len << sc);                          \
+             (size_t)len << sc);                  \
     } \
   } \
 JNI_END
@@ -3840,7 +3840,7 @@ jni_Get##Result##ArrayRegion(JNIEnv *env, ElementType##Array array, jsize start,
       int sc = TypeArrayKlass::cast(src->klass())->log2_element_size(); \
       memcpy((u_char*) buf, \
              (u_char*) src->Tag##_at_addr(start), \
-             len << sc);                          \
+             (size_t)len << sc);                  \
     } \
   } \
 JNI_END
@@ -3888,8 +3888,8 @@ jni_Set##Result##ArrayRegion(JNIEnv *env, ElementType##Array array, jsize start,
     if (len > 0) { \
       int sc = TypeArrayKlass::cast(dst->klass())->log2_element_size(); \
       memcpy((u_char*) dst->Tag##_at_addr(start), \
-             (u_char*) buf, \
-             len << sc);    \
+             (u_char*) buf,      \
+             (size_t)len << sc); \
     } \
   } \
 JNI_END
@@ -3923,8 +3923,8 @@ jni_Set##Result##ArrayRegion(JNIEnv *env, ElementType##Array array, jsize start,
     if (len > 0) { \
       int sc = TypeArrayKlass::cast(dst->klass())->log2_element_size(); \
       memcpy((u_char*) dst->Tag##_at_addr(start), \
-             (u_char*) buf, \
-             len << sc);    \
+             (u_char*) buf,      \
+             (size_t)len << sc); \
     } \
   } \
 JNI_END
