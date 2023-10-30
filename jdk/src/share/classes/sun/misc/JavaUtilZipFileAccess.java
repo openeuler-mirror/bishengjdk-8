@@ -31,6 +31,5 @@ import java.util.zip.ZipFile;
 public interface JavaUtilZipFileAccess {
     public boolean startsWithLocHeader(ZipFile zip);
     public int getManifestNum(JarFile zip);
-    public String[] getMetaInfEntryNames(ZipFile zip);
 }
 
