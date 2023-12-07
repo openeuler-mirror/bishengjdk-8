@@ -37,10 +37,10 @@
  *- @TestCaseType:Function test
  *- @RequirementID:AR.SR.IREQ02758058.001.001
  *- @RequirementName: java.security.Provider.getService() is synchronized and became scalability bottleneck
- *- @Condition:JDK8u302及以后
- *- @Brief:测试相应provider更改底层架构以后所提供的service是否与原先有差异（以openJDK8u302为准）
- *   -#step:比较openJDK8u302 SunJSSEProvider与此特性修改后的SunJSSEProvider所提供的service是否一致
- *- @Expect:正常运行
+ *- @Condition:JDK8u302 and later
+ *- @Brief:Check whether the service provided by the corresponding provider after changing the underlying architecture is different from the original one (subject to openJDK8u302)
+ *   -#step:Compare whether the service provided by openJDK8u302 SunJSSEProvider is consistent with the modified SunJSSEProvider with this feature
+ *- @Expect:Normal Running
  *- @Priority:Level 1
  */
 
