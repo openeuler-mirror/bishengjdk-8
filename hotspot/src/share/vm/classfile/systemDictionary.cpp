@@ -1031,7 +1031,6 @@ Klass* SystemDictionary::parse_stream(Symbol* class_name,
     // as the host_klass
     assert(EnableInvokeDynamic, "");
     guarantee(host_klass->class_loader() == class_loader(), "should be the same");
-    guarantee(!DumpSharedSpaces, "must not create anonymous classes when dumping");
     loader_data = ClassLoaderData::anonymous_class_loader_data(class_loader(), CHECK_NULL);
     loader_data->record_dependency(host_klass(), CHECK_NULL);
   } else {
@@ -1497,6 +1496,18 @@ instanceKlassHandle SystemDictionary::load_shared_class(instanceKlassHandle ik,
     }
   }
   return ik;
+}
+
+void SystemDictionary::clear_invoke_method_table() {
+  SymbolPropertyEntry* spe = NULL;
+  for (int index = 0; index < _invoke_method_table->table_size(); index++) {
+    SymbolPropertyEntry* p = _invoke_method_table->bucket(index);
+    while (p != NULL) {
+      spe = p;
+      p = p->next();
+      _invoke_method_table->free_entry(spe);
+    }
+  }
 }
 #endif // INCLUDE_CDS
 
