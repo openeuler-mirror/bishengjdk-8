@@ -793,6 +793,10 @@ void MetaspaceShared::preload_and_dump(TRAPS) {
   link_and_cleanup_shared_classes(CATCH);
   tty->print_cr("Rewriting and linking classes: done");
 
+  tty->print("clear _invoke_method_table ...");
+  SystemDictionary::clear_invoke_method_table();
+  tty->print_cr(" done");
+
   // At this point, many classes have been loaded.
   // Gather systemDictionary classes in a global array and do everything to
   // that so we don't have to walk the SystemDictionary again.
@@ -829,10 +833,6 @@ int MetaspaceShared::preload_and_dump(const char * class_list_path,
       TempNewSymbol class_name_symbol = SymbolTable::new_permanent_symbol(class_name, THREAD);
       guarantee(!HAS_PENDING_EXCEPTION, "Exception creating a symbol.");
 
-      // If preload_and_dump has anonymous class failed ,pls del this class_name in classlist
-      if (TraceClassLoading) {
-        tty->print_cr("preload_and_dump start: %s", class_name);
-      }
       Handle loader = UseAppCDS ? SystemDictionary::java_system_loader() : Handle();
       Klass* klass = SystemDictionary::resolve_or_null(class_name_symbol,
                                                        loader,

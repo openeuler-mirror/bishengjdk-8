@@ -394,6 +394,7 @@ class SymbolPropertyEntry : public HashtableEntry<Symbol*, mtSymbol> {
 // MethodHandle.invoke(S)T, for all signatures (S)T.
 class SymbolPropertyTable : public Hashtable<Symbol*, mtSymbol> {
   friend class VMStructs;
+  friend class SystemDictionary;
 private:
   SymbolPropertyEntry* bucket(int i) {
     return (SymbolPropertyEntry*) Hashtable<Symbol*, mtSymbol>::bucket(i);
