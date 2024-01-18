@@ -56,6 +56,7 @@
 #include "oops/oop.inline.hpp"
 #include "oops/typeArrayKlass.hpp"
 #include "prims/jvmtiRedefineClassesTrace.hpp"
+#include "prims/methodHandles.hpp"
 #include "runtime/arguments.hpp"
 #include "runtime/deoptimization.hpp"
 #include "runtime/fprofiler.hpp"
@@ -1206,37 +1207,6 @@ void Universe::flush_dependents_on(instanceKlassHandle dependee) {
 
   // Compute the dependent nmethods
   if (CodeCache::mark_for_deoptimization(changes) > 0) {
-    // At least one nmethod has been marked for deoptimization
-    VM_Deoptimize op;
-    VMThread::execute(&op);
-  }
-}
-
-// Flushes compiled methods dependent on a particular CallSite
-// instance when its target is different than the given MethodHandle.
-void Universe::flush_dependents_on(Handle call_site, Handle method_handle) {
-  assert_lock_strong(Compile_lock);
-
-  if (CodeCache::number_of_nmethods_with_dependencies() == 0) return;
-
-  // CodeCache can only be updated by a thread_in_VM and they will all be
-  // stopped dring the safepoint so CodeCache will be safe to update without
-  // holding the CodeCache_lock.
-
-  CallSiteDepChange changes(call_site(), method_handle());
-
-  // Compute the dependent nmethods that have a reference to a
-  // CallSite object.  We use InstanceKlass::mark_dependent_nmethod
-  // directly instead of CodeCache::mark_for_deoptimization because we
-  // want dependents on the call site class only not all classes in
-  // the ContextStream.
-  int marked = 0;
-  {
-    MutexLockerEx mu(CodeCache_lock, Mutex::_no_safepoint_check_flag);
-    InstanceKlass* call_site_klass = InstanceKlass::cast(call_site->klass());
-    marked = call_site_klass->mark_dependent_nmethods(changes);
-  }
-  if (marked > 0) {
     // At least one nmethod has been marked for deoptimization
     VM_Deoptimize op;
     VMThread::execute(&op);

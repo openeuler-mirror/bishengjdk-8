@@ -25,7 +25,6 @@
 
 package java.lang.invoke;
 
-import sun.invoke.empty.Empty;
 import static java.lang.invoke.MethodHandleStatics.*;
 import static java.lang.invoke.MethodHandles.Lookup.IMPL_LOOKUP;
 
@@ -134,6 +133,12 @@ public class CallSite {
         checkTargetChange(this.target, boundTarget);
         this.target = boundTarget;
     }
+
+    /**
+     * {@code CallSite} dependency context.
+     * JVM uses CallSite.context to store nmethod dependencies on the call site target.
+     */
+    private final MethodHandleNatives.CallSiteContext context = MethodHandleNatives.CallSiteContext.make(this);
 
     /**
      * Returns the type of this call site's target.
@@ -246,11 +251,13 @@ public class CallSite {
     }
 
     // unsafe stuff:
-    private static final long TARGET_OFFSET;
+    private static final long  TARGET_OFFSET;
+    private static final long CONTEXT_OFFSET;
     static {
         try {
-            TARGET_OFFSET = UNSAFE.objectFieldOffset(CallSite.class.getDeclaredField("target"));
-        } catch (Exception ex) { throw new Error(ex); }
+            TARGET_OFFSET  = UNSAFE.objectFieldOffset(CallSite.class.getDeclaredField("target"));
+            CONTEXT_OFFSET = UNSAFE.objectFieldOffset(CallSite.class.getDeclaredField("context"));
+        } catch (Exception ex) { throw newInternalError(ex); }
     }
 
     /*package-private*/

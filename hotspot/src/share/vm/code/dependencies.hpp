@@ -175,8 +175,8 @@ class Dependencies: public ResourceObj {
     non_klass_types     = (1 << call_site_target_value),
     klass_types         = all_types & ~non_klass_types,
 
-    non_ctxk_types      = (1 << evol_method),
-    implicit_ctxk_types = (1 << call_site_target_value),
+    non_ctxk_types      = (1 << evol_method) | (1 << call_site_target_value),
+    implicit_ctxk_types = 0,
     explicit_ctxk_types = all_types & ~(non_ctxk_types | implicit_ctxk_types),
 
     max_arg_count = 3,   // current maximum number of arguments (incl. ctxk)
@@ -506,6 +506,7 @@ class Dependencies: public ResourceObj {
     bool next();
 
     DepType type()               { return _type; }
+    bool is_oop_argument(int i)  { return type() == call_site_target_value; }
     int argument_count()         { return dep_args(type()); }
     int argument_index(int i)    { assert(0 <= i && i < argument_count(), "oob");
                                    return _xi[i]; }
@@ -664,7 +665,7 @@ class CallSiteDepChange : public DepChange {
       _method_handle(method_handle)
   {
     assert(_call_site()    ->is_a(SystemDictionary::CallSite_klass()),     "must be");
-    assert(_method_handle()->is_a(SystemDictionary::MethodHandle_klass()), "must be");
+    assert(_method_handle.is_null() || _method_handle()->is_a(SystemDictionary::MethodHandle_klass()), "must be");
   }
 
   // What kind of DepChange is this?
