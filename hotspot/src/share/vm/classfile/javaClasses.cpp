@@ -100,21 +100,22 @@ InjectedField* JavaClasses::get_injected(Symbol* class_name, int* field_count) {
 static bool find_field(InstanceKlass* ik,
                        Symbol* name_symbol, Symbol* signature_symbol,
                        fieldDescriptor* fd,
-                       bool allow_super = false) {
-  if (allow_super)
-    return ik->find_field(name_symbol, signature_symbol, fd) != NULL;
-  else
+                       bool is_static = false, bool allow_super = false) {
+  if (allow_super || is_static) {
+    return ik->find_field(name_symbol, signature_symbol, is_static, fd) != NULL;
+  } else {
     return ik->find_local_field(name_symbol, signature_symbol, fd);
+  }
 }
 
 // Helpful routine for computing field offsets at run time rather than hardcoding them
 static void
 compute_offset(int &dest_offset,
                Klass* klass_oop, Symbol* name_symbol, Symbol* signature_symbol,
-               bool allow_super = false) {
+               bool is_static = false, bool allow_super = false) {
   fieldDescriptor fd;
   InstanceKlass* ik = InstanceKlass::cast(klass_oop);
-  if (!find_field(ik, name_symbol, signature_symbol, &fd, allow_super)) {
+  if (!find_field(ik, name_symbol, signature_symbol, &fd, is_static, allow_super)) {
     ResourceMark rm;
     tty->print_cr("Invalid layout of %s at %s", ik->external_name(), name_symbol->as_C_string());
 #ifndef PRODUCT
@@ -3002,15 +3003,45 @@ int java_lang_invoke_MethodType::rtype_slot_count(oop mt) {
 // Support for java_lang_invoke_CallSite
 
 int java_lang_invoke_CallSite::_target_offset;
+int java_lang_invoke_CallSite::_context_offset;
 
 void java_lang_invoke_CallSite::compute_offsets() {
   if (!EnableInvokeDynamic)  return;
   Klass* k = SystemDictionary::CallSite_klass();
   if (k != NULL) {
     compute_offset(_target_offset, k, vmSymbols::target_name(), vmSymbols::java_lang_invoke_MethodHandle_signature());
+    compute_offset(_context_offset, k, vmSymbols::context_name(),
+                   vmSymbols::java_lang_invoke_MethodHandleNatives_CallSiteContext_signature());
   }
 }
 
+oop java_lang_invoke_CallSite::context(oop call_site) {
+  assert(java_lang_invoke_CallSite::is_instance(call_site), "");
+
+  oop dep_oop = call_site->obj_field(_context_offset);
+  return dep_oop;
+}
+
+// Support for java_lang_invoke_MethodHandleNatives_CallSiteContext
+
+int java_lang_invoke_MethodHandleNatives_CallSiteContext::_vmdependencies_offset;
+
+void java_lang_invoke_MethodHandleNatives_CallSiteContext::compute_offsets() {
+  Klass* k = SystemDictionary::Context_klass();
+  if (k != NULL) {
+    CALLSITECONTEXT_INJECTED_FIELDS(INJECTED_FIELD_COMPUTE_OFFSET);
+  }
+}
+
+nmethodBucket* java_lang_invoke_MethodHandleNatives_CallSiteContext::vmdependencies(oop call_site) {
+  assert(java_lang_invoke_MethodHandleNatives_CallSiteContext::is_instance(call_site), "");
+  return (nmethodBucket*) (address) call_site->long_field(_vmdependencies_offset);
+}
+
+void java_lang_invoke_MethodHandleNatives_CallSiteContext::set_vmdependencies(oop call_site, nmethodBucket* context) {
+  assert(java_lang_invoke_MethodHandleNatives_CallSiteContext::is_instance(call_site), "");
+  call_site->long_field_put(_vmdependencies_offset, (jlong) (address) context);
+}
 
 // Support for java_security_AccessControlContext
 
@@ -3405,6 +3436,7 @@ void JavaClasses::compute_offsets() {
     java_lang_invoke_LambdaForm::compute_offsets();
     java_lang_invoke_MethodType::compute_offsets();
     java_lang_invoke_CallSite::compute_offsets();
+    java_lang_invoke_MethodHandleNatives_CallSiteContext::compute_offsets();
   }
   java_security_AccessControlContext::compute_offsets();
   // Initialize reflection classes. The layouts of these classes

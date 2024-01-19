@@ -159,6 +159,7 @@ class SymbolPropertyTable;
   do_klass(MethodType_klass,                            java_lang_invoke_MethodType,               Pre_JSR292          ) \
   do_klass(BootstrapMethodError_klass,                  java_lang_BootstrapMethodError,            Pre_JSR292          ) \
   do_klass(CallSite_klass,                              java_lang_invoke_CallSite,                 Pre_JSR292          ) \
+  do_klass(Context_klass,                               java_lang_invoke_MethodHandleNatives_CallSiteContext, Pre      ) \
   do_klass(ConstantCallSite_klass,                      java_lang_invoke_ConstantCallSite,         Pre_JSR292          ) \
   do_klass(MutableCallSite_klass,                       java_lang_invoke_MutableCallSite,          Pre_JSR292          ) \
   do_klass(VolatileCallSite_klass,                      java_lang_invoke_VolatileCallSite,         Pre_JSR292          ) \
