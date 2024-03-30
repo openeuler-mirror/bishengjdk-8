@@ -5462,7 +5462,7 @@ public:
     _workers(workers),
     _active_workers(n_workers)
   {
-    assert(n_workers > 0, "shouldn't call this otherwise");
+    g1h->ref_processor_stw()->set_active_mt_degree(n_workers);
   }
 
   // Executes the given task using concurrent marking worker threads.
@@ -5595,7 +5595,9 @@ public:
     _queues(task_queues),
     _terminator(workers, _queues),
     _n_workers(workers)
-  { }
+  {
+    g1h->ref_processor_cm()->set_active_mt_degree(workers);
+  }
 
   void work(uint worker_id) {
     ResourceMark rm;
@@ -5760,8 +5762,10 @@ void G1CollectedHeap::process_discovered_references(uint no_of_gc_workers) {
                                               _gc_tracer_stw->gc_id());
   } else {
     // Parallel reference processing
-    assert(rp->num_q() == no_of_gc_workers, "sanity");
-    assert(no_of_gc_workers <= rp->max_num_q(), "sanity");
+    assert(no_of_gc_workers <= rp->max_num_q(),
+          err_msg(
+           "Mismatch between the number of GC workers %u and the maximum number of Reference process queues %u",
+           no_of_gc_workers,  rp->max_num_q()));
 
     G1STWRefProcTaskExecutor par_task_executor(this, workers(), _task_queues, no_of_gc_workers);
     stats = rp->process_discovered_references(&is_alive,
@@ -5796,10 +5800,10 @@ void G1CollectedHeap::enqueue_discovered_references(uint no_of_gc_workers) {
   } else {
     // Parallel reference enqueueing
 
-    assert(no_of_gc_workers == workers()->active_workers(),
-           "Need to reset active workers");
-    assert(rp->num_q() == no_of_gc_workers, "sanity");
-    assert(no_of_gc_workers <= rp->max_num_q(), "sanity");
+    assert(no_of_gc_workers <= rp->max_num_q(),
+          err_msg(
+           "Mismatch between the number of GC workers %u and the maximum number of Reference process queues %u",
+           no_of_gc_workers,  rp->max_num_q()));
 
     G1STWRefProcTaskExecutor par_task_executor(this, workers(), _task_queues, no_of_gc_workers);
     rp->enqueue_discovered_references(&par_task_executor);
