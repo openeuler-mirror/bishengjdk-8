@@ -136,7 +136,7 @@ void ReferenceProcessor::verify_no_references_recorded() {
   guarantee(!_discovering_refs, "Discovering refs?");
   for (uint i = 0; i < _max_num_q * number_of_subclasses_of_ref(); i++) {
     guarantee(_discovered_refs[i].is_empty(),
-              "Found non-empty discovered list");
+              err_msg("Found non-empty discovered list at %u", i));
   }
 }
 #endif
@@ -780,6 +780,11 @@ private:
   bool _clear_referent;
 };
 
+void ReferenceProcessor::set_active_mt_degree(uint v) {
+  _num_q = v;
+  _next_id = 0;
+}
+
 // Balances reference queues.
 // Move entries from all queues[0, 1, ..., _max_num_q-1] to
 // queues[0, 1, ..., _num_q-1] because only the first _num_q
@@ -862,7 +867,7 @@ void ReferenceProcessor::balance_queues(DiscoveredList ref_lists[])
   }
 #ifdef ASSERT
   size_t balanced_total_refs = 0;
-  for (uint i = 0; i < _max_num_q; ++i) {
+  for (uint i = 0; i < _num_q; ++i) {
     balanced_total_refs += ref_lists[i].length();
     if (TraceReferenceGC && PrintGCDetails) {
       gclog_or_tty->print("%d ", ref_lists[i].length());

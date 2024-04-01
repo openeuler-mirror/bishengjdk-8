@@ -5107,6 +5107,7 @@ _JNI_IMPORT_OR_EXPORT_ jint JNICALL JNI_GetDefaultJavaVMInitArgs(void *args_) {
   unit_test_function_call
 
 // Forward declaration
+void TestDependencyContext_test();
 void TestOS_test();
 void TestReservedSpace_test();
 void TestReserveMemorySpecial_test();
@@ -5132,6 +5133,7 @@ void ChunkManager_test_list_index();
 void execute_internal_vm_tests() {
   if (ExecuteInternalVMTests) {
     tty->print_cr("Running internal VM tests");
+    run_unit_test(TestDependencyContext_test());
     run_unit_test(TestOS_test());
     run_unit_test(TestReservedSpace_test());
     run_unit_test(TestReserveMemorySpecial_test());

@@ -63,6 +63,14 @@ public class TestDynamicNumberOfGCThreads {
     System.arraycopy(baseArgs,  0, finalArgs, extraArgs.length, baseArgs.length);
     pb_enabled = ProcessTools.createJavaProcessBuilder(finalArgs);
     verifyDynamicNumberOfGCThreads(new OutputAnalyzer(pb_enabled.start()));
+
+    // Turn on parallel reference processing
+    String[] parRefProcArg = {"-XX:+ParallelRefProcEnabled", "-XX:-ShowMessageBoxOnError"};
+    String[] parRefArgs = new String[baseArgs.length + parRefProcArg.length];
+    System.arraycopy(parRefProcArg, 0, parRefArgs, 0,                parRefProcArg.length);
+    System.arraycopy(baseArgs,  0, parRefArgs, parRefProcArg.length, baseArgs.length);
+    pb_enabled = ProcessTools.createJavaProcessBuilder(parRefArgs);
+    verifyDynamicNumberOfGCThreads(new OutputAnalyzer(pb_enabled.start()));
   }
 
   static class GCTest {
