@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2013, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2015, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -99,8 +99,5 @@ inline int os::close(int fd) {
 inline void os::exit(int num) {
   win32::exit_process_or_thread(win32::EPT_PROCESS, num);
 }
-
-#define CALL_TEST_FUNC_WITH_WRAPPER_IF_NEEDED(f) \
-        os::win32::call_test_func_with_wrapper(f)
 
 #endif // OS_WINDOWS_VM_OS_WINDOWS_INLINE_HPP
