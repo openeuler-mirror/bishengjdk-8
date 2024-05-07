@@ -2462,8 +2462,6 @@ void InstanceKlass::remove_unshareable_info() {
 
   constants()->remove_unshareable_info();
 
-  assert(_dep_context == DependencyContext::EMPTY, "dependency context is not shareable");
-
   for (int i = 0; i < methods()->length(); i++) {
     Method* m = methods()->at(i);
     m->remove_unshareable_info();
@@ -2487,6 +2485,7 @@ void InstanceKlass::remove_unshareable_info() {
   // do array classes also.
   array_klasses_do(remove_unshareable_in_class);
   // These are not allocated from metaspace. They are safe to set to NULL.
+  _dep_context =  DependencyContext::EMPTY;
   _member_names = NULL;
   _osr_nmethods_head = NULL;
   _init_thread = NULL;
