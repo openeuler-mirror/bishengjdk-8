@@ -54,6 +54,11 @@ class GZIPInputStream extends InflaterInputStream {
 
     private boolean closed = false;
 
+    /*
+     * GZIP use KAE.
+     */
+    private boolean gzipUseKae = false;
+
     /**
      * Check to make sure that this stream has not been closed
      */
@@ -76,6 +81,12 @@ class GZIPInputStream extends InflaterInputStream {
     public GZIPInputStream(InputStream in, int size) throws IOException {
         super(in, new Inflater(true), size);
         usesDefaultInflater = true;
+        if (("true".equals(System.getProperty("GZIP_USE_KAE", "false"))) &&
+            ("aarch64".equals(System.getProperty("os.arch")))) {
+            gzipUseKae = true;
+        }
+        // file header will be readed by kae zlib when use kae
+        if (gzipUseKae) return;
         readHeader(in);
     }
 
@@ -209,6 +220,9 @@ class GZIPInputStream extends InflaterInputStream {
      * data set)
      */
     private boolean readTrailer() throws IOException {
+        // file trailer will be readed by kae zlib when use kae
+        if (gzipUseKae) return true;
+
         InputStream in = this.in;
         int n = inf.getRemaining();
         if (n > 0) {

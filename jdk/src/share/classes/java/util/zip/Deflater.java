@@ -81,6 +81,7 @@ class Deflater {
     private boolean finish, finished;
     private long bytesRead;
     private long bytesWritten;
+    private boolean defalterUseKae;
 
     /**
      * Compression method for the deflate algorithm (the only one currently
@@ -168,7 +169,13 @@ class Deflater {
     public Deflater(int level, boolean nowrap) {
         this.level = level;
         this.strategy = DEFAULT_STRATEGY;
-        this.zsRef = new ZStreamRef(init(level, DEFAULT_STRATEGY, nowrap));
+        if (("true".equals(System.getProperty("GZIP_USE_KAE", "false"))) &&
+            ("aarch64".equals(System.getProperty("os.arch")))) {
+            this.defalterUseKae = true;
+        }
+        this.zsRef = defalterUseKae ?
+            new ZStreamRef(initKae(level, DEFAULT_STRATEGY)) :
+            new ZStreamRef(init(level, DEFAULT_STRATEGY, nowrap));
     }
 
     /**
@@ -571,6 +578,7 @@ class Deflater {
 
     private static native void initIDs();
     private native static long init(int level, int strategy, boolean nowrap);
+    private native static long initKae(int level, int strategy);
     private native static void setDictionary(long addr, byte[] b, int off, int len);
     private native int deflateBytes(long addr, byte[] b, int off, int len,
                                     int flush);

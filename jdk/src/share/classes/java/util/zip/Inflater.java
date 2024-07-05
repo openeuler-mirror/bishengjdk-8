@@ -80,6 +80,7 @@ class Inflater {
     private boolean needDict;
     private long bytesRead;
     private long bytesWritten;
+    private boolean inflaterUseKae;
 
     private static final byte[] defaultBuf = new byte[0];
 
@@ -100,7 +101,11 @@ class Inflater {
      * @param nowrap if true then support GZIP compatible compression
      */
     public Inflater(boolean nowrap) {
-        zsRef = new ZStreamRef(init(nowrap));
+        if (("true".equals(System.getProperty("GZIP_USE_KAE", "false"))) &&
+            ("aarch64".equals(System.getProperty("os.arch")))) {
+            inflaterUseKae = true;
+        }
+        zsRef = inflaterUseKae ? new ZStreamRef(initKae()): new ZStreamRef(init(nowrap));
     }
 
     /**
@@ -256,7 +261,9 @@ class Inflater {
         synchronized (zsRef) {
             ensureOpen();
             int thisLen = this.len;
-            int n = inflateBytes(zsRef.address(), b, off, len);
+            int n = this.inflaterUseKae ?
+                inflateBytesKAE(zsRef.address(), b, off, len) :
+                inflateBytes(zsRef.address(), b, off, len);
             bytesWritten += n;
             bytesRead += (thisLen - this.len);
             return n;
@@ -397,10 +404,13 @@ class Inflater {
 
     private native static void initIDs();
     private native static long init(boolean nowrap);
+    private native static long initKae();
     private native static void setDictionary(long addr, byte[] b, int off,
                                              int len);
     private native int inflateBytes(long addr, byte[] b, int off, int len)
             throws DataFormatException;
+    private native int inflateBytesKAE(long addr, byte[] b, int off, int len)
+            throws DataFormatException;  
     private native static int getAdler(long addr);
     private native static void reset(long addr);
     private native static void end(long addr);

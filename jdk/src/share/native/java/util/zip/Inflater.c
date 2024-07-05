@@ -41,6 +41,7 @@
 
 #define ThrowDataFormatException(env, msg) \
         JNU_ThrowByName(env, "java/util/zip/DataFormatException", msg)
+#define KAE_INFLATER_WindowBit 31
 
 static jfieldID needDictID;
 static jfieldID finishedID;
@@ -72,6 +73,39 @@ Java_java_util_zip_Inflater_init(JNIEnv *env, jclass cls, jboolean nowrap)
     } else {
         const char *msg;
         int ret = inflateInit2(strm, nowrap ? -MAX_WBITS : MAX_WBITS);
+        switch (ret) {
+          case Z_OK:
+            return ptr_to_jlong(strm);
+          case Z_MEM_ERROR:
+            free(strm);
+            JNU_ThrowOutOfMemoryError(env, 0);
+            return jlong_zero;
+          default:
+            msg = ((strm->msg != NULL) ? strm->msg :
+                   (ret == Z_VERSION_ERROR) ?
+                   "zlib returned Z_VERSION_ERROR: "
+                   "compile time and runtime zlib implementations differ" :
+                   (ret == Z_STREAM_ERROR) ?
+                   "inflateInit2 returned Z_STREAM_ERROR" :
+                   "unknown error initializing zlib library");
+            free(strm);
+            JNU_ThrowInternalError(env, msg);
+            return jlong_zero;
+        }
+    }
+}
+
+JNIEXPORT jlong JNICALL
+Java_java_util_zip_Inflater_initKae(JNIEnv *env, jclass cls)
+{
+    z_stream *strm = calloc(1, sizeof(z_stream));
+
+    if (strm == NULL) {
+        JNU_ThrowOutOfMemoryError(env, 0);
+        return jlong_zero;
+    } else {
+        const char *msg;
+        int ret = inflateInit2(strm, KAE_INFLATER_WindowBit);
         switch (ret) {
           case Z_OK:
             return ptr_to_jlong(strm);
@@ -148,6 +182,70 @@ Java_java_util_zip_Inflater_inflateBytes(JNIEnv *env, jobject this, jlong addr,
     strm->avail_in  = this_len;
     strm->avail_out = len;
     ret = inflate(strm, Z_PARTIAL_FLUSH);
+    (*env)->ReleasePrimitiveArrayCritical(env, b, out_buf, 0);
+    (*env)->ReleasePrimitiveArrayCritical(env, this_buf, in_buf, 0);
+
+    switch (ret) {
+    case Z_STREAM_END:
+        (*env)->SetBooleanField(env, this, finishedID, JNI_TRUE);
+        /* fall through */
+    case Z_OK:
+        this_off += this_len - strm->avail_in;
+        (*env)->SetIntField(env, this, offID, this_off);
+        (*env)->SetIntField(env, this, lenID, strm->avail_in);
+        return (jint) (len - strm->avail_out);
+    case Z_NEED_DICT:
+        (*env)->SetBooleanField(env, this, needDictID, JNI_TRUE);
+        /* Might have consumed some input here! */
+        this_off += this_len - strm->avail_in;
+        (*env)->SetIntField(env, this, offID, this_off);
+        (*env)->SetIntField(env, this, lenID, strm->avail_in);
+        return 0;
+    case Z_BUF_ERROR:
+        return 0;
+    case Z_DATA_ERROR:
+        ThrowDataFormatException(env, strm->msg);
+        return 0;
+    case Z_MEM_ERROR:
+        JNU_ThrowOutOfMemoryError(env, 0);
+        return 0;
+    default:
+        JNU_ThrowInternalError(env, strm->msg);
+        return 0;
+    }
+}
+
+JNIEXPORT jint JNICALL
+Java_java_util_zip_Inflater_inflateBytesKAE(JNIEnv *env, jobject this, jlong addr,
+                                         jarray b, jint off, jint len)
+{
+    z_stream *strm = jlong_to_ptr(addr);
+    jarray this_buf = (jarray)(*env)->GetObjectField(env, this, bufID);
+    jint this_off = (*env)->GetIntField(env, this, offID);
+    jint this_len = (*env)->GetIntField(env, this, lenID);
+
+    jbyte *in_buf;
+    jbyte *out_buf;
+    int ret;
+
+    in_buf  = (*env)->GetPrimitiveArrayCritical(env, this_buf, 0);
+    if (in_buf == NULL) {
+        if (this_len != 0 && (*env)->ExceptionOccurred(env) == NULL)
+            JNU_ThrowOutOfMemoryError(env, 0);
+        return 0;
+    }
+    out_buf = (*env)->GetPrimitiveArrayCritical(env, b, 0);
+    if (out_buf == NULL) {
+        (*env)->ReleasePrimitiveArrayCritical(env, this_buf, in_buf, 0);
+        if (len != 0 && (*env)->ExceptionOccurred(env) == NULL)
+            JNU_ThrowOutOfMemoryError(env, 0);
+        return 0;
+    }
+    strm->next_in  = (Bytef *) (in_buf + this_off);
+    strm->next_out = (Bytef *) (out_buf + off);
+    strm->avail_in  = this_len;
+    strm->avail_out = len;
+    ret = inflate(strm, Z_SYNC_FLUSH);
     (*env)->ReleasePrimitiveArrayCritical(env, b, out_buf, 0);
     (*env)->ReleasePrimitiveArrayCritical(env, this_buf, in_buf, 0);
 

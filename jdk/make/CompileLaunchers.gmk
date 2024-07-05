@@ -474,17 +474,29 @@ ifeq ($(USE_EXTERNAL_LIBZ), true)
   UNPACKEXE_ZIPOBJS := -lz
 else
   UNPACKEXE_CFLAGS := -I$(JDK_TOPDIR)/src/share/native/java/util/zip/zlib
-  UNPACKEXE_ZIPOBJS := $(JDK_OUTPUTDIR)/objs/libzip/zcrc32$(OBJ_SUFFIX) \
-      $(JDK_OUTPUTDIR)/objs/libzip/deflate$(OBJ_SUFFIX) \
-      $(JDK_OUTPUTDIR)/objs/libzip/trees$(OBJ_SUFFIX) \
-      $(JDK_OUTPUTDIR)/objs/libzip/zadler32$(OBJ_SUFFIX) \
-      $(JDK_OUTPUTDIR)/objs/libzip/compress$(OBJ_SUFFIX) \
-      $(JDK_OUTPUTDIR)/objs/libzip/zutil$(OBJ_SUFFIX) \
-      $(JDK_OUTPUTDIR)/objs/libzip/inflate$(OBJ_SUFFIX) \
-      $(JDK_OUTPUTDIR)/objs/libzip/infback$(OBJ_SUFFIX) \
-      $(JDK_OUTPUTDIR)/objs/libzip/inftrees$(OBJ_SUFFIX) \
-      $(JDK_OUTPUTDIR)/objs/libzip/inffast$(OBJ_SUFFIX)
-
+  ifeq ($(OPENJDK_TARGET_OS), windows)
+    UNPACKEXE_ZIPOBJS := $(JDK_OUTPUTDIR)/objs/libzip/zcrc32$(OBJ_SUFFIX) \
+        $(JDK_OUTPUTDIR)/objs/libzip/deflate$(OBJ_SUFFIX) \
+        $(JDK_OUTPUTDIR)/objs/libzip/trees$(OBJ_SUFFIX) \
+        $(JDK_OUTPUTDIR)/objs/libzip/zadler32$(OBJ_SUFFIX) \
+        $(JDK_OUTPUTDIR)/objs/libzip/compress$(OBJ_SUFFIX) \
+        $(JDK_OUTPUTDIR)/objs/libzip/zutil$(OBJ_SUFFIX) \
+        $(JDK_OUTPUTDIR)/objs/libzip/inflate$(OBJ_SUFFIX) \
+        $(JDK_OUTPUTDIR)/objs/libzip/infback$(OBJ_SUFFIX) \
+        $(JDK_OUTPUTDIR)/objs/libzip/inftrees$(OBJ_SUFFIX) \
+        $(JDK_OUTPUTDIR)/objs/libzip/inffast$(OBJ_SUFFIX)
+  else
+    UNPACKEXE_ZIPOBJS := $(JDK_OUTPUTDIR)/objs/libz/zcrc32$(OBJ_SUFFIX) \
+        $(JDK_OUTPUTDIR)/objs/libz/deflate$(OBJ_SUFFIX) \
+        $(JDK_OUTPUTDIR)/objs/libz/trees$(OBJ_SUFFIX) \
+        $(JDK_OUTPUTDIR)/objs/libz/zadler32$(OBJ_SUFFIX) \
+        $(JDK_OUTPUTDIR)/objs/libz/compress$(OBJ_SUFFIX) \
+        $(JDK_OUTPUTDIR)/objs/libz/zutil$(OBJ_SUFFIX) \
+        $(JDK_OUTPUTDIR)/objs/libz/inflate$(OBJ_SUFFIX) \
+        $(JDK_OUTPUTDIR)/objs/libz/infback$(OBJ_SUFFIX) \
+        $(JDK_OUTPUTDIR)/objs/libz/inftrees$(OBJ_SUFFIX) \
+        $(JDK_OUTPUTDIR)/objs/libz/inffast$(OBJ_SUFFIX)
+  endif
 endif
 
 UNPACKEXE_LANG := C

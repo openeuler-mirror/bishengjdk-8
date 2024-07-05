@@ -37,6 +37,7 @@
 #include "java_util_zip_Deflater.h"
 
 #define DEF_MEM_LEVEL 8
+#define KAE_DEFLATER_WindowBit 31
 
 static jfieldID levelID;
 static jfieldID strategyID;
@@ -80,6 +81,42 @@ Java_java_util_zip_Deflater_init(JNIEnv *env, jclass cls, jint level,
         int ret = deflateInit2(strm, level, Z_DEFLATED,
                                nowrap ? -MAX_WBITS : MAX_WBITS,
                                DEF_MEM_LEVEL, strategy);
+        switch (ret) {
+          case Z_OK:
+            return ptr_to_jlong(strm);
+          case Z_MEM_ERROR:
+            free(strm);
+            JNU_ThrowOutOfMemoryError(env, 0);
+            return jlong_zero;
+          case Z_STREAM_ERROR:
+            free(strm);
+            JNU_ThrowIllegalArgumentException(env, 0);
+            return jlong_zero;
+          default:
+            msg = ((strm->msg != NULL) ? strm->msg :
+                   (ret == Z_VERSION_ERROR) ?
+                   "zlib returned Z_VERSION_ERROR: "
+                   "compile time and runtime zlib implementations differ" :
+                   "unknown error initializing zlib library");
+            free(strm);
+            JNU_ThrowInternalError(env, msg);
+            return jlong_zero;
+        }
+    }
+}
+
+JNIEXPORT jlong JNICALL
+Java_java_util_zip_Deflater_initKae(JNIEnv *env, jclass cls, jint level,
+                                 jint strategy)
+{
+    z_stream *strm = calloc(1, sizeof(z_stream));
+
+    if (strm == 0) {
+        JNU_ThrowOutOfMemoryError(env, 0);
+        return jlong_zero;
+    } else {
+        const char *msg;
+        int ret = deflateInit2(strm, level, Z_DEFLATED, KAE_DEFLATER_WindowBit, DEF_MEM_LEVEL, strategy);
         switch (ret) {
           case Z_OK:
             return ptr_to_jlong(strm);
