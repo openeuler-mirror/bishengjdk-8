@@ -38,13 +38,16 @@ SUNWprivate_1.1 {
 		Java_java_util_zip_Deflater_end;
 		Java_java_util_zip_Deflater_getAdler;
 		Java_java_util_zip_Deflater_init;
+		Java_java_util_zip_Deflater_initKae;
 		Java_java_util_zip_Deflater_initIDs;
 		Java_java_util_zip_Deflater_reset;
 		Java_java_util_zip_Deflater_setDictionary;
 		Java_java_util_zip_Inflater_end;
 		Java_java_util_zip_Inflater_getAdler;
 		Java_java_util_zip_Inflater_inflateBytes;
+		Java_java_util_zip_Inflater_inflateBytesKAE;
 		Java_java_util_zip_Inflater_init;
+		Java_java_util_zip_Inflater_initKae;
 		Java_java_util_zip_Inflater_initIDs;
 		Java_java_util_zip_Inflater_reset;
 		Java_java_util_zip_Inflater_setDictionary;
