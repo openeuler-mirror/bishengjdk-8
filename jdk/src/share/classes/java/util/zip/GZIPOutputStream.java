@@ -52,6 +52,11 @@ class GZIPOutputStream extends DeflaterOutputStream {
      */
     private final static int TRAILER_SIZE = 8;
 
+    /*
+     * GZIP use KAE.
+     */
+    private boolean gzipUseKae = false;
+
     /**
      * Creates a new output stream with the specified buffer size.
      *
@@ -91,6 +96,12 @@ class GZIPOutputStream extends DeflaterOutputStream {
               size,
               syncFlush);
         usesDefaultDeflater = true;
+        if (("true".equals(System.getProperty("GZIP_USE_KAE", "false"))) &&
+            ("aarch64".equals(System.getProperty("os.arch")))) {
+            gzipUseKae = true;
+        }
+        // file header will be writed by kae zlib when use kae
+        if (gzipUseKae) return;
         writeHeader();
         crc.reset();
     }
@@ -160,6 +171,11 @@ class GZIPOutputStream extends DeflaterOutputStream {
                     int len = def.deflate(buf, 0, buf.length);
                     if (def.finished() && len <= buf.length - TRAILER_SIZE) {
                         // last deflater buffer. Fit trailer at the end
+                        // file trailer will be writed by kae zlib when use kae
+                        if (gzipUseKae) {
+                            out.write(buf, 0, len);
+                            return;
+                        }
                         writeTrailer(buf, len);
                         len = len + TRAILER_SIZE;
                         out.write(buf, 0, len);
@@ -167,6 +183,10 @@ class GZIPOutputStream extends DeflaterOutputStream {
                     }
                     if (len > 0)
                         out.write(buf, 0, len);
+                }
+                // file trailer will be writed by kae zlib when use kae
+                if (gzipUseKae) {
+                    return;
                 }
                 // if we can't fit the trailer at the end of the last
                 // deflater buffer, we write it separately
