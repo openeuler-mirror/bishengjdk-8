@@ -683,6 +683,20 @@ public abstract class ClassLoader {
     }
 
     /**
+     * Determine protection domain, and check it.
+     * This method is only for AggressiveCDS.
+     *
+     * @param   name the name of the class
+     * @param   c the class
+     * @param   pd the ProtectionDomain of the class
+     */
+    private void defineClassProtectionDomain(String name, Class<?> c, ProtectionDomain pd)
+    {
+        pd = preDefineClass(name, pd);
+        postDefineClass(c, pd);
+    }
+
+    /**
      * Converts an array of bytes into an instance of class <tt>Class</tt>,
      * with an optional <tt>ProtectionDomain</tt>.  If the domain is
      * <tt>null</tt>, then a default domain will be assigned to the class as
@@ -856,6 +870,27 @@ public abstract class ClassLoader {
     private native Class<?> defineClass2(String name, java.nio.ByteBuffer b,
                                          int off, int len, ProtectionDomain pd,
                                          String source);
+
+    /**
+     * This method is only invoked when java.net.AggressiveCDSPlugin enabled.
+     */
+    private native Class<?> defineClass3(String name);
+
+    protected final Class<?> defineClass(String name) {
+        Class<?> trustedClass = defineClass3(name);
+        if (trustedClass != null) {
+            ProtectionDomain pd = AccessController.doPrivileged(
+                new PrivilegedAction<ProtectionDomain>() {
+                    @Override
+                    public ProtectionDomain run() {
+                        return trustedClass.getProtectionDomain();
+                    }
+                }
+            );
+            defineClassProtectionDomain(name, trustedClass, pd);
+        }
+        return trustedClass;
+    }
 
     // true if the name is null or has the potential to be a valid binary name
     private boolean checkName(String name) {

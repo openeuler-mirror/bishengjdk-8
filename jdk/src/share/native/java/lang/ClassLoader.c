@@ -224,6 +224,31 @@ Java_java_lang_ClassLoader_defineClass2(JNIEnv *env,
     return result;
 }
 
+JNIEXPORT jclass JNICALL
+Java_java_lang_ClassLoader_defineClass3(JNIEnv *env,
+                                        jobject loader,
+                                        jstring name)
+{
+    char *utfName;
+    jclass result = 0;
+    char buf[128];
+
+    if (name != NULL) {
+        utfName = getUTF(env, name, buf, sizeof(buf));
+        if (utfName == NULL) {
+            JNU_ThrowOutOfMemoryError(env, NULL);
+            return result;
+        }
+        VerifyFixClassname(utfName);
+    } else {
+        utfName = NULL;
+    }
+
+    result = JVM_DefineTrustedSharedClass(env, utfName, loader);
+
+    return result;
+}
+
 JNIEXPORT void JNICALL
 Java_java_lang_ClassLoader_resolveClass0(JNIEnv *env, jobject this,
                                          jclass cls)

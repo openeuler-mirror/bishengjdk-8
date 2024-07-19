@@ -108,6 +108,34 @@ void JavaThread::os_linux_aarch64_options(const char *name) {
    }
 }
 
+void JavaThread::os_linux_aarch64_options(int apc, char **name) {
+  if (name == NULL) {
+    return;
+  }
+  VM_Version::get_cpu_model();
+  if (VM_Version::is_hisi_enabled()) {
+    int i = 0;
+    int step = 0;
+    while (name[i] != NULL) {
+      if (stringHash(name[i]) == 1396789436) {
+        if (FLAG_IS_DEFAULT(ActiveProcessorCount) && (UseG1GC || UseParallelGC) && apc > 8)
+          FLAG_SET_DEFAULT(ActiveProcessorCount, 8);
+        break;
+      } else if (stringHash(name[i]) == 1594786418) {
+        step = 1;
+      } else if (step == 1 && stringHash(name[i]) == 237006690) {
+        if (name[i+1] != NULL) {
+          int cores = atoi(name[i+1]);
+          if (FLAG_IS_DEFAULT(ActiveProcessorCount) && cores > 0)
+            FLAG_SET_DEFAULT(ActiveProcessorCount, cores);
+        }
+        break;
+      }
+      i++;
+    }
+  }
+}
+
 bool JavaThread::pd_get_top_frame(frame* fr_addr, void* ucontext, bool isInJava) {
   assert(this->is_Java_thread(), "must be JavaThread");
   JavaThread* jt = (JavaThread *)this;

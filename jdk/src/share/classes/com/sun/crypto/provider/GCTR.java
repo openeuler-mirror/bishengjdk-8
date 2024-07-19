@@ -29,6 +29,10 @@
 
 package com.sun.crypto.provider;
 
+import com.sun.management.HotSpotDiagnosticMXBean;
+import com.sun.management.VMOption;
+import sun.management.ManagementFactoryHelper;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import javax.crypto.IllegalBlockSizeException;
@@ -54,13 +58,26 @@ import static com.sun.crypto.provider.AESConstants.AES_BLOCK_SIZE;
  */
 final class GCTR extends CounterMode {
 
+    private static final String AES_CTR_INTRINSICS_PARAM = "UseAESCTRIntrinsics";
+    private static boolean aesctrIntrinsicEnabled = false;
+
+    static {
+        HotSpotDiagnosticMXBean diagnostic
+                = ManagementFactoryHelper.getDiagnosticMXBean();
+        VMOption vmOption;
+        try {
+            vmOption = diagnostic.getVMOption(AES_CTR_INTRINSICS_PARAM);
+        } catch (IllegalArgumentException e) {
+            vmOption = null;
+        }
+        aesctrIntrinsicEnabled = Boolean.valueOf(vmOption == null ? null : vmOption.getValue());
+    }
     GCTR(SymmetricCipher cipher, byte[] initialCounterBlk) {
         super(cipher);
         if (initialCounterBlk.length != AES_BLOCK_SIZE) {
             throw new RuntimeException("length of initial counter block (" + initialCounterBlk.length +
                                        ") not equal to AES_BLOCK_SIZE (" + AES_BLOCK_SIZE + ")");
         }
-
         iv = initialCounterBlk;
         reset();
     }
@@ -93,7 +110,7 @@ final class GCTR extends CounterMode {
 
         long blocksLeft = blocksUntilRollover();
         int numOfCompleteBlocks = inLen / AES_BLOCK_SIZE;
-        if (numOfCompleteBlocks >= blocksLeft) {
+        if (!aesctrIntrinsicEnabled || numOfCompleteBlocks >= blocksLeft) {
             // Counter Mode encryption cannot be used because counter will
             // roll over incorrectly. Use GCM-specific code instead.
             byte[] encryptedCntr = new byte[AES_BLOCK_SIZE];

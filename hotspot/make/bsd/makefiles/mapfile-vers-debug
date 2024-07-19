@@ -233,6 +233,7 @@
                 _JVM_AdaptiveHeapGetG1PeriodicGCInterval
                 _JVM_AdaptiveHeapSetG1PeriodicGCLoadThreshold
                 _JVM_AdaptiveHeapGetG1PeriodicGCLoadThreshold
+                _JVM_DefineTrustedSharedClass
                 _JVM_Sleep
                 _JVM_Socket
                 _JVM_SocketAvailable

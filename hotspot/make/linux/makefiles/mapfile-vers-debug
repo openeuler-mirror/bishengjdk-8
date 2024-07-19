@@ -237,6 +237,7 @@ SUNWprivate_1.1 {
                 JVM_AdaptiveHeapGetG1PeriodicGCInterval;
                 JVM_AdaptiveHeapSetG1PeriodicGCLoadThreshold;
                 JVM_AdaptiveHeapGetG1PeriodicGCLoadThreshold;
+                JVM_DefineTrustedSharedClass;
                 JVM_Sleep;
                 JVM_Socket;
                 JVM_SocketAvailable;

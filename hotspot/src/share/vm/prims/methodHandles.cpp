@@ -1470,19 +1470,6 @@ static JNINativeMethod MH_methods[] = {
 };
 
 /**
- * Helper method to register native methods.
- */
-static bool register_natives(JNIEnv* env, jclass clazz, const JNINativeMethod* methods, jint nMethods) {
-  int status = env->RegisterNatives(clazz, methods, nMethods);
-  if (status != JNI_OK || env->ExceptionOccurred()) {
-    warning("JSR 292 method handle code is mismatched to this JVM.  Disabling support.");
-    env->ExceptionClear();
-    return false;
-  }
-  return true;
-}
-
-/**
  * This one function is exported, used by NativeLookup.
  */
 JVM_ENTRY(void, JVM_RegisterMethodHandleMethods(JNIEnv *env, jclass MHN_class)) {
@@ -1492,34 +1479,27 @@ JVM_ENTRY(void, JVM_RegisterMethodHandleMethods(JNIEnv *env, jclass MHN_class)) 
   }
 
   assert(!MethodHandles::enabled(), "must not be enabled");
-  bool enable_MH = true;
+  if (!EnableInvokeDynamic || SystemDictionary::MethodHandle_klass() == NULL)  return;
 
-  jclass MH_class = NULL;
-  if (SystemDictionary::MethodHandle_klass() == NULL) {
-    enable_MH = false;
-  } else {
-    oop mirror = SystemDictionary::MethodHandle_klass()->java_mirror();
-    MH_class = (jclass) JNIHandles::make_local(env, mirror);
-  }
+  oop mirror = SystemDictionary::MethodHandle_klass()->java_mirror();
+  jclass MH_class = (jclass) JNIHandles::make_local(env, mirror);
 
-  if (enable_MH) {
+  {
     ThreadToNativeFromVM ttnfv(thread);
 
-    if (enable_MH) {
-      enable_MH = register_natives(env, MHN_class, MHN_methods, sizeof(MHN_methods)/sizeof(JNINativeMethod));
-    }
-    if (enable_MH) {
-      enable_MH = register_natives(env, MH_class, MH_methods, sizeof(MH_methods)/sizeof(JNINativeMethod));
-    }
+    int status = env->RegisterNatives(MHN_class, MHN_methods, sizeof(MHN_methods)/sizeof(JNINativeMethod));
+    guarantee(status == JNI_OK && !env->ExceptionOccurred(),
+              "register java.lang.invoke.MethodHandleNative natives");
+
+    status = env->RegisterNatives(MH_class, MH_methods, sizeof(MH_methods)/sizeof(JNINativeMethod));
+    guarantee(status == JNI_OK && !env->ExceptionOccurred(),
+              "register java.lang.invoke.MethodHandle natives");
   }
 
   if (TraceInvokeDynamic) {
     tty->print_cr("MethodHandle support loaded (using LambdaForms)");
   }
 
-  if (enable_MH) {
-    MethodHandles::generate_adapters();
-    MethodHandles::set_enabled(true);
-  }
+  MethodHandles::set_enabled(true);
 }
 JVM_END

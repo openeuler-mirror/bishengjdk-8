@@ -148,34 +148,41 @@ public class TestThreadDumpClassInitMonitor {
                         throw new Error("Unexpected thread state line: " + line);
                     }
                     if (isProduct) {
-                        foundLines += 3;
+                        foundLines += 4;
                     } else {
                         foundLines++;
                     }
                     continue;
                 }
                 case 2: { // Debug build
-                    if (!line.startsWith(THREAD_INFO)) {
-                        throw new Error("Unexpected thread info line: " + line);
-                    }
-                    foundLines++;
-                    continue;
-                }
-                case 3: { // Debug build
                     if (!line.trim().equals(JAVATHREAD_STATE)) {
                         throw new Error("Unexpected JavaThread state line: " + line);
                     }
                     foundLines++;
                     continue;
                 }
-                case 4: {
+                case 3: { // Debug build
+                    if (!line.startsWith(THREAD_INFO)) {
+                        throw new Error("Unexpected thread info line: " + line);
+                    }
+                    foundLines++;
+                    continue;
+                }
+                case 4: { // Debug build
+                    if (!line.trim().equals(JAVATHREAD_STATE)) {
+                        throw new Error("Unexpected JavaThread state line: " + line);
+                    }
+                    foundLines++;
+                    continue;
+                }
+                case 5: {
                     if (!line.trim().startsWith(CURRENT_METHOD)) {
                         throw new Error("Unexpected current method line: " + line);
                     }
                     foundLines++;
                     continue;
                 }
-                case 5: {
+                case 6: {
                     if (!line.trim().equals(WAIT_INFO)) {
                         throw new Error("Unexpected monitor information line: " + line);
                     }

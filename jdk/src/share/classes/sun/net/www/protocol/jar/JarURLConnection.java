@@ -25,6 +25,8 @@
 
 package sun.net.www.protocol.jar;
 
+import sun.net.www.protocol.file.FileURLConnection;
+
 import java.io.InputStream;
 import java.io.IOException;
 import java.io.FileNotFoundException;
@@ -107,8 +109,15 @@ public class JarURLConnection extends java.net.JarURLConnection {
             try {
                 super.close();
             } finally {
-                if (!getUseCaches()) {
-                    jarFile.close();
+                try {
+                    if (!getUseCaches()) {
+                        jarFile.close();
+                    }
+                } finally {
+                    if (jarFileURLConnection instanceof FileURLConnection) {
+                        FileURLConnection fileURLConnection = (FileURLConnection) jarFileURLConnection;
+                        fileURLConnection.closeInputStream();
+                    }
                 }
             }
         }

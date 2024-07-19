@@ -88,6 +88,7 @@ public:
     CPU_DMB_ATOMICS  = (1 << 31),
   } cpuFeatureFlags;
 
+  static int get_cpu_model();
   static const char* cpu_features()           { return _features_str; }
   static int cpu_family()                     { return _cpu; }
   static int cpu_model()                      { return _model; }

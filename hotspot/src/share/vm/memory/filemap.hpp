@@ -41,6 +41,7 @@
 
 #define CDS_ARCHIVE_MAGIC         0xf00baba2
 #define CDS_DYNAMIC_ARCHIVE_MAGIC 0xf00baba8
+#define CDS_AGGRESSIVE_ARCHIVE_MAGIC 0xf00baba4
 
 static const int JVM_IDENT_MAX = 256;
 
@@ -168,6 +169,9 @@ public:
   struct DynamicArchiveHeader : FileMapHeader {
   private:
     int    _base_header_crc;
+#if INCLUDE_AGGRESSIVE_CDS
+    int    _program_crc;
+#endif // INCLUDE_AGGRESSIVE_CDS
     int    _base_region_crc[MetaspaceShared::n_regions];
     char*  _requested_base_address;  // Archive relocation is not necessary if we map with this base address.
     size_t _ptrmap_size_in_bits;     // Size of pointer relocation bitmap
@@ -186,6 +190,11 @@ public:
       _base_region_crc[i] = c;
     }
 
+#if INCLUDE_AGGRESSIVE_CDS
+    int program_crc() const { return _program_crc; }
+    void set_program_crc(int c) { _program_crc = c; }
+#endif // INCLUDE_AGGRESSIVE_CDS
+
     void set_requested_base(char* b) {
       _requested_base_address = b;
     }
@@ -199,6 +208,8 @@ public:
     char* serialized_data()                  const { return from_mapped_offset(_serialized_data_offset); }
 
     virtual bool validate();
+
+    static int get_current_program_crc();
   };
 
   FileMapHeader * _header;

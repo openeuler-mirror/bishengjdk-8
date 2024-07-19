@@ -136,6 +136,7 @@ jint init_globals() {
   }
   javaClasses_init();   // must happen after vtable initialization
   stubRoutines_init2(); // note: StubRoutines need 2-phase init
+  MethodHandles::generate_adapters();
 
 #if INCLUDE_NMT
   // Solaris stack is walkable only after stubRoutines are set up.

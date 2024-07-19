@@ -208,7 +208,11 @@ size_t FileMapInfo::DynamicArchiveHeader::data_size() {
 }
 
 bool FileMapInfo::DynamicArchiveHeader::validate() {
+#if INCLUDE_AGGRESSIVE_CDS
+  if (_magic != (UseAggressiveCDS ? CDS_AGGRESSIVE_ARCHIVE_MAGIC : CDS_DYNAMIC_ARCHIVE_MAGIC)) {
+#else
   if (_magic != CDS_DYNAMIC_ARCHIVE_MAGIC) {
+#endif // INCLUDE_AGGRESSIVE_CDS
     FileMapInfo::fail_continue("The shared archive file has a bad magic number.");
     return false;
   }
@@ -243,9 +247,48 @@ bool FileMapInfo::DynamicArchiveHeader::validate() {
   return true;
 }
 
+#if INCLUDE_AGGRESSIVE_CDS
+int FileMapInfo::DynamicArchiveHeader::get_current_program_crc() {
+  int cur_crc = 0;
+  const char* full_cmd = Arguments::java_command();
+  if (full_cmd == NULL) {
+    return 0;
+  }
+  const char* main_path = Arguments::get_appclasspath();
+  int main_path_len = strlen(main_path);
+  bool is_jar_file = strncmp(full_cmd, main_path, main_path_len) == 0;
+  if (is_jar_file) {
+    fio_fd fd = os::open(main_path, O_RDONLY | O_BINARY, 0);
+    assert(fd >= 0, "sanity");
+
+    uint32_t file_size = (uint32_t) os::lseek(fd, 0, SEEK_END);
+    os::lseek(fd, 0, SEEK_SET);
+    uint32_t max_size = 40 * 1024 * 1024; // 40M
+
+    ResourceMark rm;
+    char* buf = NEW_RESOURCE_ARRAY(char, max_size);
+
+    while(file_size) {
+      uint32_t size = MIN2(max_size, file_size);
+      size_t n = os::read(fd, buf, (unsigned int)size);
+      file_size -= n;
+      cur_crc = ClassLoader::crc32(cur_crc, buf, n);
+    }
+  }
+  return cur_crc;
+}
+#endif // INCLUDE_AGGRESSIVE_CDS
+
 void FileMapInfo::FileMapHeader::populate(FileMapInfo* mapinfo, size_t alignment) {
   if (DynamicDumpSharedSpaces) {
-    _magic = CDS_DYNAMIC_ARCHIVE_MAGIC;
+#if INCLUDE_AGGRESSIVE_CDS
+    if (UseAggressiveCDS) {
+      _magic = CDS_AGGRESSIVE_ARCHIVE_MAGIC;
+    } else
+#endif // INCLUDE_AGGRESSIVE_CDS
+    {
+      _magic = CDS_DYNAMIC_ARCHIVE_MAGIC;
+    }
   } else {
     _magic = CDS_ARCHIVE_MAGIC;
   }
@@ -434,7 +477,11 @@ bool FileMapInfo::get_base_archive_name_from_header(const char* archive_name,
     os::close(fd);
     return false;
   }
+#if INCLUDE_AGGRESSIVE_CDS
+  if (dynamic_header->magic() != (UseAggressiveCDS ? CDS_AGGRESSIVE_ARCHIVE_MAGIC : CDS_DYNAMIC_ARCHIVE_MAGIC)) {
+#else
   if (dynamic_header->magic() != CDS_DYNAMIC_ARCHIVE_MAGIC) {
+#endif // INCLUDE_AGGRESSIVE_CDS
     // Not a dynamic header, no need to proceed further.
     *size = 0;
     delete dynamic_header;
@@ -499,7 +546,11 @@ bool FileMapInfo::check_archive(const char* archive_name, bool is_static) {
     }
   } else {
     DynamicArchiveHeader* dynamic_header = (DynamicArchiveHeader*)header;
+#if INCLUDE_AGGRESSIVE_CDS
+    if (dynamic_header->magic() != (UseAggressiveCDS ? CDS_AGGRESSIVE_ARCHIVE_MAGIC : CDS_DYNAMIC_ARCHIVE_MAGIC)) {
+#else
     if (dynamic_header->magic() != CDS_DYNAMIC_ARCHIVE_MAGIC) {
+#endif // INCLUDE_AGGRESSIVE_CDS
       delete header;
       os::close(fd);
       vm_exit_during_initialization("Not a top shared archive", archive_name);

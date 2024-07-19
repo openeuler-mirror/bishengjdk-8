@@ -256,6 +256,24 @@ public class URLClassPath {
     }
 
     /**
+     * Finds the URL which has the specified name.
+     * This method is only for AggressiveCDS.
+     *
+     * @param urlNoFragString the name of URL
+     * @return the URL, or null if not found
+     */
+    public URL getURL(String urlNoFragString) {
+        if (!urls.isEmpty()) {
+            int index = loaders.size();
+            while(getLoader(index) != null) {
+                index++;
+            }
+        }
+        Loader loader = lmap.get(urlNoFragString);
+        return loader != null ? loader.getBaseURL() : null;
+    }
+
+    /**
      * Finds all resources on the URL search path with the given name.
      * Returns an enumeration of the URL objects.
      *

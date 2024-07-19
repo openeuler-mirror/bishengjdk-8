@@ -35,6 +35,10 @@
 #include "utilities/resourceHash.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "utilities/ostream.hpp"
+#if INCLUDE_AGGRESSIVE_CDS
+#include "memory/oopFactory.hpp"
+#include "runtime/javaCalls.hpp"
+#endif // INCLUDE_AGGRESSIVE_CDS
 
 DEBUG_ONLY(bool SystemDictionaryShared::_no_class_loading_should_happen = false;)
 bool SystemDictionaryShared::_dump_in_progress = false;
@@ -68,6 +72,14 @@ public:
     }
   };
 
+#if INCLUDE_AGGRESSIVE_CDS
+  struct DTSharedClassFile {
+    int length;
+    u1 data[1];
+    int obj_size() { return ((int)sizeof(length)) + length; }
+  };
+#endif // INCLUDE_AGGRESSIVE_CDS
+
   InstanceKlass*               _klass;
   InstanceKlass*               _nest_host;
   bool                         _failed_verification;
@@ -78,6 +90,10 @@ public:
   GrowableArray<DTVerifierConstraint>* _verifier_constraints;
   GrowableArray<char>*                 _verifier_constraint_flags;
   GrowableArray<DTLoaderConstraint>* _loader_constraints;
+#if INCLUDE_AGGRESSIVE_CDS
+  DTSharedClassFile*           _url_string;
+  int64_t                     _classfile_timestamp;
+#endif // INCLUDE_AGGRESSIVE_CDS
 
   DumpTimeSharedClassInfo() {
     _klass = NULL;
@@ -92,6 +108,10 @@ public:
     _verifier_constraints = NULL;
     _verifier_constraint_flags = NULL;
     _loader_constraints = NULL;
+#if INCLUDE_AGGRESSIVE_CDS
+    _url_string = NULL;
+    _classfile_timestamp = 0;
+#endif // INCLUDE_AGGRESSIVE_CDS
   }
 
   void add_verification_constraint(InstanceKlass* k, Symbol* name,
@@ -149,6 +169,44 @@ public:
   void set_failed_verification()                    { _failed_verification = true; }
   InstanceKlass* nest_host() const                  { return _nest_host; }
   void set_nest_host(InstanceKlass* nest_host)      { _nest_host = nest_host; }
+
+#if INCLUDE_AGGRESSIVE_CDS
+  DTSharedClassFile* url_string() {
+    return _url_string;
+  }
+
+  size_t url_string_size() {
+    if (_url_string != NULL) {
+      return (size_t)(_url_string->obj_size());
+    }
+    return (size_t)0;
+  }
+
+  void copy_url_string(char* string_value) {
+    assert(strlen(string_value) != 0, "sanity");
+    size_t string_len = strlen(string_value) + (size_t)1;
+    size_t size = offset_of(DTSharedClassFile, data) + string_len;
+    _url_string = (DTSharedClassFile*) NEW_C_HEAP_ARRAY(u1, size, mtInternal);
+    _url_string->length = (int)string_len;
+    memcpy(_url_string->data, string_value, string_len);
+    assert((int)size == _url_string->obj_size(), "sanity");
+  }
+
+  void free_url_string() {
+    if (_url_string != NULL) {
+      FREE_C_HEAP_ARRAY(u1, _url_string, mtInternal);
+      _url_string = NULL;
+    }
+  }
+
+  int64_t classfile_timestamp() {
+    return _classfile_timestamp;
+  }
+
+  void set_classfile_timestamp(int64_t classfile_timestamp) {
+    _classfile_timestamp = classfile_timestamp;
+  }
+#endif // INCLUDE_AGGRESSIVE_CDS
 };
 
 inline unsigned DumpTimeSharedClassTable_hash(InstanceKlass* const& k) {
@@ -245,7 +303,18 @@ public:
     }
   };
 
+#if INCLUDE_AGGRESSIVE_CDS
+  struct RTSharedClassFile {
+    int length;
+    u1 data[1];
+  };
+#endif // INCLUDE_AGGRESSIVE_CDS
+
   InstanceKlass* _klass;
+#if INCLUDE_AGGRESSIVE_CDS
+  RTSharedClassFile* _url_string;
+  int64_t _classfile_timestamp;
+#endif // INCLUDE_AGGRESSIVE_CDS
   int _num_verifier_constraints;
   int _num_loader_constraints;
 
@@ -294,6 +363,17 @@ public:
            verifier_constraint_flags_size(num_verifier_constraints);
   }
 
+#if INCLUDE_AGGRESSIVE_CDS
+  static size_t byte_size(DumpTimeSharedClassInfo& info) {
+    size_t previous_size = byte_size(info._klass, info.num_verifier_constraints(), info.num_loader_constraints());
+    if (UseAggressiveCDS) {
+      size_t cf_size = info.url_string_size();
+      if (cf_size != 0) return align_up(previous_size, sizeof(int)) + cf_size;
+    }
+    return previous_size;
+  }
+#endif // INCLUDE_AGGRESSIVE_CDS
+
 private:
   size_t crc_offset() const {
     return header_size_size();
@@ -320,6 +400,13 @@ private:
   void check_loader_constraint_offset(int i) const {
     assert(0 <= i && i < _num_loader_constraints, "sanity");
   }
+
+#if INCLUDE_AGGRESSIVE_CDS
+  size_t url_string_offset() const {
+    return align_up(verifier_constraint_flags_offset() + verifier_constraint_flags_size(_num_verifier_constraints),
+                    sizeof(int));
+  }
+#endif // INCLUDE_AGGRESSIVE_CDS
 
 public:
   CrcInfo* crc() const {
@@ -349,6 +436,20 @@ public:
     check_loader_constraint_offset(i);
     return loader_constraints() + i;
   }
+
+#if INCLUDE_AGGRESSIVE_CDS
+  RTSharedClassFile* url_string() {
+    return (RTSharedClassFile*)(address(this) + url_string_offset());
+  }
+
+  int64_t classfile_timestamp() {
+    return _classfile_timestamp;
+  }
+
+  void set_classfile_timestamp(int64_t classfile_timestamp) {
+    _classfile_timestamp = classfile_timestamp;
+  }
+#endif // INCLUDE_AGGRESSIVE_CDS
 
   void init(DumpTimeSharedClassInfo& info) {
     ArchiveBuilder* builder = ArchiveBuilder::current();
@@ -382,6 +483,18 @@ public:
         ld_constraints[i]._loader_type2 = info._loader_constraints->at(i)._loader_type2;
       }
     }
+
+#if INCLUDE_AGGRESSIVE_CDS
+    if (info.url_string_size() != 0) {
+      _url_string = url_string();
+      memcpy(_url_string, info.url_string(), info.url_string_size());
+      ArchivePtrMarker::mark_pointer(&_url_string);
+      info.free_url_string();
+    } else {
+      _url_string = NULL;
+    }
+    set_classfile_timestamp(info.classfile_timestamp());
+#endif // INCLUDE_AGGRESSIVE_CDS
 
     ArchivePtrMarker::mark_pointer(&_klass);
   }
@@ -426,6 +539,69 @@ public:
        const RunTimeSharedClassInfo* value, Symbol* key, int len_unused) {
     return (value->_klass->name() == key);
   }
+
+#if INCLUDE_AGGRESSIVE_CDS
+  // check timestamp in the load time when UseAggressiveCDS.
+  //   regular_file(*.class): need to check timestamp.
+  //   jar_file(*.jar): no need to check timestamp here,already check programe_crc
+  //                    somewhere else, see DynamicArchive::validate.
+  //   other_file: not supported when UseAggressiveCDS.
+  bool check_classfile_timestamp(char* url_string, TRAPS) {
+    if (SystemDictionaryShared::is_regular_file(url_string)) {
+      ResourceMark rm(THREAD);
+      char* dir = SystemDictionaryShared::get_filedir(url_string);
+      if (dir == NULL) {
+        return false;
+      }
+      int64_t timestamp = SystemDictionaryShared::get_timestamp(dir, _klass->name());
+      if (timestamp != _classfile_timestamp) {
+        dynamic_cds_log->print_cr("%s, timestamp mismatch: " INT64_FORMAT " -> " INT64_FORMAT, _klass->name()->as_C_string(), _classfile_timestamp, timestamp);
+        return false;
+      }
+    } else if (!SystemDictionaryShared::is_jar_file(url_string)) {
+      dynamic_cds_log->print_cr("Unsupported URL:%s", url_string);
+      return false;
+    }
+    return true;
+  }
+
+  Handle get_protection_domain(Handle class_loader, TRAPS) {
+    if (_url_string == NULL) {
+      return Handle();
+    }
+    char* data_ptr = (char*)(_url_string->data);
+
+    if (CheckClassFileTimeStamp) {
+      if (!check_classfile_timestamp(data_ptr, THREAD)) {
+        return Handle();
+      }
+    }
+
+    Handle url_string = java_lang_String::create_from_str(data_ptr, THREAD);
+    JavaValue result(T_OBJECT);
+    JavaCalls::call_virtual(&result,
+                            class_loader,
+                            class_loader->klass(),
+                            vmSymbols::getProtectionDomainByURLString_name(),
+                            vmSymbols::getProtectionDomainInternal_signature(),
+                            url_string, THREAD);
+    if (!HAS_PENDING_EXCEPTION) {
+      oop pd = (oop) result.get_jobject();
+      return Handle(THREAD, pd);
+    } else {
+      ResourceMark rm(THREAD);
+      char* ex_msg = const_cast<char*>("");
+      oop message = java_lang_Throwable::message(PENDING_EXCEPTION);
+      if (message != NULL) {
+        ex_msg = java_lang_String::as_utf8_string(message);
+      }
+      dynamic_cds_log->print_cr("get protection_domain has encountered exception: %s %s",
+                                 PENDING_EXCEPTION->klass()->external_name(), ex_msg);
+      CLEAR_PENDING_EXCEPTION;
+    }
+    return Handle();
+  }
+#endif // INCLUDE_AGGRESSIVE_CDS
 };
 
 class RunTimeSharedDictionary : public OffsetCompactHashtable<
@@ -710,7 +886,11 @@ public:
 
   bool do_entry(InstanceKlass* k, DumpTimeSharedClassInfo& info) {
     if (!info.is_excluded()) {
+#if INCLUDE_AGGRESSIVE_CDS
+      size_t byte_size = RunTimeSharedClassInfo::byte_size(info);
+#else
       size_t byte_size = RunTimeSharedClassInfo::byte_size(info._klass, info.num_verifier_constraints(), info.num_loader_constraints());
+#endif // INCLUDE_AGGRESSIVE_CDS
       _shared_class_info_size += align_up(byte_size, KlassAlignmentInBytes);
     }
     return true; // keep on iterating
@@ -746,6 +926,38 @@ unsigned int SystemDictionaryShared::hash_for_shared_dictionary(address ptr) {
   }
 }
 
+#if INCLUDE_AGGRESSIVE_CDS
+class ExcludeDuplicateKlass : StackObj {
+public:
+  static const int INITIAL_TABLE_SIZE = 15889;
+
+  ExcludeDuplicateKlass(int size) : _has_been_visited(size) {}
+
+  bool do_entry(InstanceKlass* k, DumpTimeSharedClassInfo& info) {
+    if (!info.is_excluded()) {
+      bool created;
+      Symbol* name = info._klass->name();
+      address* info_ptr = _has_been_visited.add_if_absent((address)name, (address)&info, &created);
+      if (!created) {
+        info.set_excluded();
+        DumpTimeSharedClassInfo* first_info = (DumpTimeSharedClassInfo*)(*info_ptr);
+        if (!first_info->is_excluded()) {
+          first_info->set_excluded();
+        }
+        if (TraceDynamicCDS) {
+          ResourceMark rm;
+          dynamic_cds_log->print_cr("[AggressiveCDS] Skipping duplicate class (excluded): %s", name->as_C_string());
+        }
+      }
+    }
+    return true;
+  }
+
+private:
+  KVHashtable<address, address, mtClassShared> _has_been_visited;
+};
+#endif // INCLUDE_AGGRESSIVE_CDS
+
 class CopySharedClassInfoToArchive : StackObj {
   CompactHashtableWriter* _writer;
   bool _is_builtin;
@@ -757,7 +969,11 @@ public:
 
   bool do_entry(InstanceKlass* k, DumpTimeSharedClassInfo& info) {
     if (!info.is_excluded() && info.is_builtin() == _is_builtin) {
+#if INCLUDE_AGGRESSIVE_CDS
+      size_t byte_size = RunTimeSharedClassInfo::byte_size(info);
+#else
       size_t byte_size = RunTimeSharedClassInfo::byte_size(info._klass, info.num_verifier_constraints(), info.num_loader_constraints());
+#endif // INCLUDE_AGGRESSIVE_CDS
       RunTimeSharedClassInfo* record;
       record = (RunTimeSharedClassInfo*)ArchiveBuilder::ro_region_alloc(byte_size);
       record->init(info);
@@ -787,6 +1003,12 @@ void SystemDictionaryShared::write_dictionary(RunTimeSharedDictionary* dictionar
                                               bool is_builtin) {
   CompactHashtableStats stats;
   dictionary->reset();
+#if INCLUDE_AGGRESSIVE_CDS
+  if (UseAggressiveCDS && !is_builtin) {
+    ExcludeDuplicateKlass dup(ExcludeDuplicateKlass::INITIAL_TABLE_SIZE);
+    _dumptime_table->iterate(&dup);
+  }
+#endif // INCLUDE_AGGRESSIVE_CDS
   CompactHashtableWriter writer(_dumptime_table->count_of(is_builtin), &stats);
   CopySharedClassInfoToArchive copy(&writer, is_builtin);
   assert_lock_strong(DumpTimeTable_lock);
@@ -909,3 +1131,156 @@ InstanceKlass* SystemDictionaryShared::find_dynamic_builtin_class(Symbol* name) 
     return NULL;
   }
 }
+
+#if INCLUDE_AGGRESSIVE_CDS
+static const char* JAR_FILE_PREFIX = "jar://file:";
+static const char* FILE_SEPARATOR = "file://";
+static const char* CLASSFILE_SUFFIX = ".class";
+
+static bool start_with(char* str, const char* prefix) {
+  if (str == NULL || prefix == NULL || strlen(str) < strlen(prefix)) {
+    return false;
+  }
+  if (strncmp(str, prefix, strlen(prefix)) == 0) {
+    return true;
+  }
+  return false;
+}
+
+bool SystemDictionaryShared::is_jar_file(char* url_string) {
+  if (start_with(url_string, JAR_FILE_PREFIX)) {
+    return true;
+  }
+  return false;
+}
+
+bool SystemDictionaryShared::is_regular_file(char* url_string) {
+  if (start_with(url_string, FILE_SEPARATOR)) {
+    return true;
+  }
+  return false;
+}
+
+char* SystemDictionaryShared::get_filedir(char* url_string) {
+  if (!is_regular_file(url_string)) {
+    return NULL;
+  }
+  char* dir = url_string + strlen(FILE_SEPARATOR);
+  struct stat st;
+  if (os::stat(dir, &st) == 0) {
+    if ((st.st_mode & S_IFDIR) == S_IFDIR) {
+      return dir;
+    }
+  }
+  return NULL;
+}
+
+int64_t SystemDictionaryShared::get_timestamp(char* dir, Symbol* class_name) {
+  char* name = class_name->as_C_string();
+  size_t name_len = strlen(name);
+  size_t dir_len = strlen(dir);
+  size_t classfile_suffix_len = strlen(CLASSFILE_SUFFIX);
+  char* file_path = NEW_RESOURCE_ARRAY(char, dir_len + name_len + classfile_suffix_len + 1);
+  memcpy(file_path, dir, dir_len);
+  memcpy(file_path + dir_len, name, name_len);
+  memcpy(file_path + dir_len + name_len, CLASSFILE_SUFFIX, classfile_suffix_len + 1);
+  assert(strlen(file_path) == dir_len + name_len + classfile_suffix_len, "sanity");
+  struct stat st;
+  if (os::stat(file_path, &st) == 0) {
+    return st.st_mtime;
+  }
+  dynamic_cds_log->print_cr("get timestamp failed:%s", file_path);
+  return 0;
+}
+
+Handle SystemDictionaryShared::get_protection_domain(InstanceKlass* k, Handle class_loader, TRAPS) {
+  assert(UseAggressiveCDS, "sanity");
+  RunTimeSharedClassInfo* info = RunTimeSharedClassInfo::get_for(k);
+  assert(!is_builtin_loader(class_loader), "sanity");
+  return info->get_protection_domain(class_loader, THREAD);
+}
+
+void SystemDictionaryShared::set_url_string(InstanceKlass* k, char* string_value) {
+  assert(UseAggressiveCDS, "sanity");
+  Arguments::assert_is_dumping_archive();
+  assert(!is_builtin(k), "must be unregistered class");
+  DumpTimeSharedClassInfo* info = find_or_allocate_info_for(k);
+  if (info != NULL && info->_url_string == NULL) {
+    info->copy_url_string(string_value);
+  }
+}
+
+void SystemDictionaryShared::save_timestamp(InstanceKlass* k, char* string_value) {
+  if (SystemDictionaryShared::is_regular_file(string_value)) {
+    char* dir = SystemDictionaryShared::get_filedir(string_value);
+    if (dir != NULL) {
+      int64_t timestamp = SystemDictionaryShared::get_timestamp(dir, k->name());
+      SystemDictionaryShared::set_classfile_timestamp(k, timestamp);
+    }
+  } else if (!SystemDictionaryShared::is_jar_file(string_value)) {
+    dynamic_cds_log->print_cr("Unsupported URL:%s", string_value);
+  }
+}
+
+void SystemDictionaryShared::set_classfile_timestamp(InstanceKlass* k, int64_t classfile_timestamp) {
+  assert(UseAggressiveCDS, "sanity");
+  Arguments::assert_is_dumping_archive();
+  assert(!is_builtin(k), "must be unregistered class");
+  DumpTimeSharedClassInfo* info = find_or_allocate_info_for(k);
+  if (info != NULL) {
+    info->set_classfile_timestamp(classfile_timestamp);
+  }
+}
+
+InstanceKlass* SystemDictionaryShared::lookup_trusted_share_class(Symbol* class_name,
+                                                                  Handle class_loader,
+                                                                  TRAPS) {
+  assert(UseAggressiveCDS, "sanity");
+  if (!UseSharedSpaces) {
+    return NULL;
+  }
+  if (class_name == NULL) {  // don't do this for hidden classes
+    return NULL;
+  }
+  if (SystemDictionary::is_builtin_loader(class_loader)) {
+    // Do nothing for the BUILTIN loaders.
+    return NULL;
+  }
+
+  // Classloaders that support parallelism, e.g. bootstrap classloader,
+  // or all classloaders with UnsyncloadClass do not acquire lock here
+  bool DoObjectLock = true;
+  if (is_parallelCapable(class_loader)) {
+    DoObjectLock = false;
+  }
+
+  register_loader(class_loader, CHECK_NULL);
+
+  // Make sure we are synchronized on the class loader before we proceed
+  Handle lockObject = compute_loader_lock_object(class_loader, THREAD);
+  check_loader_lock_contention(lockObject, THREAD);
+  ObjectLocker ol(lockObject, THREAD, DoObjectLock);
+
+  const RunTimeSharedClassInfo* record = find_record(&_dynamic_unregistered_dictionary, class_name);
+  if (record == NULL) {
+    return NULL;
+  }
+
+  Handle protection_domain = SystemDictionaryShared::get_protection_domain(record->_klass, class_loader, CHECK_NULL);
+
+  if (protection_domain.is_null()) {
+    // URL not matched, which means should not be loaded by this classloader
+    return NULL;
+  }
+
+  instanceKlassHandle k = acquire_class_for_current_thread(record->_klass, class_loader, protection_domain, NULL, THREAD);
+  if (!HAS_PENDING_EXCEPTION && k() != NULL) {
+    if (is_parallelCapable(class_loader)) {
+      k = find_or_define_instance_class(class_name, class_loader, k, THREAD);
+    } else {
+      define_instance_class(k, THREAD);
+    }
+  }
+  return k();
+}
+#endif // INCLUDE_AGGRESSIVE_CDS

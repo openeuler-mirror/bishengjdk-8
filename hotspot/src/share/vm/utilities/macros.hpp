@@ -106,6 +106,7 @@
 
 #ifndef INCLUDE_CDS
 #define INCLUDE_CDS 1
+#define INCLUDE_AGGRESSIVE_CDS 1
 #endif
 
 #if INCLUDE_CDS
@@ -119,6 +120,14 @@
 #define NOT_CDS_RETURN          {}
 #define NOT_CDS_RETURN_(code) { return code; }
 #endif // INCLUDE_CDS
+
+#if INCLUDE_AGGRESSIVE_CDS
+#define AGGRESSIVE_CDS_ONLY(x) x
+#define NOT_AGGRESSIVE_CDS(x)
+#else
+#define AGGRESSIVE_CDS_ONLY(x)
+#define NOT_AGGRESSIVE_CDS(x) x
+#endif // INCLUDE_AGGRESSIVE_CDS
 
 #ifndef INCLUDE_MANAGEMENT
 #define INCLUDE_MANAGEMENT 1

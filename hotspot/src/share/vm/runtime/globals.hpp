@@ -3323,7 +3323,8 @@ class CommandLineFlags {
           "non-daemon thread (in bytes)")                                   \
                                                                             \
   product_pd(uintx, MetaspaceSize,                                          \
-          "Initial size of Metaspaces (in bytes)")                          \
+          "Initial threshold (in bytes) at which a garbage collection "     \
+          "is done to reduce Metaspace usage")                              \
                                                                             \
   product(uintx, MaxMetaspaceSize, max_uintx,                               \
           "Maximum size of Metaspaces (in bytes)")                          \
@@ -4109,6 +4110,14 @@ class CommandLineFlags {
                                                                             \
   product(bool, UseAppCDS, false,                                           \
           "Enable Application Class Data Sharing (AppCDS)")                 \
+                                                                            \
+  experimental(bool, UseAggressiveCDS, false,                               \
+          "An aggressive stratage to improve start-up "                     \
+          "because we avoid decoding the classfile.")                       \
+                                                                            \
+  experimental(bool, CheckClassFileTimeStamp, true,                         \
+          "Check whether the modification time of the"                      \
+          "class file is changed during UseAggressiveCDS.")                 \
                                                                             \
   product(bool, EnableSplitVerifierForAppCDS, false,                        \
           "Enable Type Check (AppCDS)")                                     \

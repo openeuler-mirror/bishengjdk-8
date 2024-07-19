@@ -3321,6 +3321,36 @@ JVM_ENTRY(jint, JVM_AdaptiveHeapGetG1PeriodicGCLoadThreshold(JNIEnv *env, jclass
 #endif
 JVM_END
 
+JVM_ENTRY(jclass, JVM_DefineTrustedSharedClass(JNIEnv *env, const char *name, jobject loader))
+#if INCLUDE_AGGRESSIVE_CDS
+  assert(UseAggressiveCDS, "sanity");
+
+  TempNewSymbol class_name = NULL;
+  if (name != NULL) {
+    const int str_len = (int)strlen(name);
+    if (str_len > Symbol::max_length()) {
+      // It's impossible to create this class;  the name cannot fit
+      // into the constant pool.
+      THROW_MSG_0(vmSymbols::java_lang_NoClassDefFoundError(), name);
+    }
+    class_name = SymbolTable::new_symbol(name, str_len, CHECK_NULL);
+  }
+
+  ResourceMark rm(THREAD);
+  Handle class_loader (THREAD, JNIHandles::resolve(loader));
+  InstanceKlass* k = SystemDictionaryShared::lookup_trusted_share_class(class_name,
+                                                                        class_loader,
+                                                                        CHECK_NULL);
+  if (k == NULL) {
+    return NULL;
+  }
+
+  return (jclass) JNIHandles::make_local(THREAD, k->java_mirror());
+#else
+  return NULL;
+#endif // INCLUDE_AGGRESSIVE_CDS
+JVM_END
+
 JVM_ENTRY(void, JVM_Yield(JNIEnv *env, jclass threadClass))
   JVMWrapper("JVM_Yield");
   if (os::dont_yield()) return;
