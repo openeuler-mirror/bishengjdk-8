@@ -382,6 +382,17 @@ public class URLClassLoader extends SecureClassLoader implements Closeable {
             result = AccessController.doPrivileged(
                 new PrivilegedExceptionAction<Class<?>>() {
                     public Class<?> run() throws ClassNotFoundException {
+                        if (AggressiveCDSPlugin.isEnabled()) {
+                            Class<?> trustedClass = defineClass(name);
+                            if (trustedClass != null) {
+                                int i = name.lastIndexOf('.');
+                                if (i != -1) {
+                                    String pkgname = name.substring(0, i);
+                                    definePackageInternal(pkgname, null, null);
+                                }
+                                return trustedClass;
+                            }
+                        }
                         String path = name.replace('.', '/').concat(".class");
                         Resource res = ucp.getResource(path, false);
                         if (res != null) {
@@ -407,6 +418,22 @@ public class URLClassLoader extends SecureClassLoader implements Closeable {
             throw new ClassNotFoundException(name);
         }
         return result;
+    }
+
+    /**
+     * get ProtectionDomain By URL String.
+     * This method is invoked only in C++ for AggressiveCDS.
+     *
+     * @param urlNoFragString the URL String.
+     *
+     * @return ProtectionDomain create from URL.
+     */
+    protected ProtectionDomain getProtectionDomainByURLString(String urlNoFragString) {
+        URL url = ucp.getURL(urlNoFragString);
+        if (url != null) {
+            return getProtectionDomainFromURL(url);
+        }
+        return null;
     }
 
     /*

@@ -4348,6 +4348,11 @@ jint Arguments::apply_ergo() {
 
   ArgumentsExt::set_gc_specific_flags();
 
+#if INCLUDE_AGGRESSIVE_CDS
+  result = init_aggressive_cds_properties();
+  if (result != JNI_OK) return result;
+#endif // INCLUDE_AGGRESSIVE_CDS
+
   // Initialize Metaspace flags and alignments.
   Metaspace::ergo_initialize();
 
@@ -4632,3 +4637,14 @@ bool Arguments::copy_expand_pid(const char* src, size_t srclen,
   *b = '\0';
   return (p == src_end); // return false if not all of the source was copied
 }
+
+#if INCLUDE_AGGRESSIVE_CDS
+jint Arguments::init_aggressive_cds_properties() {
+  if (!is_dumping_archive() && SharedDynamicArchivePath != NULL && UseAggressiveCDS) {
+    bool added = false;
+    added = add_property("jdk.jbooster.aggressivecds.load=true");
+    if (!added) return JNI_ENOMEM;
+  }
+  return JNI_OK;
+}
+#endif // INCLUDE_AGGRESSIVE_CDS

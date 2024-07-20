@@ -25,6 +25,7 @@
 
 package java.security;
 
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
@@ -35,6 +36,7 @@ import sun.misc.JavaSecurityAccess;
 import sun.misc.JavaSecurityProtectionDomainAccess;
 import static sun.misc.JavaSecurityProtectionDomainAccess.ProtectionDomainCache;
 import sun.misc.SharedSecrets;
+import sun.net.util.URLUtil;
 import sun.security.util.Debug;
 import sun.security.util.SecurityConstants;
 
@@ -206,6 +208,20 @@ public class ProtectionDomain {
         return this.codesource;
     }
 
+    /**
+     * Returns a URL String.
+     *
+     * @return URL String.
+     */
+    public String getLocationNoFragString() {
+        if (codesource != null) {
+            URL url = codesource.getLocation();
+            if (url != null) {
+                return URLUtil.urlNoFragString(url);
+            }
+        }
+        return null;
+    }
 
     /**
      * Returns the ClassLoader of this domain.

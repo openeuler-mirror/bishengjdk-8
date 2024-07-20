@@ -772,7 +772,12 @@ void ArchiveBuilder::clean_up_src_obj_table() {
 }
 
 void ArchiveBuilder::write_archive(FileMapInfo* mapinfo) {
+#if INCLUDE_AGGRESSIVE_CDS
+  assert(mapinfo->header()->magic() == (UseAggressiveCDS ?
+         CDS_AGGRESSIVE_ARCHIVE_MAGIC : CDS_DYNAMIC_ARCHIVE_MAGIC), "Dynamic CDS or Aggressive CDS calls only");
+#else
   assert(mapinfo->header()->magic() == CDS_DYNAMIC_ARCHIVE_MAGIC, "Dynamic CDS calls only");
+#endif // INCLUDE_AGGRESSIVE_CDS
 
   mapinfo->write_dynamic_header();
 

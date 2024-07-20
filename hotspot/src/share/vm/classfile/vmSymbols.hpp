@@ -421,6 +421,8 @@
   template(definePackageInternal_signature,           "(Ljava/lang/String;Ljava/util/jar/Manifest;Ljava/net/URL;)V") \
   template(getProtectionDomainInternal_name,          "getProtectionDomainInternal")              \
   template(getProtectionDomainInternal_signature,     "(Ljava/lang/String;)Ljava/security/ProtectionDomain;") \
+  template(getProtectionDomainByURLString_name,       "getProtectionDomainByURLString")           \
+  template(getLocationNoFragString_name,              "getLocationNoFragString")                  \
   template(url_code_signer_array_void_signature,      "(Ljava/net/URL;[Ljava/security/CodeSigner;)V") \
   template(resolved_references_name,                  "<resolved_references>")                    \
   template(referencequeue_null_name,                  "NULL")                                     \

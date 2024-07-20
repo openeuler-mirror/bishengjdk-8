@@ -1598,6 +1598,12 @@ JNIEXPORT jint JNICALL
 JVM_AdaptiveHeapGetG1PeriodicGCLoadThreshold(JNIEnv *env, jclass clazz);
 
 
+/**
+ * Define the trusted shared class.
+ */
+JNIEXPORT jclass JNICALL
+JVM_DefineTrustedSharedClass(JNIEnv *env, const char *name, jobject loader);
+
 /* =========================================================================
  * The following defines a private JVM interface that the JDK can query
  * for the JVM version and capabilities.  sun.misc.Version defines

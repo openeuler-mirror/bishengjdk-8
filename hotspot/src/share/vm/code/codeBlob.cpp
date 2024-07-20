@@ -337,6 +337,9 @@ MethodHandlesAdapterBlob* MethodHandlesAdapterBlob::create(int buffer_size) {
     // This means that CodeCacheMinimumFreeSpace is used, if necessary
     const bool is_critical = true;
     blob = new (size, is_critical) MethodHandlesAdapterBlob(size);
+    if (blob == NULL) {
+      vm_exit_out_of_memory(size, OOM_MALLOC_ERROR, "CodeCache: no room for method handle adapter blob");
+    }
   }
   // Track memory usage statistic after releasing CodeCache_lock
   MemoryService::track_code_cache_memory_usage();

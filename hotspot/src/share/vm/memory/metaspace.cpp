@@ -2599,7 +2599,7 @@ void MetaspaceGC::compute_new_size() {
       if (PrintGCDetails && Verbose) {
         gclog_or_tty->print_cr("  "
                       "  shrinking:"
-                      "  initSize: %.1fK"
+                      "  initThreshold: %.1fK"
                       "  maximum_desired_capacity: %.1fK",
                       MetaspaceSize / (double) K,
                       maximum_desired_capacity / (double) K);

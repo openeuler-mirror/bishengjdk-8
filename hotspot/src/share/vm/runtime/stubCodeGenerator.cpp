@@ -36,6 +36,7 @@
 
 StubCodeDesc* volatile StubCodeDesc::_list = NULL;
 int                    StubCodeDesc::_count = 0;
+bool                StubCodeDesc::_frozen = false;
 
 
 StubCodeDesc* StubCodeDesc::desc_for(address pc) {
@@ -58,6 +59,10 @@ const char* StubCodeDesc::name_for(address pc) {
   return p == NULL ? NULL : p->name();
 }
 
+void StubCodeDesc::freeze() {
+  assert(!_frozen, "repeated freeze operation");
+  _frozen = true;
+}
 
 void StubCodeDesc::print_on(outputStream* st) const {
   st->print("%s", group());

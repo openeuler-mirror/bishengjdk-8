@@ -576,6 +576,10 @@ class Arguments : AllStatic {
     assert(Arguments::is_dumping_archive(), "dump time only");
   }
 
+#if INCLUDE_AGGRESSIVE_CDS
+  static jint init_aggressive_cds_properties();
+#endif // INCLUDE_AGGRESSIVE_CDS
+
   static bool CompileMethod(char* className, char* methodName) {
     return
       methodExists(

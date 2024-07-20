@@ -215,6 +215,18 @@ public class SecureClassLoader extends ClassLoader {
         return pd;
     }
 
+    /**
+     * get ProtectionDomain From URL.
+     * This method is only for AggressiveCDS.
+     *
+     * @param url the URL.
+     *
+     * @return ProtectionDomain create from URL.
+     */
+    protected ProtectionDomain getProtectionDomainFromURL(URL url) {
+        CodeSource cs = new CodeSource(url, (CodeSigner[]) null);
+        return getProtectionDomain(cs);
+    }
 
     /*
      * Check to make sure the class loader has been initialized.

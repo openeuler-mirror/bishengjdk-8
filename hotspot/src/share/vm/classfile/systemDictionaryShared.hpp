@@ -238,6 +238,19 @@ public:
                                                   TRAPS);
 
   static InstanceKlass* find_dynamic_builtin_class(Symbol* name);
+
+#if INCLUDE_AGGRESSIVE_CDS
+  static bool is_jar_file(char* url_string);
+  static bool is_regular_file(char* url_string);
+  static char* get_filedir(char* url_string);
+  static int64_t get_timestamp(char* dir, Symbol* class_name);
+  static Handle get_protection_domain(InstanceKlass* k, Handle class_loader, TRAPS);
+  static void set_url_string(InstanceKlass* k, char* string_value);
+  static void save_timestamp(InstanceKlass* k, char* string_value);
+  static void set_classfile_timestamp(InstanceKlass* k, int64_t classfile_timestamp);
+  static int64_t get_classfile_timestamp(InstanceKlass* k);
+  static InstanceKlass* lookup_trusted_share_class(Symbol* class_name, Handle class_loader, TRAPS);
+#endif // INCLUDE_AGGRESSIVE_CDS
 };
 
 #endif // SHARE_VM_CLASSFILE_SYSTEMDICTIONARYSHARED_HPP

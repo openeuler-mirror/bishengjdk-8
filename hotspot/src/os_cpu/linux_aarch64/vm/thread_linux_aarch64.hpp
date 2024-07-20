@@ -67,6 +67,7 @@
     bool isInJava);
 
   void os_linux_aarch64_options(const char *name);
+  static void os_linux_aarch64_options(int apc, char **name);
 
   bool pd_get_top_frame_for_profiling(frame* fr_addr, void* ucontext, bool isInJava);
 private:

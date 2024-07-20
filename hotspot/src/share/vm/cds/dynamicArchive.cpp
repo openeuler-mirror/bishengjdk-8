@@ -165,6 +165,16 @@ void DynamicArchiveBuilder::init_header() {
 
   FileMapInfo* base_info = FileMapInfo::current_info();
   _header->set_base_header_crc(base_info->header()->crc());
+
+#if INCLUDE_AGGRESSIVE_CDS
+  if (UseAggressiveCDS) {
+    int crc = FileMapInfo::DynamicArchiveHeader::get_current_program_crc();
+    _header->set_program_crc(crc);
+  } else {
+    _header->set_program_crc(0);
+  }
+#endif // INCLUDE_AGGRESSIVE_CDS
+
   for (int i = 0; i < MetaspaceShared::n_regions; i++) {
     _header->set_base_region_crc(i, base_info->header()->space_crc(i));
   }
@@ -400,6 +410,16 @@ bool DynamicArchive::validate(FileMapInfo* dynamic_info) {
     FileMapInfo::fail_continue("Dynamic archive cannot be used: static archive header checksum verification failed.");
     return false;
   }
+
+#if INCLUDE_AGGRESSIVE_CDS
+  // Check the program crc
+  if (UseAggressiveCDS) {
+    if (dynamic_header->program_crc() != FileMapInfo::DynamicArchiveHeader::get_current_program_crc()) {
+      FileMapInfo::fail_continue("Aggressive Dynamic archive cannot be used: program crc verification failed.");
+      return false;
+    }
+  }
+#endif // INCLUDE_AGGRESSIVE_CDS
 
   // Check each space's crc
   for (int i = 0; i < MetaspaceShared::n_regions; i++) {

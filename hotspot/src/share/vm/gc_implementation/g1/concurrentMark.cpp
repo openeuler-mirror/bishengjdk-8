@@ -477,6 +477,16 @@ HeapRegion* CMRootRegions::claim_next() {
   return res;
 }
 
+void CMRootRegions::notify_scan_done() {
+  MutexLockerEx x(RootRegionScan_lock, Mutex::_no_safepoint_check_flag);
+  _scan_in_progress = false;
+  RootRegionScan_lock->notify_all();
+}
+
+void CMRootRegions::cancel_scan() {
+  notify_scan_done();
+}
+
 void CMRootRegions::scan_finished() {
   assert(scan_in_progress(), "pre-condition");
 
@@ -486,11 +496,7 @@ void CMRootRegions::scan_finished() {
   }
   _next_survivor = NULL;
 
-  {
-    MutexLockerEx x(RootRegionScan_lock, Mutex::_no_safepoint_check_flag);
-    _scan_in_progress = false;
-    RootRegionScan_lock->notify_all();
-  }
+  notify_scan_done();
 }
 
 bool CMRootRegions::wait_until_scan_finished() {
@@ -1224,13 +1230,11 @@ public:
 };
 
 void ConcurrentMark::scanRootRegions() {
-  // Start of concurrent marking.
-  ClassLoaderDataGraph::clear_claimed_marks();
-
   // scan_in_progress() will have been set to true only if there was
   // at least one root region to scan. So, if it's false, we
   // should not attempt to do any further work.
   if (root_regions()->scan_in_progress()) {
+    assert(!has_aborted(), "Aborting before root region scanning is finished not supported.");
     _parallel_marking_threads = calc_parallel_marking_threads();
     assert(parallel_marking_threads() <= max_parallel_marking_threads(),
            "Maximum number of marking threads exceeded");

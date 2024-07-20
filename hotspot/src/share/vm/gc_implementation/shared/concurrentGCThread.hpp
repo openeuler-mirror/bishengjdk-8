@@ -71,6 +71,8 @@ public:
 
   // Tester
   bool is_ConcurrentGC_thread() const          { return true;       }
+
+  bool should_terminate() { return _should_terminate; }
 };
 
 // The SurrogateLockerThread is used by concurrent GC threads for

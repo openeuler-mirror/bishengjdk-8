@@ -4416,6 +4416,38 @@ instanceKlassHandle ClassFileParser::parseClassFile(Symbol* name,
   if (DynamicDumpSharedSpaces && !SystemDictionary::is_builtin_loader(class_loader)) {
     this_klass->set_shared_classpath_index(UNREGISTERED_INDEX);
     SystemDictionaryShared::set_shared_class_misc_info(this_klass(), cfs);
+#if INCLUDE_AGGRESSIVE_CDS
+    if (UseAggressiveCDS && protection_domain() != NULL) {
+      ResourceMark rm(THREAD);
+      KlassHandle protectionDomain_klass(THREAD, SystemDictionary::ProtectionDomain_klass());
+      JavaValue result(T_OBJECT);
+      JavaCalls::call_virtual(&result,
+                              protection_domain,
+                              protectionDomain_klass,
+                              vmSymbols::getLocationNoFragString_name(),
+                              vmSymbols::void_string_signature(),
+                              THREAD);
+      if (!HAS_PENDING_EXCEPTION) {
+        oop res_oop = (oop) result.get_jobject();
+        if (res_oop != NULL) {
+          char* string_value = java_lang_String::as_utf8_string(res_oop);
+          if (strlen(string_value) != 0) {
+            SystemDictionaryShared::set_url_string(this_klass(), string_value);
+            SystemDictionaryShared::save_timestamp(this_klass(), string_value);
+          }
+        }
+      } else {
+        char* ex_msg = const_cast<char*>("");
+        oop message = java_lang_Throwable::message(PENDING_EXCEPTION);
+        if (message != NULL) {
+          ex_msg = java_lang_String::as_utf8_string(message);
+        }
+        dynamic_cds_log->print_cr("get LocationNoFragString from protection_domain has encountered exception: %s %s",
+                                   PENDING_EXCEPTION->klass()->external_name(), ex_msg);
+        CLEAR_PENDING_EXCEPTION;
+      }
+    }
+#endif // INCLUDE_AGGRESSIVE_CDS
   }
 #endif // INCLUDE_CDS
 
