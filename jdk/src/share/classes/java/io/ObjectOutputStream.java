@@ -240,7 +240,7 @@ public class ObjectOutputStream
      * Value of "UseFastSerializer" property. The fastSerializer is turned
      * on when it is true.
      */
-    private final boolean useFastSerializer = UNSAFE.getUseFastSerializer();
+    private  boolean useFastSerializer = UNSAFE.getUseFastSerializer();
 
     /**
      * value of  "printFastSerializer" property,
@@ -254,7 +254,22 @@ public class ObjectOutputStream
      * Magic number that is written to the stream header when using fastserilizer.
      */
     private static final short STREAM_MAGIC_FAST = (short)0xdeca;
+    
+    /**
+     * The default value is true. If you want to disable the  fast serialization function, please set it to false.
+     */
+    protected boolean enableFastSerializerClass(){
+        return true;
+    }
 
+    /**
+     * Disable fast serialization functionality.
+     */
+    private void disableFastSerializerStatusByClass() {
+        if ( this.useFastSerializer && !enableFastSerializerClass()){
+	    this.useFastSerializer = false;
+	}
+    }
     /**
      * Creates an ObjectOutputStream that writes to the specified OutputStream.
      * This constructor writes the serialization stream header to the
@@ -279,7 +294,8 @@ public class ObjectOutputStream
      * @see     ObjectInputStream#ObjectInputStream(InputStream)
      */
     public ObjectOutputStream(OutputStream out) throws IOException {
-        verifySubclass();
+        disableFastSerializerStatusByClass();
+	verifySubclass();
         bout = new BlockDataOutputStream(out);
         handles = new HandleTable(10, (float) 3.00);
         subs = new ReplaceTable(10, (float) 3.00);
@@ -311,7 +327,8 @@ public class ObjectOutputStream
      * @see java.io.SerializablePermission
      */
     protected ObjectOutputStream() throws IOException, SecurityException {
-        SecurityManager sm = System.getSecurityManager();
+        disableFastSerializerStatusByClass();
+	SecurityManager sm = System.getSecurityManager();
         if (sm != null) {
             sm.checkPermission(SUBCLASS_IMPLEMENTATION_PERMISSION);
         }
