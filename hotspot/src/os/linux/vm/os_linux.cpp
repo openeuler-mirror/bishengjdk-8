@@ -5576,10 +5576,6 @@ jint os::init_2(void)
           Linux::is_floating_stack() ? "floating stack" : "fixed stack");
   }
 
-#ifdef AARCH64
-    JavaThread::os_linux_aarch64_options(active_processor_count(), argv_for_execvp);
-#endif
-
   if (UseNUMA) {
     if (!Linux::libnuma_init()) {
       UseNUMA = false;

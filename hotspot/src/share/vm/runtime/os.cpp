@@ -366,6 +366,11 @@ static void signal_thread_entry(JavaThread* thread, TRAPS) {
 }
 
 void os::init_before_ergo() {
+#ifdef AARCH64
+  // global variables
+  extern char** argv_for_execvp;
+  JavaThread::os_linux_aarch64_options(active_processor_count(), argv_for_execvp);
+#endif
   initialize_initial_active_processor_count();
   // We need to initialize large page support here because ergonomics takes some
   // decisions depending on large page support and the calculated large page size.
