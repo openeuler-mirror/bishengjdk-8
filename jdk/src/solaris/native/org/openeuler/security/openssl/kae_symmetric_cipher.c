@@ -146,6 +146,7 @@ Java_org_openeuler_security_openssl_KAESymmetricCipherBase_nativeInit(JNIEnv* en
     const EVP_CIPHER* cipher = NULL;
     ENGINE* kaeEngine = NULL;
     int keyLength = (*env)->GetArrayLength(env, key);
+    int ivLength = 0;
 
     const char* algo = (*env)->GetStringUTFChars(env, cipherType, 0);
     if (StartsWith("aes", algo)) {
@@ -158,7 +159,6 @@ Java_org_openeuler_security_openssl_KAESymmetricCipherBase_nativeInit(JNIEnv* en
 
     KAE_TRACE("KAESymmetricCipherBase_nativeInit: kaeEngine => %p", kaeEngine);
 
-    (*env)->ReleaseStringUTFChars(env, cipherType, algo);
     if (cipher == NULL) {
         KAE_ThrowOOMException(env, "create EVP_CIPHER fail");
         goto cleanup;
@@ -170,19 +170,35 @@ Java_org_openeuler_security_openssl_KAESymmetricCipherBase_nativeInit(JNIEnv* en
 
     if (iv != NULL) {
         ivBytes = (*env)->GetByteArrayElements(env, iv, NULL);
+        ivLength = (*env)->GetArrayLength(env, iv);
     }
     if (key != NULL) {
         keyBytes = (*env)->GetByteArrayElements(env, key, NULL);
     }
 
-    if (!EVP_CipherInit_ex(ctx, cipher, kaeEngine, (const unsigned char*)keyBytes,
-            (const unsigned char*)ivBytes, encrypt ? 1 : 0)) {
+    if (!EVP_CipherInit_ex(ctx, cipher, kaeEngine, NULL,
+            NULL, encrypt ? 1 : 0)) {
         KAE_ThrowFromOpenssl(env, "EVP_CipherInit_ex failed", KAE_ThrowRuntimeException);
+        goto cleanup;
+    }
+
+    if (strcasecmp(algo + 8, "gcm") == 0) {
+        /* Set IV length if default 12 bytes (96 bits) is not appropriate */
+        if(!EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, ivLength, NULL)) {
+            KAE_ThrowFromOpenssl(env, "EVP_CIPHER_CTX_ctrl failed", KAE_ThrowRuntimeException);
+            goto cleanup;
+        }
+    }
+
+    if (!EVP_CipherInit_ex(ctx, NULL, kaeEngine, (const unsigned char*)keyBytes,
+            (const unsigned char*)ivBytes, encrypt ? 1 : 0)) {
+        KAE_ThrowFromOpenssl(env, "EVP_CipherInit_ex int key & iv failed", KAE_ThrowRuntimeException);
         goto cleanup;
     }
 
     EVP_CIPHER_CTX_set_padding(ctx, padding ? 1 : 0);
 
+    (*env)->ReleaseStringUTFChars(env, cipherType, algo);
     FreeMemoryFromInit(env, iv, ivBytes, key, keyBytes, keyLength);
     return (jlong)ctx;
 
@@ -190,6 +206,7 @@ cleanup:
     if (ctx != NULL) {
         EVP_CIPHER_CTX_free(ctx);
     }
+    (*env)->ReleaseStringUTFChars(env, cipherType, algo);
     FreeMemoryFromInit(env, iv, ivBytes, key, keyBytes, keyLength);
     return 0;
 }
