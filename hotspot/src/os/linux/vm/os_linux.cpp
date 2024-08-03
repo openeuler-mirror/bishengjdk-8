@@ -1070,6 +1070,13 @@ void os::free_thread(OSThread* osthread) {
   assert(osthread != NULL, "osthread not set");
 
   if (Thread::current()->osthread() == osthread) {
+#ifdef ASSERT
+    sigset_t current;
+    sigemptyset(&current);
+    pthread_sigmask(SIG_SETMASK, NULL, &current);
+    assert(!sigismember(&current, SR_signum), "SR signal should not be blocked!");
+#endif
+
     // Restore caller's signal mask
     sigset_t sigmask = osthread->caller_sigmask();
     pthread_sigmask(SIG_SETMASK, &sigmask, NULL);
@@ -4723,7 +4730,8 @@ static void SR_handler(int sig, siginfo_t* siginfo, ucontext_t* context) {
   // after sigsuspend.
   int old_errno = errno;
 
-  Thread* thread = Thread::current();
+  Thread* thread = Thread::current_or_null();
+  assert(thread != NULL, "Missing current thread in SR_handler");
   OSThread* osthread = thread->osthread();
   assert(thread->is_VM_thread() || thread->is_Java_thread(), "Must be VMThread or JavaThread");
 
@@ -4735,7 +4743,7 @@ static void SR_handler(int sig, siginfo_t* siginfo, ucontext_t* context) {
     os::SuspendResume::State state = osthread->sr.suspended();
     if (state == os::SuspendResume::SR_SUSPENDED) {
       sigset_t suspend_set;  // signals for sigsuspend()
-
+      sigemptyset(&suspend_set);
       // get current set of blocked signals and unblock resume signal
       pthread_sigmask(SIG_BLOCK, NULL, &suspend_set);
       sigdelset(&suspend_set, SR_signum);
@@ -5025,6 +5033,7 @@ static bool call_chained_handler(struct sigaction *actp, int sig,
 
     // try to honor the signal mask
     sigset_t oset;
+    sigemptyset(&oset);
     pthread_sigmask(SIG_SETMASK, &(actp->sa_mask), &oset);
 
     // call into the chained handler
@@ -5035,7 +5044,7 @@ static bool call_chained_handler(struct sigaction *actp, int sig,
     }
 
     // restore the signal mask
-    pthread_sigmask(SIG_SETMASK, &oset, 0);
+    pthread_sigmask(SIG_SETMASK, &oset, NULL);
   }
   // Tell jvm's signal handler the signal is taken care of.
   return true;
@@ -6699,6 +6708,7 @@ void Parker::park(bool isAbsolute, jlong time) {
   // Don't catch signals while blocked; let the running threads have the signals.
   // (This allows a debugger to break into the running thread.)
   sigset_t oldsigs;
+  sigemptyset(&oldsigs);
   sigset_t* allowdebug_blocked = os::Linux::allowdebug_blocked_signals();
   pthread_sigmask(SIG_BLOCK, allowdebug_blocked, &oldsigs);
 #endif
