@@ -80,7 +80,6 @@ class Inflater {
     private boolean needDict;
     private long bytesRead;
     private long bytesWritten;
-    private boolean inflaterUseKae;
 
     private static final byte[] defaultBuf = new byte[0];
 
@@ -101,11 +100,18 @@ class Inflater {
      * @param nowrap if true then support GZIP compatible compression
      */
     public Inflater(boolean nowrap) {
-        if (("true".equals(System.getProperty("GZIP_USE_KAE", "false"))) &&
-            ("aarch64".equals(System.getProperty("os.arch")))) {
-            inflaterUseKae = true;
-        }
-        zsRef = inflaterUseKae ? new ZStreamRef(initKae()): new ZStreamRef(init(nowrap));
+        zsRef = new ZStreamRef(init(nowrap));
+    }
+
+    /**
+     * Creates a new decompressor.
+     * This method is mainly used to support the KAE-zip feature.
+     *
+     * @param windowBits compression format (-15~31)
+     * @param flushKAE inflate flush type (0~6)
+     */
+    public Inflater(int windowBits, int flushKAE) {
+        this.zsRef = new ZStreamRef(initKAE(windowBits, flushKAE));
     }
 
     /**
@@ -261,9 +267,7 @@ class Inflater {
         synchronized (zsRef) {
             ensureOpen();
             int thisLen = this.len;
-            int n = this.inflaterUseKae ?
-                inflateBytesKAE(zsRef.address(), b, off, len) :
-                inflateBytes(zsRef.address(), b, off, len);
+            int n = inflateBytes(zsRef.address(), b, off, len);
             bytesWritten += n;
             bytesRead += (thisLen - this.len);
             return n;
@@ -366,6 +370,17 @@ class Inflater {
     }
 
     /**
+     * Resets inflater so that a new set of input data can be processed.
+     * This method is mainly used to support the KAE-zip feature.
+     */
+    public void resetKAE() {
+        synchronized (zsRef) {
+            ensureOpen();
+            reset(zsRef.address());
+        }
+    }
+
+    /**
      * Closes the decompressor and discards any unprocessed input.
      * This method should be called when the decompressor is no longer
      * being used, but will also be called automatically by the finalize()
@@ -404,13 +419,11 @@ class Inflater {
 
     private native static void initIDs();
     private native static long init(boolean nowrap);
-    private native static long initKae();
+    private native static long initKAE(int windowBits, int flushKAE);
     private native static void setDictionary(long addr, byte[] b, int off,
                                              int len);
     private native int inflateBytes(long addr, byte[] b, int off, int len)
             throws DataFormatException;
-    private native int inflateBytesKAE(long addr, byte[] b, int off, int len)
-            throws DataFormatException;  
     private native static int getAdler(long addr);
     private native static void reset(long addr);
     private native static void end(long addr);

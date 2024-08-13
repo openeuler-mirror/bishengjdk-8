@@ -52,10 +52,19 @@ class GZIPOutputStream extends DeflaterOutputStream {
      */
     private final static int TRAILER_SIZE = 8;
 
-    /*
-     * GZIP use KAE.
+    /**
+     * The field is mainly used to support the KAE-zip feature.
      */
-    private boolean gzipUseKae = false;
+    private static boolean GZIP_USE_KAE = false;
+
+    private static int WINDOWBITS = 31;
+
+    static {
+        if ("aarch64".equals(System.getProperty("os.arch"))) {
+            GZIP_USE_KAE = Boolean.parseBoolean(System.getProperty("GZIP_USE_KAE", "false"));
+            WINDOWBITS = Integer.parseInt(System.getProperty("WINDOWBITS", "31"));
+        }
+    }
 
     /**
      * Creates a new output stream with the specified buffer size.
@@ -92,16 +101,15 @@ class GZIPOutputStream extends DeflaterOutputStream {
     public GZIPOutputStream(OutputStream out, int size, boolean syncFlush)
         throws IOException
     {
-        super(out, new Deflater(Deflater.DEFAULT_COMPRESSION, true),
+        super(out, GZIP_USE_KAE ? new Deflater(Deflater.DEFAULT_COMPRESSION, WINDOWBITS) :
+              new Deflater(Deflater.DEFAULT_COMPRESSION, true),
               size,
               syncFlush);
         usesDefaultDeflater = true;
-        if (("true".equals(System.getProperty("GZIP_USE_KAE", "false"))) &&
-            ("aarch64".equals(System.getProperty("os.arch")))) {
-            gzipUseKae = true;
-        }
-        // file header will be writed by kae zlib when use kae
-        if (gzipUseKae) return;
+
+        // When GZIP_USE_KAE is true, the header of the file is written
+        // through the native zlib library, not in java code.
+        if (GZIP_USE_KAE) return;
         writeHeader();
         crc.reset();
     }
@@ -171,9 +179,11 @@ class GZIPOutputStream extends DeflaterOutputStream {
                     int len = def.deflate(buf, 0, buf.length);
                     if (def.finished() && len <= buf.length - TRAILER_SIZE) {
                         // last deflater buffer. Fit trailer at the end
-                        // file trailer will be writed by kae zlib when use kae
-                        if (gzipUseKae) {
+                        // When GZIP_USE_KAE is true, the trailer of the file is written
+                        // through the native zlib library, not in java code.
+                        if (GZIP_USE_KAE) {
                             out.write(buf, 0, len);
+                            def.resetKAE();
                             return;
                         }
                         writeTrailer(buf, len);
@@ -184,12 +194,14 @@ class GZIPOutputStream extends DeflaterOutputStream {
                     if (len > 0)
                         out.write(buf, 0, len);
                 }
-                // file trailer will be writed by kae zlib when use kae
-                if (gzipUseKae) {
-                    return;
-                }
                 // if we can't fit the trailer at the end of the last
                 // deflater buffer, we write it separately
+                // When GZIP_USE_KAE is true, the trailer of the file is written
+                // through the native zlib library, not in java code.
+                if (GZIP_USE_KAE) {
+                    def.resetKAE();
+                    return;
+                }
                 byte[] trailer = new byte[TRAILER_SIZE];
                 writeTrailer(trailer, 0);
                 out.write(trailer);

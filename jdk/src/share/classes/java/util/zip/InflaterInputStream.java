@@ -179,6 +179,10 @@ class InflaterInputStream extends FilterInputStream {
         ensureOpen();
         if (reachEOF) {
             return 0;
+        } else if (inf.finished()) {
+            // the end of the compressed data stream has been reached
+            reachEOF = true;
+            return 0;
         } else {
             return 1;
         }
@@ -240,6 +244,27 @@ class InflaterInputStream extends FilterInputStream {
             throw new EOFException("Unexpected end of ZLIB input stream");
         }
         inf.setInput(buf, 0, len);
+    }
+
+    /**
+     * Fills input buffer with more data to decompress.
+     * This method is mainly used to support the KAE-zip feature.
+     * @param     n Maximum Read Bytes
+     * @throws    IOException if an I/O error has occurred
+     */
+    protected void fillKAE(int n) throws IOException {
+        ensureOpen();
+        byte[] buftmp = new byte[buf.length];
+        if (n != 0) {
+            System.arraycopy(buf, buf.length - n, buftmp, 0, n);
+        }
+        int kaelen = in.read(buftmp, n, buf.length - n);
+        if (kaelen == -1) {
+            throw new EOFException("Unexpected end of ZLIB input stream");
+        }
+        System.arraycopy(buftmp, 0, buf, buf.length - n - kaelen, n + kaelen);
+        inf.reset();
+        inf.setInput(buf, buf.length - n - kaelen, n + kaelen);
     }
 
     /**

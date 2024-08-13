@@ -50,5 +50,7 @@ grant {
         permission java.util.PropertyPermission "sun.security.pkcs11.disableKeyExtraction", "read";
 
         permission java.util.PropertyPermission "GZIP_USE_KAE", "read";
+        permission java.util.PropertyPermission "WINDOWBITS", "read";
+        permission java.util.PropertyPermission "FLUSHKAE", "read";
 };
 

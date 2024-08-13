@@ -54,10 +54,22 @@ class GZIPInputStream extends InflaterInputStream {
 
     private boolean closed = false;
 
-    /*
-     * GZIP use KAE.
+    /**
+     * The field is mainly used to support the KAE-zip feature.
      */
-    private boolean gzipUseKae = false;
+    private static boolean GZIP_USE_KAE = false;
+
+    private static int WINDOWBITS = 31;
+
+    private static int FLUSHKAE = 2;
+
+    static {
+        if ("aarch64".equals(System.getProperty("os.arch"))) {
+            GZIP_USE_KAE = Boolean.parseBoolean(System.getProperty("GZIP_USE_KAE", "false"));
+            WINDOWBITS = Integer.parseInt(System.getProperty("WINDOWBITS", "31"));
+            FLUSHKAE = Integer.parseInt(System.getProperty("FLUSHKAE", "2"));
+        }
+    }
 
     /**
      * Check to make sure that this stream has not been closed
@@ -79,14 +91,13 @@ class GZIPInputStream extends InflaterInputStream {
      * @exception IllegalArgumentException if {@code size <= 0}
      */
     public GZIPInputStream(InputStream in, int size) throws IOException {
-        super(in, new Inflater(true), size);
+        super(in, GZIP_USE_KAE ? new Inflater(WINDOWBITS, FLUSHKAE) : new Inflater(true), size);
         usesDefaultInflater = true;
-        if (("true".equals(System.getProperty("GZIP_USE_KAE", "false"))) &&
-            ("aarch64".equals(System.getProperty("os.arch")))) {
-            gzipUseKae = true;
-        }
-        // file header will be readed by kae zlib when use kae
-        if (gzipUseKae) return;
+
+        // When GZIP_USE_KAE is true, the header of the file is readed
+        // through the native zlib library, not in java code.
+        if (GZIP_USE_KAE) return;
+
         readHeader(in);
     }
 
@@ -127,12 +138,15 @@ class GZIPInputStream extends InflaterInputStream {
         }
         int n = super.read(buf, off, len);
         if (n == -1) {
-            if (readTrailer())
+            if (GZIP_USE_KAE ? readTrailerKAE() : readTrailer())
                 eos = true;
             else
                 return this.read(buf, off, len);
         } else {
             crc.update(buf, off, n);
+        }
+        if (GZIP_USE_KAE && inf.finished()) {
+            if (readTrailerKAE()) eos = true;
         }
         return n;
     }
@@ -220,9 +234,7 @@ class GZIPInputStream extends InflaterInputStream {
      * data set)
      */
     private boolean readTrailer() throws IOException {
-        // file trailer will be readed by kae zlib when use kae
-        if (gzipUseKae) return true;
-
+        if (GZIP_USE_KAE) return true;
         InputStream in = this.in;
         int n = inf.getRemaining();
         if (n > 0) {
@@ -248,6 +260,39 @@ class GZIPInputStream extends InflaterInputStream {
         inf.reset();
         if (n > m)
             inf.setInput(buf, len - n + m, n - m);
+        return false;
+    }
+
+    /*
+     * Reads GZIP member trailer and returns true if the eos
+     * reached, false if there are more (concatenated gzip
+     * data set)
+     *
+     * This method is mainly used to support the KAE-zip feature.
+     */
+    private boolean readTrailerKAE() throws IOException {
+        InputStream in = this.in;
+        int n = inf.getRemaining();
+        if (n > 0) {
+            in = new SequenceInputStream(
+                        new ByteArrayInputStream(buf, len - n, n),
+                        new FilterInputStream(in) {
+                            public void close() throws IOException {}
+                        });
+        }
+        // If there are more bytes available in "in" or the leftover in the "inf" is > 18 bytes:
+        // next.header.min(10) + next.trailer(8), try concatenated case
+
+        if (n > 18) {
+            inf.reset();
+            inf.setInput(buf, len - n, n);
+        } else {
+            try {
+                fillKAE(n);
+            } catch (IOException e) {
+                return true;
+            }
+        }
         return false;
     }
 
