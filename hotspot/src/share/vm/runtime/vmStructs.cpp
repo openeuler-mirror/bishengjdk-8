@@ -399,6 +399,10 @@ typedef OffsetCompactHashtable<const char*, Symbol*, symbol_equals_compact_hasht
   nonstatic_field(Symbol,                      _length,                                       unsigned short)                        \
   unchecked_nonstatic_field(Symbol,            _body,                                         sizeof(jbyte)) /* NOTE: no type */     \
   nonstatic_field(TypeArrayKlass,              _max_length,                                   int)                                   \
+  nonstatic_field(Annotations,                 _class_annotations,                            Array<u1>*)                            \
+  nonstatic_field(Annotations,                 _class_type_annotations,                       Array<u1>*)                            \
+  nonstatic_field(Annotations,                 _fields_annotations,                           Array<Array<u1>*>*)                    \
+  nonstatic_field(Annotations,                 _fields_type_annotations,                      Array<Array<u1>*>*)                    \
                                                                                                                                      \
   /***********************/                                                                                                          \
   /* Constant Pool Cache */                                                                                                          \
@@ -767,6 +771,8 @@ typedef OffsetCompactHashtable<const char*, Symbol*, symbol_equals_compact_hasht
                                                                                                                                      \
   nonstatic_field(Array<Klass*>,               _length,                                       int)                                   \
   nonstatic_field(Array<Klass*>,               _data[0],                                      Klass*)                                \
+  nonstatic_field(Array<Array<u1>*>,           _length,                                       int)                                   \
+  nonstatic_field(Array<Array<u1>*>,           _data[0],                                      Array<u1>*)                            \
                                                                                                                                      \
   /*******************/                                                                                                              \
   /* GrowableArrays  */                                                                                                              \
@@ -1264,6 +1270,7 @@ typedef OffsetCompactHashtable<const char*, Symbol*, symbol_equals_compact_hasht
   unchecked_nonstatic_field(Array<u2>,             _data,                                     sizeof(u2))                            \
   unchecked_nonstatic_field(Array<Method*>,        _data,                                     sizeof(Method*))                       \
   unchecked_nonstatic_field(Array<Klass*>,         _data,                                     sizeof(Klass*))                        \
+  unchecked_nonstatic_field(Array<Array<u1>*>,     _data,                                     sizeof(Array<u1>*))                    \
                                                                                                                                      \
   /*********************************/                                                                                                \
   /* java_lang_Class fields        */                                                                                                \
@@ -1460,6 +1467,7 @@ typedef OffsetCompactHashtable<const char*, Symbol*, symbol_equals_compact_hasht
     declare_type(Method, Metadata)                                        \
     declare_type(MethodCounters, MetaspaceObj)                            \
     declare_type(ConstMethod, MetaspaceObj)                               \
+    declare_type(Annotations, MetaspaceObj)                               \
                                                                           \
   declare_toplevel_type(vtableEntry)                                      \
                                                                           \
@@ -2131,6 +2139,7 @@ typedef OffsetCompactHashtable<const char*, Symbol*, symbol_equals_compact_hasht
             declare_type(Array<u2>, MetaspaceObj)                         \
             declare_type(Array<Klass*>, MetaspaceObj)                     \
             declare_type(Array<Method*>, MetaspaceObj)                    \
+            declare_type(Array<Array<u1>*>, MetaspaceObj)                 \
                                                                           \
    declare_integer_type(AccessFlags)  /* FIXME: wrong type (not integer) */\
   declare_toplevel_type(address)      /* FIXME: should this be an integer type? */\

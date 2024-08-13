@@ -50,6 +50,15 @@ else
   include $(if $(wildcard $(ALT_BUILDARCH_MAKE)),$(ALT_BUILDARCH_MAKE),$(BUILDARCH_MAKE))
 endif
 
+# PLUGIN PATH
+JVM_KUNPENG_PLUGIN_DIR := $(shell find $(GAMMADIR)/../jdk/src/share/* -type d -name plugin)
+JVM_KUNPENG_PLUGIN_SRC := $(JVM_KUNPENG_PLUGIN_DIR)/feature
+ifeq ($(wildcard $(JVM_KUNPENG_PLUGIN_SRC)), $(JVM_KUNPENG_PLUGIN_SRC))
+    JVM_KUNPENG_PLUGIN_SRCS := $(shell find $(JVM_KUNPENG_PLUGIN_SRC)/ -type d)
+    Src_Dirs_V += $(JVM_KUNPENG_PLUGIN_SRCS)
+    Src_Dirs_I += $(JVM_KUNPENG_PLUGIN_SRCS)
+endif
+
 # set VPATH so make knows where to look for source files
 # Src_Dirs_V is everything in src/share/vm/*, plus the right os/*/vm and cpu/*/vm
 # The adfiles directory contains ad_<arch>.[ch]pp.
@@ -186,6 +195,11 @@ Src_Dirs/ZERO      := $(CORE_PATHS)
 Src_Dirs/SHARK     := $(CORE_PATHS) $(SHARK_PATHS)
 Src_Dirs := $(Src_Dirs/$(TYPE))
 
+ifeq ($(wildcard $(JVM_KUNPENG_PLUGIN_SRC)), $(JVM_KUNPENG_PLUGIN_SRC))
+    JVM_KUNPENG_PLUGIN_SRCS := $(shell find $(JVM_KUNPENG_PLUGIN_SRC)/ -type d)
+    Src_Dirs += $(JVM_KUNPENG_PLUGIN_SRCS)
+endif
+
 COMPILER2_SPECIFIC_FILES := opto libadt bcEscapeAnalyzer.cpp c2_\* runtime_\*
 COMPILER1_SPECIFIC_FILES := c1_\*
 SHARK_SPECIFIC_FILES     := shark
@@ -233,7 +247,18 @@ JVM_OBJ_FILES = $(Obj_Files)
 
 vm_version.o: $(filter-out vm_version.o,$(JVM_OBJ_FILES))
 
-mapfile : $(MAPFILE) vm.def mapfile_ext
+JVM_KUNPENG_PLUGIN_SYMBOLS_SRC := $(JVM_KUNPENG_PLUGIN_DIR)/make/hotspot-symbols/symbols-plugin
+EXTENDED_SYMBOLS_START=$(shell awk '/EXTENDED SYMBOLS START/{print NR}' $(MAPFILE))
+EXTENDED_SYMBOLS_END=$(shell awk '/EXTENDED SYMBOLS END/{print NR}' $(MAPFILE))
+
+mapfile_extend : $(MAPFILE)
+	if [ "$(EXTENDED_SYMBOLS_START)" != "" ] && [ "$(EXTENDED_SYMBOLS_END)" != "" ]; then\
+        sed -i '$(EXTENDED_SYMBOLS_START), $(EXTENDED_SYMBOLS_END)d' $(MAPFILE);\
+    fi
+	sed -i '/INSERT EXTENDED SYMBOLS HERE/r $(JVM_KUNPENG_PLUGIN_SYMBOLS_SRC)' $(MAPFILE)
+
+
+mapfile : mapfile_extend vm.def mapfile_ext
 	rm -f $@
 	awk '{ if ($$0 ~ "INSERT VTABLE SYMBOLS HERE")	\
                  { system ("cat mapfile_ext"); system ("cat vm.def"); } \

@@ -39,12 +39,12 @@ import sun.jvm.hotspot.gc_implementation.parallelScavenge.*;
 import sun.jvm.hotspot.gc_interface.*;
 import sun.jvm.hotspot.interpreter.*;
 import sun.jvm.hotspot.memory.*;
-import sun.jvm.hotspot.oops.*;
 import sun.jvm.hotspot.runtime.*;
 import sun.jvm.hotspot.ui.*;
 import sun.jvm.hotspot.ui.tree.*;
 import sun.jvm.hotspot.ui.classbrowser.*;
 import sun.jvm.hotspot.utilities.*;
+import sun.jvm.hotspot.oops.*;
 
 /** The top-level HotSpot Debugger. FIXME: make this an embeddable
     component! (Among other things, figure out what to do with the
@@ -988,7 +988,7 @@ public class HSDB implements ObjectHistogramPanel.Listener, SAListener {
             }
 
             if (curFrame.getFP() != null) {
-              annoPanel.addAnnotation(new Annotation(curFrame.getSP(),
+              annoPanel.addAnnotation(new sun.jvm.hotspot.ui.Annotation(curFrame.getSP(),
                                                      curFrame.getFP(),
                                                      anno));
             } else {
@@ -1000,7 +1000,7 @@ public class HSDB implements ObjectHistogramPanel.Listener, SAListener {
                 if (Assert.ASSERTS_ENABLED) {
                   Assert.that(cb.getFrameSize() > 0, "CodeBlob must have non-zero frame size");
                 }
-                annoPanel.addAnnotation(new Annotation(sp,
+                annoPanel.addAnnotation(new sun.jvm.hotspot.ui.Annotation(sp,
                                                        sp.addOffsetTo(cb.getFrameSize()),
                                                        anno));
               } else {
@@ -1010,19 +1010,19 @@ public class HSDB implements ObjectHistogramPanel.Listener, SAListener {
 
             // Add interpreter frame annotations
             if (curFrame.isInterpretedFrame()) {
-              annoPanel.addAnnotation(new Annotation(curFrame.addressOfInterpreterFrameExpressionStack(),
+              annoPanel.addAnnotation(new sun.jvm.hotspot.ui.Annotation(curFrame.addressOfInterpreterFrameExpressionStack(),
                                                      curFrame.addressOfInterpreterFrameTOS(),
                                                      "Interpreter expression stack"));
               Address monBegin = curFrame.interpreterFrameMonitorBegin().address();
               Address monEnd = curFrame.interpreterFrameMonitorEnd().address();
               if (!monBegin.equals(monEnd)) {
-                  annoPanel.addAnnotation(new Annotation(monBegin, monEnd,
+                  annoPanel.addAnnotation(new sun.jvm.hotspot.ui.Annotation(monBegin, monEnd,
                                                          "BasicObjectLocks"));
               }
               if (interpreterFrameMethod != null) {
                 // The offset is just to get the right stack slots highlighted in the output
                 int offset = 1;
-                annoPanel.addAnnotation(new Annotation(curFrame.addressOfInterpreterFrameLocal(offset),
+                annoPanel.addAnnotation(new sun.jvm.hotspot.ui.Annotation(curFrame.addressOfInterpreterFrameLocal(offset),
                                                        curFrame.addressOfInterpreterFrameLocal((int) interpreterFrameMethod.getMaxLocals() + offset),
                                                        "Interpreter locals area for frame with SP = " + curFrame.getSP()));
               }
@@ -1031,9 +1031,9 @@ public class HSDB implements ObjectHistogramPanel.Listener, SAListener {
                 methodAnno += " (BAD OOP)";
               }
               Address a = curFrame.addressOfInterpreterFrameMethod();
-              annoPanel.addAnnotation(new Annotation(a, a.addOffsetTo(addressSize), methodAnno));
+              annoPanel.addAnnotation(new sun.jvm.hotspot.ui.Annotation(a, a.addOffsetTo(addressSize), methodAnno));
               a = curFrame.addressOfInterpreterFrameCPCache();
-              annoPanel.addAnnotation(new Annotation(a, a.addOffsetTo(addressSize), "Interpreter constant pool cache"));
+              annoPanel.addAnnotation(new sun.jvm.hotspot.ui.Annotation(a, a.addOffsetTo(addressSize), "Interpreter constant pool cache"));
             }
 
             RegisterMap rm = (RegisterMap) vf.getRegisterMap().clone();
@@ -1118,7 +1118,7 @@ public class HSDB implements ObjectHistogramPanel.Listener, SAListener {
                         }
                       }
 
-                      annoPanel.addAnnotation(new Annotation(addr, addr.addOffsetTo(addressSize), anno));
+                      annoPanel.addAnnotation(new sun.jvm.hotspot.ui.Annotation(addr, addr.addOffsetTo(addressSize), anno));
                     }
                   }, rm);
               } catch (Exception e) {

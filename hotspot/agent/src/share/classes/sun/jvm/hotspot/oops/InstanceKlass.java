@@ -73,6 +73,7 @@ public class InstanceKlass extends Klass {
     transitiveInterfaces = type.getAddressField("_transitive_interfaces");
     fields               = type.getAddressField("_fields");
     javaFieldsCount      = new CIntField(type.getCIntegerField("_java_fields_count"), 0);
+    annotate             = type.getAddressField("_annotations");
     constants            = new MetadataField(type.getAddressField("_constants"), 0);
     classLoaderData      = type.getAddressField("_class_loader_data");
     sourceDebugExtension = type.getAddressField("_source_debug_extension");
@@ -132,6 +133,7 @@ public class InstanceKlass extends Klass {
   private static AddressField  transitiveInterfaces;
   private static AddressField fields;
   private static CIntField javaFieldsCount;
+  private static AddressField annotate;
   private static MetadataField constants;
   private static AddressField  classLoaderData;
   private static AddressField  sourceDebugExtension;
@@ -849,6 +851,11 @@ public class InstanceKlass extends Klass {
   public IntArray  getMethodOrdering() {
     Address addr = getAddress().getAddressAt(methodOrdering.getOffset());
     return (IntArray) VMObjectFactory.newObject(IntArray.class, addr);
+  }
+
+ public Annotation getAnnotation() {
+      Address addr = getAddress().getAddressAt(annotate.getOffset());
+      return (Annotation) VMObjectFactory.newObject(Annotation.class, addr);
   }
 
   public U2Array getFields() {
