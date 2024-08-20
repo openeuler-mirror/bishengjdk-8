@@ -53,6 +53,7 @@ void generate_transcendental_entry(AbstractInterpreter::MethodKind kind, int fpa
   void emit_array_address(Register src, Register idx, Register dst, BasicType type);
   address generate_Dgemm_dgemm_entry();
   address generate_Dgemv_dgemv_entry();
+  address generate_JVM_isAmd64_entry();
 
   void generate_counter_incr(Label* overflow, Label* profile_method, Label* profile_method_continue);
   void generate_counter_overflow(Label* do_continue);

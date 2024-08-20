@@ -259,6 +259,10 @@ AbstractInterpreter::MethodKind AbstractInterpreter::method_kind(methodHandle m)
     }
   }
 
+  if (UseHBaseUtilIntrinsics && m->intrinsic_id() == vmIntrinsics::_jvm_isAmd64) {
+    return org_apache_hadoop_hbase_util_JVM_isAmd64;
+  }
+
   // Accessor method?
   if (m->is_accessor()) {
     assert(m->size_of_parameters() == 1, "fast code for accessors assumes parameter size = 1");
@@ -321,6 +325,7 @@ void AbstractInterpreter::print_method_kind(MethodKind kind) {
     case java_util_zip_CRC32_updateByteBuffer : tty->print("java_util_zip_CRC32_updateByteBuffer"); break;
     case org_netlib_blas_Dgemm_dgemm : tty->print("org_netlib_blas_Dgemm_dgemm"); break;
     case org_netlib_blas_Dgemv_dgemv : tty->print("org_netlib_blas_Dgemv_dgemv"); break;
+    case org_apache_hadoop_hbase_util_JVM_isAmd64 : tty->print("org_apache_hadoop_hbase_util_JVM_isAmd64"); break;
     default:
       if (kind >= method_handle_invoke_FIRST &&
           kind <= method_handle_invoke_LAST) {

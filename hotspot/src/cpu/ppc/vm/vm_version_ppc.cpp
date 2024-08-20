@@ -251,6 +251,11 @@ void VM_Version::initialize() {
     FLAG_SET_DEFAULT(UseF2jBLASIntrinsics, false);
   }
 
+  if (UseHBaseUtilIntrinsics) {
+    warning("hbase.util instructions are not available on this CPU");
+    FLAG_SET_DEFAULT(UseHBaseUtilIntrinsics, false);
+  }
+
   if (FLAG_IS_DEFAULT(UseMontgomeryMultiplyIntrinsic)) {
     UseMontgomeryMultiplyIntrinsic = true;
   }

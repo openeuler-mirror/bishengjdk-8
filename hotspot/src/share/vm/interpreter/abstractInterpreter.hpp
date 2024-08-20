@@ -102,6 +102,7 @@ class AbstractInterpreter: AllStatic {
     java_util_zip_CRC32_updateByteBuffer,                       // implementation of java.util.zip.CRC32.updateByteBuffer()
     org_netlib_blas_Dgemm_dgemm,                                // implementation of org.netlib.blas.Dgemm.dgemm()
     org_netlib_blas_Dgemv_dgemv,                                // implementation of org.netlib.blas.Dgemv.dgemv()
+    org_apache_hadoop_hbase_util_JVM_isAmd64,                   // implementation of org.hbase.hadoop.hbase.util.JVM.isAmd64()
     number_of_method_entries,
     invalid = -1
   };
