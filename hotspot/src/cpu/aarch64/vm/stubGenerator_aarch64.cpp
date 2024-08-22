@@ -5185,6 +5185,10 @@ class StubGenerator: public StubCodeGenerator {
       StubRoutines::_dgemmDgemm = generate_dgemmDgemm(StubRoutines::_BLAS_library);
       StubRoutines::_dgemvDgemv = generate_dgemvDgemv(StubRoutines::_BLAS_library);
     }
+
+    if (UseHBaseUtilIntrinsics) {
+      StubRoutines::_isAmd64JVM = CAST_FROM_FN_PTR(address, StubRoutines::intrinsic_isAmd64_JVM);
+    }
   }
 
   void generate_all() {

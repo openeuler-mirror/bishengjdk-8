@@ -221,6 +221,7 @@ class StubRoutines: AllStatic {
   static address _ddotF2jBLAS;
   static address _dgemmDgemm;
   static address _dgemvDgemv;
+  static address _isAmd64JVM;
 
   static address _multiplyToLen;
   static address _squareToLen;
@@ -391,6 +392,7 @@ class StubRoutines: AllStatic {
   static address ddotF2jBLAS()         { return _ddotF2jBLAS; }
   static address dgemmDgemm()          { return _dgemmDgemm; }
   static address dgemvDgemv()          { return _dgemvDgemv; }
+  static address isAmd64JVM()          { return _isAmd64JVM; }
 
   static address multiplyToLen()       {return _multiplyToLen; }
   static address squareToLen()         {return _squareToLen; }
@@ -429,6 +431,10 @@ class StubRoutines: AllStatic {
   static double  intrinsic_tan(double d) {
     assert(_intrinsic_tan != NULL, "must be defined");
     return _intrinsic_tan(d);
+  }
+
+  static bool intrinsic_isAmd64_JVM() {
+    return true;
   }
 
   //

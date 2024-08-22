@@ -406,6 +406,10 @@ void TemplateInterpreterGenerator::generate_all() {
     method_entry(org_netlib_blas_Dgemv_dgemv)
   }
 
+  if (UseHBaseUtilIntrinsics) {
+    method_entry(org_apache_hadoop_hbase_util_JVM_isAmd64)
+  }
+
   initialize_method_handle_entries();
 
   // all native method kinds (must be one contiguous block)

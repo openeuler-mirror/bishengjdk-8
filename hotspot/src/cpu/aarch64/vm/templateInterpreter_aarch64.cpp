@@ -860,6 +860,18 @@ void InterpreterGenerator::emit_array_address(Register src, Register idx,
   __ add(dst, src, idx);
 }
 
+
+address InterpreterGenerator::generate_JVM_isAmd64_entry() {
+  address entry = __ pc();
+  __ mov(r19, lr);
+  address fn = CAST_FROM_FN_PTR(address, StubRoutines::isAmd64JVM());
+  __ mov(rscratch1, fn);
+  __ blr(rscratch1);
+  __ br(r19);
+
+  return entry;
+}
+
 /**
  * Stub Arguments:
  *
@@ -1838,6 +1850,8 @@ address AbstractInterpreterGenerator::generate_method_entry(
                                            : entry_point = ((InterpreterGenerator*)this)->generate_Dgemm_dgemm_entry(); break;
   case Interpreter::org_netlib_blas_Dgemv_dgemv
                                            : entry_point = ((InterpreterGenerator*)this)->generate_Dgemv_dgemv_entry(); break;
+  case Interpreter::org_apache_hadoop_hbase_util_JVM_isAmd64
+                                           : entry_point = ((InterpreterGenerator*)this)->generate_JVM_isAmd64_entry(); break;
   default                                  : ShouldNotReachHere();                                                       break;
   }
 

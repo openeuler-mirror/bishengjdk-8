@@ -76,13 +76,11 @@ void JavaThread::os_linux_aarch64_options(const char *name) {
         const static intx tTypeProfileMajorReceiverPercent = TypeProfileMajorReceiverPercent;
         const static intx tLoopUnrollLimit = LoopUnrollLimit;
         if (stringHash(secondStr) == 2046673384) {
-          // makes specjvm compiler.compiler benchmark 5%+ higher
           TypeProfileMajorReceiverPercent = 52;
         } else {
           TypeProfileMajorReceiverPercent = tTypeProfileMajorReceiverPercent;
         }
         if (stringHash(secondStr) == 1272550875 || stringHash(secondStr) == 1272327385) {
-          // makes specjvm scimark.sor.small/large benchmark 10%+ higher
           LoopUnrollLimit = 1000;
         } else {
           LoopUnrollLimit = tLoopUnrollLimit;
@@ -108,6 +106,31 @@ void JavaThread::os_linux_aarch64_options(const char *name) {
    }
 }
 
+void set_compilation_tuner_params() {
+  if (FLAG_IS_DEFAULT(UseCounterDecay))
+    FLAG_SET_DEFAULT(UseCounterDecay, false);
+  if (FLAG_IS_DEFAULT(DontCompileHugeMethods))
+    FLAG_SET_DEFAULT(DontCompileHugeMethods, false);
+  if (FLAG_IS_DEFAULT(TieredCompilation))
+    FLAG_SET_DEFAULT(TieredCompilation, false);
+  if (FLAG_IS_DEFAULT(CompileThreshold))
+    FLAG_SET_DEFAULT(CompileThreshold, 11132);
+  if (FLAG_IS_DEFAULT(BackEdgeThreshold))
+    FLAG_SET_DEFAULT(BackEdgeThreshold, 136559);
+  if (FLAG_IS_DEFAULT(OnStackReplacePercentage))
+    FLAG_SET_DEFAULT(OnStackReplacePercentage, 182);
+  if (FLAG_IS_DEFAULT(InterpreterProfilePercentage))
+    FLAG_SET_DEFAULT(InterpreterProfilePercentage, 17);
+}
+
+void set_intrinsic_param() {
+  if (FLAG_IS_DEFAULT(UseHBaseUtilIntrinsics)) {
+    warning("If your HBase version is lower than 2.4.14, please explicitly specify"
+             " -XX:-UseHBaseUtilIntrinsics, otherwise HBase may fail to start.");
+    FLAG_SET_DEFAULT(UseHBaseUtilIntrinsics, true);
+  }
+}
+
 void JavaThread::os_linux_aarch64_options(int apc, char **name) {
   if (name == NULL) {
     return;
@@ -118,6 +141,8 @@ void JavaThread::os_linux_aarch64_options(int apc, char **name) {
     int step = 0;
     while (name[i] != NULL) {
       if (stringHash(name[i]) == 1396789436) {
+        set_compilation_tuner_params();
+        set_intrinsic_param();
         if (FLAG_IS_DEFAULT(ActiveProcessorCount) && (UseG1GC || UseParallelGC) && apc > 8)
           FLAG_SET_DEFAULT(ActiveProcessorCount, 8);
         break;

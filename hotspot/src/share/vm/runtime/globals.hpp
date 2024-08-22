@@ -768,6 +768,9 @@ class CommandLineFlags {
   product(bool, UseCRC32Intrinsics, false,                                  \
           "use intrinsics for java.util.zip.CRC32")                         \
                                                                             \
+  product(bool, UseHBaseUtilIntrinsics, false,                              \
+          "use intrinsics for org.apache.hadoop.hbase.util.JVM on aarch64") \
+                                                                            \
   experimental(bool, UseF2jBLASIntrinsics, false,                           \
           "use intrinsics for com.github.fommil.netlib.F2jBLAS on aarch64") \
                                                                             \

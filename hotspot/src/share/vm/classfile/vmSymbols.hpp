@@ -880,6 +880,11 @@
    do_name(     dgemv_name,                                         "dgemv")                                            \
    do_signature(dgemv_signature,                                    "(Ljava/lang/String;IID[DII[DIID[DII)V")            \
                                                                                                                         \
+  /* support for org.apache.hadoop.hbase.util.JVM */                                                                    \
+  do_class(org_apache_hadoop_hbase_util_jvm,                       "org/apache/hadoop/hbase/util/JVM")                  \
+  do_intrinsic(_jvm_isAmd64, org_apache_hadoop_hbase_util_jvm, isAmd64_name, void_boolean_signature, F_S)               \
+   do_name(     isAmd64_name,                                         "isAmd64")                                        \
+                                                                                                                        \
   /* support for sun.security.provider.SHA2 */                                                                          \
   do_class(sun_security_provider_sha2,                             "sun/security/provider/SHA2")                        \
   do_intrinsic(_sha2_implCompress, sun_security_provider_sha2, implCompress_name, implCompress_signature, F_R)          \

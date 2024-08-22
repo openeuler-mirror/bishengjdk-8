@@ -144,6 +144,8 @@ address StubRoutines::_ddotF2jBLAS = NULL;
 address StubRoutines::_dgemmDgemm = NULL;
 address StubRoutines::_dgemvDgemv = NULL;
 
+address StubRoutines::_isAmd64JVM = NULL;
+
 address StubRoutines::_multiplyToLen = NULL;
 address StubRoutines::_squareToLen = NULL;
 address StubRoutines::_mulAdd = NULL;
