@@ -26,6 +26,8 @@
  * @bug 8054889
  * @build DcmdUtil CompilerQueueTest
  * @run main CompilerQueueTest
+ * @run main/othervm -XX:-TieredCompilation CompilerQueueTest
+ * @run main/othervm -Xint CompilerQueueTest
  * @summary Test of diagnostic command Compiler.queue
  */
 
@@ -62,36 +64,31 @@ public class CompilerQueueTest {
         String result = DcmdUtil.executeDcmd("Compiler.queue");
         BufferedReader r = new BufferedReader(new StringReader(result));
 
-        String line;
-        match(r.readLine(), "Contents of C1 compile queue");
-        match(r.readLine(), "----------------------------");
         String str = r.readLine();
-        if (!str.equals("Empty")) {
-            while (str.charAt(0) != '-') {
-                validateMethodLine(str);
+        while (str != null) {
+            if (str.startsWith("Contents of C")) {
+                match(r.readLine(), "----------------------------");
                 str = r.readLine();
-            }
-        } else {
-            str = r.readLine();
-        }
-
-        match(str,          "----------------------------");
-        match(r.readLine(), "Contents of C2 compile queue");
-        match(r.readLine(), "----------------------------");
-        str = r.readLine();
-        if (!str.equals("Empty")) {
-            while (str.charAt(0) != '-') {
-                validateMethodLine(str);
+                if (!str.equals("Empty")) {
+                    while (str.charAt(0) != '-') {
+                        validateMethodLine(str);
+                        str = r.readLine();
+                    }
+                } else {
+                    str = r.readLine();
+                }
+                match(str,"----------------------------");
                 str = r.readLine();
+            } else {
+                throw new Exception("Failed parsing dcmd queue, line: " + str);
             }
-        } else {
-            str = r.readLine();
         }
-        match(str, "----------------------------");
     }
 
     private static void validateMethodLine(String str)  throws Exception {
-        String name = str.substring(19);
+        // Skip until package/class name begins. Trim to remove whitespace that
+        // may differ.
+        String name = str.substring(14).trim();
         int sep = name.indexOf("::");
         try {
             Class.forName(name.substring(0, sep));
