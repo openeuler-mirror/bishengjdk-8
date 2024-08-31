@@ -181,6 +181,7 @@ static jint jcmd(AttachOperation* op, outputStream* out) {
 // Input arguments :-
 //   arg0: Name of the dump file
 //   arg1: "-live" or "-all"
+//   arg2: "-HeapDumpRedact=<heapDumpRedactLevel>,RedactMap=<redactMap>,RedactMapFile=<redactMapFile>"
 jint dump_heap(AttachOperation* op, outputStream* out) {
   const char* path = op->arg(0);
   if (path == NULL || path[0] == '\0') {
@@ -196,11 +197,20 @@ jint dump_heap(AttachOperation* op, outputStream* out) {
       live_objects_only = strcmp(arg1, "-live") == 0;
     }
 
+    const char* arg2 = op->arg(2);
+    if (arg2 != NULL && (strlen(arg2) > 0)) {
+      size_t len = strlen("-HeapDumpRedact=");
+      if (strncmp(arg2, "-HeapDumpRedact=", len) != 0){
+        out->print_cr("Invalid argument to dumpheap operation: %s", arg2);
+        return JNI_ERR;
+      }
+    }
+
     // Request a full GC before heap dump if live_objects_only = true
     // This helps reduces the amount of unreachable objects in the dump
     // and makes it easier to browse.
     HeapDumper dumper(live_objects_only /* request GC */);
-    int res = dumper.dump(op->arg(0));
+    int res = dumper.dump(op->arg(0), arg2, out);
     if (res == 0) {
       out->print_cr("Heap dump file created");
     } else {
@@ -371,6 +381,14 @@ static jint set_flag(AttachOperation* op, outputStream* out) {
 
   Flag* f = Flag::find_flag((char*)name, strlen(name));
   if (f && f->is_external() && f->is_writeable()) {
+    if(VerifyRedactPassword) {
+      if(strcmp(name, "HeapDumpRedact") == 0 || strcmp(name, "RedactMap") == 0 || strcmp(name, "RedactMapFile") == 0
+         || strcmp(name, "RedactClassPath") == 0) {
+          out->print_cr("has no authority to reset redact params");
+          return JNI_ERR;
+      }
+    }
+
     if (f->is_bool()) {
       return set_bool_flag(name, op, out);
     } else if (f->is_intx()) {

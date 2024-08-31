@@ -379,6 +379,31 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
     private static final int JVM_SIGNATURE_ARRAY   = '[';
     private static final int JVM_SIGNATURE_CLASS   = 'L';
 
+    // Heap Redact
+    private HeapRedactor heapRedactor;
+
+    public HeapRedactor getHeapRedactor() {
+        return heapRedactor;
+    }
+
+    public void setHeapRedactor(HeapRedactor heapRedactor) {
+        this.heapRedactor = heapRedactor;
+    }
+
+    public HeapRedactor.HeapDumpRedactLevel getHeapDumpRedactLevel(){
+        if(heapRedactor == null){
+            return HeapRedactor.HeapDumpRedactLevel.REDACT_OFF;
+        }
+        return heapRedactor.getHeapDumpRedactLevel();
+    }
+
+    private String lookupRedactName(String name){
+        if(heapRedactor == null){
+            return null;
+        }
+        return heapRedactor.lookupRedactName(name);
+    }
+
     public synchronized void write(String fileName) throws IOException {
         // open file stream and create buffered data output stream
         fos = new FileOutputStream(fileName);
@@ -431,6 +456,9 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
 
         // this will write heap data into the buffer stream
         super.write();
+
+        // write redacted String Field record
+        writeAnnotateFieldValue();
 
         // flush buffer stream.
         out.flush();
@@ -530,6 +558,59 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
                         });
         } catch (RuntimeException re) {
             handleRuntimeException(re);
+        }
+    }
+
+    private void writeAnnotateFieldValue() throws IOException {
+        HeapRedactor.HeapDumpRedactLevel level = getHeapDumpRedactLevel();
+        if(level != HeapRedactor.HeapDumpRedactLevel.REDACT_ANNOTATION
+                && level != HeapRedactor.HeapDumpRedactLevel.REDACT_DIYRULES) {
+            return;
+        }
+
+        HeapRedactor.RedactVectorNode redactVector = heapRedactor.getHeaderNode();
+        if(redactVector == null) {
+            return;
+        }
+
+        while(redactVector != null){
+            List<TypeArray> typeArrayList = redactVector.getTypeArrayList();
+            for(int i = 0; i < redactVector.getCurrentIndex(); i++) {
+                TypeArray array = typeArrayList.get(i);
+                TypeArrayKlass tak = (TypeArrayKlass) array.getKlass();
+                final int type = (int) tak.getElementType();
+
+                if(type != TypeArrayKlass.T_CHAR) {
+                    continue;
+                }
+
+                OopHandle handle = (array != null)? array.getHandle() : null;
+                long address = getAddressValue(handle);
+                Optional<String> annotateValueOptional = heapRedactor.lookupRedactAnnotationValue(address);
+                String annotateValue = annotateValueOptional.isPresent() ? annotateValueOptional.get() : null;
+                long expectLength = array.getLength();
+                if(annotateValue != null) {
+                    expectLength = annotateValue.length();
+                }
+
+                final String typeName = tak.getElementTypeName();
+                out.writeByte((byte) HPROF_GC_PRIM_ARRAY_DUMP);
+                writeObjectID(array);
+                out.writeInt(DUMMY_STACK_TRACE_ID);
+                out.writeInt((int)expectLength);
+                out.writeByte((byte) type);
+
+                if (annotateValue != null) {
+                    for(int index = 0; index < expectLength; index++) {
+                        out.writeChar(annotateValue.charAt(index));
+                    }
+                } else {
+                    writeCharArray(array);
+                }
+            }
+
+            HeapRedactor.RedactVectorNode tempVector = redactVector.getNext();
+            redactVector = tempVector;
         }
     }
 
@@ -690,19 +771,34 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
     }
 
     protected void writePrimitiveArray(TypeArray array) throws IOException {
+        HeapRedactor.HeapDumpRedactLevel level = getHeapDumpRedactLevel();
+
+        TypeArrayKlass tak = (TypeArrayKlass) array.getKlass();
+        final int type = (int) tak.getElementType();
+        if(type == TypeArrayKlass.T_CHAR && (level == HeapRedactor.HeapDumpRedactLevel.REDACT_ANNOTATION
+                || level == HeapRedactor.HeapDumpRedactLevel.REDACT_DIYRULES)) {
+            heapRedactor.recordTypeArray(array);
+            return;
+        }
+
         out.writeByte((byte) HPROF_GC_PRIM_ARRAY_DUMP);
         writeObjectID(array);
         out.writeInt(DUMMY_STACK_TRACE_ID);
         out.writeInt((int) array.getLength());
-        TypeArrayKlass tak = (TypeArrayKlass) array.getKlass();
-        final int type = (int) tak.getElementType();
         out.writeByte((byte) type);
+
+        boolean shouldRedact = ( level== HeapRedactor.HeapDumpRedactLevel.REDACT_BASIC
+                ||level == HeapRedactor.HeapDumpRedactLevel.REDACT_FULL);
         switch (type) {
             case TypeArrayKlass.T_BOOLEAN:
                 writeBooleanArray(array);
                 break;
             case TypeArrayKlass.T_CHAR:
-                writeCharArray(array);
+                if (shouldRedact) {
+                    writeCharArrayObfuscated(array);
+                } else {
+                    writeCharArray(array);
+                }
                 break;
             case TypeArrayKlass.T_FLOAT:
                 writeFloatArray(array);
@@ -711,13 +807,21 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
                 writeDoubleArray(array);
                 break;
             case TypeArrayKlass.T_BYTE:
-                writeByteArray(array);
+                if (shouldRedact) {
+                    writeByteArrayObfuscated(array);
+                } else {
+                    writeByteArray(array);
+                }
                 break;
             case TypeArrayKlass.T_SHORT:
                 writeShortArray(array);
                 break;
             case TypeArrayKlass.T_INT:
-                writeIntArray(array);
+                if (shouldRedact) {
+                    writeIntArrayObfuscated(array);
+                } else {
+                    writeIntArray(array);
+                }
                 break;
             case TypeArrayKlass.T_LONG:
                 writeLongArray(array);
@@ -743,6 +847,13 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
         }
     }
 
+    private void writeByteArrayObfuscated(TypeArray array) throws IOException {
+        final int length = (int) array.getLength();
+        for (int index = 0; index < length; index++) {
+            out.writeByte(0);
+        }
+    }
+
     private void writeShortArray(TypeArray array) throws IOException {
         final int length = (int) array.getLength();
         for (int index = 0; index < length; index++) {
@@ -759,6 +870,13 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
         }
     }
 
+    private void writeIntArrayObfuscated(TypeArray array) throws IOException {
+        final int length = (int) array.getLength();
+        for (int index = 0; index < length; index++) {
+            out.writeInt(0);
+        }
+    }
+
     private void writeLongArray(TypeArray array) throws IOException {
         final int length = (int) array.getLength();
         for (int index = 0; index < length; index++) {
@@ -772,6 +890,13 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
         for (int index = 0; index < length; index++) {
              long offset = CHAR_BASE_OFFSET + index * CHAR_SIZE;
              out.writeChar(array.getHandle().getJCharAt(offset));
+        }
+    }
+
+    private void writeCharArrayObfuscated(TypeArray array) throws IOException {
+        final int length = (int) array.getLength();
+        for (int index = 0; index < length; index++) {
+            out.writeChar(0);
         }
     }
 
@@ -820,6 +945,20 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
         for (Iterator itr = fields.iterator(); itr.hasNext();) {
             writeField((Field) itr.next(), instance);
         }
+
+        if(getHeapDumpRedactLevel() != HeapRedactor.HeapDumpRedactLevel.REDACT_ANNOTATION
+                && getHeapDumpRedactLevel() != HeapRedactor.HeapDumpRedactLevel.REDACT_DIYRULES) {
+            return;
+        }
+        // record the anonymous value for every field
+        if(klass instanceof InstanceKlass && heapRedactor != null) {
+            if(heapRedactor.getHeapDumpRedactLevel() == HeapRedactor.HeapDumpRedactLevel.REDACT_ANNOTATION
+                && heapRedactor.getRedactAnnotationClassPath() != null && !heapRedactor.getRedactAnnotationClassPath().isEmpty()) {
+                recordAnnotationValueMap(fields, instance);
+            } else if( heapRedactor.getHeapDumpRedactLevel() == HeapRedactor.HeapDumpRedactLevel.REDACT_DIYRULES) {
+                recordDiyRulesValueMap(fields, instance);
+            }
+        }
     }
 
     //-- Internals only below this point
@@ -840,6 +979,130 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
                 writeField(field, ik.getJavaMirror());
             }
         }
+    }
+
+    private void recordAnnotationValueMap(List<Field> fields, Instance instance) {
+        Klass klass = instance.getKlass();
+        boolean inJavaPackage = false;
+        Symbol classNameSymbol = klass.getName();
+        if(classNameSymbol != null) {
+            String className = classNameSymbol.asString();
+            inJavaPackage = (className != null && className.startsWith("java/"));
+        }
+        if(inJavaPackage){
+            return;
+        }
+        for (Field field : fields) {
+            Symbol fieldSignature = field.getSignature();
+            if(fieldSignature == null || fieldSignature.asString() == null || !"Ljava/lang/String;".equals(fieldSignature.asString())) {
+                continue;
+            }
+            try {
+                InstanceKlass fieldHolder = field.getFieldHolder();
+                U1Array fieldAnnotations = field.getFieldAnnotations();
+                Optional<String> anonymousValueOption = getAnonymousValue(fieldAnnotations, fieldHolder.getConstants());
+                if(!anonymousValueOption.isPresent()) {
+                    continue;
+                }
+                long address = getStringFieldAddress(field, instance);
+                if(address > 0L) {
+                    heapRedactor.recordRedactAnnotationValue(address, anonymousValueOption.get());
+                }
+            } catch (Exception e) {
+            }
+        }
+    }
+
+    private Optional<String> getAnonymousValue(U1Array fieldAnnotations, ConstantPool cp) {
+        Optional<String> anonymousValueOption = Optional.empty();
+        if (fieldAnnotations.getAddress() == null) {
+            return anonymousValueOption;
+        }
+
+        int fieldAnnotationsTagsLen = fieldAnnotations.length();
+        boolean isAnonymousAnnotation = false;
+        int annotationStart = 0;
+        int annotationEnd = 0;
+        for (int j = 0; j < fieldAnnotationsTagsLen; j++) {
+            int cpIndex = fieldAnnotations.at(j);
+            if (cpIndex >= cp.getLength() || cpIndex < 0) {
+                continue;
+            }
+            byte cpConstType = cp.getTags().at(cpIndex);
+            if (cpConstType == ConstantPool.JVM_CONSTANT_Utf8) {
+                annotationStart += (isAnonymousAnnotation ? 0 : 1);
+                annotationEnd++;
+                Symbol symbol = cp.getSymbolAt(cpIndex);
+                if (symbol.asString() == null || symbol.asString().isEmpty()) {
+                    continue;
+                }
+                if (symbol.asString().equals("L" + heapRedactor.getRedactAnnotationClassPath() + ";")) {
+                    isAnonymousAnnotation = true;
+                }
+                if(annotationEnd - annotationStart == 1 && !"value".equals(symbol.asString())) {
+                    break;
+                }
+                if(annotationEnd - annotationStart == 2) {
+                    anonymousValueOption = Optional.ofNullable(cp.getSymbolAt(cpIndex).asString());
+                    break;
+                }
+            }
+        }
+        return anonymousValueOption;
+    }
+
+    private void recordDiyRulesValueMap(List<Field> fields, Instance instance) {
+        Klass klass = instance.getKlass();
+        boolean diyRulesFlag = false;
+        Symbol classNameSymbol = klass.getName();
+        Map<String, String> redactRulesMap = null;
+        if(classNameSymbol != null) {
+            String className = classNameSymbol.asString();
+            Optional<Map<String, String>> redactRulesMapOptional = className == null ? Optional.<Map<String, String>>empty() : heapRedactor.getRedactRulesTable(className);
+            redactRulesMap = redactRulesMapOptional.isPresent() ? redactRulesMapOptional.get() : null;
+            diyRulesFlag = (redactRulesMap != null);
+        }
+        if(!diyRulesFlag){
+            return;
+        }
+        for (Field field : fields) {
+            Symbol fieldSignature = field.getSignature();
+            if(fieldSignature == null || fieldSignature.asString() == null || !"Ljava/lang/String;".equals(fieldSignature.asString())) {
+                continue;
+            }
+
+            try {
+                FieldIdentifier fieldIdentifier = field.getID();
+                if(fieldIdentifier == null || !(fieldIdentifier instanceof NamedFieldIdentifier)) {
+                    continue;
+                }
+
+                String filedName = fieldIdentifier.getName();
+                String replaceValue = filedName == null ? null : redactRulesMap.get(filedName);
+                long address = getStringFieldAddress(field, instance);
+                if(address > 0L && replaceValue != null) {
+                    heapRedactor.recordRedactAnnotationValue(address, replaceValue);
+                }
+            } catch (Exception e) {
+            }
+        }
+    }
+
+    private long getStringFieldAddress(Field field, Instance instance) {
+        long address = 0L;
+        if(field instanceof OopField) {
+            Oop fieldOop = ((OopField) field).getValue(instance);
+            Field stringField = null;
+            if (fieldOop != null && fieldOop.getKlass() instanceof InstanceKlass) {
+                List<Field> oopFiledSubs = ((InstanceKlass) fieldOop.getKlass()).getAllFields();
+                stringField = oopFiledSubs.iterator().next();
+            }
+            if (stringField != null && stringField instanceof OopField) {
+                OopHandle handle = ((OopField) stringField).getValueAsOopHandle(fieldOop);
+                address = getAddressValue(handle);
+            }
+        }
+        return address;
     }
 
     public static int signatureToHprofKind(char ch) {
@@ -941,7 +1204,20 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
     }
 
     private void writeSymbol(Symbol sym) throws IOException {
-        byte[] buf = sym.asString().getBytes("UTF-8");
+        String symbolStr = sym.asString();
+        HeapRedactor.HeapDumpRedactLevel level = getHeapDumpRedactLevel();
+        boolean shouldRedact = (level == HeapRedactor.HeapDumpRedactLevel.REDACT_NAMES ||
+                level == HeapRedactor.HeapDumpRedactLevel.REDACT_FULL);
+        byte[] buf = null;
+        if (shouldRedact) {
+            String redactFiled = lookupRedactName(symbolStr);
+            if (redactFiled != null) {
+                buf = redactFiled.getBytes("UTF-8");
+            }
+        }
+        if (buf == null) {
+            buf = symbolStr.getBytes("UTF-8");
+        }
         writeHeader(HPROF_UTF8, buf.length + OBJ_ID_SIZE);
         writeSymbolID(sym);
         out.write(buf);
@@ -1019,11 +1295,23 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
         List res = new ArrayList();
         while (klass != null) {
             List curFields = klass.getImmediateFields();
+            Annotation annotation = klass.getAnnotation();
+            AnnotationArray2D fieldsAnnotations = (annotation == null) ? null : annotation.getFieldsAnnotations();
+            boolean hasAnnotations = false;
+            if(fieldsAnnotations != null && fieldsAnnotations.getAddress() != null) {
+                hasAnnotations = true;
+            }
+            int fieldIndex = 0;
             for (Iterator itr = curFields.iterator(); itr.hasNext();) {
                 Field f = (Field) itr.next();
                 if (! f.isStatic()) {
-                    res.add(f);
-                }
+                   // record annotation for class Field
+                   res.add(f);
+                   if(hasAnnotations) {
+                       f.setFieldAnnotations(fieldsAnnotations.getAt(fieldIndex));
+                   }
+               }
+               fieldIndex++;
             }
             klass = (InstanceKlass) klass.getSuper();
         }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000, 2013, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2000, 2019, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -124,6 +124,7 @@ public class VM {
 
   private static Type intxType;
   private static Type uintxType;
+  private static Type uint64tType;
   private static CIntegerType boolType;
   private Boolean sharingEnabled;
   private Boolean compressedOopsEnabled;
@@ -192,6 +193,50 @@ public class VM {
         return addr.getCIntegerAt(0, uintxType.getSize(), true);
      }
 
+     public boolean isCcstr() {
+         return type.equals("ccstr");
+     }
+
+     public String getCcstr() {
+         if (Assert.ASSERTS_ENABLED) {
+             Assert.that(isCcstr(), "not a ccstr flag!");
+         }
+         return CStringUtilities.getString(addr.getAddressAt(0));
+     }
+
+     public boolean isCcstrlist() {
+         return type.equals("ccstrlist");
+     }
+
+     public String getCcstrlist() {
+         if (Assert.ASSERTS_ENABLED) {
+             Assert.that(isCcstrlist(), "not a ccstrlist flag!");
+         }
+         return CStringUtilities.getString(addr.getAddressAt(0));
+     }
+
+     public boolean isDouble() {
+         return type.equals("double");
+     }
+
+     public double getDouble() {
+         if (Assert.ASSERTS_ENABLED) {
+             Assert.that(isDouble(), "not a double flag!");
+         }
+         return addr.getJDoubleAt(0);
+     }
+
+     public boolean isUint64t() {
+         return type.equals("uint64_t");
+     }
+
+     public long getUint64t() {
+         if (Assert.ASSERTS_ENABLED) {
+             Assert.that(isUint64t(), "not an uint64_t flag!");
+         }
+         return addr.getCIntegerAt(0, uint64tType.getSize(), true);
+     }
+
      public String getValue() {
         if (isBool()) {
            return new Boolean(getBool()).toString();
@@ -199,7 +244,23 @@ public class VM {
            return new Long(getIntx()).toString();
         } else if (isUIntx()) {
            return new Long(getUIntx()).toString();
-        } else {
+        } else if (isCcstr()) {
+            String str = getCcstr();
+            if (str != null) {
+                str = "\"" + str + "\"";
+            }
+            return str;
+        } else if (isCcstrlist()) {
+            String str = getCcstrlist();
+            if (str != null) {
+                str = "\"" + str + "\"";
+            }
+            return str;
+        } else if (isDouble()) {
+            return Double.toString(getDouble());
+        } else if (isUint64t()) {
+            return Long.toUnsignedString(getUint64t());
+        }else {
            return null;
         }
      }
@@ -325,6 +386,7 @@ public class VM {
 
     intxType = db.lookupType("intx");
     uintxType = db.lookupType("uintx");
+    uint64tType = db.lookupType("uint64_t");
     boolType = (CIntegerType) db.lookupType("bool");
 
     minObjAlignmentInBytes = getObjectAlignmentInBytes();

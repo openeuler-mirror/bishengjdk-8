@@ -25,10 +25,15 @@
 
 package sun.tools.jmap;
 
+import java.io.Console;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.Arrays;
 
 import com.sun.tools.attach.VirtualMachine;
 import com.sun.tools.attach.AttachNotSupportedException;
@@ -163,7 +168,8 @@ public class JMap {
         // -dump option needs to be handled in a special way
         if (option.startsWith(DUMP_OPTION_PREFIX)) {
             // first check that the option can be parsed
-            String fn = parseDumpOptions(option);
+            RedactParams redactParams = new RedactParams();
+            String fn = parseDumpOptions(option, redactParams);
             if (fn == null) {
                 usage(1);
             }
@@ -171,6 +177,11 @@ public class JMap {
             // tool for heap dumping
             tool = "sun.jvm.hotspot.tools.HeapDumper";
 
+            // HeapDump redact arguments
+            if (redactParams.isEnableRedact()) {
+                args = prepend(redactParams.toString(), args);
+                args = prepend("-r", args);
+            }
             // HeapDumper -f <file>
             args = prepend(fn, args);
             args = prepend("-f", args);
@@ -245,12 +256,18 @@ public class JMap {
     }
 
     private static void dump(String pid, String options) throws IOException {
+        RedactParams redactParams = new RedactParams();
         // parse the options to get the dump filename
-        String filename = parseDumpOptions(options);
+        String filename = parseDumpOptions(options,redactParams);
         if (filename == null) {
             usage(1);  // invalid options or no filename
         }
 
+        String redactPassword = ",RedactPassword=";
+        if (options.contains("RedactPassword,") || options.contains(",RedactPassword")) {
+            // heap dump may need a password
+            redactPassword = getRedactPassword();
+        }
         // get the canonical path - important to avoid just passing
         // a "heap.bin" and having the dump created in the target VM
         // working directory rather than the directory where jmap
@@ -264,14 +281,77 @@ public class JMap {
         System.out.println("Dumping heap to " + filename + " ...");
         InputStream in = ((HotSpotVirtualMachine)vm).
             dumpHeap((Object)filename,
-                     (live ? LIVE_OBJECTS_OPTION : ALL_OBJECTS_OPTION));
+                     (live ? LIVE_OBJECTS_OPTION : ALL_OBJECTS_OPTION),
+                    redactParams.isEnableRedact() ? redactParams.toDumpArgString() + redactPassword : "");
         drain(vm, in);
+    }
+
+    private static String getRedactPassword() {
+        String redactPassword = ",RedactPassword=";
+        Console console = System.console();
+        char[] passwords = null;
+        if (console == null) {
+            return redactPassword;
+        }
+
+        try {
+            passwords = console.readPassword("redact authority password:");
+        } catch (Exception e) {
+        }
+        if(passwords == null) {
+            return redactPassword;
+        }
+
+        String password = new String(passwords);
+        Arrays.fill(passwords, '0');
+        String passwordPattern = "^[0-9a-zA-Z!@#$]{1,9}$";
+        if(!password.matches(passwordPattern)) {
+            return redactPassword;
+        }
+
+        String digestStr = null;
+        byte[] passwordBytes = null;
+        char[] passwordValue = null;
+        try {
+            Field valueField = password.getClass().getDeclaredField("value");
+            valueField.setAccessible(true);
+            passwordValue = (char[])valueField.get(password);
+
+            passwordBytes= password.getBytes(StandardCharsets.UTF_8);
+            StringBuilder digestStrBuilder = new StringBuilder();
+            MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
+            byte[] digestBytes = messageDigest.digest(passwordBytes);
+            for(byte b : digestBytes) {
+                String hex = Integer.toHexString(0xff & b);
+                if(hex.length() == 1) {
+                    digestStrBuilder.append('0');
+                }
+                digestStrBuilder.append(hex);
+            }
+            digestStr = digestStrBuilder.toString();
+        } catch (Exception e) {
+        }finally {
+            // clear all password
+            if(passwordBytes != null) {
+                Arrays.fill(passwordBytes, (byte) 0);
+            }
+            if(passwordValue != null) {
+                Arrays.fill(passwordValue, '0');
+            }
+        }
+
+        redactPassword += (digestStr == null ? "" : digestStr);
+        return redactPassword;
     }
 
     // Parse the options to the -dump option. Valid options are format=b and
     // file=<file>. Returns <file> if provided. Returns null if <file> not
     // provided, or invalid option.
-    private static String parseDumpOptions(String arg) {
+    private static String parseDumpOptions(String arg){
+        return parseDumpOptions(arg, null);
+    }
+
+    private static String parseDumpOptions(String arg, RedactParams redactParams) {
         assert arg.startsWith(DUMP_OPTION_PREFIX);
 
         String filename = null;
@@ -279,15 +359,16 @@ public class JMap {
         // options are separated by comma (,)
         String options[] = arg.substring(DUMP_OPTION_PREFIX.length()).split(",");
 
-        for (int i=0; i<options.length; i++) {
+        for (int i = 0; i < options.length; i++) {
             String option = options[i];
 
             if (option.equals("format=b")) {
                 // ignore format (not needed at this time)
             } else if (option.equals("live")) {
                 // a valid suboption
+            } else if (option.equals("RedactPassword")) {
+                // ignore this option, just suit the parse rule
             } else {
-
                 // file=<file> - check that <file> is specified
                 if (option.startsWith("file=")) {
                     filename = option.substring(5);
@@ -295,11 +376,46 @@ public class JMap {
                         return null;
                     }
                 } else {
+                    if (redactParams != null && initRedactParams(redactParams, option)) {
+                        continue;
+                    }
                     return null;  // option not recognized
                 }
             }
         }
+        if (redactParams != null) {
+            if (redactParams.getHeapDumpRedact() == null) {
+                if (redactParams.getRedactMap() == null && redactParams.getRedactMapFile() == null
+                    && redactParams.getRedactClassPath() == null) {
+                    redactParams.setEnableRedact(false);
+                } else {
+                    System.err.println("Error: HeapDumpRedact must be specified to enable heap-dump-redacting");
+                    usage(1);
+                }
+            }
+        }
         return filename;
+    }
+
+    private static boolean initRedactParams(RedactParams redactParams, String option) {
+        if (option.startsWith("HeapDumpRedact=")) {
+            if (!redactParams.setAndCheckHeapDumpRedact(option.substring("HeapDumpRedact=".length()))) {
+                usage(1);
+            }
+            return true;
+        } else if (option.startsWith("RedactMap=")) {
+            redactParams.setRedactMap(option.substring("RedactMap=".length()));
+            return true;
+        } else if (option.startsWith("RedactMapFile=")) {
+            redactParams.setRedactMapFile(option.substring("RedactMapFile=".length()));
+            return true;
+        } else if (option.startsWith("RedactClassPath")) {
+            redactParams.setRedactClassPath(option.substring("RedactClassPath=".length()));
+            return true;
+        } else {
+            // None matches
+            return false;
+        }
     }
 
     private static boolean isDumpLiveObjects(String arg) {
@@ -391,6 +507,14 @@ public class JMap {
             System.err.println("                                        all objects in the heap are dumped.");
             System.err.println("                           format=b     binary format");
             System.err.println("                           file=<file>  dump heap to <file>");
+            System.err.println("                           HeapDumpRedact=<basic|names|full|diyrules|annotation|off>  redact the heapdump");
+            System.err.println("                                        information to remove sensitive data");
+            System.err.println("                           RedactMap=<name1:value1;name2:value2;...> Redact the class and");
+            System.err.println("                                        field names to other strings");
+            System.err.println("                           RedactMapFile=<file> file path of the redact map");
+            System.err.println("                           RedactClassPath=<classpath>    full path of the redact annotation");
+            System.err.println("                           RedactPassword  maybe redact feature has an authority, RedactPassword will wait for a password, ");
+            System.err.println("                                           without a correct password, heap dump with default redact level");
             System.err.println("                         Example: jmap -dump:live,format=b,file=heap.bin <pid>");
             System.err.println("    -F                   force. Use with -dump:<dump-options> <pid> or -histo");
             System.err.println("                         to force a heap dump or histogram when <pid> does not");
@@ -412,5 +536,113 @@ public class JMap {
         }
 
         System.exit(exit);
+    }
+
+    public static class RedactParams {
+        private boolean enableRedact = false;
+        private String heapDumpRedact;
+        private String redactMap;
+        private String redactMapFile;
+        private String redactClassPath;
+
+        public RedactParams() {
+        }
+
+        public RedactParams(String heapDumpRedact, String redactMap, String redactMapFile, String redactClassPath) {
+            if (heapDumpRedact != null && checkLauncherHeapdumpRedactSupport(heapDumpRedact)) {
+                enableRedact = true;
+            }
+            this.heapDumpRedact = heapDumpRedact;
+            this.redactMap = redactMap;
+            this.redactMapFile = redactMapFile;
+            this.redactClassPath = redactClassPath;
+        }
+
+        @Override
+        public String toString() {
+            StringBuilder builder = new StringBuilder();
+            if (heapDumpRedact != null) {
+                builder.append("HeapDumpRedact=");
+                builder.append(heapDumpRedact);
+                builder.append(",");
+            }
+            if (redactMap != null) {
+                builder.append("RedactMap=");
+                builder.append(redactMap);
+                builder.append(",");
+            }
+            if (redactMapFile != null) {
+                builder.append("RedactMapFile=");
+                builder.append(redactMapFile);
+                builder.append(",");
+            }
+            if (redactClassPath != null) {
+                builder.append("RedactClassPath=");
+                builder.append(redactClassPath);
+            }
+            return builder.toString();
+        }
+
+        public String toDumpArgString() {
+            return "-HeapDumpRedact=" + (heapDumpRedact == null ? "off" : heapDumpRedact) +
+                    ",RedactMap=" + (redactMap == null ? "" : redactMap) +
+                    ",RedactMapFile=" + (redactMapFile == null ? "" : redactMapFile) +
+                    ",RedactClassPath=" + (redactClassPath == null ? "" : redactClassPath);
+        }
+
+        public static boolean checkLauncherHeapdumpRedactSupport(String value) {
+            String[] validValues = {"basic", "names", "full", "diyrules", "annotation", "off"};
+            for (String validValue : validValues) {
+                if (validValue.equals(value)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        public boolean isEnableRedact() {
+            return enableRedact;
+        }
+
+        public void setEnableRedact(boolean enableRedact) {
+            this.enableRedact = enableRedact;
+        }
+
+        public String getHeapDumpRedact() {
+            return heapDumpRedact;
+        }
+
+        public boolean setAndCheckHeapDumpRedact(String heapDumpRedact) {
+            if (!checkLauncherHeapdumpRedactSupport(heapDumpRedact)) {
+                return false;
+            }
+            this.heapDumpRedact = heapDumpRedact;
+            this.enableRedact = true;
+            return true;
+        }
+
+        public String getRedactMap() {
+            return redactMap;
+        }
+
+        public void setRedactMap(String redactMap) {
+            this.redactMap = redactMap;
+        }
+
+        public String getRedactMapFile() {
+            return redactMapFile;
+        }
+
+        public void setRedactMapFile(String redactMapFile) {
+            this.redactMapFile = redactMapFile;
+        }
+
+        public String getRedactClassPath() {
+            return redactClassPath;
+        }
+
+        public void setRedactClassPath(String redactClassPath) {
+            this.redactClassPath = redactClassPath;
+        }
     }
 }

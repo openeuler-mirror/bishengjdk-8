@@ -81,7 +81,6 @@ class Deflater {
     private boolean finish, finished;
     private long bytesRead;
     private long bytesWritten;
-    private boolean defalterUseKae;
 
     /**
      * Compression method for the deflate algorithm (the only one currently
@@ -169,13 +168,20 @@ class Deflater {
     public Deflater(int level, boolean nowrap) {
         this.level = level;
         this.strategy = DEFAULT_STRATEGY;
-        if (("true".equals(System.getProperty("GZIP_USE_KAE", "false"))) &&
-            ("aarch64".equals(System.getProperty("os.arch")))) {
-            this.defalterUseKae = true;
-        }
-        this.zsRef = defalterUseKae ?
-            new ZStreamRef(initKae(level, DEFAULT_STRATEGY)) :
-            new ZStreamRef(init(level, DEFAULT_STRATEGY, nowrap));
+        this.zsRef = new ZStreamRef(init(level, DEFAULT_STRATEGY, nowrap));
+    }
+
+    /**
+     * Creates a new compressor using the specified compression level
+     * and windowBits.
+     * This method is mainly used to support the KAE-zip feature.
+     * @param level the compression level (0-9)
+     * @param windowBits compression format (-15~31)
+     */
+    public Deflater(int level, int windowBits) {
+        this.level = level;
+        this.strategy = DEFAULT_STRATEGY;
+        this.zsRef = new ZStreamRef(initKAE(level, DEFAULT_STRATEGY, windowBits));
     }
 
     /**
@@ -536,6 +542,18 @@ class Deflater {
     }
 
     /**
+     * Resets deflater so that a new set of input data can be processed.
+     * Java fields are not initialized.
+     * This method is mainly used to support the KAE-zip feature.
+     */
+    public void resetKAE() {
+        synchronized (zsRef) {
+            ensureOpen();
+            reset(zsRef.address());
+        }
+    }
+
+    /**
      * Closes the compressor and discards any unprocessed input.
      * This method should be called when the compressor is no longer
      * being used, but will also be called automatically by the
@@ -578,7 +596,7 @@ class Deflater {
 
     private static native void initIDs();
     private native static long init(int level, int strategy, boolean nowrap);
-    private native static long initKae(int level, int strategy);
+    private native static long initKAE(int level, int strategy, int windowBits);
     private native static void setDictionary(long addr, byte[] b, int off, int len);
     private native int deflateBytes(long addr, byte[] b, int off, int len,
                                     int flush);

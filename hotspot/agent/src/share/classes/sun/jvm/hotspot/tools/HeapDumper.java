@@ -24,8 +24,11 @@
 
 package sun.jvm.hotspot.tools;
 
+import sun.jvm.hotspot.runtime.VM;
 import sun.jvm.hotspot.utilities.HeapHprofBinWriter;
 import sun.jvm.hotspot.debugger.JVMDebugger;
+import sun.jvm.hotspot.utilities.HeapRedactor;
+
 import java.io.IOException;
 
 /*
@@ -39,8 +42,15 @@ public class HeapDumper extends Tool {
 
     private String dumpFile;
 
+    private HeapRedactor redactor;
+
     public HeapDumper(String dumpFile) {
         this.dumpFile = dumpFile;
+    }
+
+    public HeapDumper(String dumpFile, HeapRedactor redactor){
+        this(dumpFile);
+        this.redactor = redactor;
     }
 
     public HeapDumper(String dumpFile, JVMDebugger d) {
@@ -55,14 +65,51 @@ public class HeapDumper extends Tool {
         super.printFlagsUsage();
     }
 
+    private String getVMRedactParameter(String name){
+        VM vm = VM.getVM();
+        VM.Flag flag = vm.getCommandLineFlag(name);
+        if(flag == null){
+            return null;
+        }
+        return flag.getCcstr();
+    }
+
     // use HeapHprofBinWriter to write the heap dump
     public void run() {
         System.out.println("Dumping heap to " + dumpFile + " ...");
         try {
-            new HeapHprofBinWriter().write(dumpFile);
+            HeapHprofBinWriter writer = new HeapHprofBinWriter();
+            if(this.redactor != null){
+                writer.setHeapRedactor(this.redactor);
+                if(writer.getHeapDumpRedactLevel() != HeapRedactor.HeapDumpRedactLevel.REDACT_UNKNOWN){
+                    System.out.println("HeapDump Redact Level = " + this.redactor.getRedactLevelString());
+                }
+            }else{
+                resetHeapHprofBinWriter(writer);
+            }
+            writer.write(dumpFile);
             System.out.println("Heap dump file created");
         } catch (IOException ioe) {
             System.err.println(ioe.getMessage());
+        }
+    }
+
+    private void resetHeapHprofBinWriter(HeapHprofBinWriter writer) {
+        String redactStr = getVMRedactParameter("HeapDumpRedact");
+        if(redactStr != null && !redactStr.isEmpty()){
+            HeapRedactor.RedactParams redactParams = new HeapRedactor.RedactParams();
+            if(HeapRedactor.REDACT_ANNOTATION_OPTION.equals(redactStr)){
+                String classPathStr = getVMRedactParameter("RedactClassPath");
+                redactStr = (classPathStr != null && !classPathStr.isEmpty()) ? redactStr : HeapRedactor.REDACT_OFF_OPTION;
+                redactParams.setRedactClassPath(classPathStr);
+            } else {
+                String redactMapStr = getVMRedactParameter("RedactMap");
+                redactParams.setRedactMap(redactMapStr);
+                String redactMapFileStr = getVMRedactParameter("RedactMapFile");
+                redactParams.setRedactMapFile(redactMapFileStr);
+            }
+            redactParams.setAndCheckHeapDumpRedact(redactStr);
+            writer.setHeapRedactor(new HeapRedactor(redactParams));
         }
     }
 
@@ -70,6 +117,7 @@ public class HeapDumper extends Tool {
     //   HeapDumper -f <file> <args...>
     public static void main(String args[]) {
         String file = DEFAULT_DUMP_FILE;
+        HeapRedactor heapRedactor = null;
         if (args.length > 2) {
             if (args[0].equals("-f")) {
                 file = args[1];
@@ -77,9 +125,15 @@ public class HeapDumper extends Tool {
                 System.arraycopy(args, 2, newargs, 0, args.length-2);
                 args = newargs;
             }
+            if(args[0].equals("-r")){
+                heapRedactor = new HeapRedactor(args[1]);
+                String[] newargs = new String[args.length-2];
+                System.arraycopy(args, 2, newargs, 0, args.length-2);
+                args = newargs;
+            }
         }
 
-        HeapDumper dumper = new HeapDumper(file);
+        HeapDumper dumper = heapRedactor == null? new HeapDumper(file):new HeapDumper(file, heapRedactor);
         dumper.execute(args);
     }
 

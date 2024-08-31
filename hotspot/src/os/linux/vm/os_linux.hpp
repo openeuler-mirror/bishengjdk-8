@@ -197,6 +197,7 @@ class Linux {
   // stack or fixed stack.
   static bool is_floating_stack()             { return _is_floating_stack; }
 
+  static void load_plugin_library();
   static void libpthread_init();
   static void parse_numa_nodes();
   static bool libnuma_init();
@@ -297,6 +298,18 @@ private:
   typedef int (*numa_bitmask_isbitset_func_t)(struct bitmask *bmp, unsigned int n);
   typedef int (*numa_distance_func_t)(int node1, int node2);
 
+  typedef void* (*heap_dict_add_t)(void* key, void* val, void* heap_dict, uint8_t type);
+  typedef void* (*heap_dict_lookup_t)(void* key, void* heap_dict, bool deletable);
+  typedef void (*heap_dict_free_t)(void* heap_dict, bool is_nested);
+  typedef void* (*heap_vector_add_t)(void* val, void* heap_vector, bool &_inserted);
+  typedef void* (*heap_vector_get_next_t)(void* heap_vector, void* heap_vector_node, int &_cnt, void** &_items);
+  typedef void (*heap_vector_free_t)(void* heap_vector);
+  static heap_dict_add_t _heap_dict_add;
+  static heap_dict_lookup_t _heap_dict_lookup;
+  static heap_dict_free_t _heap_dict_free;
+  static heap_vector_add_t _heap_vector_add;
+  static heap_vector_get_next_t _heap_vector_get_next;
+  static heap_vector_free_t _heap_vector_free;
   static sched_getcpu_func_t _sched_getcpu;
   static numa_node_to_cpus_func_t _numa_node_to_cpus;
   static numa_max_node_func_t _numa_max_node;
@@ -528,6 +541,46 @@ public:
   static void numa_bitmask_free(bitmask* bitmask) {
     if (_numa_bitmask_free != NULL) {
       _numa_bitmask_free(bitmask);
+    }
+  }
+
+  static void* heap_dict_add(void* key, void* val, void* heap_dict, uint8_t type) {
+    if(_heap_dict_add == NULL) {
+        return NULL;
+    }
+    return _heap_dict_add(key, val, heap_dict, type);
+  }
+
+  static void* heap_dict_lookup(void* key, void* heap_dict, bool deletable) {
+    if(_heap_dict_lookup == NULL) {
+        return NULL;
+    }
+    return _heap_dict_lookup(key, heap_dict, deletable);
+  }
+
+  static void heap_dict_free(void* heap_dict, bool is_nested) {
+    if(_heap_dict_free != NULL) {
+        _heap_dict_free(heap_dict, is_nested);
+    }
+  }
+
+  static void* heap_vector_add(void* val, void* heap_vector, bool &_inserted) {
+    if(_heap_vector_add == NULL) {
+        return NULL;
+    }
+    return _heap_vector_add(val, heap_vector, _inserted);
+  }
+
+  static void* heap_vector_get_next(void* heap_vector, void* heap_vector_node, int &_cnt, void** &_items) {
+    if(_heap_vector_get_next == NULL) {
+        return NULL;
+    }
+    return _heap_vector_get_next(heap_vector, heap_vector_node, _cnt, _items);
+  }
+
+  static void heap_vector_free(void* heap_vector) {
+    if(_heap_vector_free != NULL) {
+        _heap_vector_free(heap_vector);
     }
   }
 };

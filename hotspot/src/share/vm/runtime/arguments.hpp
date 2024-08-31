@@ -449,6 +449,8 @@ class Arguments : AllStatic {
 
   static char*  SharedDynamicArchivePath;
 
+  static char* _heap_dump_redact_auth;
+
  public:
   // Parses the arguments, first phase
   static jint parse(const JavaVMInitArgs* args);
@@ -561,6 +563,8 @@ class Arguments : AllStatic {
   static const char* GetSharedArchivePath() { return SharedArchivePath; }
 
   static const char* GetSharedDynamicArchivePath() { return SharedDynamicArchivePath; }
+
+  static const char* get_heap_dump_redact_auth() { return _heap_dump_redact_auth; }
 
   static bool init_shared_archive_paths();
 
