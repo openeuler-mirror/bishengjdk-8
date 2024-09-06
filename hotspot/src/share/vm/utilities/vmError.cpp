@@ -813,7 +813,7 @@ void VMError::report(outputStream* st) {
 #if defined(AARCH64) || defined(X86)
   STEP(207, "(printing file descriptor)" )
 
-     if (ExtensiveErrorReports && _verbose) {
+     if (_verbose) {
        // File Descriptor
        os::print_file_descriptor(st);
        st->cr();
