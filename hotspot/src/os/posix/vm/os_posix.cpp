@@ -207,6 +207,26 @@ void os::Posix::print_rlimit_info(outputStream* st) {
   if (rlim.rlim_cur == RLIM_INFINITY) st->print("infinity");
   else st->print("%uk", rlim.rlim_cur >> 10);
 
+  st->print(", DATA ");
+  getrlimit(RLIMIT_DATA, &rlim);
+  if (rlim.rlim_cur == RLIM_INFINITY) st->print("infinity");
+  else st->print("%uk", rlim.rlim_cur >> 10);
+
+  st->print(", FSIZE ");
+  getrlimit(RLIMIT_FSIZE, &rlim);
+  if (rlim.rlim_cur == RLIM_INFINITY) st->print("infinity");
+  else st->print("%u", rlim.rlim_cur >> 10);
+
+  st->print(", CPU ");
+  getrlimit(RLIMIT_CPU, &rlim);
+  if (rlim.rlim_cur == RLIM_INFINITY) st->print("infinity");
+  else st->print("%uk seconds", rlim.rlim_cur >> 10);
+
+  st->print(", RSS ");
+  getrlimit(RLIMIT_RSS, &rlim);
+  if (rlim.rlim_cur == RLIM_INFINITY) st->print("infinity");
+  else st->print("%u", rlim.rlim_cur >> 10);
+
   // Isn't there on solaris
 #if !defined(TARGET_OS_FAMILY_solaris) && !defined(TARGET_OS_FAMILY_aix)
   st->print(", NPROC ");
@@ -765,6 +785,12 @@ static bool get_signal_code_description(const siginfo_t* si, enum_sigcode_desc_t
     { SIGBUS,  BUS_ADRALN,   "BUS_ADRALN",   "Invalid address alignment." },
     { SIGBUS,  BUS_ADRERR,   "BUS_ADRERR",   "Nonexistent physical address." },
     { SIGBUS,  BUS_OBJERR,   "BUS_OBJERR",   "Object-specific hardware error." },
+#ifdef BUS_MCEERR_AR
+    { SIGBUS,  BUS_MCEERR_AR,"BUS_MCEERR_AR","hardware memory error consumed on a machine check: action required."},
+#endif
+#ifdef BUS_MCEERR_AO
+    { SIGBUS,  BUS_MCEERR_AO,"BUS_MCEERR_AO","hardware memory error detected in process but not consumed: action optional."},
+#endif
     { SIGTRAP, TRAP_BRKPT,   "TRAP_BRKPT",   "Process breakpoint." },
     { SIGTRAP, TRAP_TRACE,   "TRAP_TRACE",   "Process trace trap." },
     { SIGCHLD, CLD_EXITED,   "CLD_EXITED",   "Child has exited." },
