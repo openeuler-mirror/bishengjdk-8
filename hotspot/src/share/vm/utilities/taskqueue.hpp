@@ -720,7 +720,7 @@ public:
   // else is.  If returns "true", all threads are terminated.  If returns
   // "false", available work has been observed in one of the task queues,
   // so the global task is not complete.
-  virtual bool offer_termination() {
+  bool offer_termination() {
     return offer_termination(NULL);
   }
 

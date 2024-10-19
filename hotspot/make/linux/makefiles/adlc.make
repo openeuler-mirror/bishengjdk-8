@@ -74,6 +74,20 @@ endif
 CFLAGS_WARN = $(WARNINGS_ARE_ERRORS)
 CFLAGS += $(CFLAGS_WARN)
 
+# Extra flags from gnumake's invocation or environment
+# Adapt wrap for JDK-8281096:Flags introduced by configure script are not passed to ADLC build
+WRAP_STR := ,--wrap=memcpy
+WRAP_NULL :=
+HOST_LDFLAGS_ADOPT_WRAP := $(HOST_LDFLAGS)
+
+ifeq ($(findstring --wrap=memcpy,$(HOST_LDFLAGS)),--wrap=memcpy)
+  HOST_LDFLAGS_ADOPT_WRAP := $(subst $(WRAP_STR),$(WRAP_NULL),$(HOST_LDFLAGS))
+endif
+
+CFLAGS += $(HOST_CFLAGS)
+LFLAGS += $(HOST_CFLAGS) $(HOST_LDFLAGS_ADOPT_WRAP)
+ASFLAGS += $(HOST_ASFLAGS)
+
 OBJECTNAMES = \
 	adlparse.o \
 	archDesc.o \
