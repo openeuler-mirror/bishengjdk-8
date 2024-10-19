@@ -250,50 +250,52 @@ class ZipOutputStream extends DeflaterOutputStream implements ZipConstants {
             try {
                 ZipEntry e = current.entry;
                 switch (e.method) {
-                case DEFLATED:
-                    def.finish();
-                    while (!def.finished()) {
-                        deflate();
+                case DEFLATED: {
+                        def.finish();
+                        while (!def.finished()) {
+                            deflate();
+                        }
+                        if ((e.flag & 8) == 0) {
+                            // verify size, compressed size, and crc-32 settings
+                            if (e.size != def.getBytesRead()) {
+                                throw new ZipException(
+                                    "invalid entry size (expected " + e.size +
+                                    " but got " + def.getBytesRead() + " bytes)");
+                            }
+                            if (e.csize != def.getBytesWritten()) {
+                                throw new ZipException(
+                                    "invalid entry compressed size (expected " +
+                                    e.csize + " but got " + def.getBytesWritten() + " bytes)");
+                            }
+                            if (e.crc != crc.getValue()) {
+                                throw new ZipException(
+                                    "invalid entry CRC-32 (expected 0x" +
+                                    Long.toHexString(e.crc) + " but got 0x" +
+                                    Long.toHexString(crc.getValue()) + ")");
+                            }
+                        } else {
+                            e.size = def.getBytesRead();
+                            e.csize = def.getBytesWritten();
+                            e.crc = crc.getValue();
+                            writeEXT(e);
+                        }
+                        def.reset();
+                        written += e.csize;
                     }
-                    if ((e.flag & 8) == 0) {
-                        // verify size, compressed size, and crc-32 settings
-                        if (e.size != def.getBytesRead()) {
+                    break;
+                case STORED: {
+                        // we already know that both e.size and e.csize are the same
+                        if (e.size != written - locoff) {
                             throw new ZipException(
                                 "invalid entry size (expected " + e.size +
-                                " but got " + def.getBytesRead() + " bytes)");
-                        }
-                        if (e.csize != def.getBytesWritten()) {
-                            throw new ZipException(
-                                "invalid entry compressed size (expected " +
-                                e.csize + " but got " + def.getBytesWritten() + " bytes)");
+                                " but got " + (written - locoff) + " bytes)");
                         }
                         if (e.crc != crc.getValue()) {
                             throw new ZipException(
-                                "invalid entry CRC-32 (expected 0x" +
+                                "invalid entry crc-32 (expected 0x" +
                                 Long.toHexString(e.crc) + " but got 0x" +
                                 Long.toHexString(crc.getValue()) + ")");
                         }
-                    } else {
-                        e.size  = def.getBytesRead();
-                        e.csize = def.getBytesWritten();
-                        e.crc = crc.getValue();
-                        writeEXT(e);
-                    }
-                    def.reset();
-                    written += e.csize;
-                    break;
-                case STORED:
-                    // we already know that both e.size and e.csize are the same
-                    if (e.size != written - locoff) {
-                        throw new ZipException(
-                            "invalid entry size (expected " + e.size +
-                            " but got " + (written - locoff) + " bytes)");
-                    }
-                    if (e.crc != crc.getValue()) {
-                        throw new ZipException(
-                             "invalid entry crc-32 (expected 0x" +
-                             Long.toHexString(e.crc) + " but got 0x" +
-                             Long.toHexString(crc.getValue()) + ")");
                     }
                     break;
                 default:

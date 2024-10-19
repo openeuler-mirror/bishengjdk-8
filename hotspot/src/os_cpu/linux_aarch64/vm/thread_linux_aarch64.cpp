@@ -126,7 +126,7 @@ void set_compilation_tuner_params() {
 void set_intrinsic_param() {
   if (FLAG_IS_DEFAULT(UseHBaseUtilIntrinsics)) {
     warning("If your HBase version is lower than 2.4.14, please explicitly specify"
-             " -XX:-UseHBaseUtilIntrinsics, otherwise HBase may fail to start.");
+            " -XX:-UseHBaseUtilIntrinsics, otherwise HBase may fail to start.");
     FLAG_SET_DEFAULT(UseHBaseUtilIntrinsics, true);
   }
 }
