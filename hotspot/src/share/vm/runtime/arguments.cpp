@@ -3476,6 +3476,8 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args,
       FLAG_SET_CMDLINE(uintx, TLABSize, long_tlab_size);
     } else if (match_option(option, "-XX:TLEThreadRatio=", &tail)) {
       // No longer used.
+    } else if (match_option(option, "-XX:+UseIMACheckJavaFile", &tail)) {
+      FLAG_SET_CMDLINE(bool, UseIMACheckJavaFile, true);
     } else if (match_option(option, "-XX:+UseTLE", &tail)) {
       FLAG_SET_CMDLINE(bool, UseTLAB, true);
     } else if (match_option(option, "-XX:-UseTLE", &tail)) {

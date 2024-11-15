@@ -22,6 +22,7 @@
  *
  */
 
+
 #ifndef SHARE_VM_UTILITIES_MACROS_HPP
 #define SHARE_VM_UTILITIES_MACROS_HPP
 
@@ -451,5 +452,19 @@
 #endif
 
 #define define_pd_global(type, name, value) const type pd_##name = value;
+
+
+#if defined(__linux__) && (defined(__aarch64__) || defined(__x86_64))
+#if defined( __GLIBC__) && (__GLIBC__ == 2) && (__GLIBC_MINOR__ >= 34)
+#define USE_IMA 1
+#ifndef AT_CHECK
+#define AT_CHECK      0x10000        /* command execution from file is intended, check exec permissions */
+#endif
+#else
+#define USE_IMA 0
+#endif
+#else
+#define USE_IMA 0
+#endif
 
 #endif // SHARE_VM_UTILITIES_MACROS_HPP

@@ -1,0 +1,351 @@
+Date: Mon, 21 Oct 2024 17:16:10 +0800
+Subject: [PATCH] using ima for class loading check
+
+Summary: <hotspot> : using ima for class loading check
+LLT: NA
+Patch Type: huawei
+Bug url: NA
+---
+ hotspot/src/share/vm/classfile/classLoader.cpp |  18 +++-
+ hotspot/src/share/vm/runtime/arguments.cpp     |   2 +
+ hotspot/src/share/vm/runtime/globals.hpp       |   4 +-
+ hotspot/src/share/vm/utilities/macros.hpp      |  15 +++
+ jdk/src/share/bin/java.c                       | 134 +++++++++++++++++++++++--
+ 5 files changed, 164 insertions(+), 9 deletions(-)
+
+diff --git a/hotspot/src/share/vm/classfile/classLoader.cpp b/hotspot/src/share/vm/classfile/classLoader.cpp
+index 04fa84d..8993e34 100644
+--- a/hotspot/src/share/vm/classfile/classLoader.cpp
++++ b/hotspot/src/share/vm/classfile/classLoader.cpp
+@@ -65,6 +65,7 @@
+ #include "utilities/events.hpp"
+ #include "utilities/hashtable.hpp"
+ #include "utilities/hashtable.inline.hpp"
++#include "utilities/macros.hpp"
+ #ifdef TARGET_OS_FAMILY_linux
+ # include "os_linux.inline.hpp"
+ #endif
+@@ -82,6 +83,7 @@
+ #endif
+ 
+ 
++
+ // Entry points in zip.dll for loading zip/jar file entries
+ 
+ typedef void * * (JNICALL *ZipOpen_t)(const char *name, char **pmsg);
+@@ -311,7 +313,21 @@ ClassFileStream* ClassPathDirEntry::open_stream(const char* name, TRAPS) {
+     }
+ #endif
+     // found file, open it
+-    int file_handle = os::open(path, 0, 0);
++    int file_handle = os::open(path, O_RDONLY, 0);
++    if (file_handle < 0)
++      return NULL;
++
++#if USE_IMA
++    if (UseIMACheckJavaFile) {
++      char arg[] = "";
++      char *args[] = { arg, NULL };
++      int ret = execveat(file_handle, "", args, NULL, AT_CHECK | AT_EMPTY_PATH);
++      if (ret < 0) {
++        vm_exit_during_initialization("Access denied to", path);
++      }
++    }
++#endif
++
+     if (file_handle != -1) {
+       // read contents into resource array
+       u1* buffer = NEW_RESOURCE_ARRAY(u1, st.st_size);
+diff --git a/hotspot/src/share/vm/runtime/arguments.cpp b/hotspot/src/share/vm/runtime/arguments.cpp
+index a50aa18..73cbc52 100644
+--- a/hotspot/src/share/vm/runtime/arguments.cpp
++++ b/hotspot/src/share/vm/runtime/arguments.cpp
+@@ -3474,6 +3474,8 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args,
+       FLAG_SET_CMDLINE(uintx, TLABSize, long_tlab_size);
+     } else if (match_option(option, "-XX:TLEThreadRatio=", &tail)) {
+       // No longer used.
++    } else if (match_option(option, "-XX:+UseIMACheckJavaFile", &tail)) {
++      FLAG_SET_CMDLINE(bool, UseIMACheckJavaFile, true);
+     } else if (match_option(option, "-XX:+UseTLE", &tail)) {
+       FLAG_SET_CMDLINE(bool, UseTLAB, true);
+     } else if (match_option(option, "-XX:-UseTLE", &tail)) {
+diff --git a/hotspot/src/share/vm/runtime/globals.hpp b/hotspot/src/share/vm/runtime/globals.hpp
+index b3c2f5a..0d0a6e6 100644
+--- a/hotspot/src/share/vm/runtime/globals.hpp
++++ b/hotspot/src/share/vm/runtime/globals.hpp
+@@ -4186,7 +4186,9 @@ class CommandLineFlags {
+                                                                             \
+   diagnostic(bool, PrintAsyncGCLog, false,                                  \
+           "Print some information of Async GC Log")                         \
+-
++                                                                            \
++  product(bool, UseIMACheckJavaFile, false,                                 \
++          "Check java class or jar files when Linux IMA is enabled")        \
+ /*
+  *  Macros for factoring of globals
+  */
+diff --git a/hotspot/src/share/vm/utilities/macros.hpp b/hotspot/src/share/vm/utilities/macros.hpp
+index f631c94..a73733c 100644
+--- a/hotspot/src/share/vm/utilities/macros.hpp
++++ b/hotspot/src/share/vm/utilities/macros.hpp
+@@ -22,6 +22,7 @@
+  *
+  */
+ 
++
+ #ifndef SHARE_VM_UTILITIES_MACROS_HPP
+ #define SHARE_VM_UTILITIES_MACROS_HPP
+ 
+@@ -452,4 +453,18 @@
+ 
+ #define define_pd_global(type, name, value) const type pd_##name = value;
+ 
++
++#if defined(__linux__) && (defined(__aarch64__) || defined(__x86_64))
++#if defined( __GLIBC__) && (__GLIBC__ == 2) && (__GLIBC_MINOR__ >= 34)
++#define USE_IMA 1
++#ifndef AT_CHECK
++#define AT_CHECK      0x10000        /* command execution from file is intended, check exec permissions */
++#endif
++#else
++#define USE_IMA 0
++#endif
++#else
++#define USE_IMA 0
++#endif
++
+ #endif // SHARE_VM_UTILITIES_MACROS_HPP
+diff --git a/jdk/src/share/bin/java.c b/jdk/src/share/bin/java.c
+index c3d3b1b..d2804d2 100644
+--- a/jdk/src/share/bin/java.c
++++ b/jdk/src/share/bin/java.c
+@@ -50,6 +50,25 @@
+  * the CreateExecutionEnviroment will remove the -d<n> flags.
+  */
+ 
++#include <unistd.h>
++#include <fcntl.h>
++
++
++#if defined(__linux__) && (defined(__aarch64__) || defined(__x86_64))
++#if defined( __GLIBC__) && (__GLIBC__ == 2) && (__GLIBC_MINOR__ >= 34)
++#define IMA_OPEN 1
++#ifndef AT_CHECK
++#define AT_CHECK      0x10000        /* command execution from file is intended, check exec permissions */
++static int ClipCheckOnePath(const char *name);
++static int ClipCheckPaths(const char *paths);
++#endif
++#else
++#define IMA_OPEN 0
++#endif
++#else
++#define IMA_OPEN 0
++#endif
++
+ 
+ #include "java.h"
+ 
+@@ -77,6 +96,7 @@ static const char *_fVersion;
+ static const char *_dVersion;
+ static jboolean _wc_enabled = JNI_FALSE;
+ static jint _ergo_policy = DEFAULT_POLICY;
++static jboolean _is_os_exec_java_check = JNI_FALSE;
+ 
+ /*
+  * Entries for splash screen environment variables.
+@@ -96,7 +116,7 @@ static int numOptions, maxOptions;
+ /*
+  * Prototypes for functions internal to launcher.
+  */
+-static void SetClassPath(const char *s);
++static int SetClassPath(const char *s);
+ static void SelectVersion(int argc, char **argv, char **main_class);
+ static void SetJvmEnvironment(int argc, char **argv);
+ static jboolean ParseArguments(int *pargc, char ***pargv,
+@@ -265,6 +285,18 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
+     ++argv;
+     --argc;
+ 
++    //check settings in file: /proc/cmdline
++    FILE *fp = fopen("/proc/cmdline", "r");
++    if (fp != NULL) {
++        char buf[2048];
++        if (fgets(buf, sizeof (buf), fp) != NULL) {
++            if (strstr(buf, "exec_check.java=1") != NULL) {
++                _is_os_exec_java_check = JNI_TRUE;
++            }
++        }
++        fclose(fp);
++    }
++
+     if (IsJavaArgs()) {
+         /* Preprocess wrapper arguments */
+         TranslateApplicationArgs(jargc, jargv, &argc, &argv);
+@@ -290,8 +322,25 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
+ 
+     /* Override class path if -jar flag was specified */
+     if (mode == LM_JAR) {
+-        SetClassPath(what);     /* Override class path */
++        if(!SetClassPath(what)) return(1);     /* Override class path */
++    }
++
++#if IMA_OPEN
++    if (_is_os_exec_java_check && (mode == LM_CLASS) && what) {
++        // claspath = '.'
++        char* path = JLI_MemAlloc(strlen(what) + sizeof(".class"));
++        sprintf(path, "%s.class", what);
++        int ret = 0;
++        if (access(path, F_OK) == 0) {
++            ret = ClipCheckOnePath(path);
++        }
++        free(path);
++        if(ret != 0) return(ret);
++    }
++    if (_is_os_exec_java_check) {
++        AddOption("-XX:+UseIMACheckJavaFile", NULL);
+     }
++#endif
+ 
+     /* set the -Dsun.java.command pseudo property */
+     SetJavaCommandLineProp(what, argc, argv);
+@@ -811,7 +860,60 @@ AddOption(char *str, void *info)
+     }
+ }
+ 
+-static void
++#if IMA_OPEN
++static int
++ClipCheckOnePath(const char *name)
++{
++    int ret, fd;
++    char arg[] = "";
++    char *args[] = { arg, NULL };
++    if (strcmp(name, ".") != 0) {
++        fd = open(name, O_RDONLY);
++        if (fd < 0)
++           return -1;
++        ret = execveat(fd, "", args, NULL, AT_CHECK | AT_EMPTY_PATH);
++        if (ret < 0) {
++           JLI_ReportMessage("Access denied to %s", name);
++           return -1;
++        }
++        close(fd);
++    }
++    return 0;
++}
++
++static int
++ClipCheckPaths(const char *s)
++{
++    char *p, *q, *path;
++    int ret = -1;
++
++    path = strdup(s); // Work on a writable copy
++    if (!path) {
++        JLI_ReportMessage("Access denied to %s (OOM)", s);
++        return -1;
++    }
++
++    p = path;
++    do {
++        q = strchr(p, ':');
++        if (q)
++            *q = '\0';
++        if (access(p, F_OK) == -1) {
++            continue;
++        }
++        if (ClipCheckOnePath(p) != 0)
++            goto out;
++        if (q)
++            p = q + 1; // OK, null-terminated
++    } while (q);
++    ret = 0;
++    out:
++    free(path);
++    return ret;
++}
++#endif
++
++static int
+ SetClassPath(const char *s)
+ {
+     char *def;
+@@ -823,11 +925,15 @@ SetClassPath(const char *s)
+      * caller deal with it
+      */
+     if (s == NULL)
+-        return;
++        return 0;
+     s = JLI_WildcardExpandClasspath(s);
++#if IMA_OPEN
++    if (_is_os_exec_java_check && ClipCheckPaths(s))
++        return 0;
++#endif
+     if (sizeof(format) - 2 + JLI_StrLen(s) < JLI_StrLen(s))
+         // s is corrupted after wildcard expansion
+-        return;
++        return 0;
+     def = JLI_MemAlloc(sizeof(format)
+                        - 2 /* strlen("%s") */
+                        + JLI_StrLen(s));
+@@ -835,6 +941,7 @@ SetClassPath(const char *s)
+     AddOption(def, NULL);
+     if (s != orig)
+         JLI_MemFree((char *) s);
++    return 1;
+ }
+ 
+ /*
+@@ -1100,7 +1207,11 @@ ParseArguments(int *pargc, char ***pargv,
+         argv++; --argc;
+         if (JLI_StrCmp(arg, "-classpath") == 0 || JLI_StrCmp(arg, "-cp") == 0) {
+             ARG_CHECK (argc, ARG_ERROR1, arg);
+-            SetClassPath(*argv);
++            int ret = SetClassPath(*argv);
++            if(!ret) {
++                *pret = 1;
++                return JNI_FALSE;
++            }
+             mode = LM_CLASS;
+             argv++; --argc;
+         } else if (JLI_StrCmp(arg, "-jar") == 0) {
+@@ -1442,7 +1553,7 @@ TranslateApplicationArgs(int jargc, const char **jargv, int *pargc, char ***parg
+ static jboolean
+ AddApplicationOptions(int cpathc, const char **cpathv)
+ {
+-    char *envcp, *appcp, *apphome;
++    char *envcp, *appcp, *apphome, *appcp_path;
+     char home[MAXPATHLEN]; /* application home */
+     char separator[] = { PATH_SEPARATOR, '\0' };
+     int size, i;
+@@ -1451,6 +1562,10 @@ AddApplicationOptions(int cpathc, const char **cpathv)
+         const char *s = getenv("CLASSPATH");
+         if (s) {
+             s = (char *) JLI_WildcardExpandClasspath(s);
++#if IMA_OPEN
++            if (_is_os_exec_java_check && ClipCheckPaths(s))
++                return JNI_FALSE;
++#endif
+             /* 40 for -Denv.class.path= */
+             if (JLI_StrLen(s) + 40 > JLI_StrLen(s)) { // Safeguard from overflow
+                 envcp = (char *)JLI_MemAlloc(JLI_StrLen(s) + 40);
+@@ -1477,11 +1592,16 @@ AddApplicationOptions(int cpathc, const char **cpathv)
+     }
+     appcp = (char *)JLI_MemAlloc(size + 1);
+     JLI_StrCpy(appcp, "-Djava.class.path=");
++    appcp_path = appcp + sizeof("-Djava.class.path=") - 1;
+     for (i = 0; i < cpathc; i++) {
+         JLI_StrCat(appcp, home);                        /* c:\program files\myapp */
+         JLI_StrCat(appcp, cpathv[i]);           /* \lib\myapp.jar         */
+         JLI_StrCat(appcp, separator);           /* ;                      */
+     }
++#if IMA_OPEN
++    if (_is_os_exec_java_check && ClipCheckPaths(appcp_path))
++      return JNI_FALSE;
++#endif
+     appcp[JLI_StrLen(appcp)-1] = '\0';  /* remove trailing path separator */
+     AddOption(appcp, NULL);
+     return JNI_TRUE;
+-- 
+1.8.3.1
+
