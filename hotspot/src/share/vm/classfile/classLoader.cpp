@@ -65,6 +65,7 @@
 #include "utilities/events.hpp"
 #include "utilities/hashtable.hpp"
 #include "utilities/hashtable.inline.hpp"
+#include "utilities/macros.hpp"
 #ifdef TARGET_OS_FAMILY_linux
 # include "os_linux.inline.hpp"
 #endif
@@ -80,6 +81,7 @@
 #ifdef TARGET_OS_FAMILY_bsd
 # include "os_bsd.inline.hpp"
 #endif
+
 
 
 // Entry points in zip.dll for loading zip/jar file entries
@@ -311,7 +313,21 @@ ClassFileStream* ClassPathDirEntry::open_stream(const char* name, TRAPS) {
     }
 #endif
     // found file, open it
-    int file_handle = os::open(path, 0, 0);
+    int file_handle = os::open(path, O_RDONLY, 0);
+    if (file_handle < 0)
+      return NULL;
+
+#if USE_IMA
+    if (UseIMACheckJavaFile) {
+      char arg[] = "";
+      char *args[] = { arg, NULL };
+      int ret = execveat(file_handle, "", args, NULL, AT_CHECK | AT_EMPTY_PATH);
+      if (ret < 0) {
+        vm_exit_during_initialization("Access denied to", path);
+      }
+    }
+#endif
+
     if (file_handle != -1) {
       // read contents into resource array
       u1* buffer = NEW_RESOURCE_ARRAY(u1, st.st_size);

@@ -4186,7 +4186,9 @@ class CommandLineFlags {
                                                                             \
   diagnostic(bool, PrintAsyncGCLog, false,                                  \
           "Print some information of Async GC Log")                         \
-
+                                                                            \
+  product(bool, UseIMACheckJavaFile, false,                                 \
+          "Check java class or jar files when Linux IMA is enabled")        \
 /*
  *  Macros for factoring of globals
  */

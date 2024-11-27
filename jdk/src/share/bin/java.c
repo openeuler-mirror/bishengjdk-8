@@ -50,6 +50,25 @@
  * the CreateExecutionEnviroment will remove the -d<n> flags.
  */
 
+#include <unistd.h>
+#include <fcntl.h>
+
+
+#if defined(__linux__) && (defined(__aarch64__) || defined(__x86_64))
+#if defined( __GLIBC__) && (__GLIBC__ == 2) && (__GLIBC_MINOR__ >= 34)
+#define IMA_OPEN 1
+#ifndef AT_CHECK
+#define AT_CHECK      0x10000        /* command execution from file is intended, check exec permissions */
+static int ClipCheckOnePath(const char *name);
+static int ClipCheckPaths(const char *paths);
+#endif
+#else
+#define IMA_OPEN 0
+#endif
+#else
+#define IMA_OPEN 0
+#endif
+
 
 #include "java.h"
 
@@ -77,6 +96,7 @@ static const char *_fVersion;
 static const char *_dVersion;
 static jboolean _wc_enabled = JNI_FALSE;
 static jint _ergo_policy = DEFAULT_POLICY;
+static jboolean _is_os_exec_java_check = JNI_FALSE;
 
 /*
  * Entries for splash screen environment variables.
@@ -96,7 +116,7 @@ static int numOptions, maxOptions;
 /*
  * Prototypes for functions internal to launcher.
  */
-static void SetClassPath(const char *s);
+static int SetClassPath(const char *s);
 static void SelectVersion(int argc, char **argv, char **main_class);
 static void SetJvmEnvironment(int argc, char **argv);
 static jboolean ParseArguments(int *pargc, char ***pargv,
@@ -265,6 +285,18 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
     ++argv;
     --argc;
 
+    //check settings in file: /proc/cmdline
+    FILE *fp = fopen("/proc/cmdline", "r");
+    if (fp != NULL) {
+        char buf[2048];
+        if (fgets(buf, sizeof (buf), fp) != NULL) {
+            if (strstr(buf, "exec_check.java=1") != NULL) {
+                _is_os_exec_java_check = JNI_TRUE;
+            }
+        }
+        fclose(fp);
+    }
+
     if (IsJavaArgs()) {
         /* Preprocess wrapper arguments */
         TranslateApplicationArgs(jargc, jargv, &argc, &argv);
@@ -290,8 +322,25 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
 
     /* Override class path if -jar flag was specified */
     if (mode == LM_JAR) {
-        SetClassPath(what);     /* Override class path */
+        if(!SetClassPath(what)) return(1);     /* Override class path */
     }
+
+#if IMA_OPEN
+    if (_is_os_exec_java_check && (mode == LM_CLASS) && what) {
+        // claspath = '.'
+        char* path = JLI_MemAlloc(strlen(what) + sizeof(".class"));
+        sprintf(path, "%s.class", what);
+        int ret = 0;
+        if (access(path, F_OK) == 0) {
+            ret = ClipCheckOnePath(path);
+        }
+        free(path);
+        if(ret != 0) return(ret);
+    }
+    if (_is_os_exec_java_check) {
+        AddOption("-XX:+UseIMACheckJavaFile", NULL);
+    }
+#endif
 
     /* set the -Dsun.java.command pseudo property */
     SetJavaCommandLineProp(what, argc, argv);
@@ -811,7 +860,60 @@ AddOption(char *str, void *info)
     }
 }
 
-static void
+#if IMA_OPEN
+static int
+ClipCheckOnePath(const char *name)
+{
+    int ret, fd;
+    char arg[] = "";
+    char *args[] = { arg, NULL };
+    if (strcmp(name, ".") != 0) {
+        fd = open(name, O_RDONLY);
+        if (fd < 0)
+           return -1;
+        ret = execveat(fd, "", args, NULL, AT_CHECK | AT_EMPTY_PATH);
+        if (ret < 0) {
+           JLI_ReportMessage("Access denied to %s", name);
+           return -1;
+        }
+        close(fd);
+    }
+    return 0;
+}
+
+static int
+ClipCheckPaths(const char *s)
+{
+    char *p, *q, *path;
+    int ret = -1;
+
+    path = strdup(s); // Work on a writable copy
+    if (!path) {
+        JLI_ReportMessage("Access denied to %s (OOM)", s);
+        return -1;
+    }
+
+    p = path;
+    do {
+        q = strchr(p, ':');
+        if (q)
+            *q = '\0';
+        if (access(p, F_OK) == -1) {
+            continue;
+        }
+        if (ClipCheckOnePath(p) != 0)
+            goto out;
+        if (q)
+            p = q + 1; // OK, null-terminated
+    } while (q);
+    ret = 0;
+    out:
+    free(path);
+    return ret;
+}
+#endif
+
+static int
 SetClassPath(const char *s)
 {
     char *def;
@@ -823,11 +925,15 @@ SetClassPath(const char *s)
      * caller deal with it
      */
     if (s == NULL)
-        return;
+        return 0;
     s = JLI_WildcardExpandClasspath(s);
+#if IMA_OPEN
+    if (_is_os_exec_java_check && ClipCheckPaths(s))
+        return 0;
+#endif
     if (sizeof(format) - 2 + JLI_StrLen(s) < JLI_StrLen(s))
         // s is corrupted after wildcard expansion
-        return;
+        return 0;
     def = JLI_MemAlloc(sizeof(format)
                        - 2 /* strlen("%s") */
                        + JLI_StrLen(s));
@@ -835,6 +941,7 @@ SetClassPath(const char *s)
     AddOption(def, NULL);
     if (s != orig)
         JLI_MemFree((char *) s);
+    return 1;
 }
 
 /*
@@ -1100,7 +1207,11 @@ ParseArguments(int *pargc, char ***pargv,
         argv++; --argc;
         if (JLI_StrCmp(arg, "-classpath") == 0 || JLI_StrCmp(arg, "-cp") == 0) {
             ARG_CHECK (argc, ARG_ERROR1, arg);
-            SetClassPath(*argv);
+            int ret = SetClassPath(*argv);
+            if(!ret) {
+                *pret = 1;
+                return JNI_FALSE;
+            }
             mode = LM_CLASS;
             argv++; --argc;
         } else if (JLI_StrCmp(arg, "-jar") == 0) {
@@ -1442,7 +1553,7 @@ TranslateApplicationArgs(int jargc, const char **jargv, int *pargc, char ***parg
 static jboolean
 AddApplicationOptions(int cpathc, const char **cpathv)
 {
-    char *envcp, *appcp, *apphome;
+    char *envcp, *appcp, *apphome, *appcp_path;
     char home[MAXPATHLEN]; /* application home */
     char separator[] = { PATH_SEPARATOR, '\0' };
     int size, i;
@@ -1451,6 +1562,10 @@ AddApplicationOptions(int cpathc, const char **cpathv)
         const char *s = getenv("CLASSPATH");
         if (s) {
             s = (char *) JLI_WildcardExpandClasspath(s);
+#if IMA_OPEN
+            if (_is_os_exec_java_check && ClipCheckPaths(s))
+                return JNI_FALSE;
+#endif
             /* 40 for -Denv.class.path= */
             if (JLI_StrLen(s) + 40 > JLI_StrLen(s)) { // Safeguard from overflow
                 envcp = (char *)JLI_MemAlloc(JLI_StrLen(s) + 40);
@@ -1477,11 +1592,16 @@ AddApplicationOptions(int cpathc, const char **cpathv)
     }
     appcp = (char *)JLI_MemAlloc(size + 1);
     JLI_StrCpy(appcp, "-Djava.class.path=");
+    appcp_path = appcp + sizeof("-Djava.class.path=") - 1;
     for (i = 0; i < cpathc; i++) {
         JLI_StrCat(appcp, home);                        /* c:\program files\myapp */
         JLI_StrCat(appcp, cpathv[i]);           /* \lib\myapp.jar         */
         JLI_StrCat(appcp, separator);           /* ;                      */
     }
+#if IMA_OPEN
+    if (_is_os_exec_java_check && ClipCheckPaths(appcp_path))
+      return JNI_FALSE;
+#endif
     appcp[JLI_StrLen(appcp)-1] = '\0';  /* remove trailing path separator */
     AddOption(appcp, NULL);
     return JNI_TRUE;
