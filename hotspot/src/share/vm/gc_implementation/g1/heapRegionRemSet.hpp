@@ -178,17 +178,13 @@ public:
   // Returns the card index of the given within_region pointer relative to the bottom  ————————————————————heapRegionRemSet.hpp:312  OtherRegionsTable
   // of the given heap region.
   static CardIdx_t card_within_region(OopOrNarrowOopStar within_region, HeapRegion* hr);
-  // For now.  Could "expand" some tables in the future, so that this made
-  // sense.
+  // Adds the reference from "from to this remembered set.
   void add_reference(OopOrNarrowOopStar from, int tid);
 
   // Returns whether this remembered set (and all sub-sets) have an occupancy
   // that is less or equal than the given occupancy.
   bool occupancy_less_or_equal_than(size_t limit) const;
 
-  // Removes any entries shown by the given bitmaps to contain only dead
-  // objects.
-  void scrub(CardTableModRefBS* ctbs, BitMap* region_bm, BitMap* card_bm);
 
   // Returns whether this remembered set (and all sub-sets) contain no entries.
   bool is_empty() const;
@@ -248,10 +244,6 @@ private:
 
   OtherRegionsTable _other_regions;
 
-  enum ParIterState { Unclaimed, Claimed, Complete };
-  volatile ParIterState _iter_state;
-  volatile jlong _iter_claimed;
-
   // Unused unless G1RecordHRRSOops is true.
 
   static const int MaxRecorded = 1000000;
@@ -304,50 +296,62 @@ public:
   }
 
   static jint n_coarsenings() { return OtherRegionsTable::n_coarsenings(); }
+private:
+  enum RemSetState {
+    Untracked,
+    Updating,
+    Complete
+  };
+
+  RemSetState _state;
+
+  static const char* _state_strings[];
+ public:
+
+  const char* get_state_str() const { return _state_strings[_state]; }
+
+  bool is_tracked() { return _state != Untracked; }
+  bool is_updating() { return _state == Updating; }
+  bool is_complete() { return _state == Complete; }
+
+  void set_state_empty() {
+    guarantee(SafepointSynchronize::is_at_safepoint() || !is_tracked(), "Should only set to Untracked during safepoint");
+    if (_state == Untracked) {
+      return;
+    }
+    _other_regions.clear_fcc();
+    _state = Untracked;
+  }
+
+  void set_state_updating() {
+    guarantee(SafepointSynchronize::is_at_safepoint() && !is_tracked(), "Should only set to Updating from Untracked during safepoint ");
+    _other_regions.clear_fcc();
+    _state = Updating;
+  }
+
+  void set_state_complete() {
+    _other_regions.clear_fcc();
+    _state = Complete;
+  }
 
   // Used in the sequential case.
   void add_reference(OopOrNarrowOopStar from) {
-    _other_regions.add_reference(from, 0);
+    add_reference(from, 0);
   }
 
   // Used in the parallel case.
   void add_reference(OopOrNarrowOopStar from, int tid) {
+    RemSetState state = _state;
+    if (state == Untracked) {
+      return;
+    }
     _other_regions.add_reference(from, tid);
   }
 
-  // Removes any entries shown by the given bitmaps to contain only dead
-  // objects.
-  void scrub(CardTableModRefBS* ctbs, BitMap* region_bm, BitMap* card_bm);
-
   // The region is being reclaimed; clear its remset, and any mention of
   // entries for this region in other remsets.
-  void clear();
-  void clear_locked();
-
-  // Attempt to claim the region.  Returns true iff this call caused an
-  // atomic transition from Unclaimed to Claimed.
-  bool claim_iter();
-  // Sets the iteration state to "complete".
-  void set_iter_complete();
-  // Returns "true" iff the region's iteration is complete.
-  bool iter_is_complete();
-
-  // Support for claiming blocks of cards during iteration
-  size_t iter_claimed() const { return (size_t)_iter_claimed; }
-  // Claim the next block of cards
-  size_t iter_claimed_next(size_t step) {
-    size_t current, next;
-    do {
-      current = iter_claimed();
-      next = current + step;
-    } while (Atomic::cmpxchg((jlong)next, &_iter_claimed, (jlong)current) != (jlong)current);
-    return current;
-  }
-  void reset_for_par_iteration();
-
-  bool verify_ready_for_par_iteration() {
-    return (_iter_state == Unclaimed) && (_iter_claimed == 0);
-  }
+  void clear(bool only_cardset = false);
+  void clear_locked(bool only_cardset = false);
 
   // The actual # of bytes this hr_remset takes up.
   // Note also includes the strong code root set.

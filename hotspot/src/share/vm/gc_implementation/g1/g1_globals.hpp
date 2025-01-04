@@ -274,6 +274,9 @@
   product(uintx, G1MixedGCCountTarget, 8,                                   \
           "The target number of mixed GCs after a marking cycle.")          \
                                                                             \
+  experimental(bool, G1PretouchAuxiliaryMemory, false,                      \
+          "Pre-touch large auxiliary data structures used by the GC.")      \
+                                                                            \
   experimental(bool, G1EagerReclaimHumongousObjects, true,                  \
           "Try to reclaim dead large objects at every young GC.")           \
                                                                             \

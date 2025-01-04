@@ -65,6 +65,7 @@ class SpaceClosure;
 class CompactibleSpaceClosure;
 class Space;
 class G1CollectorPolicy;
+class G1FullGCScope;
 class GenRemSet;
 class G1RemSet;
 class HeapRegionRemSetIterator;
@@ -493,6 +494,9 @@ protected:
   // NULL if unsuccessful.
   HeapWord* humongous_obj_allocate(size_t word_size, AllocationContext_t context);
 
+  // Returns the number of regions the humongous object of the given word size
+  // requires.
+
   // The following two methods, allocate_new_tlab() and
   // mem_allocate(), are the two main entry points from the runtime
   // into the G1's allocation routines. They have the following
@@ -634,7 +638,19 @@ protected:
   HeapWord* satisfy_failed_allocation(size_t word_size,
                                       AllocationContext_t context,
                                       bool* succeeded);
+private:
+  // Internal helpers used during full GC to split it up to
+  // increase readability.
+  void do_full_collection_inner(G1FullGCScope* scope, size_t word_size);
+  void abort_concurrent_cycle();
+  void verify_before_full_collection(bool explicit_gc);
+  void prepare_heap_for_full_collection();
+  void prepare_heap_for_mutators(bool explicit_gc, size_t word_size);
+  void abort_refinement();
+  void verify_after_full_collection();
+  void print_heap_after_full_collection();
 
+protected:
   // Attempting to expand the heap sufficiently
   // to support an allocation of the given "word_size".  If
   // successful, perform the allocation and return the address of the
@@ -652,6 +668,7 @@ protected:
   void verify_numa_regions(const char* desc);
 
 public:
+  static size_t humongous_obj_size_in_regions(size_t word_size);
 
   G1Allocator* allocator() {
     return _allocator;
@@ -683,6 +700,9 @@ public:
   // Do anything common to GC's.
   virtual void gc_prologue(bool full);
   virtual void gc_epilogue(bool full);
+
+  // Does the given region fulfill remembered set based eager reclaim candidate requirements?
+  bool is_potential_eager_reclaim_candidate(HeapRegion* r) const;
 
   // Modify the reclaim candidate set and test for presence.
   // These are only valid for starts_humongous regions.
@@ -1096,9 +1116,11 @@ public:
   // continues humongous regions too.
   void reset_gc_time_stamps(HeapRegion* hr);
 
-  void iterate_dirty_card_closure(CardTableEntryClosure* cl,
-                                  DirtyCardQueue* into_cset_dcq,
-                                  bool concurrent, uint worker_i);
+  // Apply the given closure on all cards in the Hot Card Cache, emptying it.
+  void iterate_hcc_closure(CardTableEntryClosure* cl, uint worker_i);
+
+  // Apply the given closure on all cards in the Dirty Card Queue Set, emptying it.
+  void iterate_dirty_card_closure(CardTableEntryClosure* cl, uint worker_i);
 
   // The shared block offset table array.
   G1BlockOffsetSharedArray* bot_shared() const { return _bot_shared; }
@@ -1248,7 +1270,6 @@ public:
   void prepend_to_freelist(FreeRegionList* list);
   void decrement_summary_bytes(size_t bytes);
 
-  // Returns "TRUE" iff "p" points into the committed areas of the heap.
   virtual bool is_in(const void* p) const;
 #ifdef ASSERT
   // Returns whether p is in one of the available areas of the heap. Slow but
@@ -1261,6 +1282,8 @@ public:
   inline bool obj_in_cs(oop obj);
 
   inline bool is_in_cset(oop obj);
+
+  inline bool is_in_cset(HeapWord* addr);
 
   inline bool is_in_cset_or_humongous(const oop obj);
 
@@ -1320,6 +1343,10 @@ public:
   // Return the region with the given index. It assumes the index is valid.
   inline HeapRegion* region_at(uint index) const;
 
+    // Return the next region (by index) that is part of the same
+    // humongous object that hr is part of.
+    inline HeapRegion* next_region_in_humongous(HeapRegion* hr) const;
+
   // Calculate the region index of the given address. Given address must be
   // within the heap.
   inline uint addr_to_region(HeapWord* addr) const;
@@ -1362,10 +1389,6 @@ public:
   // A CollectedHeap will contain some number of spaces.  This finds the
   // space containing a given address, or else returns NULL.
   virtual Space* space_containing(const void* addr) const;
-
-  // Returns the HeapRegion that contains addr. addr must not be NULL.
-  template <class T>
-  inline HeapRegion* heap_region_containing_raw(const T addr) const;
 
   // Returns the HeapRegion that contains addr. addr must not be NULL.
   // If addr is within a humongous continues region, it returns its humongous start region.
@@ -1514,9 +1537,7 @@ public:
   // iff a) it was not allocated since the last mark and b) it
   // is not marked.
   bool is_obj_dead(const oop obj, const HeapRegion* hr) const {
-    return
-      !hr->obj_allocated_since_prev_marking(obj) &&
-      !isMarkedPrev(obj);
+    return hr->is_obj_dead(obj, _cm->prevMarkBitMap());
   }
 
   // This function returns true when an object has been

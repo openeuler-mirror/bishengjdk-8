@@ -35,103 +35,70 @@
 #include "memory/iterator.inline.hpp"
 #include "runtime/prefetch.inline.hpp"
 
-/*
- * This really ought to be an inline function, but apparently the C++
- * compiler sometimes sees fit to ignore inline declarations.  Sigh.
- */
-
-template <class T>
-inline void FilterIntoCSClosure::do_oop_nv(T* p) {
-  T heap_oop = oopDesc::load_heap_oop(p);
-  if (!oopDesc::is_null(heap_oop) &&
-      _g1->is_in_cset_or_humongous(oopDesc::decode_heap_oop_not_null(heap_oop))) {
-    _oc->do_oop(p);
-  }
-}
-
-template <class T>
-inline void FilterOutOfRegionClosure::do_oop_nv(T* p) {
-  T heap_oop = oopDesc::load_heap_oop(p);
-  if (!oopDesc::is_null(heap_oop)) {
-    HeapWord* obj_hw = (HeapWord*)oopDesc::decode_heap_oop_not_null(heap_oop);
-    if (obj_hw < _r_bottom || obj_hw >= _r_end) {
-      _oc->do_oop(p);
-    }
-  }
-}
-
 // This closure is applied to the fields of the objects that have just been copied.
 template <class T>
-inline void G1ParScanClosure::do_oop_nv(T* p) {
-  T heap_oop = oopDesc::load_heap_oop(p);
+inline void G1ScanClosureBase::prefetch_and_push(T* p, const oop obj) {
+    // We're not going to even bother checking whether the object is
+    // already forwarded or not, as this usually causes an immediate
+    // stall. We'll try to prefetch the object (for write, given that
+    // we might need to install the forwarding reference) and we'll
+    // get back to it when pop it from the queue
+    Prefetch::write(obj->mark_addr(), 0);
+    Prefetch::read(obj->mark_addr(), (HeapWordSize*2));
 
-  if (!oopDesc::is_null(heap_oop)) {
-    oop obj = oopDesc::decode_heap_oop_not_null(heap_oop);
-    const InCSetState state = _g1->in_cset_state(obj);
-    if (state.is_in_cset()) {
-      // We're not going to even bother checking whether the object is
-      // already forwarded or not, as this usually causes an immediate
-      // stall. We'll try to prefetch the object (for write, given that
-      // we might need to install the forwarding reference) and we'll
-      // get back to it when pop it from the queue
-      Prefetch::write(obj->mark_addr(), 0);
-      Prefetch::read(obj->mark_addr(), (HeapWordSize*2));
+    // slightly paranoid test; I'm trying to catch potential
+    // problems before we go into push_on_queue to know where the
+    // problem is coming from
+    assert((obj == oopDesc::load_decode_heap_oop(p)) ||
+           (obj->is_forwarded() &&
+               obj->forwardee() == oopDesc::load_decode_heap_oop(p)),
+           "p should still be pointing to obj or to its forwardee");
 
-      // slightly paranoid test; I'm trying to catch potential
-      // problems before we go into push_on_queue to know where the
-      // problem is coming from
-      assert((obj == oopDesc::load_decode_heap_oop(p)) ||
-             (obj->is_forwarded() &&
-                 obj->forwardee() == oopDesc::load_decode_heap_oop(p)),
-             "p should still be pointing to obj or to its forwardee");
-
-      _par_scan_state->push_on_queue(p);
-    } else {
-      if (state.is_humongous()) {
-        _g1->set_humongous_is_live(obj);
-      }
-      _par_scan_state->update_rs(_from, p, _worker_id);
-    }
-  }
+    _par_scan_state->push_on_queue(p);
 }
 
 template <class T>
-inline void G1ParPushHeapRSClosure::do_oop_nv(T* p) {
+inline void G1ScanClosureBase::handle_non_cset_obj_common(InCSetState const state, T* p, oop const obj) {
+    if (state.is_humongous()) {
+      _g1->set_humongous_is_live(obj);
+    }
+}
+
+template <class T>
+inline void G1ScanEvacuatedObjClosure::do_oop_nv(T* p) {
   T heap_oop = oopDesc::load_heap_oop(p);
 
-  if (!oopDesc::is_null(heap_oop)) {
-    oop obj = oopDesc::decode_heap_oop_not_null(heap_oop);
-    if (_g1->is_in_cset_or_humongous(obj)) {
-      Prefetch::write(obj->mark_addr(), 0);
-      Prefetch::read(obj->mark_addr(), (HeapWordSize*2));
+  if (oopDesc::is_null(heap_oop)) {
+    return;
+  }
 
-      // Place on the references queue
-      _par_scan_state->push_on_queue(p);
-    } else {
-      assert(!_g1->obj_in_cs(obj), "checking");
-    }
+  oop obj = oopDesc::decode_heap_oop_not_null(heap_oop);
+  const InCSetState state = _g1->in_cset_state(obj);
+  if (state.is_in_cset()) {
+    prefetch_and_push(p, obj);
+  } else {
+    handle_non_cset_obj_common(state, p, obj);
+    _par_scan_state->update_rs(_from, p, _par_scan_state->queue_num());
   }
 }
 
 template <class T>
 inline void G1CMOopClosure::do_oop_nv(T* p) {
-  oop obj = oopDesc::load_decode_heap_oop(p);
   if (_cm->verbose_high()) {
-    gclog_or_tty->print_cr("[%u] we're looking at location "
-                           "*" PTR_FORMAT " = " PTR_FORMAT,
-                           _task->worker_id(), p2i(p), p2i((void*) obj));
+    gclog_or_tty->print_cr("[%u] we're looking at location " PTR_FORMAT "",
+                           _task->worker_id(), p2i(p));
   }
-  _task->deal_with_reference(obj);
+  _task->deal_with_reference(p);
 }
 
 template <class T>
 inline void G1RootRegionScanClosure::do_oop_nv(T* p) {
   T heap_oop = oopDesc::load_heap_oop(p);
-  if (!oopDesc::is_null(heap_oop)) {
-    oop obj = oopDesc::decode_heap_oop_not_null(heap_oop);
-    HeapRegion* hr = _g1h->heap_region_containing((HeapWord*) obj);
-    _cm->grayRoot(obj, obj->size(), _worker_id, hr);
+  if (oopDesc::is_null(heap_oop)) {
+    return;
   }
+  oop obj = oopDesc::decode_heap_oop_not_null(heap_oop);
+  _cm->mark_in_next_bitmap(_worker_id, obj);
 }
 
 template <class T>
@@ -142,84 +109,119 @@ inline void G1Mux2Closure::do_oop_nv(T* p) {
 }
 
 template <class T>
-inline void G1TriggerClosure::do_oop_nv(T* p) {
-  // Record that this closure was actually applied (triggered).
-  _triggered = true;
-}
-
-template <class T>
-inline void G1InvokeIfNotTriggeredClosure::do_oop_nv(T* p) {
-  if (!_trigger_cl->triggered()) {
-    _oop_cl->do_oop(p);
-  }
-}
-
-template <class T>
-inline void G1UpdateRSOrPushRefOopClosure::do_oop_nv(T* p) {
-  oop obj = oopDesc::load_decode_heap_oop(p);
-  if (obj == NULL) {
-    return;
-  }
+inline static void check_obj_during_refinement(T* p, oop const obj) {
 #ifdef ASSERT
+  G1CollectedHeap* g1 = G1CollectedHeap::heap();
   // can't do because of races
   // assert(obj == NULL || obj->is_oop(), "expected an oop");
+  assert(check_obj_alignment(obj), "not oop aligned");
+  assert(g1->is_in_reserved(obj), "must be in heap");
 
-  // Do the safe subset of is_oop
-#ifdef CHECK_UNHANDLED_OOPS
-  oopDesc* o = obj.obj();
-#else
-  oopDesc* o = obj;
-#endif // CHECK_UNHANDLED_OOPS
-  assert((intptr_t)o % MinObjAlignmentInBytes == 0, "not oop aligned");
-  assert(Universe::heap()->is_in_reserved(obj), "must be in heap");
+  HeapRegion* from = g1->heap_region_containing(p);
+
+  assert(from != NULL, "from region must be non-NULL");
+  assert(from->is_in_reserved(p) ||
+         (from->isHumongous() &&
+          g1->heap_region_containing(p)->isHumongous() &&
+          from->humongous_start_region() == g1->heap_region_containing(p)->humongous_start_region()),
+          err_msg("p " PTR_FORMAT " is not in the same region %u or part of the correct humongous object"
+              " starting at region %u.", p2i(p), from->hrm_index(), from->humongous_start_region()->hrm_index()));
 #endif // ASSERT
+}
 
-  assert(_from != NULL, "from region must be non-NULL");
-  assert(_from->is_in_reserved(p), "p is not in from");
+template <class T>
+inline void G1ConcurrentRefineOopClosure::do_oop_nv(T* p) {
+  T o = oopDesc::load_heap_oop(p);
+  if (oopDesc::is_null(o)) {
+    return;
+  }
+  oop obj = oopDesc::decode_heap_oop_not_null(o);
 
-  HeapRegion* to = _g1->heap_region_containing(obj);
-  if (_from == to) {
+  check_obj_during_refinement(p, obj);
+
+  if (HeapRegion::is_in_same_region(p, obj)) {
     // Normally this closure should only be called with cross-region references.
     // But since Java threads are manipulating the references concurrently and we
     // reload the values things may have changed.
+    // Also this check lets slip through references from a humongous continues region
+    // to its humongous start region, as they are in different regions, and adds a
+    // remembered set entry. This is benign (apart from memory usage), as we never
+    // try to either evacuate or eager reclaim humonguous arrays of j.l.O.
     return;
   }
-  // The _record_refs_into_cset flag is true during the RSet
-  // updating part of an evacuation pause. It is false at all
-  // other times:
-  //  * rebuilding the remembered sets after a full GC
-  //  * during concurrent refinement.
-  //  * updating the remembered sets of regions in the collection
-  //    set in the event of an evacuation failure (when deferred
-  //    updates are enabled).
 
-  if (_record_refs_into_cset && to->in_collection_set()) {
-    // We are recording references that point into the collection
-    // set and this particular reference does exactly that...
-    // If the referenced object has already been forwarded
-    // to itself, we are handling an evacuation failure and
-    // we have already visited/tried to copy this object
-    // there is no need to retry.
-    if (!self_forwarded(obj)) {
-      assert(_push_ref_cl != NULL, "should not be null");
-      // Push the reference in the refs queue of the G1ParScanThreadState
-      // instance for this worker thread.
-      _push_ref_cl->do_oop(p);
-     }
+  HeapRegionRemSet* to_rem_set = _g1->heap_region_containing(obj)->rem_set();
 
-    // Deferred updates to the CSet are either discarded (in the normal case),
-    // or processed (if an evacuation failure occurs) at the end
-    // of the collection.
-    // See G1RemSet::cleanup_after_oops_into_collection_set_do().
+  assert(to_rem_set != NULL, "Need per-region 'into' remsets.");
+  if (to_rem_set->is_tracked()) {
+    to_rem_set->add_reference(p, _worker_i);
+  }
+}
+
+
+template <class T>
+inline void G1ScanObjsDuringUpdateRSClosure::do_oop_nv(T* p) {
+  T o = oopDesc::load_heap_oop(p);
+  if (oopDesc::is_null(o)) {
+    return;
+  }
+  oop obj = oopDesc::decode_heap_oop_not_null(o);
+  check_obj_during_refinement(p, obj);
+
+  assert(!_g1->is_in_cset((HeapWord*)p),
+         err_msg("Oop originates from " PTR_FORMAT " (region: %u) which is in the collection set.", p2i(p),
+         _g1->addr_to_region((HeapWord*)p)))
+         ;
+  const InCSetState state = _g1->in_cset_state(obj);
+  if (state.is_in_cset()) {
+    // Since the source is always from outside the collection set, here we implicitly know
+    // that this is a cross-region reference too.
+    prefetch_and_push(p, obj);
+
+    _has_refs_into_cset = true;
   } else {
-    // We either don't care about pushing references that point into the
-    // collection set (i.e. we're not during an evacuation pause) _or_
-    // the reference doesn't point into the collection set. Either way
-    // we add the reference directly to the RSet of the region containing
-    // the referenced object.
-    assert(to->rem_set() != NULL, "Need per-region 'into' remsets.");
+    HeapRegion* to = _g1->heap_region_containing(obj);
+    if (_from == to) {
+      // Normally this closure should only be called with cross-region references.
+      // But since Java threads are manipulating the references concurrently and we
+      // reload the values things may have changed.
+      return;
+    }
+    handle_non_cset_obj_common(state, p, obj);
     to->rem_set()->add_reference(p, _worker_i);
   }
+}
+
+template <class T>
+inline void G1ScanObjsDuringScanRSClosure::do_oop_nv(T* p) {
+  T heap_oop = oopDesc::load_heap_oop(p);
+  if (oopDesc::is_null(heap_oop)) {
+    return;
+  }
+  oop obj = oopDesc::decode_heap_oop_not_null(heap_oop);
+
+  const InCSetState state = _g1->in_cset_state(obj);
+  if (state.is_in_cset()) {
+    prefetch_and_push(p, obj);
+  } else {
+    handle_non_cset_obj_common(state, p, obj);
+  }
+}
+
+template <class T> void G1RebuildRemSetClosure::do_oop_nv(T* p) {
+  T heap_oop = oopDesc::load_heap_oop(p);
+  if (oopDesc::is_null(heap_oop)) {
+    return;
+  }
+  oop obj = oopDesc::decode_heap_oop_not_null(heap_oop);
+
+  if (HeapRegion::is_in_same_region(p, obj)) {
+    return;
+  }
+
+  HeapRegion* to = _g1->heap_region_containing(obj);
+  HeapRegionRemSet* rem_set = to->rem_set();
+  rem_set->add_reference(p, _worker_id);
 }
 
 #endif // SHARE_VM_GC_IMPLEMENTATION_G1_G1OOPCLOSURES_INLINE_HPP

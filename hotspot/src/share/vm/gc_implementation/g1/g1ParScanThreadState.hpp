@@ -52,7 +52,7 @@ class G1ParScanThreadState : public CHeapObj<mtGC> {
   InCSetState       _dest[InCSetState::Num];
   // Local tenuring threshold.
   uint              _tenuring_threshold;
-  G1ParScanClosure  _scanner;
+  G1ScanEvacuatedObjClosure  _scanner;
 
   size_t            _alloc_buffer_waste;
   size_t            _undo_waste;

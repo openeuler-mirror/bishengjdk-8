@@ -215,4 +215,50 @@ void ArrayAllocator<E, F>::free() {
   }
 }
 
+template <class E>
+size_t MmapArrayAllocator<E>::size_for(size_t length) {
+  size_t size = length * sizeof(E);
+  int alignment = os::vm_allocation_granularity();
+  return align_size_up_(size, alignment);
+}
+
+template <class E>
+E* MmapArrayAllocator<E>::allocate_or_null(size_t length, MEMFLAGS flags) {
+  size_t size = size_for(length);
+  int alignment = os::vm_allocation_granularity();
+
+  char* addr = os::reserve_memory(size, NULL, alignment, flags);
+  if (addr == NULL) {
+    return NULL;
+  }
+
+  if (os::commit_memory(addr, size, !ExecMem)) {
+    return (E*)addr;
+  } else {
+    os::release_memory(addr, size);
+    return NULL;
+  }
+}
+
+template <class E>
+E* MmapArrayAllocator<E>::allocate(size_t length, MEMFLAGS flags) {
+  size_t size = size_for(length);
+  int alignment = os::vm_allocation_granularity();
+
+  char* addr = os::reserve_memory(size, NULL, alignment, flags);
+  if (addr == NULL) {
+    vm_exit_out_of_memory(size, OOM_MMAP_ERROR, "Allocator (reserve)");
+  }
+
+  os::commit_memory_or_exit(addr, size, !ExecMem, "Allocator (commit)");
+
+  return (E*)addr;
+}
+
+template <class E>
+void MmapArrayAllocator<E>::free(E* addr, size_t length) {
+  bool result = os::release_memory((char*)addr, size_for(length));
+  assert(result, "Failed to release memory");
+}
+
 #endif // SHARE_VM_MEMORY_ALLOCATION_INLINE_HPP

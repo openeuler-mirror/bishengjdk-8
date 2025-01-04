@@ -1007,8 +1007,8 @@ class CommandLineFlags {
   product(bool, VerifyRedactPassword, false,                                \
          "verify authority for operating heapDump redact feature")          \
                                                                             \
-  product(ccstr, RedactPassword, "",                                      \
-         "authority for operating heapDump redact feature")                 \
+  product(ccstr, RedactPassword, NULL,                                          \
+         "authority for operating heapDump redact feature, format {password,salt}, salt length >= 8")                 \
                                                                             \
   develop(uintx, SegmentedHeapDumpThreshold, 2*G,                           \
           "Generate a segmented heap dump (JAVA PROFILE 1.0.2 format) "     \

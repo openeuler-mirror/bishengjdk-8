@@ -102,16 +102,18 @@ public:
 
   void sort_regions();
 
+  static size_t mixed_gc_live_threshold_bytes() {
+    return HeapRegion::GrainBytes * (size_t) G1MixedGCLiveThresholdPercent / 100;
+  }
+
+  static bool region_occupancy_low_enough_for_evac(size_t live_bytes);
+
   // Determine whether to add the given region to the CSet chooser or
   // not. Currently, we skip humongous regions (we never add them to
   // the CSet, we only reclaim them during cleanup) and regions whose
   // live bytes are over the threshold.
-  bool should_add(HeapRegion* hr) {
-    assert(hr->is_marked(), "pre-condition");
-    assert(!hr->is_young(), "should never consider young regions");
-    return !hr->isHumongous() &&
-            hr->live_bytes() < _region_live_threshold_bytes;
-  }
+  // Regions also need a complete remembered set to be a candidate.
+  bool should_add(HeapRegion* hr) const ;
 
   // Returns the number candidate old regions added
   uint length() { return _length; }
@@ -132,6 +134,9 @@ public:
   // Atomically increment the number of added regions by region_num
   // and the amount of reclaimable bytes by reclaimable_bytes.
   void update_totals(uint region_num, size_t reclaimable_bytes);
+
+  // Iterate over all collection set candidate regions.
+  void iterate(HeapRegionClosure* cl);
 
   void clear();
 

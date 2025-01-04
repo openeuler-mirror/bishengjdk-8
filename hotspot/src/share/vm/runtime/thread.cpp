@@ -380,10 +380,12 @@ Thread::~Thread() {
   delete handle_area();
   delete metadata_handles();
 
+  // SR_handler uses this as a termination indicator -
+  delete _SR_lock;
+  _SR_lock = NULL;
+
   // osthread() can be NULL, if creation of thread failed.
   if (osthread() != NULL) os::free_thread(osthread());
-
-  delete _SR_lock;
 
   // clear thread local storage if the Thread is deleting itself
   if (this == Thread::current()) {

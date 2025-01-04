@@ -29,6 +29,7 @@
 #include "classfile/vmSymbols.hpp"
 #include "code/codeCache.hpp"
 #include "code/icBuffer.hpp"
+#include "gc_implementation/g1/g1FullGCScope.hpp"
 #include "gc_implementation/g1/g1Log.hpp"
 #include "gc_implementation/g1/g1MarkSweep.hpp"
 #include "gc_implementation/g1/g1RootProcessor.hpp"
@@ -222,6 +223,9 @@ uint G1MarkSweep::_active_workers = 0;
 void G1MarkSweep::invoke_at_safepoint(ReferenceProcessor* rp,
                                       bool clear_all_softrefs) {
   assert(SafepointSynchronize::is_at_safepoint(), "must be at a safepoint");
+  HandleMark hm;  // Discard invalid handles created during gc
+
+  COMPILER2_PRESENT(DerivedPointerTable::clear());
 
   _active_workers = G1CollectedHeap::heap()->workers()->active_workers();
 
@@ -302,6 +306,9 @@ void G1MarkSweep::invoke_at_safepoint(ReferenceProcessor* rp,
     }
   }
 
+  // Now update the derived pointers.
+  COMPILER2_PRESENT(DerivedPointerTable::update_pointers());
+
   // "free at last gc" is calculated from these.
   // CHF: cheating for now!!!
   //  Universe::set_heap_capacity_at_last_gc(Universe::heap()->capacity());
@@ -312,6 +319,14 @@ void G1MarkSweep::invoke_at_safepoint(ReferenceProcessor* rp,
   JvmtiExport::gc_epilogue();
   // refs processing: clean slate
   GenMarkSweep::_ref_processor = NULL;
+}
+
+STWGCTimer* G1MarkSweep::gc_timer() {
+  return G1FullGCScope::instance()->timer();
+}
+
+SerialOldTracer* G1MarkSweep::gc_tracer() {
+  return G1FullGCScope::instance()->tracer();
 }
 
 void G1MarkSweep::run_task(AbstractGangTask* task) {
@@ -567,11 +582,14 @@ protected:
 protected:
   void free_humongous_region(HeapRegion* hr) {
     FreeRegionList dummy_free_list("Dummy Free List for G1MarkSweep");
-    assert(hr->startsHumongous(),
-           "Only the start of a humongous region should be freed.");
-    hr->set_containing_set(NULL);
-    _humongous_regions_removed.increment(1u, hr->capacity());
-    G1CollectedHeap::heap()->free_humongous_region(hr, &dummy_free_list, false);
+    G1CollectedHeap* g1h = G1CollectedHeap::heap();
+    do {
+      HeapRegion* next = g1h->next_region_in_humongous(hr);
+      hr->set_containing_set(NULL);
+      _humongous_regions_removed.increment(1u, hr->capacity());
+      g1h->free_humongous_region(hr, &dummy_free_list, false);
+      hr = next;
+    } while (hr != NULL);
     dummy_free_list.remove_all();
   }
 
@@ -772,8 +790,8 @@ public:
         } else {
           assert(hr->is_empty(), "Should have been cleared in phase 2.");
         }
-        hr->reset_during_compaction();
       }
+      hr->reset_during_compaction();
     } else {
       hr->compact();
     }
@@ -813,6 +831,7 @@ public:
     }
 
     const GrowableArray<HeapRegion*>* marked_huge_regions = _cps->cp_at(worker_id)->huge_regions();
+    G1CollectedHeap* g1h = G1CollectedHeap::heap();
     for (GrowableArrayIterator<HeapRegion*> it = marked_huge_regions->begin();
          it != marked_huge_regions->end();
          ++it) {
@@ -820,7 +839,11 @@ public:
       oop obj = oop(hr->bottom());
       assert(obj->is_gc_marked(), "Must be");
       obj->init_mark();
-      hr->reset_during_compaction();
+      do {
+        HeapRegion* next = g1h->next_region_in_humongous(hr);
+        hr->reset_during_compaction();
+        hr = next;
+      } while (hr != NULL);
     }
   }
 
@@ -888,9 +911,6 @@ protected:
     HeapWord* end = hr->end();
     FreeRegionList dummy_free_list("Dummy Free List for G1MarkSweep");
 
-    assert(hr->startsHumongous(),
-           "Only the start of a humongous region should be freed.");
-
     hr->set_containing_set(NULL);
     _humongous_regions_removed.increment(1u, hr->capacity());
 
@@ -916,16 +936,13 @@ public:
   }
   bool doHeapRegion(HeapRegion* hr) {
     if (hr->isHumongous()) {
-      if (hr->startsHumongous()) {
-        oop obj = oop(hr->bottom());
-        if (obj->is_gc_marked()) {
+        oop obj = oop(hr->humongous_start_region()->bottom());
+        if (hr->startsHumongous() && obj->is_gc_marked()) {
           obj->forward_to(obj);
-        } else  {
+        }
+        if (!obj->is_gc_marked()) {
           free_humongous_region(hr);
         }
-      } else {
-        assert(hr->continuesHumongous(), "Invalid humongous.");
-      }
     } else {
       prepare_for_compaction(hr, hr->end());
     }

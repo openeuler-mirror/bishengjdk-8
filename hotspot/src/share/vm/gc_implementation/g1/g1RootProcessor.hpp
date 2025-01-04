@@ -33,7 +33,7 @@ class CLDClosure;
 class CodeBlobClosure;
 class G1CollectedHeap;
 class G1GCPhaseTimes;
-class G1ParPushHeapRSClosure;
+
 class G1RootClosures;
 class Monitor;
 class OopClosure;
@@ -127,7 +127,7 @@ public:
   // Apply scan_rs to all locations in the union of the remembered sets for all
   // regions in the collection set
   // (having done "set_region" to indicate the region in which the root resides),
-  void scan_remembered_sets(G1ParPushHeapRSClosure* scan_rs,
+  void scan_remembered_sets(G1ParScanThreadState* pss,
                             OopClosure* scan_non_heap_weak_roots,
                             uint worker_i);
 

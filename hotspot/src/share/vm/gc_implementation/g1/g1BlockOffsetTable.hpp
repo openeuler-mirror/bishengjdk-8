@@ -302,11 +302,7 @@ public:
   virtual HeapWord* block_start_unsafe(const void* addr);
   virtual HeapWord* block_start_unsafe_const(const void* addr) const;
 
-  // Used by region verification. Checks that the contents of the
-  // BOT reflect that there's a single object that spans the address
-  // range [obj_start, obj_start + word_size); returns true if this is
-  // the case, returns false if it's not.
-  bool verify_for_object(HeapWord* obj_start, size_t word_size) const;
+  void verify() const;
 
   void check_all_cards(size_t left_card, size_t right_card) const;
 
@@ -367,7 +363,7 @@ class G1BlockOffsetArrayContigSpace: public G1BlockOffsetArray {
   HeapWord* block_start_unsafe(const void* addr);
   HeapWord* block_start_unsafe_const(const void* addr) const;
 
-  void set_for_starts_humongous(HeapWord* new_top);
+  void set_for_starts_humongous(HeapWord* obj_top, size_t fill_size);
 
   virtual void print_on(outputStream* out) PRODUCT_RETURN;
 };

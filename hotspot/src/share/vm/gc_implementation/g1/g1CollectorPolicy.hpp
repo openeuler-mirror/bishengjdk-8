@@ -28,6 +28,7 @@
 #include "gc_implementation/g1/collectionSetChooser.hpp"
 #include "gc_implementation/g1/g1Allocator.hpp"
 #include "gc_implementation/g1/g1MMUTracker.hpp"
+#include "gc_implementation/g1/g1RemSetTrackingPolicy.hpp"
 #include "memory/collectorPolicy.hpp"
 
 // A G1CollectorPolicy makes policy decisions that determine the
@@ -176,6 +177,8 @@ private:
     NumPrevPausesForHeuristics = 10
   };
 
+  G1RemSetTrackingPolicy _remset_tracker;
+
   G1MMUTracker* _mmu_tracker;
 
   void initialize_alignments();
@@ -236,6 +239,7 @@ private:
 
   TruncatedSeq* _rs_length_diff_seq;
   TruncatedSeq* _cost_per_card_ms_seq;
+  TruncatedSeq* _cost_scan_hcc_seq;
   TruncatedSeq* _young_cards_per_entry_ratio_seq;
   TruncatedSeq* _mixed_cards_per_entry_ratio_seq;
   TruncatedSeq* _cost_per_entry_ms_seq;
@@ -310,6 +314,8 @@ private:
   volatile double _os_load;
   double _uncommit_start_time;
 public:
+
+  G1RemSetTrackingPolicy* remset_tracker() { return &_remset_tracker; }
   // Accessors
   void set_region_eden(HeapRegion* hr, int young_index_in_cset) {
     hr->set_eden();
@@ -357,8 +363,12 @@ public:
     return get_new_prediction(_cost_per_card_ms_seq);
   }
 
+  double predict_scan_hcc_ms() {
+    return get_new_prediction(_cost_scan_hcc_seq);
+  }
+
   double predict_rs_update_time_ms(size_t pending_cards) {
-    return (double) pending_cards * predict_cost_per_card_ms();
+    return (double) pending_cards * predict_cost_per_card_ms() + predict_scan_hcc_ms();
   }
 
   double predict_young_cards_per_entry_ratio() {
@@ -495,6 +505,7 @@ public:
   jlong collection_pause_end_millis() { return _collection_pause_end_millis; }
 
 private:
+  void clear_collection_set_candidates();
   // Statistics kept per GC stoppage, pause or full.
   TruncatedSeq* _recent_prev_end_times_for_all_gcs_sec;
 
@@ -601,12 +612,16 @@ private:
   volatile bool _during_initial_mark_pause;
 
   bool _last_young_gc;
+  bool _mixed_gc_pending;
 
   // This set of variables tracks the collector efficiency, in order to
   // determine whether we should initiate a new marking.
   double _cur_mark_stop_world_time_ms;
   double _mark_remark_start_sec;
   double _mark_cleanup_start_sec;
+
+  void set_last_young_gc(bool v) { _last_young_gc = v; _mixed_gc_pending = false;}
+  void set_mixed_gc_pending(bool v) { _mixed_gc_pending = v; }
 
   // Update the young list target length either by setting it to the
   // desired fixed value or by calculating it using G1's pause

@@ -85,6 +85,7 @@ G1CollectorPolicy::G1CollectorPolicy() :
 
   _recent_gc_times_ms(new TruncatedSeq(NumPrevPausesForHeuristics)),
   _stop_world_start(0.0),
+  _remset_tracker(),
 
   _concurrent_mark_remark_times_ms(new TruncatedSeq(NumPrevPausesForHeuristics)),
   _concurrent_mark_cleanup_times_ms(new TruncatedSeq(NumPrevPausesForHeuristics)),
@@ -95,6 +96,7 @@ G1CollectorPolicy::G1CollectorPolicy() :
   _prev_collection_pause_end_ms(0.0),
   _rs_length_diff_seq(new TruncatedSeq(TruncatedSeqLength)),
   _cost_per_card_ms_seq(new TruncatedSeq(TruncatedSeqLength)),
+  _cost_scan_hcc_seq(new TruncatedSeq(TruncatedSeqLength)),
   _young_cards_per_entry_ratio_seq(new TruncatedSeq(TruncatedSeqLength)),
   _mixed_cards_per_entry_ratio_seq(new TruncatedSeq(TruncatedSeqLength)),
   _cost_per_entry_ms_seq(new TruncatedSeq(TruncatedSeqLength)),
@@ -131,6 +133,7 @@ G1CollectorPolicy::G1CollectorPolicy() :
   _initiate_conc_mark_if_possible(false),
   _during_initial_mark_pause(false),
   _last_young_gc(false),
+  _mixed_gc_pending(false),
   _last_gc_was_young(false),
 
   _eden_used_bytes_before_gc(0),
@@ -218,6 +221,7 @@ G1CollectorPolicy::G1CollectorPolicy() :
 
   _rs_length_diff_seq->add(rs_length_diff_defaults[index]);
   _cost_per_card_ms_seq->add(cost_per_card_ms_defaults[index]);
+  _cost_scan_hcc_seq->add(0.0);
   _young_cards_per_entry_ratio_seq->add(
                                   young_cards_per_entry_ratio_defaults[index]);
   _cost_per_entry_ms_seq->add(cost_per_entry_ms_defaults[index]);
@@ -804,6 +808,7 @@ void G1CollectorPolicy::record_full_collection_start() {
   record_heap_size_info_at_start(true /* full */);
   // Release the future to-space so that it is available for compaction into.
   _g1->set_full_collection();
+  _collectionSetChooser->clear();
 }
 
 void G1CollectorPolicy::record_full_collection_end() {
@@ -822,7 +827,7 @@ void G1CollectorPolicy::record_full_collection_end() {
   // "Nuke" the heuristics that control the young/mixed GC
   // transitions and make sure we start with young GCs after the Full GC.
   set_gcs_are_young(true);
-  _last_young_gc = false;
+  set_last_young_gc(false);
   clear_initiate_conc_mark_if_possible();
   clear_during_initial_mark_pause();
   _in_marking_window = false;
@@ -837,7 +842,6 @@ void G1CollectorPolicy::record_full_collection_end() {
   // Reset survivors SurvRateGroup.
   _survivor_surv_rate_group->reset();
   update_young_list_target_length();
-  _collectionSetChooser->clear();
 }
 
 void G1CollectorPolicy::record_stop_world_start() {
@@ -903,7 +907,7 @@ void G1CollectorPolicy::record_concurrent_mark_cleanup_start() {
 }
 
 void G1CollectorPolicy::record_concurrent_mark_cleanup_completed() {
-  _last_young_gc = true;
+  set_last_young_gc(_mixed_gc_pending);
   _in_marking_window = false;
 }
 
@@ -915,6 +919,8 @@ void G1CollectorPolicy::record_concurrent_pause() {
 }
 
 bool G1CollectorPolicy::about_to_start_mixed_phase() const {
+  guarantee(_g1->concurrent_mark()->cmThread()->during_cycle() || !_mixed_gc_pending,
+            "Pending mixed phase when CM is idle!");
   return _g1->concurrent_mark()->cmThread()->during_cycle() || _last_young_gc;
 }
 
@@ -1066,11 +1072,11 @@ void G1CollectorPolicy::record_collection_pause_end(double pause_time_ms, Evacua
     // This is supposed to to be the "last young GC" before we start
     // doing mixed GCs. Here we decide whether to start mixed GCs or not.
     assert(!last_pause_included_initial_mark, "The last young GC is not allowed to be an initial mark GC");
-    if (next_gc_should_be_mixed("start mixed GCs",
-                                  "do not start mixed GCs")) {
-      set_gcs_are_young(false);
-    }
-    _last_young_gc = false;
+    // This has been the "last young GC" before we start doing mixed GCs. We already
+    // decided to start mixed GCs much earlier, so there is nothing to do except
+    // advancing the state.
+    set_gcs_are_young(false);
+    set_last_young_gc(false);
   }
 
   if (!_last_gc_was_young) {
@@ -1080,6 +1086,7 @@ void G1CollectorPolicy::record_collection_pause_end(double pause_time_ms, Evacua
     if (!next_gc_should_be_mixed("continue mixed GCs",
                                  "do not continue mixed GCs")) {
       set_gcs_are_young(true);
+      clear_collection_set_candidates();
     }
   }
 
@@ -1088,10 +1095,12 @@ void G1CollectorPolicy::record_collection_pause_end(double pause_time_ms, Evacua
 
   if (update_stats) {
     double cost_per_card_ms = 0.0;
+    double cost_scan_hcc = phase_times()->average_time_ms(G1GCPhaseTimes::ScanHCC);
     if (_pending_cards > 0) {
-      cost_per_card_ms = phase_times()->average_time_ms(G1GCPhaseTimes::UpdateRS) / (double) _pending_cards;
+      cost_per_card_ms = (phase_times()->average_time_ms(G1GCPhaseTimes::UpdateRS) - cost_scan_hcc) / (double) _pending_cards;
       _cost_per_card_ms_seq->add(cost_per_card_ms);
     }
+    _cost_scan_hcc_seq->add(cost_scan_hcc);
 
     size_t cards_scanned = _g1->cards_scanned();
 
@@ -1190,8 +1199,23 @@ void G1CollectorPolicy::record_collection_pause_end(double pause_time_ms, Evacua
 
   // Note that _mmu_tracker->max_gc_time() returns the time in seconds.
   double update_rs_time_goal_ms = _mmu_tracker->max_gc_time() * MILLIUNITS * G1RSetUpdatingPauseTimePercent / 100.0;
-  adjust_concurrent_refinement(phase_times()->average_time_ms(G1GCPhaseTimes::UpdateRS),
-                               phase_times()->sum_thread_work_items(G1GCPhaseTimes::UpdateRS), update_rs_time_goal_ms);
+  double scan_hcc_time_ms = phase_times()->average_time_ms(G1GCPhaseTimes::ScanHCC);
+  if (update_rs_time_goal_ms < scan_hcc_time_ms) {
+    ergo_verbose2(ErgoTiming,
+                  "adjust concurrent refinement thresholds",
+                  ergo_format_reason("Scanning the HCC expected to take longer than Update RS time goal")
+                  ergo_format_ms("Update RS time goal")
+                  ergo_format_ms("Scan HCC time"),
+                  update_rs_time_goal_ms,
+                  scan_hcc_time_ms);
+
+    update_rs_time_goal_ms = 0;
+  } else {
+    update_rs_time_goal_ms -= scan_hcc_time_ms;
+  }
+  adjust_concurrent_refinement(phase_times()->average_time_ms(G1GCPhaseTimes::UpdateRS) - scan_hcc_time_ms,
+                               phase_times()->sum_thread_work_items(G1GCPhaseTimes::UpdateRS),
+                               update_rs_time_goal_ms);
 
   _collectionSetChooser->verify();
 }
@@ -1524,7 +1548,12 @@ G1CollectorPolicy::decide_on_conc_mark_initiation() {
       // Initiate a user requested initial mark. An initial mark must be young only
       // GC, so the collector state must be updated to reflect this.
       set_gcs_are_young(true);
-      _last_young_gc = false;
+      set_last_young_gc(false);
+      // We might have ended up coming here about to start a mixed phase with a collection set
+      // active. The following remark might change the change the "evacuation efficiency" of
+      // the regions in this set, leading to failing asserts later.
+      // Since the concurrent cycle will recreate the collection set anyway, simply drop it here.
+      clear_collection_set_candidates();
       initiate_conc_mark();
       ergo_verbose0(ErgoConcCycles,
                   "initiate concurrent cycle",
@@ -1593,6 +1622,10 @@ public:
       // before we fill them up).
       if (_cset_updater.should_add(r) && !_g1h->is_old_gc_alloc_region(r)) {
         _cset_updater.add_region(r);
+      } else if (r->is_old()) {
+        // Can clean out the remembered sets of all regions that we did not choose but
+        // we created the remembered set for.
+        r->rem_set()->clear(true);
       }
     }
     return false;
@@ -1657,12 +1690,33 @@ G1CollectorPolicy::record_concurrent_mark_cleanup_end(int no_of_gc_threads) {
 
   _collectionSetChooser->sort_regions();
 
+  bool mixed_gc_pending = next_gc_should_be_mixed("request mixed gcs", "request young-only gcs");
+  if (!mixed_gc_pending) {
+    clear_collection_set_candidates();
+  }
+  set_mixed_gc_pending(mixed_gc_pending);
+
   double end_sec = os::elapsedTime();
   double elapsed_time_ms = (end_sec - _mark_cleanup_start_sec) * 1000.0;
   _concurrent_mark_cleanup_times_ms->add(elapsed_time_ms);
   _cur_mark_stop_world_time_ms += elapsed_time_ms;
   _prev_collection_pause_end_ms += elapsed_time_ms;
   _mmu_tracker->add_pause(_mark_cleanup_start_sec, end_sec, true);
+}
+
+class G1ClearCollectionSetCandidateRemSets : public HeapRegionClosure {
+  virtual bool doHeapRegion(HeapRegion* r) {
+    r->rem_set()->clear_locked(true /* only_cardset */);
+    return false;
+  }
+};
+
+void G1CollectorPolicy::clear_collection_set_candidates() {
+  // Clear remembered sets of remaining candidate regions and the actual candidate
+  // list.
+  G1ClearCollectionSetCandidateRemSets cl;
+  _collectionSetChooser->iterate(&cl);
+  _collectionSetChooser->clear();
 }
 
 // Add the heap region at the head of the non-incremental collection set

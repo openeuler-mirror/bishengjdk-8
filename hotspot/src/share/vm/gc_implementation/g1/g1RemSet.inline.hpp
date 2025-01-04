@@ -64,7 +64,7 @@ inline void G1RemSet::par_write_ref(HeapRegion* from, T* p, int tid) {
   assert(Universe::heap()->is_in_reserved(obj), "must be in heap");
 #endif // ASSERT
 
-  assert(from == NULL || from->is_in_reserved(p), "p is not in from");
+  assert(from->is_in_reserved(p) || from->startsHumongous(), "p is not in from");
 
   HeapRegion* to = _g1->heap_region_containing(obj);
   if (from != to) {

@@ -435,6 +435,7 @@ bool C2Compiler::is_intrinsic_supported(methodHandle method, bool is_virtual) {
   case vmIntrinsics::_dgemm_dgemm:
   case vmIntrinsics::_dgemv_dgemv:
   case vmIntrinsics::_f2jblas_ddot:
+  case vmIntrinsics::_getComponentType:
     break;
   default:
     return false;

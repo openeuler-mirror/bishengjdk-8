@@ -32,6 +32,7 @@
 #endif
 
 #define MAX_MAP_FILE_LENGTH 1024
+#define SALT_LEN 9
 
 enum HeapDumpRedactLevel {
     REDACT_UNKNOWN,
