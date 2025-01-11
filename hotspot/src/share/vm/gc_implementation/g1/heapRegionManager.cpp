@@ -397,63 +397,23 @@ void HeapRegionManager::par_iterate(HeapRegionClosure* blk, uint worker_id, Heap
   // are currently not committed.
   // This also (potentially) iterates over regions newly allocated during GC. This
   // is no problem except for some extra work.
-  for (uint count = 0; count < _allocated_heapregions_length; count++) {
-    const uint index = (start_index + count) % _allocated_heapregions_length;
-    assert(0 <= index && index < _allocated_heapregions_length, "sanity");
+  const uint n_regions = hrclaimer->n_regions();
+  for (uint count = 0; count < n_regions; count++) {
+    const uint index = (start_index + count) % n_regions;
+    assert(0 <= index && index < n_regions, "sanity");
     // Skip over unavailable regions
     HeapRegion* r = _regions.get_by_index(index);
     if (r != NULL && r->in_uncommit_list() || !_available_map.at(index)) {
       continue;
     }
-    // We'll ignore "continues humongous" regions (we'll process them
-    // when we come across their corresponding "start humongous"
-    // region) and regions already claimed.
-    if (hrclaimer->is_region_claimed(index) || r->continuesHumongous()) {
+    // We'll ignore regions already claimed.
+    if (hrclaimer->is_region_claimed(index)) {
       continue;
     }
     // OK, try to claim it
     if (!hrclaimer->claim_region(index)) {
       continue;
     }
-    // Success!
-    if (r->startsHumongous()) {
-      // If the region is "starts humongous" we'll iterate over its
-      // "continues humongous" first; in fact we'll do them
-      // first. The order is important. In one case, calling the
-      // closure on the "starts humongous" region might de-allocate
-      // and clear all its "continues humongous" regions and, as a
-      // result, we might end up processing them twice. So, we'll do
-      // them first (note: most closures will ignore them anyway) and
-      // then we'll do the "starts humongous" region.
-      for (uint ch_index = index + 1; ch_index < index + r->region_num(); ch_index++) {
-        HeapRegion* chr = _regions.get_by_index(ch_index);
-
-        assert(chr->continuesHumongous(), "Must be humongous region");
-        assert(chr->humongous_start_region() == r,
-               err_msg("Must work on humongous continuation of the original start region "
-                       PTR_FORMAT ", but is " PTR_FORMAT, p2i(r), p2i(chr)));
-        assert(!hrclaimer->is_region_claimed(ch_index),
-               "Must not have been claimed yet because claiming of humongous continuation first claims the start region");
-
-        bool claim_result = hrclaimer->claim_region(ch_index);
-        // We should always be able to claim it; no one else should
-        // be trying to claim this region.
-        guarantee(claim_result, "We should always be able to claim the continuesHumongous part of the humongous object");
-
-        bool res2 = blk->doHeapRegion(chr);
-        if (res2) {
-          return;
-        }
-
-        // Right now, this holds (i.e., no closure that actually
-        // does something with "continues humongous" regions
-        // clears them). We might have to weaken it in the future,
-        // but let's leave these two asserts here for extra safety.
-        assert(chr->continuesHumongous(), "should still be the case");
-        assert(chr->humongous_start_region() == r, "sanity");
-      }
-    }
-
     bool res = blk->doHeapRegion(r);
     if (res) {
       return;
@@ -551,11 +511,7 @@ void HeapRegionManager::verify() {
     // this method may be called, we have only completed allocation of the regions,
     // but not put into a region set.
     prev_committed = true;
-    if (hr->startsHumongous()) {
-      prev_end = hr->orig_end();
-    } else {
-      prev_end = hr->end();
-    }
+    prev_end = hr->end();
   }
   for (uint i = _allocated_heapregions_length; i < max_length(); i++) {
     guarantee(_regions.get_by_index(i) == NULL, err_msg("invariant i: %u", i));

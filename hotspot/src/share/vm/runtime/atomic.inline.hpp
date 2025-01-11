@@ -73,4 +73,20 @@
 # include "atomic_bsd_zero.inline.hpp"
 #endif
 
+// size_t casts...
+#if (SIZE_MAX != UINTPTR_MAX)
+#error size_t is not WORD_SIZE, interesting platform, but missing implementation here
+#endif
+
+inline size_t Atomic::add(size_t add_value, volatile size_t* dest) {
+  return (size_t) add_ptr((intptr_t) add_value, (volatile intptr_t*) dest);
+}
+
+inline void Atomic::inc(volatile size_t* dest) {
+  inc_ptr((volatile intptr_t*) dest);
+}
+
+inline void Atomic::dec(volatile size_t* dest) {
+  dec_ptr((volatile intptr_t*) dest);
+}
 #endif // SHARE_VM_RUNTIME_ATOMIC_INLINE_HPP

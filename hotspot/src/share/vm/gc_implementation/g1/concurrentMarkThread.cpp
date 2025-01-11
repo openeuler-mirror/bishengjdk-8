@@ -25,10 +25,12 @@
 #include "precompiled.hpp"
 #include "classfile/classLoaderData.hpp"
 #include "gc_implementation/g1/concurrentMarkThread.inline.hpp"
+#include "gc_implementation/g1/concurrentMark.inline.hpp"
 #include "gc_implementation/g1/g1CollectedHeap.inline.hpp"
 #include "gc_implementation/g1/g1CollectorPolicy.hpp"
 #include "gc_implementation/g1/g1Log.hpp"
 #include "gc_implementation/g1/g1MMUTracker.hpp"
+#include "gc_implementation/g1/g1RemSet.hpp"
 #include "gc_implementation/g1/vm_operations_g1.hpp"
 #include "gc_implementation/shared/gcTrace.hpp"
 #include "memory/resourceArea.hpp"
@@ -175,6 +177,10 @@ void ConcurrentMarkThread::run() {
           }
         }
       } while (cm()->restart_for_overflow());
+
+      if (!cm()->has_aborted()) {
+        cm()->rebuild_rem_set_concurrently();
+      }
 
       double end_time = os::elapsedVTime();
       // Update the total virtual time before doing this, since it will try

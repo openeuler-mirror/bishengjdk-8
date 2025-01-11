@@ -40,6 +40,9 @@ public class HeapDumper extends Tool {
 
     private static String DEFAULT_DUMP_FILE = "heap.bin";
 
+    // encrypt
+    private static int SALT_MIN_LENGTH = 8;
+
     private String dumpFile;
 
     private HeapRedactor redactor;
@@ -78,8 +81,19 @@ public class HeapDumper extends Tool {
     public void run() {
         System.out.println("Dumping heap to " + dumpFile + " ...");
         try {
+            String redactAuth = getVMRedactParameter("RedactPassword");
+            boolean redactAuthFlag = true;
+            if(redactAuth != null) {
+                String[] auths = redactAuth.split(",");
+                if(auths.length == 2) {
+                    byte[] saltBytes = auths[1].getBytes("UTF-8");
+                    if(saltBytes.length >= SALT_MIN_LENGTH) {
+                        redactAuthFlag = (this.redactor != null && auths[0].equals(this.redactor.getRedactPassword()));
+                    }
+                }
+            }
             HeapHprofBinWriter writer = new HeapHprofBinWriter();
-            if(this.redactor != null){
+            if(this.redactor != null && redactAuthFlag) {
                 writer.setHeapRedactor(this.redactor);
                 if(writer.getHeapDumpRedactLevel() != HeapRedactor.HeapDumpRedactLevel.REDACT_UNKNOWN){
                     System.out.println("HeapDump Redact Level = " + this.redactor.getRedactLevelString());
@@ -133,7 +147,7 @@ public class HeapDumper extends Tool {
             }
         }
 
-        HeapDumper dumper = heapRedactor == null? new HeapDumper(file):new HeapDumper(file, heapRedactor);
+        HeapDumper dumper = heapRedactor == null? new HeapDumper(file) : new HeapDumper(file, heapRedactor);
         dumper.execute(args);
     }
 

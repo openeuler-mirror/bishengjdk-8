@@ -51,7 +51,8 @@ public class HeapRedactor {
     private HeapDumpRedactLevel redactLevel;
     private Map<String, String> redactNameTable;
     private Map<String, Map<String, String>> redactClassTable;
-    private  String redactClassFullName = null;
+    private String redactClassFullName = null;
+    private String redactPassword = null;
     private Map<Long, String> redactValueTable;
     private RedactVectorNode headerNode;
     private RedactVectorNode currentNode;
@@ -62,6 +63,7 @@ public class HeapRedactor {
     public static final String REDACT_MAP_PREFIX = "RedactMap=";
     public static final String REDACT_MAP_FILE_PREFIX = "RedactMapFile=";
     public static final String REDACT_CLASS_PATH_PREFIX = "RedactClassPath=";
+    public static final String REDACT_PASSWORD_PREFIX = "RedactPassword=";
 
     public static final String REDACT_UNKNOWN_STR = "UNKNOWN";
     public static final String REDACT_OFF_STR = "OFF";
@@ -170,6 +172,10 @@ public class HeapRedactor {
         return redactParams.getRedactClassPath();
     }
 
+    public String getRedactPassword(){
+        return redactPassword;
+    }
+
     public Optional<Map<String, String>> getRedactRulesTable(String key) {
         return Optional.<Map<String, String>>ofNullable(redactClassTable == null ? null: redactClassTable.get(key));
     }
@@ -231,9 +237,11 @@ public class HeapRedactor {
                     params.setRedactMap(option.substring(REDACT_MAP_PREFIX.length()));
                 } else if (option.startsWith(REDACT_MAP_FILE_PREFIX)) {
                     params.setRedactMapFile(option.substring(REDACT_MAP_FILE_PREFIX.length()));
-                }  else if (option.startsWith(REDACT_CLASS_PATH_PREFIX)) {
+                } else if (option.startsWith(REDACT_CLASS_PATH_PREFIX)) {
                     params.setRedactClassPath(option.substring(REDACT_CLASS_PATH_PREFIX.length()));
-                }else{
+                } else if (option.startsWith(REDACT_PASSWORD_PREFIX)) {
+                    redactPassword = option.substring(REDACT_PASSWORD_PREFIX.length());
+                } else{
                     // None matches
                 }
             }

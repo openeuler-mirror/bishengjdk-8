@@ -47,35 +47,32 @@ enum G1Mark {
 template<G1Barrier barrier, G1Mark do_mark_object>
 class G1ParCopyClosure;
 
-class G1ParScanClosure;
-class G1ParPushHeapRSClosure;
+class G1ScanEvacuatedObjClosure;
 
-class FilterIntoCSClosure;
-class FilterOutOfRegionClosure;
+class G1ScanObjsDuringUpdateRSClosure;
+class G1ScanObjsDuringScanRSClosure;
+
+
 class G1CMOopClosure;
 class G1RootRegionScanClosure;
-
+class G1RebuildRemSetClosure;
 // Specialized oop closures from g1RemSet.cpp
 class G1Mux2Closure;
-class G1TriggerClosure;
-class G1InvokeIfNotTriggeredClosure;
-class G1UpdateRSOrPushRefOopClosure;
+class G1ConcurrentRefineOopClosure;
 
 #ifdef FURTHER_SPECIALIZED_OOP_OOP_ITERATE_CLOSURES
 #error "FURTHER_SPECIALIZED_OOP_OOP_ITERATE_CLOSURES already defined."
 #endif
 
 #define FURTHER_SPECIALIZED_OOP_OOP_ITERATE_CLOSURES(f) \
-      f(G1ParScanClosure,_nv)                           \
-      f(G1ParPushHeapRSClosure,_nv)                     \
-      f(FilterIntoCSClosure,_nv)                        \
-      f(FilterOutOfRegionClosure,_nv)                   \
+      f(G1ScanEvacuatedObjClosure,_nv)                           \
+      f(G1ScanObjsDuringUpdateRSClosure,_nv)                     \
       f(G1CMOopClosure,_nv)                             \
       f(G1RootRegionScanClosure,_nv)                    \
       f(G1Mux2Closure,_nv)                              \
-      f(G1TriggerClosure,_nv)                           \
-      f(G1InvokeIfNotTriggeredClosure,_nv)              \
-      f(G1UpdateRSOrPushRefOopClosure,_nv)
+      f(G1ConcurrentRefineOopClosure,_nv)               \
+      f(G1RebuildRemSetClosure,_nv)                     \
+      f(G1ScanObjsDuringScanRSClosure,_nv)
 
 #ifdef FURTHER_SPECIALIZED_SINCE_SAVE_MARKS_CLOSURES
 #error "FURTHER_SPECIALIZED_SINCE_SAVE_MARKS_CLOSURES already defined."

@@ -57,6 +57,7 @@ class G1GCPhaseTimes : public CHeapObj<mtGC> {
     WeakCLDRoots,
     SATBFiltering,
     UpdateRS,
+    ScanHCC,
     ScanRS,
     CodeRoots,
     ObjCopy,

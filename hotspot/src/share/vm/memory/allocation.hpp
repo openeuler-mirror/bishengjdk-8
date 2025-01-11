@@ -754,4 +754,17 @@ class ArrayAllocator VALUE_OBJ_CLASS_SPEC {
   void free();
 };
 
+// Uses mmaped memory for all allocations. All allocations are initially
+// zero-filled. No pre-touching.
+template <class E>
+class MmapArrayAllocator : public AllStatic {
+ private:
+  static size_t size_for(size_t length);
+
+ public:
+  static E* allocate_or_null(size_t length, MEMFLAGS flags);
+  static E* allocate(size_t length, MEMFLAGS flags);
+  static void free(E* addr, size_t length);
+};
+
 #endif // SHARE_VM_MEMORY_ALLOCATION_HPP

@@ -52,6 +52,10 @@ public:
     assert(n_workers > 0, "Need at least one worker.");
     _n_workers = n_workers;
   }
+
+  inline uint n_regions() const {
+    return _n_regions;
+  }
   // Calculate the starting region for given worker so
   // that they do not all start from the same region.
   uint offset_for_worker(uint worker_id) const;
@@ -187,6 +191,10 @@ public:
   // Return the HeapRegion at the given index. Assume that the index
   // is valid.
   inline HeapRegion* at(uint index) const;
+
+  // Return the next region (by index) that is part of the same
+  // humongous object that hr is part of.
+  inline HeapRegion* next_region_in_humongous(HeapRegion* hr) const;
 
   // If addr is within the committed space return its corresponding
   // HeapRegion, otherwise return NULL.

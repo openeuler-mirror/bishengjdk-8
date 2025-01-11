@@ -152,8 +152,6 @@ char* Arguments::_meta_index_dir = NULL;
 
 bool Arguments::_transletEnhance = false;
 
-char* Arguments::_heap_dump_redact_auth = NULL;
-
 // Check if head of 'option' matches 'name', and sets 'tail' remaining part of option string
 
 static bool match_option(const JavaVMOption *option, const char* name,
@@ -4183,14 +4181,13 @@ jint Arguments::parse(const JavaVMInitArgs* args) {
     if(match_option(option, "-XX:RedactPassword=", &tail)) {
       if(tail == NULL || strlen(tail) == 0) {
           VerifyRedactPassword = false;
-          jio_fprintf(defaultStream::output_stream(), "redact password is null, disable verify heap dump authority.\n");
       } else {
-          VerifyRedactPassword = true;
-          size_t redact_password_len = strlen(tail);
-          _heap_dump_redact_auth = NEW_C_HEAP_ARRAY(char, redact_password_len+1, mtInternal);
-          memcpy(_heap_dump_redact_auth, tail, redact_password_len);
-          _heap_dump_redact_auth[redact_password_len] = '\0';
-          memset((void*)tail, '0', redact_password_len);
+          char* split_char = strstr(const_cast<char*>(tail), ",");
+          VerifyRedactPassword = !(split_char == NULL || strlen(split_char) < SALT_LEN);
+      }
+
+      if(!VerifyRedactPassword) {
+          jio_fprintf(defaultStream::output_stream(), "redact auth is null or with incorrect format, disable verify heap dump authority.\n");
       }
     }
 

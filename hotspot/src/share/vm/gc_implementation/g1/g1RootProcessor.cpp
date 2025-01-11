@@ -50,7 +50,7 @@ class G1CodeBlobClosure : public CodeBlobClosure {
       T oop_or_narrowoop = oopDesc::load_heap_oop(p);
       if (!oopDesc::is_null(oop_or_narrowoop)) {
         oop o = oopDesc::decode_heap_oop_not_null(oop_or_narrowoop);
-        HeapRegion* hr = _g1h->heap_region_containing_raw(o);
+        HeapRegion* hr = _g1h->heap_region_containing(o);
         assert(!_g1h->obj_in_cs(o) || hr->rem_set()->strong_code_roots_list_contains(_nm), "if o still in CS then evacuation failed and nm must already be in the remset");
         hr->add_strong_code_root(_nm);
       }
@@ -350,7 +350,7 @@ void G1RootProcessor::process_code_cache_roots(CodeBlobClosure* code_closure,
   }
 }
 
-void G1RootProcessor::scan_remembered_sets(G1ParPushHeapRSClosure* scan_rs,
+void G1RootProcessor::scan_remembered_sets(G1ParScanThreadState* pss,
                                            OopClosure* scan_non_heap_weak_roots,
                                            uint worker_i) {
   G1GCPhaseTimes* phase_times = _g1h->g1_policy()->phase_times();
@@ -359,7 +359,7 @@ void G1RootProcessor::scan_remembered_sets(G1ParPushHeapRSClosure* scan_rs,
   // Now scan the complement of the collection set.
   G1CodeBlobClosure scavenge_cs_nmethods(scan_non_heap_weak_roots);
 
-  _g1h->g1_rem_set()->oops_into_collection_set_do(scan_rs, &scavenge_cs_nmethods, worker_i);
+  _g1h->g1_rem_set()->oops_into_collection_set_do(pss, &scavenge_cs_nmethods, worker_i);
 }
 
 void G1RootProcessor::set_num_workers(int active_workers) {

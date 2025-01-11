@@ -25,6 +25,7 @@
 #include "precompiled.hpp"
 #include "gc_implementation/g1/collectionSetChooser.hpp"
 #include "gc_implementation/g1/g1CollectedHeap.inline.hpp"
+#include "gc_implementation/g1/heapRegionRemSet.hpp"
 #include "gc_implementation/g1/g1CollectorPolicy.hpp"
 #include "gc_implementation/g1/g1ErgoVerbose.hpp"
 #include "memory/space.inline.hpp"
@@ -84,8 +85,7 @@ CollectionSetChooser::CollectionSetChooser() :
                   100), true /* C_Heap */),
     _curr_index(0), _length(0), _first_par_unreserved_idx(0),
     _region_live_threshold_bytes(0), _remaining_reclaimable_bytes(0) {
-  _region_live_threshold_bytes =
-    HeapRegion::GrainBytes * (size_t) G1MixedGCLiveThresholdPercent / 100;
+  _region_live_threshold_bytes = mixed_gc_live_threshold_bytes();
 }
 
 #ifndef PRODUCT
@@ -151,6 +151,8 @@ void CollectionSetChooser::add_region(HeapRegion* hr) {
   assert(!hr->isHumongous(),
          "Humongous regions shouldn't be added to the collection set");
   assert(!hr->is_young(), "should not be young!");
+  assert(hr->rem_set()->is_complete(),
+         err_msg("Trying to add region %u to the collection set with incomplete remembered set", hr->hrm_index()));
   _regions.append(hr);
   _length++;
   _remaining_reclaimable_bytes += hr->reclaimable_bytes();
@@ -208,9 +210,31 @@ void CollectionSetChooser::update_totals(uint region_num,
   }
 }
 
+void CollectionSetChooser::iterate(HeapRegionClosure* cl) {
+  for (uint i = _curr_index; i < _length; i++) {
+    HeapRegion* r = regions_at(i);
+    if (cl->doHeapRegion(r)) {
+      cl->incomplete();
+      break;
+    }
+  }
+}
+
 void CollectionSetChooser::clear() {
   _regions.clear();
   _curr_index = 0;
   _length = 0;
   _remaining_reclaimable_bytes = 0;
 };
+
+bool CollectionSetChooser::region_occupancy_low_enough_for_evac(size_t live_bytes) {
+  return live_bytes < mixed_gc_live_threshold_bytes();
+}
+
+bool CollectionSetChooser::should_add(HeapRegion* hr) const {
+  assert(hr->is_marked(), "pre-condition");
+  assert(!hr->is_young(), "should never consider young regions");
+  return !hr->isHumongous() &&
+         region_occupancy_low_enough_for_evac(hr->live_bytes()) &&
+         hr->rem_set()->is_complete();
+}

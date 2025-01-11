@@ -26,7 +26,7 @@
  * @test
  * @bug 8080289
  * @summary Sink stores out of loops if possible
- * @run main/othervm -XX:-UseOnStackReplacement -XX:-BackgroundCompilation -XX:+PrintCompilation -XX:CompileCommand=dontinline,TestMoveStoresOutOfLoops::test*  TestMoveStoresOutOfLoops
+ * @run main/othervm -XX:-UseOnStackReplacement -XX:-BackgroundCompilation -XX:CompileCommand=dontinline,TestMoveStoresOutOfLoops::test*  TestMoveStoresOutOfLoops
  *
  */
 

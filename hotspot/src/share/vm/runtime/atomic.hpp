@@ -57,6 +57,7 @@ class Atomic : AllStatic {
 
   // Atomically add to a location, return updated value
   inline static jint     add    (jint     add_value, volatile jint*     dest);
+  inline static size_t   add    (size_t   add_value, volatile size_t*   dest);
   inline static intptr_t add_ptr(intptr_t add_value, volatile intptr_t* dest);
   inline static void*    add_ptr(intptr_t add_value, volatile void*     dest);
   // See comment above about using jlong atomics on 32-bit platforms
@@ -65,12 +66,14 @@ class Atomic : AllStatic {
   // Atomically increment location
   inline static void inc    (volatile jint*     dest);
          static void inc    (volatile jshort*   dest);
+  inline static void inc    (volatile size_t*   dest);
   inline static void inc_ptr(volatile intptr_t* dest);
   inline static void inc_ptr(volatile void*     dest);
 
   // Atomically decrement a location
   inline static void dec    (volatile jint*     dest);
          static void dec    (volatile jshort*    dest);
+  inline static void dec    (volatile size_t*   dest);
   inline static void dec_ptr(volatile intptr_t* dest);
   inline static void dec_ptr(volatile void*     dest);
 

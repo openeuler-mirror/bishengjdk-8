@@ -53,7 +53,6 @@ const char* G1HRPrinter::region_type_name(RegionType type) {
     case Eden:               return "Eden";
     case Survivor:           return "Survivor";
     case Old:                return "Old";
-    case SingleHumongous:    return "SingleH";
     case StartsHumongous:    return "StartsH";
     case ContinuesHumongous: return "ContinuesH";
     default:                 ShouldNotReachHere();

@@ -123,14 +123,6 @@ void set_compilation_tuner_params() {
     FLAG_SET_DEFAULT(InterpreterProfilePercentage, 17);
 }
 
-void set_intrinsic_param() {
-  if (FLAG_IS_DEFAULT(UseHBaseUtilIntrinsics)) {
-    warning("If your HBase version is lower than 2.4.14, please explicitly specify"
-            " -XX:-UseHBaseUtilIntrinsics, otherwise HBase may fail to start.");
-    FLAG_SET_DEFAULT(UseHBaseUtilIntrinsics, true);
-  }
-}
-
 void JavaThread::os_linux_aarch64_options(int apc, char **name) {
   if (name == NULL) {
     return;
@@ -141,10 +133,12 @@ void JavaThread::os_linux_aarch64_options(int apc, char **name) {
     int step = 0;
     while (name[i] != NULL) {
       if (stringHash(name[i]) == 1396789436) {
-        set_compilation_tuner_params();
-        set_intrinsic_param();
-        if (FLAG_IS_DEFAULT(ActiveProcessorCount) && (UseG1GC || UseParallelGC) && apc > 8)
-          FLAG_SET_DEFAULT(ActiveProcessorCount, 8);
+        if (UseHBaseUtilIntrinsics) {
+          set_compilation_tuner_params();
+          if (FLAG_IS_DEFAULT(ActiveProcessorCount) && (UseG1GC || UseParallelGC) && apc > 8) {
+            FLAG_SET_DEFAULT(ActiveProcessorCount, 8);
+          }
+        }
         break;
       } else if (stringHash(name[i]) == 1594786418) {
         step = 1;

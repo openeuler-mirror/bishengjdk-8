@@ -4698,8 +4698,8 @@ void os::hint_no_preempt() {}
 //      - sets target osthread state to continue
 //      - sends signal to end the sigsuspend loop in the SR_handler
 //
-//  Note that the SR_lock plays no role in this suspend/resume protocol.
-//
+//  Note that the SR_lock plays no role in this suspend/resume protocol,
+//  but is checked for NULL in SR_handler as a thread termination indicator.
 
 static void resume_clear_context(OSThread *osthread) {
   osthread->set_ucontext(NULL);
@@ -4731,9 +4731,36 @@ static void SR_handler(int sig, siginfo_t* siginfo, ucontext_t* context) {
   int old_errno = errno;
 
   Thread* thread = Thread::current_or_null();
-  assert(thread != NULL, "Missing current thread in SR_handler");
-  OSThread* osthread = thread->osthread();
+
+  // The suspend/resume signal may have been sent from outside the process, deliberately or
+  // accidentally. In that case the receiving thread may not be attached to the VM. We handle
+  // that case by asserting (debug VM) resp. writing a diagnostic message to tty and
+  // otherwise ignoring the stray signal (release VMs).
+  // We print the siginfo as part of the diagnostics, which also contains the sender pid of
+  // the stray signal.
+  if (thread == NULL) {
+    bufferedStream st;
+    st.print_raw("Non-attached thread received stray SR signal (");
+    os::Posix::print_siginfo_brief(&st, siginfo);
+    st.print_raw(").");
+    assert(thread != NULL, st.base());
+    warning("%s", st.base());
+    return;
+  }
+
+  // On some systems we have seen signal delivery get "stuck" until the signal
+  // mask is changed as part of thread termination. Check that the current thread
+  // has not already terminated (via SR_lock()) - else the following assertion
+  // will fail because the thread is no longer a JavaThread as the ~JavaThread
+  // destructor has completed.
+
+  if (thread->SR_lock() == NULL) {
+    return;
+  }
+
   assert(thread->is_VM_thread() || thread->is_Java_thread(), "Must be VMThread or JavaThread");
+
+  OSThread* osthread = thread->osthread();
 
   os::SuspendResume::State current = osthread->sr.state();
   if (current == os::SuspendResume::SR_SUSPEND_REQUEST) {

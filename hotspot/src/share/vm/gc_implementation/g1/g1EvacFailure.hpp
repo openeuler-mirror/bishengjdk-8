@@ -140,7 +140,7 @@ public:
         // explicitly and all objects in the CSet are considered
         // (implicitly) live. So, we won't mark them explicitly and
         // we'll leave them over NTAMS.
-        _cm->grayRoot(obj, obj_size, _worker_id, _hr);
+        _cm->mark_in_next_bitmap(_worker_id, obj);
       }
       _marked_bytes += (obj_size * HeapWordSize);
       obj->set_mark(markOopDesc::prototype());
@@ -207,20 +207,12 @@ public:
                                                during_conc_mark);
         _g1h->check_bitmaps("Self-Forwarding Ptr Removal", hr);
 
-        // In the common case (i.e. when there is no evacuation
-        // failure) we make sure that the following is done when
-        // the region is freed so that it is "ready-to-go" when it's
-        // re-allocated. However, when evacuation failure happens, a
-        // region will remain in the heap and might ultimately be added
-        // to a CSet in the future. So we have to be careful here and
-        // make sure the region's RSet is ready for parallel iteration
-        // whenever this might be required in the future.
-        hr->rem_set()->reset_for_par_iteration();
         hr->reset_bot();
         _update_rset_cl.set_region(hr);
         hr->object_iterate(&rspc);
 
         hr->rem_set()->clean_strong_code_roots(hr);
+        hr->rem_set()->clear_locked(true);
 
         hr->note_self_forwarding_removal_end(during_initial_mark,
                                              during_conc_mark,

@@ -31,13 +31,18 @@ import java.lang.reflect.Method;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.KeySpec;
 import java.util.Arrays;
 
 import com.sun.tools.attach.VirtualMachine;
 import com.sun.tools.attach.AttachNotSupportedException;
 import sun.tools.attach.HotSpotVirtualMachine;
+
+import javax.crypto.SecretKey;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
 
 /*
  * This class is the main class for the JMap utility. It parses its arguments
@@ -63,6 +68,11 @@ public class JMap {
 
     // Default option (if nothing provided)
     private static String DEFAULT_OPTION = "-pmap";
+
+    // encrypt
+    private static int SALT_MIN_LENGTH = 8;
+    private static int HASH_BIT_SIZE = 256;
+    private static int HASH_ITERATIONS_COUNT = 10000;
 
     public static void main(String[] args) throws Exception {
         if (args.length == 0) {
@@ -169,7 +179,8 @@ public class JMap {
         if (option.startsWith(DUMP_OPTION_PREFIX)) {
             // first check that the option can be parsed
             RedactParams redactParams = new RedactParams();
-            String fn = parseDumpOptions(option, redactParams);
+            String pid = args.length == 1 ? args[0] : null;
+            String fn = parseDumpOptions(option, redactParams, pid);
             if (fn == null) {
                 usage(1);
             }
@@ -258,15 +269,9 @@ public class JMap {
     private static void dump(String pid, String options) throws IOException {
         RedactParams redactParams = new RedactParams();
         // parse the options to get the dump filename
-        String filename = parseDumpOptions(options,redactParams);
+        String filename = parseDumpOptions(options, redactParams, pid);
         if (filename == null) {
             usage(1);  // invalid options or no filename
-        }
-
-        String redactPassword = ",RedactPassword=";
-        if (options.contains("RedactPassword,") || options.contains(",RedactPassword")) {
-            // heap dump may need a password
-            redactPassword = getRedactPassword();
         }
         // get the canonical path - important to avoid just passing
         // a "heap.bin" and having the dump created in the target VM
@@ -282,12 +287,12 @@ public class JMap {
         InputStream in = ((HotSpotVirtualMachine)vm).
             dumpHeap((Object)filename,
                      (live ? LIVE_OBJECTS_OPTION : ALL_OBJECTS_OPTION),
-                    redactParams.isEnableRedact() ? redactParams.toDumpArgString() + redactPassword : "");
+                    redactParams.isEnableRedact() ? redactParams.toDumpArgString() : "");
         drain(vm, in);
     }
 
-    private static String getRedactPassword() {
-        String redactPassword = ",RedactPassword=";
+    private static String getRedactPassword(String pid) {
+        String redactPassword = "";
         Console console = System.console();
         char[] passwords = null;
         if (console == null) {
@@ -305,53 +310,97 @@ public class JMap {
         String password = new String(passwords);
         Arrays.fill(passwords, '0');
         String passwordPattern = "^[0-9a-zA-Z!@#$]{1,9}$";
-        if(!password.matches(passwordPattern)) {
-            return redactPassword;
-        }
 
         String digestStr = null;
-        byte[] passwordBytes = null;
         char[] passwordValue = null;
         try {
             Field valueField = password.getClass().getDeclaredField("value");
             valueField.setAccessible(true);
             passwordValue = (char[])valueField.get(password);
 
-            passwordBytes= password.getBytes(StandardCharsets.UTF_8);
-            StringBuilder digestStrBuilder = new StringBuilder();
-            MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
-            byte[] digestBytes = messageDigest.digest(passwordBytes);
-            for(byte b : digestBytes) {
-                String hex = Integer.toHexString(0xff & b);
-                if(hex.length() == 1) {
-                    digestStrBuilder.append('0');
-                }
-                digestStrBuilder.append(hex);
+            if(!password.matches(passwordPattern)) {
+                return redactPassword;
             }
-            digestStr = digestStrBuilder.toString();
+
+            String salt = getSalt(pid);
+            if(salt == null) {
+                return redactPassword;
+            }
+            byte[] saltBytes = salt.getBytes("UTF-8");
+            if(saltBytes.length < SALT_MIN_LENGTH) {
+                return redactPassword;
+            }
+
+            digestStr = getEncryptValue(passwordValue, saltBytes);
         } catch (Exception e) {
         }finally {
             // clear all password
-            if(passwordBytes != null) {
-                Arrays.fill(passwordBytes, (byte) 0);
-            }
             if(passwordValue != null) {
                 Arrays.fill(passwordValue, '0');
             }
         }
 
-        redactPassword += (digestStr == null ? "" : digestStr);
+        redactPassword = (digestStr == null ? "" : digestStr);
         return redactPassword;
+    }
+
+    private static String getSalt(String pid) throws Exception {
+        String salt = null;
+        StringBuilder redactAuth = new StringBuilder();
+
+        VirtualMachine vm = VirtualMachine.attach(pid);
+        HotSpotVirtualMachine hvm = (HotSpotVirtualMachine) vm;
+        String flag = "RedactPassword";
+        try (InputStream in = hvm.printFlag(flag)) {
+            byte b[] = new byte[256];
+            int n;
+            do {
+                n = in.read(b);
+                if (n > 0) {
+                    redactAuth.append(new String(b, 0, n, "UTF-8"));
+                }
+            } while (n > 0);
+        }
+        vm.detach();
+
+        if(redactAuth.length() > 0) {
+            String[] auths = redactAuth.toString().split(",");
+            if(auths.length != 2) {
+                return salt;
+            }
+            return auths[1].trim();
+        }
+
+        return salt;
+    }
+
+    private static String getEncryptValue(char[] passwordValue, byte[] saltBytes) throws InvalidKeySpecException, NoSuchAlgorithmException {
+        StringBuilder digestStrBuilder = new StringBuilder();
+
+        KeySpec spec = new PBEKeySpec(passwordValue, saltBytes, HASH_ITERATIONS_COUNT, HASH_BIT_SIZE);
+        SecretKeyFactory secretKeyFactory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+        SecretKey secretKey = secretKeyFactory.generateSecret(spec);
+        byte[] digestBytes = secretKey.getEncoded();
+        for (byte b : digestBytes) {
+            String hex = Integer.toHexString(0xff & b);
+            if (hex.length() == 1) {
+                digestStrBuilder.append('0');
+            }
+            digestStrBuilder.append(hex);
+        }
+        String digestStr = digestStrBuilder.toString();
+
+        return digestStr;
     }
 
     // Parse the options to the -dump option. Valid options are format=b and
     // file=<file>. Returns <file> if provided. Returns null if <file> not
     // provided, or invalid option.
     private static String parseDumpOptions(String arg){
-        return parseDumpOptions(arg, null);
+        return parseDumpOptions(arg, null, null);
     }
 
-    private static String parseDumpOptions(String arg, RedactParams redactParams) {
+    private static String parseDumpOptions(String arg, RedactParams redactParams, String pid) {
         assert arg.startsWith(DUMP_OPTION_PREFIX);
 
         String filename = null;
@@ -366,8 +415,6 @@ public class JMap {
                 // ignore format (not needed at this time)
             } else if (option.equals("live")) {
                 // a valid suboption
-            } else if (option.equals("RedactPassword")) {
-                // ignore this option, just suit the parse rule
             } else {
                 // file=<file> - check that <file> is specified
                 if (option.startsWith("file=")) {
@@ -376,7 +423,7 @@ public class JMap {
                         return null;
                     }
                 } else {
-                    if (redactParams != null && initRedactParams(redactParams, option)) {
+                    if (redactParams != null && initRedactParams(redactParams, option, pid)) {
                         continue;
                     }
                     return null;  // option not recognized
@@ -397,7 +444,7 @@ public class JMap {
         return filename;
     }
 
-    private static boolean initRedactParams(RedactParams redactParams, String option) {
+    private static boolean initRedactParams(RedactParams redactParams, String option, String pid) {
         if (option.startsWith("HeapDumpRedact=")) {
             if (!redactParams.setAndCheckHeapDumpRedact(option.substring("HeapDumpRedact=".length()))) {
                 usage(1);
@@ -409,8 +456,13 @@ public class JMap {
         } else if (option.startsWith("RedactMapFile=")) {
             redactParams.setRedactMapFile(option.substring("RedactMapFile=".length()));
             return true;
-        } else if (option.startsWith("RedactClassPath")) {
+        } else if (option.startsWith("RedactClassPath=")) {
             redactParams.setRedactClassPath(option.substring("RedactClassPath=".length()));
+            return true;
+        } else if (option.startsWith("RedactPassword")) {
+            // heap dump may need a password
+            String redactPassword = getRedactPassword(pid);
+            redactParams.setRedactPassword(redactPassword);
             return true;
         } else {
             // None matches
@@ -544,11 +596,12 @@ public class JMap {
         private String redactMap;
         private String redactMapFile;
         private String redactClassPath;
+        private String redactPassword;
 
         public RedactParams() {
         }
 
-        public RedactParams(String heapDumpRedact, String redactMap, String redactMapFile, String redactClassPath) {
+        public RedactParams(String heapDumpRedact, String redactMap, String redactMapFile, String redactClassPath, String redactPassword) {
             if (heapDumpRedact != null && checkLauncherHeapdumpRedactSupport(heapDumpRedact)) {
                 enableRedact = true;
             }
@@ -556,6 +609,7 @@ public class JMap {
             this.redactMap = redactMap;
             this.redactMapFile = redactMapFile;
             this.redactClassPath = redactClassPath;
+            this.redactPassword = redactPassword;
         }
 
         @Override
@@ -579,6 +633,11 @@ public class JMap {
             if (redactClassPath != null) {
                 builder.append("RedactClassPath=");
                 builder.append(redactClassPath);
+                builder.append(",");
+            }
+            if (redactPassword != null) {
+                builder.append("RedactPassword=");
+                builder.append(redactPassword);
             }
             return builder.toString();
         }
@@ -587,7 +646,8 @@ public class JMap {
             return "-HeapDumpRedact=" + (heapDumpRedact == null ? "off" : heapDumpRedact) +
                     ",RedactMap=" + (redactMap == null ? "" : redactMap) +
                     ",RedactMapFile=" + (redactMapFile == null ? "" : redactMapFile) +
-                    ",RedactClassPath=" + (redactClassPath == null ? "" : redactClassPath);
+                    ",RedactClassPath=" + (redactClassPath == null ? "" : redactClassPath) +
+                    ",RedactPassword=" + (redactPassword == null ? "" : redactPassword);
         }
 
         public static boolean checkLauncherHeapdumpRedactSupport(String value) {
@@ -643,6 +703,14 @@ public class JMap {
 
         public void setRedactClassPath(String redactClassPath) {
             this.redactClassPath = redactClassPath;
+        }
+
+        public String getRedactPassword() {
+            return redactPassword;
+        }
+
+        public void setRedactPassword(String redactPassword) {
+            this.redactPassword = redactPassword;
         }
     }
 }
