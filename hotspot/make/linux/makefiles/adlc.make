@@ -76,12 +76,21 @@ CFLAGS += $(CFLAGS_WARN)
 
 # Extra flags from gnumake's invocation or environment
 # Adapt wrap for JDK-8281096:Flags introduced by configure script are not passed to ADLC build
-WRAP_STR := ,--wrap=memcpy
+WRAP_STR := -Wl,--wrap
+WRAP_MEM := ,--wrap=memcpy
 WRAP_NULL :=
+WRAP_LIBPTHREAD := libpthread.so.0
+WRAP_LIBDL := libdl.so.2
+WRAP_LM := -lm
 HOST_LDFLAGS_ADOPT_WRAP := $(HOST_LDFLAGS)
 
-ifeq ($(findstring --wrap=memcpy,$(HOST_LDFLAGS)),--wrap=memcpy)
-  HOST_LDFLAGS_ADOPT_WRAP := $(subst $(WRAP_STR),$(WRAP_NULL),$(HOST_LDFLAGS))
+ifeq ($(findstring --wrap=,$(HOST_LDFLAGS)),--wrap=)
+  HOST_LDFLAGS_ADOPT_WRAP := $(subst $(WRAP_MEM),$(WRAP_NULL),$(HOST_LDFLAGS_ADOPT_WRAP))
+  HOST_LDFLAGS_ADOPT_WRAP := $(subst $(WRAP_LIBPTHREAD),$(WRAP_NULL),$(HOST_LDFLAGS_ADOPT_WRAP))
+  HOST_LDFLAGS_ADOPT_WRAP := $(subst $(WRAP_LIBDL),$(WRAP_NULL),$(HOST_LDFLAGS_ADOPT_WRAP))
+  HOST_LDFLAGS_ADOPT_WRAP := $(subst $(WRAP_LM),$(WRAP_NULL),$(HOST_LDFLAGS_ADOPT_WRAP))
+  FILTERED_WRAP := $(filter $(WRAP_STR)%,$(HOST_LDFLAGS_ADOPT_WRAP))
+  HOST_LDFLAGS_ADOPT_WRAP := $(patsubst %$(FILTERED_WRAP),$(WRAP_NULL),$(HOST_LDFLAGS_ADOPT_WRAP))
 endif
 
 CFLAGS += $(HOST_CFLAGS)
