@@ -1938,8 +1938,20 @@ class VM_HeapDumper : public VM_GC_Operation {
     assert(_global_writer == NULL, "Error");
     _global_writer = _local_writer;
   }
+  void set_dump_instance_fields_descriptors() {
+    assert(_dump_instance_fields_descriptors == NULL, "Error");
+    assert(_global_writer != NULL, "Error");
+    if(_global_writer->getHeapDumpRedactLevel() == REDACT_ANNOTATION) {
+      _dump_instance_fields_descriptors = DumperSupport::dump_instance_annotation_field_descriptors;
+    } else if(_global_writer->getHeapDumpRedactLevel() == REDACT_DIYRULES) {
+      _dump_instance_fields_descriptors = DumperSupport::dump_instance_diyrules_field_descriptors;
+    } else {
+      _dump_instance_fields_descriptors = DumperSupport::dump_instance_field_descriptors;
+    }
+  }
   void clear_global_dumper() { _global_dumper = NULL; }
   void clear_global_writer() { _global_writer = NULL; }
+  void clear_dump_instance_fields_descriptors() { _dump_instance_fields_descriptors = NULL; }
 
   bool skip_operation() const;
 
@@ -1979,13 +1991,6 @@ class VM_HeapDumper : public VM_GC_Operation {
     _klass_map = new (ResourceObj::C_HEAP, mtInternal) GrowableArray<Klass*>(INITIAL_CLASS_COUNT, true);
     _stack_traces = NULL;
     _num_threads = 0;
-    if(writer->getHeapDumpRedactLevel() == REDACT_ANNOTATION) {
-      _dump_instance_fields_descriptors = DumperSupport::dump_instance_annotation_field_descriptors;
-    } else if(writer->getHeapDumpRedactLevel() == REDACT_DIYRULES) {
-      _dump_instance_fields_descriptors = DumperSupport::dump_instance_diyrules_field_descriptors;
-    } else {
-      _dump_instance_fields_descriptors = DumperSupport::dump_instance_field_descriptors;
-    }
 
     if (oome) {
       assert(!Thread::current()->is_VM_thread(), "Dump from OutOfMemoryError cannot be called by the VMThread");
@@ -2290,6 +2295,7 @@ void VM_HeapDumper::doit() {
   // the following should be safe.
   set_global_dumper();
   set_global_writer();
+  set_dump_instance_fields_descriptors();
 
   // Write the file header - we always use 1.0.2
   size_t used = ch->used();
@@ -2379,6 +2385,7 @@ void VM_HeapDumper::doit() {
   // Now we clear the global variables, so that a future dumper might run.
   clear_global_dumper();
   clear_global_writer();
+  clear_dump_instance_fields_descriptors();
 }
 
 void VM_HeapDumper::dump_stack_traces() {
