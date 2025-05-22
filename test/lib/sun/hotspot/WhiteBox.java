@@ -140,7 +140,7 @@ public class WhiteBox {
   public native long    g1NumFreeRegions();
   public native int     g1RegionSize();
   public native MemoryUsage g1AuxiliaryMemoryUsage();
-  public native Object[]    parseCommandLine(String commandline, DiagnosticCommand[] args);
+  public native Object[]    parseCommandLine(String commandline, char delim, DiagnosticCommand[] args);
   public native int g1ActiveMemoryNodeCount();
   public native int[] g1MemoryNodeIds();
 

@@ -51,6 +51,7 @@
 #include "gc_implementation/g1/heapRegionRemSet.hpp"
 #include "gc_implementation/g1/heapRegionSet.inline.hpp"
 #include "gc_implementation/g1/vm_operations_g1.hpp"
+#include "gc_implementation/shared/dynamicMaxHeap.hpp"
 #include "gc_implementation/shared/gcHeapSummary.hpp"
 #include "gc_implementation/shared/gcTimer.hpp"
 #include "gc_implementation/shared/gcTrace.hpp"
@@ -770,31 +771,7 @@ HeapWord* G1CollectedHeap::humongous_obj_allocate(size_t word_size, AllocationCo
     // Policy: We could not find enough regions for the humongous object in the
     // free list. Look through the heap to find a mix of free and uncommitted regions.
     // If so, try expansion.
-    first = _hrm.find_contiguous_empty_or_unavailable(obj_regions);
-    if (first != G1_NO_HRM_INDEX) {
-      // We found something. Make sure these regions are committed, i.e. expand
-      // the heap. Alternatively we could do a defragmentation GC.
-      ergo_verbose1(ErgoHeapSizing,
-                    "attempt heap expansion",
-                    ergo_format_reason("humongous allocation request failed")
-                    ergo_format_byte("allocation request"),
-                    word_size * HeapWordSize);
-
-      _hrm.expand_at(first, obj_regions);
-      g1_policy()->record_new_heap_size(num_regions());
-
-#ifdef ASSERT
-      for (uint i = first; i < first + obj_regions; ++i) {
-        HeapRegion* hr = region_at(i);
-        assert(hr->is_free(), "sanity");
-        assert(hr->is_empty(), "sanity");
-        assert(is_on_master_free_list(hr), "sanity");
-      }
-#endif
-      _hrm.allocate_free_regions_starting_at(first, obj_regions);
-    } else {
-      // Policy: Potentially trigger a defragmentation GC.
-    }
+    first = attempt_expansion_for_humongous_allocation(obj_regions, word_size);
   }
 
   HeapWord* result = NULL;
@@ -812,6 +789,43 @@ HeapWord* G1CollectedHeap::humongous_obj_allocate(size_t word_size, AllocationCo
   verify_region_sets_optional();
 
   return result;
+}
+
+uint G1CollectedHeap::attempt_expansion_for_humongous_allocation(uint obj_regions, size_t word_size) {
+  // Policy: We could not find enough regions for the humongous object in the
+  // free list. Look through the heap to find a mix of free and uncommitted regions.
+  // If so, try expansion.
+  uint first = _hrm.find_contiguous_empty_or_unavailable(obj_regions);
+  if (first != G1_NO_HRM_INDEX) {
+    // We found something. Make sure these regions are committed, i.e. expand
+    // the heap. Alternatively we could do a defragmentation GC.
+    ergo_verbose1(ErgoHeapSizing,
+                  "attempt heap expansion",
+                  ergo_format_reason("humongous allocation request failed")
+                  ergo_format_byte("allocation request"),
+                  word_size * HeapWordSize);
+
+    _hrm.expand_at(first, obj_regions);
+    g1_policy()->record_new_heap_size(num_regions());
+    if (Universe::is_dynamic_max_heap_enable()) {
+      // expand might fail, search continous only empty again
+      first = _hrm.find_contiguous_only_empty(obj_regions);
+    }
+    if (first != G1_NO_HRM_INDEX) {
+#ifdef ASSERT
+      for (uint i = first; i < first + obj_regions; ++i) {
+        HeapRegion* hr = region_at(i);
+        assert(hr->is_free(), "sanity");
+        assert(hr->is_empty(), "sanity");
+        assert(is_on_master_free_list(hr), "sanity");
+      }
+#endif
+      _hrm.allocate_free_regions_starting_at(first, obj_regions);
+    }
+  } else {
+    // Policy: Potentially trigger a defragmentation GC.
+  }
+  return first;
 }
 
 HeapWord* G1CollectedHeap::allocate_new_tlab(size_t word_size) {
@@ -1421,7 +1435,11 @@ size_t G1CollectedHeap::full_collection_resize_amount(bool& expand) {
   const double minimum_used_percentage = 1.0 - maximum_free_percentage;
 
   const size_t min_heap_size = collector_policy()->min_heap_byte_size();
-  const size_t max_heap_size = collector_policy()->max_heap_byte_size();
+  size_t max_heap_size = collector_policy()->max_heap_byte_size();
+  if (Universe::is_dynamic_max_heap_enable()) {
+    max_heap_size = current_max_heap_size();
+    guarantee(max_heap_size >= min_heap_size, "must be");
+  }
 
   // We have to be careful here as these two calculations can overflow
   // 32-bit size_t's.
@@ -1484,6 +1502,27 @@ size_t G1CollectedHeap::full_collection_resize_amount(bool& expand) {
                   ergo_format_byte_perc("max desired capacity"),
                   capacity_after_gc, used_after_gc,
                   maximum_desired_capacity, (double) MaxHeapFreeRatio);
+    expand = false;
+    return shrink_bytes;
+  }
+
+  size_t exp_size = exp_dynamic_max_heap_size();
+  if (Universe::is_dynamic_max_heap_enable() &&
+      (exp_size > 0) &&
+      (exp_size < capacity()) &&
+      (exp_size >= minimum_desired_capacity)) {
+    // shrink to exp_dynamic_max_heap_size when
+    // 1. exp_dynamic_max_heap_size smaller than capacity
+    // 2. exp_dynamic_max_heap_size bigger than minimum_desired_capacity
+    size_t shrink_bytes = capacity() - exp_size;
+    ergo_verbose3(ErgoHeapSizing,
+                  "attempt heap shrinking for dynamic max heap",
+                  ergo_format_reason("capacity higher than "
+                                    "expected dynamic max heap after Full GC")
+                  ergo_format_byte("capacity")
+                  ergo_format_byte("occupancy")
+                  ergo_format_byte("expected dynamic max heap"),
+                  capacity_after_gc, used_after_gc, exp_size);
     expand = false;
     return shrink_bytes;
   }
@@ -1811,6 +1850,9 @@ jint G1CollectedHeap::initialize() {
 
   size_t init_byte_size = collector_policy()->initial_heap_byte_size();
   size_t max_byte_size = collector_policy()->max_heap_byte_size();
+  if (Universe::is_dynamic_max_heap_enable()) {
+    max_byte_size = collector_policy()->max_heap_byte_size_limit();
+  }
   size_t heap_alignment = collector_policy()->heap_alignment();
 
   if (G1Uncommit) {
@@ -2749,6 +2791,12 @@ size_t G1CollectedHeap::unsafe_max_tlab_alloc(Thread* ignored) const {
 }
 
 size_t G1CollectedHeap::max_capacity() const {
+  // Dynamic Max Heap
+  if (Universe::is_dynamic_max_heap_enable()) {
+    size_t cur_size = current_max_heap_size();
+    guarantee(cur_size <= _hrm.reserved().byte_size(), "must be");
+    return cur_size;
+  }
   return _hrm.reserved().byte_size();
 }
 
@@ -6520,7 +6568,7 @@ public:
   }
 };
 
-void G1CollectedHeap::rebuild_region_sets(bool free_list_only) {
+void G1CollectedHeap::rebuild_region_sets(bool free_list_only, bool is_dynamic_max_heap_shrink) {
   assert_at_safepoint(true /* should_be_vm_thread */);
 
   if (!free_list_only) {
@@ -6533,7 +6581,8 @@ void G1CollectedHeap::rebuild_region_sets(bool free_list_only) {
   if (!free_list_only) {
     _allocator->set_used(cl.total_used());
   }
-  assert(_allocator->used_unlocked() == recalculate_used(),
+  // don`t do this assert if is_dynamic_max_heap_shrink
+  assert(is_dynamic_max_heap_shrink || _allocator->used_unlocked() == recalculate_used(),
          err_msg("inconsistent _allocator->used_unlocked(), "
                  "value: " SIZE_FORMAT " recalculated: " SIZE_FORMAT,
                  _allocator->used_unlocked(), recalculate_used()));
@@ -6846,4 +6895,11 @@ public:
 void G1CollectedHeap::rebuild_strong_code_roots() {
   RebuildStrongCodeRootClosure blob_cl(this);
   CodeCache::blobs_do(&blob_cl);
+}
+
+bool G1CollectedHeap::change_max_heap(size_t new_size) {
+  assert_heap_not_locked();
+  G1_ChangeMaxHeapOp op(new_size);
+  VMThread::execute(&op);
+  return op.resize_success();
 }

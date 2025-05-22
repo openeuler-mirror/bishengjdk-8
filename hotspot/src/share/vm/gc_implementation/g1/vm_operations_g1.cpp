@@ -257,3 +257,137 @@ void VM_CGC_Operation::doit_epilogue() {
     release_and_notify_pending_list_lock();
   }
 }
+
+G1_ChangeMaxHeapOp::G1_ChangeMaxHeapOp(size_t new_max_heap) :
+  VM_ChangeMaxHeapOp(new_max_heap) {
+}
+
+/*
+ * No need calculate young/old size, shrink will adjust young automatically.
+ * ensure young_list_length, _young_list_max_length, _young_list_target_length align.
+ *
+ * 1. check if need perform gc: new_heap_max >= minimum_desired_capacity
+ * 2. perform full GC if necessary
+ * 3. update new limit
+ * 4. validation
+ */
+void G1_ChangeMaxHeapOp::doit() {
+  G1CollectedHeap* heap      = (G1CollectedHeap*)Universe::heap();
+  G1CollectorPolicy* policy  = heap->g1_policy();
+  const size_t min_heap_size = policy->min_heap_byte_size();
+  const size_t max_heap_size = heap->current_max_heap_size();
+  bool is_shrink             = _new_max_heap < max_heap_size;
+  bool is_valid              = false;
+
+  // step1. calculate maximum_used_percentage for shrink validity check
+  const double minimum_free_percentage = (double) MinHeapFreeRatio / 100.0;
+  const double maximum_used_percentage = 1.0 - minimum_free_percentage;
+
+  // step2 trigger GC as needed and resize
+  if (is_shrink) {
+    trigger_gc_shrink(_new_max_heap, maximum_used_percentage, max_heap_size, is_valid);
+    if (!is_valid) {
+      // We should not reach here because we have already checked the existence of
+      // the ACC and disabled this feature when the ACC is absent.
+      DMH_LOG("G1_ChangeMaxHeapOp fail for missing ACC");
+      return;
+    }
+  }
+
+  DMH_LOG("G1_ChangeMaxHeapOp: current capacity " SIZE_FORMAT "K, new max heap " SIZE_FORMAT "K",
+          heap->capacity() / K, _new_max_heap / K);
+
+  // step3 check if can update new limit
+  if (heap->capacity() <= _new_max_heap) {
+    uint dynamic_max_heap_len = os::Linux::dmh_g1_get_region_limit(_new_max_heap, HeapRegion::GrainBytes, is_valid);
+    if (!is_valid) {
+      // We should not reach here because we have already checked the existence of
+      // the ACC and disabled this feature when the ACC is absent.
+      DMH_LOG("G1_ChangeMaxHeapOp fail for missing ACC");
+      return;
+    }
+    heap->set_current_max_heap_size(_new_max_heap);
+    heap->hrm()->set_dynamic_max_heap_length(dynamic_max_heap_len);
+    // G1 young/old share same max size
+    heap->update_gen_max_counter(_new_max_heap);
+    _resize_success = true;
+    DMH_LOG("G1_ChangeMaxHeapOp success");
+  } else {
+    DMH_LOG("G1_ChangeMaxHeapOp fail");
+  }
+}
+
+void G1_ChangeMaxHeapOp::trigger_gc_shrink(size_t _new_max_heap,
+                                           double maximum_used_percentage,
+                                           size_t max_heap_size,
+                                           bool &is_valid) {
+    G1CollectedHeap* heap = (G1CollectedHeap*)Universe::heap();
+    G1CollectorPolicy* policy = heap->g1_policy();
+    bool triggered_full_gc = false;
+    bool can_shrink = os::Linux::dmh_g1_can_shrink((double)heap->used(), _new_max_heap, maximum_used_percentage, max_heap_size, is_valid);
+    if (!is_valid) {
+      return;
+    }
+    if (!can_shrink) {
+      // trigger Young GC
+      policy->set_gcs_are_young(true);
+      GCCauseSetter gccs(heap, _gc_cause);
+      bool minor_gc_succeeded = heap->do_collection_pause_at_safepoint(policy->max_pause_time_ms());
+      if (minor_gc_succeeded) {
+        DMH_LOG("G1_ChangeMaxHeapOp heap after Young GC");
+        if (TraceDynamicMaxHeap) {
+          heap->print_on(tty);
+        }
+      }
+      can_shrink = os::Linux::dmh_g1_can_shrink((double)heap->used(), _new_max_heap, maximum_used_percentage, max_heap_size, is_valid);
+      if (!is_valid) {
+        return;
+      }
+      if (!can_shrink) {
+        // trigger Full GC and adjust everything in resize_if_necessary_after_full_collection
+        heap->set_exp_dynamic_max_heap_size(_new_max_heap);
+        heap->do_full_collection(true);
+        DMH_LOG("G1_ChangeMaxHeapOp heap after Full GC");
+        if (TraceDynamicMaxHeap) {
+          heap->print_on(tty);
+        }
+        heap->set_exp_dynamic_max_heap_size(0);
+        triggered_full_gc = true;
+      }
+    }
+    if (!triggered_full_gc) {
+      // there may be two situations when entering this branch:
+      //     1. first check passed, no GC triggered
+      //     2. first check failed, triggered Young GC,
+      //        second check passed
+      // so the shrink has not been completed and it must be valid to shrink
+      g1_shrink_without_full_gc(_new_max_heap);
+    }
+}
+
+void G1_ChangeMaxHeapOp::g1_shrink_without_full_gc(size_t _new_max_heap) {
+  G1CollectedHeap* heap = (G1CollectedHeap*)Universe::heap();
+  size_t capacity_before_shrink = heap->capacity();
+  // _new_max_heap is large enough, do nothing
+  if (_new_max_heap >= capacity_before_shrink) {
+    return;
+  }
+  // Capacity too large, compute shrinking size and shrink
+  size_t shrink_bytes = capacity_before_shrink - _new_max_heap;
+  heap->verify_region_sets_optional();
+  heap->tear_down_region_sets(true /* free_list_only */);
+  heap->shrink_helper(shrink_bytes);
+  heap->rebuild_region_sets(true /* free_list_only */, true /* is_dynamic_max_heap_shrink */);
+  heap->_hrm.verify_optional();
+  heap->verify_region_sets_optional();
+  heap->verify_after_gc();
+
+  DMH_LOG("G1_ChangeMaxHeapOp: attempt heap shrinking for dynamic max heap %s "
+          "origin capacity " SIZE_FORMAT "K "
+          "new capacity " SIZE_FORMAT "K "
+          "shrink by " SIZE_FORMAT "K",
+          heap->capacity() <= _new_max_heap ? "success":"fail",
+          capacity_before_shrink / K,
+          heap->capacity() / K,
+          shrink_bytes / K);
+}

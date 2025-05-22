@@ -240,6 +240,27 @@ public:
   virtual void execute(DCmdSource source, TRAPS);
 };
 
+class ChangeMaxHeapDCmd : public DCmdWithParser {
+public:
+  ChangeMaxHeapDCmd(outputStream* output, bool heap);
+  static const char* name() { return "GC.change_max_heap"; }
+  static const char* description() {
+    return "Change dynamic max heap size during runtime.";
+  }
+  static const char* impact() {
+    return "Medium";
+  }
+  static int num_arguments();
+  static const JavaPermission permission() {
+    JavaPermission p = {"java.lang.management.ManagementPermission",
+      "monitor", NULL};
+      return p;
+  }
+  virtual void execute(DCmdSource source, TRAPS);
+protected:
+  DCmdArgument<MemorySizeArgument> _new_max_heap_size;
+};
+
 #if INCLUDE_SERVICES   // Heap dumping supported
 // See also: dump_heap in attachListener.cpp
 class HeapDumpDCmd : public DCmdWithParser {
@@ -286,7 +307,7 @@ public:
     return p;
   }
   static int num_arguments() {
-    return 0; 
+    return 0;
   }
   virtual void execute(DCmdSource source, TRAPS);
 };

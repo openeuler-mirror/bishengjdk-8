@@ -72,6 +72,9 @@ class CollectorPolicy : public CHeapObj<mtGC> {
   size_t _max_heap_byte_size;
   size_t _min_heap_byte_size;
 
+  // Dynamic Max Heap
+  size_t _max_heap_byte_size_limit;
+
   size_t _space_alignment;
   size_t _heap_alignment;
 
@@ -111,6 +114,9 @@ class CollectorPolicy : public CHeapObj<mtGC> {
   size_t initial_heap_byte_size() { return _initial_heap_byte_size; }
   size_t max_heap_byte_size()     { return _max_heap_byte_size; }
   size_t min_heap_byte_size()     { return _min_heap_byte_size; }
+
+  // Dynamic Max Heap
+  size_t max_heap_byte_size_limit() { return _max_heap_byte_size_limit; }
 
   enum Name {
     CollectorPolicyKind,

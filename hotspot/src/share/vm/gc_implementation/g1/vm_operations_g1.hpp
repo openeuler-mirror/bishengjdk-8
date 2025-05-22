@@ -27,6 +27,7 @@
 
 #include "gc_implementation/g1/g1AllocationContext.hpp"
 #include "gc_implementation/shared/vmGCOperations.hpp"
+#include "gc_implementation/shared/dynamicMaxHeap.hpp"
 
 // VM_operations for the G1 collector.
 // VM_GC_Operation:
@@ -120,6 +121,18 @@ public:
   virtual const char* name() const {
     return "concurrent gc";
   }
+};
+
+// Change Dynamic Max Heap Size
+class G1_ChangeMaxHeapOp : public VM_ChangeMaxHeapOp {
+public:
+  G1_ChangeMaxHeapOp(size_t new_max_heap);
+  virtual void doit();
+  void trigger_gc_shrink(size_t _new_max_heap,
+                         double maximum_used_percentage,
+                         size_t max_heap_size,
+                         bool& is_valid);
+  void g1_shrink_without_full_gc(size_t _new_max_heap);
 };
 
 #endif // SHARE_VM_GC_IMPLEMENTATION_G1_VM_OPERATIONS_G1_HPP

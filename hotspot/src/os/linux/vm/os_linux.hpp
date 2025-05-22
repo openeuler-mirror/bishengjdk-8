@@ -197,7 +197,8 @@ class Linux {
   // stack or fixed stack.
   static bool is_floating_stack()             { return _is_floating_stack; }
 
-  static void load_plugin_library();
+  static void load_ACC_library();
+  static void load_ACC_library_before_ergo();
   static void libpthread_init();
   static void parse_numa_nodes();
   static bool libnuma_init();
@@ -304,6 +305,8 @@ private:
   typedef void* (*heap_vector_add_t)(void* val, void* heap_vector, bool &_inserted);
   typedef void* (*heap_vector_get_next_t)(void* heap_vector, void* heap_vector_node, int &_cnt, void** &_items);
   typedef void (*heap_vector_free_t)(void* heap_vector);
+  typedef bool (*dmh_g1_can_shrink_t)(double used_after_gc_d, size_t _new_max_heap, double maximum_used_percentage, size_t max_heap_size);
+  typedef uint (*dmh_g1_get_region_limit_t)(size_t _new_max_heap, size_t region_size);
   static heap_dict_add_t _heap_dict_add;
   static heap_dict_lookup_t _heap_dict_lookup;
   static heap_dict_free_t _heap_dict_free;
@@ -330,6 +333,8 @@ private:
   static numa_bitmask_equal_func_t _numa_bitmask_equal;
   static numa_set_membind_func_t _numa_set_membind;
   static numa_bitmask_free_func_t _numa_bitmask_free;
+  static dmh_g1_can_shrink_t _dmh_g1_can_shrink;
+  static dmh_g1_get_region_limit_t _dmh_g1_get_region_limit;
 
   static unsigned long* _numa_all_nodes;
   static struct bitmask* _numa_all_nodes_ptr;
@@ -502,7 +507,7 @@ public:
   // If we only have mallinfo(), values may be 32-bit truncated, which is signaled via
   // "ok_but_possibly_wrapped".
   static mallinfo_retval_t get_mallinfo(glibc_mallinfo2* out);
-  
+
   // Calls out to GNU extension malloc_info if available
   // otherwise does nothing and returns -2.
   static int malloc_info(FILE* stream);
@@ -583,8 +588,35 @@ public:
         _heap_vector_free(heap_vector);
     }
   }
-};
+  static bool dmh_g1_can_shrink(double used_after_gc_d,
+                               size_t _new_max_heap,
+                               double maximum_used_percentage,
+                               size_t max_heap_size,
+                               bool &is_valid,
+                               bool just_check = false) {
+    is_valid = false;
+    bool result = false;
+    if (just_check) {
+      is_valid = (_dmh_g1_can_shrink != NULL);
+    } else if (_dmh_g1_can_shrink != NULL) {
+      is_valid = true;
+      result = _dmh_g1_can_shrink(used_after_gc_d, _new_max_heap, maximum_used_percentage, max_heap_size);
+    }
+    return result;
+  }
 
+  static uint dmh_g1_get_region_limit(size_t _new_max_heap, size_t region_size, bool &is_valid, bool just_check = false) {
+    is_valid = false;
+    uint result = 0;
+    if (just_check) {
+      is_valid = (_dmh_g1_get_region_limit != NULL);
+    } else if (_dmh_g1_get_region_limit != NULL) {
+      is_valid = true;
+      result = _dmh_g1_get_region_limit(_new_max_heap, region_size);
+    }
+    return result;
+  }
+};
 
 class PlatformEvent : public CHeapObj<mtInternal> {
   private:

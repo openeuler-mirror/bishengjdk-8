@@ -157,6 +157,7 @@ CollectedHeap*  Universe::_collectedHeap = NULL;
 NarrowPtrStruct Universe::_narrow_oop = { NULL, 0, true };
 NarrowPtrStruct Universe::_narrow_klass = { NULL, 0, true };
 address Universe::_narrow_ptrs_base;
+bool Universe::_enable_dynamic_max_heap = false;
 
 void Universe::basic_type_classes_do(void f(Klass*)) {
   f(boolArrayKlassObj());

@@ -5546,8 +5546,33 @@ os::Linux::heap_dict_free_t os::Linux::_heap_dict_free;
 os::Linux::heap_vector_add_t os::Linux::_heap_vector_add;
 os::Linux::heap_vector_get_next_t os::Linux::_heap_vector_get_next;
 os::Linux::heap_vector_free_t os::Linux::_heap_vector_free;
+os::Linux::dmh_g1_can_shrink_t os::Linux::_dmh_g1_can_shrink;
+os::Linux::dmh_g1_get_region_limit_t os::Linux::_dmh_g1_get_region_limit;
 
-void os::Linux::load_plugin_library() {
+void os::Linux::load_ACC_library_before_ergo() {
+    _dmh_g1_can_shrink = CAST_TO_FN_PTR(dmh_g1_can_shrink_t, dlsym(RTLD_DEFAULT, "DynamicMaxHeap_G1CanShrink"));
+    _dmh_g1_get_region_limit = CAST_TO_FN_PTR(dmh_g1_get_region_limit_t, dlsym(RTLD_DEFAULT, "DynamicMaxHeap_G1GetRegionLimit"));
+
+    char path[JVM_MAXPATHLEN];
+    char ebuf[1024];
+    void* handle = NULL;
+    if (os::dll_build_name(path, sizeof(path), Arguments::get_dll_dir(), "jvm8_kunpeng")) {
+        handle = dlopen(path, RTLD_LAZY);
+    }
+    if (handle == NULL && os::dll_build_name(path, sizeof(path), "/usr/lib64", "jvm8_kunpeng")) {
+        handle = dlopen(path, RTLD_LAZY);
+    }
+    if (handle != NULL) {
+        if (_dmh_g1_can_shrink == NULL) {
+            _dmh_g1_can_shrink = CAST_TO_FN_PTR(dmh_g1_can_shrink_t, dlsym(handle, "DynamicMaxHeap_G1CanShrink"));
+        }
+        if (_dmh_g1_get_region_limit == NULL) {
+            _dmh_g1_get_region_limit = CAST_TO_FN_PTR(dmh_g1_get_region_limit_t, dlsym(handle, "DynamicMaxHeap_G1GetRegionLimit"));
+        }
+    }
+}
+
+void os::Linux::load_ACC_library() {
     _heap_dict_add = CAST_TO_FN_PTR(heap_dict_add_t, dlsym(RTLD_DEFAULT, "HeapDict_Add"));
     _heap_dict_lookup = CAST_TO_FN_PTR(heap_dict_lookup_t, dlsym(RTLD_DEFAULT, "HeapDict_Lookup"));
     _heap_dict_free = CAST_TO_FN_PTR(heap_dict_free_t, dlsym(RTLD_DEFAULT, "HeapDict_Free"));
@@ -5581,7 +5606,7 @@ void os::Linux::load_plugin_library() {
             _heap_vector_get_next = CAST_TO_FN_PTR(heap_vector_get_next_t, dlsym(handle, "HeapVector_GetNext"));
         }
         if(_heap_vector_free == NULL) {
-            _heap_vector_free= CAST_TO_FN_PTR(heap_vector_free_t, dlsym(handle, "HeapVector_Free"));
+            _heap_vector_free = CAST_TO_FN_PTR(heap_vector_free_t, dlsym(handle, "HeapVector_Free"));
         }
     }
 }
@@ -5658,7 +5683,7 @@ jint os::init_2(void)
           Linux::is_floating_stack() ? "floating stack" : "fixed stack");
   }
 
-  Linux::load_plugin_library();
+  Linux::load_ACC_library();
 
   if (UseNUMA) {
     if (!Linux::libnuma_init()) {

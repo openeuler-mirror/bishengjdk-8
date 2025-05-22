@@ -56,7 +56,8 @@ CollectorPolicy::CollectorPolicy() :
     _max_heap_size_cmdline(false),
     _size_policy(NULL),
     _should_clear_all_soft_refs(false),
-    _all_soft_refs_clear(false)
+    _all_soft_refs_clear(false),
+    _max_heap_byte_size_limit(DynamicMaxHeapSizeLimit)
 {}
 
 #ifdef ASSERT

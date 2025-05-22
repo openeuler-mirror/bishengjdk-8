@@ -227,6 +227,8 @@ class G1CollectedHeap : public SharedHeap {
   // Testing classes.
   friend class G1CheckCSetFastTableClosure;
 
+  friend class G1_ChangeMaxHeapOp;
+
 private:
   // The one and only G1CollectedHeap, so static functions can find it.
   static G1CollectedHeap* _g1h;
@@ -266,7 +268,7 @@ private:
   // free_list_only is true, it will only rebuild the master free
   // list. It is called after a Full GC (free_list_only == false) or
   // after heap shrinking (free_list_only == true).
-  void rebuild_region_sets(bool free_list_only);
+  void rebuild_region_sets(bool free_list_only, bool is_dynamic_max_heap_shrink = false);
 
   // Callback for region mapping changed events.
   G1RegionMappingChangedListener _listener;
@@ -1150,7 +1152,11 @@ public:
   // But G1CollectedHeap doesn't yet support this.
 
   virtual bool is_maximal_no_gc() const {
-    return _hrm.available() == 0;
+    return _hrm.available() == 0 || (Universe::is_dynamic_max_heap_enable() && _hrm.dynamic_available() == 0);
+  }
+
+  HeapRegionManager* hrm() {
+    return &_hrm;
   }
 
   // The current number of regions in the heap.
@@ -1243,6 +1249,7 @@ public:
   void reset_free_regions_coming();
   bool free_regions_coming() { return _free_regions_coming; }
   void wait_while_free_regions_coming();
+  uint attempt_expansion_for_humongous_allocation(uint obj_regions, size_t word_size);
 
   // Determine whether the given region is one that we are using as an
   // old GC alloc region.
@@ -1673,6 +1680,26 @@ public:
 
 protected:
   size_t _max_heap_capacity;
+
+private:
+  // Dynamic Max Heap
+  // expected DynamicMaxHeap size during full gc(temp value)
+  // 0 means do not adjust
+  // min_gen_size <= _expected_dynamic_max_heap_size <= _reserved size.
+  // will be cleared after DynamicMaxHeap VM operation.
+  size_t _exp_dynamic_max_heap_size;
+public:
+  virtual bool change_max_heap(size_t new_size);
+  size_t exp_dynamic_max_heap_size() const { return _exp_dynamic_max_heap_size; }
+  void set_exp_dynamic_max_heap_size(size_t size) {
+    guarantee(size <= _reserved.byte_size(), "must be");
+    _exp_dynamic_max_heap_size = size;
+  }
+  void update_gen_max_counter(size_t size) {
+    guarantee(Universe::is_dynamic_max_heap_enable(), "must be");
+    _g1mm->young_collection_counters()->update_max_size(size);
+    _g1mm->old_collection_counters()->update_max_size(size);
+  }
 };
 
 #endif // SHARE_VM_GC_IMPLEMENTATION_G1_G1COLLECTEDHEAP_HPP
