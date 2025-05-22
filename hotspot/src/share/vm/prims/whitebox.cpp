@@ -1307,7 +1307,7 @@ static JNINativeMethod methods[] = {
   {CC"getLookupCacheMatches", CC"(Ljava/lang/ClassLoader;Ljava/lang/String;)[I",
                                                       (void*)&WB_GetLookupCacheMatches},
   {CC"parseCommandLine",
-      CC"(Ljava/lang/String;[Lsun/hotspot/parser/DiagnosticCommand;)[Ljava/lang/Object;",
+      CC"(Ljava/lang/String;C[Lsun/hotspot/parser/DiagnosticCommand;)[Ljava/lang/Object;",
       (void*) &WB_ParseCommandLine
   },
   {CC"addToBootstrapClassLoaderSearch", CC"(Ljava/lang/String;)V",

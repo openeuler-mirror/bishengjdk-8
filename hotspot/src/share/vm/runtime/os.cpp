@@ -370,6 +370,7 @@ void os::init_before_ergo() {
   // global variables
   extern char** argv_for_execvp;
   JavaThread::os_linux_aarch64_options(active_processor_count(), argv_for_execvp);
+  os::Linux::load_ACC_library_before_ergo();
 #endif
   initialize_initial_active_processor_count();
   // We need to initialize large page support here because ergonomics takes some

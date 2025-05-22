@@ -3301,6 +3301,12 @@ class CommandLineFlags {
   product(uintx, MaxHeapSize, ScaleForWordSize(96*M),                       \
           "Maximum heap size (in bytes)")                                   \
                                                                             \
+  product(uintx, DynamicMaxHeapSizeLimit, ScaleForWordSize(96*M),           \
+          "The limit of Dynamic maximum heap size (in bytes)")              \
+                                                                            \
+  product(bool, TraceDynamicMaxHeap, false,                                 \
+          "Trace Dynamic Max Heap resizing log and cause of failure")       \
+                                                                            \
   product(uintx, OldSize, ScaleForWordSize(4*M),                            \
           "Initial tenured generation size (in bytes)")                     \
                                                                             \

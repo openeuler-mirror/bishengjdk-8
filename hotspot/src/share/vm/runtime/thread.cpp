@@ -86,6 +86,7 @@
 #include "utilities/events.hpp"
 #include "utilities/preserveException.hpp"
 #include "utilities/macros.hpp"
+#include "gc_implementation/shared/dynamicMaxHeap.hpp"
 #ifdef TARGET_OS_FAMILY_linux
 # include "os_linux.inline.hpp"
 #endif
@@ -3764,6 +3765,16 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 #ifdef ASSERT
   _vm_complete = true;
 #endif
+
+  // Dynamic Max Heap: reset heap initial size to MaxHeapSize
+  if (Universe::is_dynamic_max_heap_enable()) {
+    bool success = Universe::heap()->change_max_heap(MaxHeapSize);
+    if (!success) {
+      jio_fprintf(defaultStream::error_stream(),
+                  "VM failed to initialize heap to Xmx " SIZE_FORMAT "K", (MaxHeapSize / K));
+      vm_exit(1);
+    }
+  }
   return JNI_OK;
 }
 

@@ -251,6 +251,9 @@ class Universe: AllStatic {
 
   static void compute_verify_oop_data();
 
+  // Dynamic Max Heap
+  static bool _enable_dynamic_max_heap;
+
  public:
   // Known classes in the VM
   static Klass* boolArrayKlassObj()                 { return _boolArrayKlassObj;   }
@@ -484,6 +487,10 @@ class Universe: AllStatic {
 
   // Compiler support
   static int base_vtable_size()               { return _base_vtable_size; }
+
+  // Dynamic Max Heap
+  static bool is_dynamic_max_heap_enable() {return _enable_dynamic_max_heap; }
+  static void set_dynamic_max_heap_enable(bool a) { _enable_dynamic_max_heap = a; }
 };
 
 class DeferredObjAllocEvent : public CHeapObj<mtInternal> {

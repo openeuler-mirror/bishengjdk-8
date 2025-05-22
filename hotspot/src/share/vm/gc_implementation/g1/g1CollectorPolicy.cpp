@@ -188,7 +188,11 @@ G1CollectorPolicy::G1CollectorPolicy() :
   // the region size on the heap size, but the heap size should be
   // aligned with the region size. To get around this we use the
   // unaligned values for the heap.
-  HeapRegion::setup_heap_region_size(MaxHeapSize);
+  if (Universe::is_dynamic_max_heap_enable()) {
+    HeapRegion::setup_heap_region_size(DynamicMaxHeapSizeLimit);
+  } else {
+    HeapRegion::setup_heap_region_size(MaxHeapSize);
+  }
   HeapRegionRemSet::setup_remset_size();
 
   G1ErgoVerbose::initialize();

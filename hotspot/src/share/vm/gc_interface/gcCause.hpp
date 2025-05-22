@@ -55,6 +55,7 @@ class GCCause : public AllStatic {
     _no_gc,
     _no_cause_specified,
     _allocation_failure,
+    _change_max_heap,
 
     /* implementation specific */
 

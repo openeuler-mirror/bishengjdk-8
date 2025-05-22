@@ -63,6 +63,7 @@ void DCmdRegistrant::register_dcmds(){
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<RunFinalizationDCmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<HeapInfoDCmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<FinalizerInfoDCmd>(full_export, true, false));
+  DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<ChangeMaxHeapDCmd>(full_export, true, false));
 #if INCLUDE_SERVICES // Heap dumping/inspection supported
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<HeapDumpDCmd>(DCmd_Source_Internal | DCmd_Source_AttachAPI, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<DynamicCDSDumpDCmd>(DCmd_Source_Internal | DCmd_Source_AttachAPI, true, false));
@@ -358,6 +359,52 @@ void FinalizerInfoDCmd::execute(DCmdSource source, TRAPS) {
     char *name = java_lang_String::as_utf8_string(str_oop);
     int count = element_oop->int_field(count_fd.offset());
     output()->print_cr("%10d  %s", count, name);
+  }
+}
+
+ChangeMaxHeapDCmd::ChangeMaxHeapDCmd(outputStream* output, bool heap) :
+  DCmdWithParser(output, heap),
+  _new_max_heap_size("change_max_heap", "New max size of heap", "MEMORY SIZE", true) {
+  _dcmdparser.add_dcmd_argument(&_new_max_heap_size);
+}
+
+int ChangeMaxHeapDCmd::num_arguments() {
+  ResourceMark rm;
+  ChangeMaxHeapDCmd* dcmd = new ChangeMaxHeapDCmd(NULL, false);
+  if (dcmd != NULL) {
+    DCmdMark mark(dcmd);
+    return dcmd->_dcmdparser.num_arguments();
+  } else {
+    return 0;
+  }
+}
+
+void ChangeMaxHeapDCmd::execute(DCmdSource source, TRAPS) {
+  if (!Universe::is_dynamic_max_heap_enable()) {
+    output()->print_cr("not supported because -XX:DynamicMaxHeapSizeLimit was not specified");
+    return;
+  }
+  jlong input_max_heap_size = _new_max_heap_size.value()._size;
+  size_t heap_alignment = Universe::heap()->collector_policy()->heap_alignment();
+  jlong new_max_heap_size = align_size_up((size_t)input_max_heap_size, heap_alignment);
+  output()->print_cr("align the given value " SIZE_FORMAT " up to "SIZE_FORMAT "K for heap alignment "SIZE_FORMAT "K",
+                    input_max_heap_size,
+                    (new_max_heap_size / K),
+                    (heap_alignment / K));
+  bool is_validate = Universe::heap()->check_new_max_heap_validity(new_max_heap_size, output());
+  if (!is_validate) {
+    output()->print_cr("GC.change_max_heap fail");
+    return;
+  }
+  output()->print_cr("GC.change_max_heap (" SIZE_FORMAT "K" "->" SIZE_FORMAT "K)(" SIZE_FORMAT "K)",
+                    (Universe::heap()->current_max_heap_size() / K),
+                    (new_max_heap_size / K),
+                    (Universe::heap()->collector_policy()->max_heap_byte_size_limit() / K));
+  bool success = Universe::heap()->change_max_heap(new_max_heap_size);
+  if (success) {
+    output()->print_cr("GC.change_max_heap success");
+  } else {
+    output()->print_cr("GC.change_max_heap fail");
   }
 }
 

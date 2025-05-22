@@ -27,6 +27,7 @@
 #include "classfile/javaAssertions.hpp"
 #include "classfile/symbolTable.hpp"
 #include "compiler/compilerOracle.hpp"
+#include "gc_implementation/shared/dynamicMaxHeap.hpp"
 #include "memory/allocation.inline.hpp"
 #include "memory/cardTableRS.hpp"
 #include "memory/filemap.hpp"
@@ -1635,6 +1636,18 @@ void Arguments::set_use_compressed_oops() {
   // the only value that can override MaxHeapSize if we are
   // to use UseCompressedOops is InitialHeapSize.
   size_t max_heap_size = MAX2(MaxHeapSize, InitialHeapSize);
+  // DynamicMaxHeap
+  // 1. align DynamicMaxHeapSizeLimit
+  // 2. use DynamicMaxHeapSizeLimit to check whether compressedOops can enabled
+  bool dynamic_max_heap_enable = DynamicMaxHeapChecker::check_dynamic_max_heap_size_limit();
+  if (dynamic_max_heap_enable) {
+     Universe::set_dynamic_max_heap_enable(true);
+     DynamicMaxHeapConfig::set_initial_max_heap_size((size_t)MaxHeapSize);
+     size_t _heap_alignment = CollectorPolicy::compute_heap_alignment();
+     uintx aligned_max_heap_size_limit = align_size_up(DynamicMaxHeapSizeLimit, _heap_alignment);
+     FLAG_SET_ERGO(uintx, DynamicMaxHeapSizeLimit, aligned_max_heap_size_limit);
+     max_heap_size = MAX2(max_heap_size, DynamicMaxHeapSizeLimit);
+  }
   if (max_heap_size <= max_heap_for_compressed_oops()) {
 #if !defined(COMPILER1) || defined(TIERED)
     if (FLAG_IS_DEFAULT(UseCompressedOops)) {
@@ -1864,6 +1877,7 @@ static bool verify_serial_gc_flags() {
 
 void Arguments::set_gc_specific_flags() {
 #if INCLUDE_ALL_GCS
+  DynamicMaxHeapChecker::common_check();
   // Set per-collector flags
   if (UseParallelGC || UseParallelOldGC) {
     set_parallel_gc_flags();

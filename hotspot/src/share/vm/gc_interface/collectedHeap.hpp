@@ -109,6 +109,7 @@ class CollectedHeap : public CHeapObj<mtInternal> {
   BarrierSet* _barrier_set;
   bool _is_gc_active;
   uint _n_par_threads;
+  size_t _current_max_heap_size;
 
   unsigned int _total_collections;          // ... started
   unsigned int _total_full_collections;     // ... started
@@ -665,6 +666,15 @@ class CollectedHeap : public CHeapObj<mtInternal> {
   /////////////// Unit tests ///////////////
 
   NOT_PRODUCT(static void test_is_in();)
+
+public:
+  // Dynamic Max Heap
+  virtual bool change_max_heap(size_t new_size) = 0;
+  bool check_new_max_heap_validity(size_t new_size, outputStream* st);
+  size_t current_max_heap_size() const { return _current_max_heap_size; }
+  void set_current_max_heap_size(size_t new_size) {
+    _current_max_heap_size = new_size;
+  }
 };
 
 // Class to set and reset the GC cause for a CollectedHeap.

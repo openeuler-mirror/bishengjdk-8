@@ -95,6 +95,7 @@
   template(JFRCheckpoint)                         \
   template(Exit)                                  \
   template(LinuxDllLoad)                          \
+  template(DynamicMaxHeap)                        \
   template(RotateGCLog)                           \
   template(WhiteBoxOperation)                     \
   template(ClassLoaderStatsOperation)             \

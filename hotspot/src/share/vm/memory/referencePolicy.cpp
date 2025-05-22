@@ -63,6 +63,9 @@ LRUMaxHeapPolicy::LRUMaxHeapPolicy() {
 // Capture state (of-the-VM) information needed to evaluate the policy
 void LRUMaxHeapPolicy::setup() {
   size_t max_heap = MaxHeapSize;
+  if (Universe::is_dynamic_max_heap_enable()) {
+    max_heap = Universe::heap()->current_max_heap_size();
+  }
   max_heap -= Universe::get_heap_used_at_last_gc();
   max_heap /= M;
 

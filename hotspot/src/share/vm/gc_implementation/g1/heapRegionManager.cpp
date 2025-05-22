@@ -82,6 +82,7 @@ void HeapRegionManager::initialize(G1RegionToSpaceMapper* heap_storage,
   MemRegion reserved = heap_storage->reserved();
   _regions.initialize(reserved.start(), reserved.end(), HeapRegion::GrainBytes);
 
+  _dynamic_max_heap_length = (uint)_regions.length();
   _available_map.resize(_regions.length(), false);
   _available_map.clear();
   _uncommit_list_filled = false;
@@ -249,6 +250,12 @@ uint HeapRegionManager::expand_at(uint start, uint num_regions) {
   if (num_regions == 0) {
     return 0;
   }
+  if (Universe::is_dynamic_max_heap_enable()) {
+    uint available_regions = dynamic_max_heap_length() - length();
+    guarantee(dynamic_max_heap_length() >= length(), err_msg("The current length %u must not exceed dynamic max heap length %u", length(), dynamic_max_heap_length()));
+    guarantee(available_regions >= 0 && available_regions <= max_length() && available_regions <= dynamic_max_heap_length(), "must be");
+    num_regions = MIN2(num_regions, available_regions);
+  }
 
   uint cur = start;
   uint idx_last_found = 0;
@@ -269,6 +276,13 @@ uint HeapRegionManager::expand_at(uint start, uint num_regions) {
 }
 
 uint HeapRegionManager::expand_on_preferred_node(uint preferred_index) {
+  if (Universe::is_dynamic_max_heap_enable()) {
+    guarantee(dynamic_max_heap_length() >= length(), err_msg("The current length %u must not exceed dynamic max heap length %u", length(), dynamic_max_heap_length()));
+    // No regions left, expand failed.
+    if (dynamic_max_heap_length() == length()) {
+      return 0;
+    }
+  }
   uint expand_candidate = UINT_MAX;
   for (uint i = 0; i < max_length(); i++) {
     if (!can_expand(i)) {

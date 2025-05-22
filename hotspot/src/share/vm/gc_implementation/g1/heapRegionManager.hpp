@@ -119,6 +119,9 @@ class HeapRegionManager: public CHeapObj<mtGC> {
   // Internal only. The highest heap region +1 we allocated a HeapRegion instance for.
   uint _allocated_heapregions_length;
 
+  // The max number of regions controlled by Dynamic Max Heap
+  uint _dynamic_max_heap_length;
+
    HeapWord* heap_bottom() const { return _regions.bottom_address_mapped(); }
    HeapWord* heap_end() const {return _regions.end_address_mapped(); }
 
@@ -161,7 +164,7 @@ public:
 
  public:
   // Empty constructor, we'll initialize it with the initialize() method.
-  HeapRegionManager() : _regions(), _heap_mapper(NULL), _num_committed(0),
+  HeapRegionManager() : _regions(), _heap_mapper(NULL), _num_committed(0), _dynamic_max_heap_length(0),
                     _next_bitmap_mapper(NULL), _prev_bitmap_mapper(NULL), _bot_mapper(NULL),
                     _allocated_heapregions_length(0), _available_map(),
                     _free_list("Free list", new MasterFreeRegionListMtSafeChecker()),
@@ -233,11 +236,22 @@ public:
   // Return the number of available (uncommitted) regions.
   uint available() const { return max_length() - length(); }
 
+  // Return the number of dynamic available (uncommitted) regions.
+  uint dynamic_available() const { return dynamic_max_heap_length() - length(); }
+
   // Return the number of regions that have been committed in the heap.
   uint length() const { return _num_committed; }
 
   // Return the maximum number of regions in the heap.
   uint max_length() const { return (uint)_regions.length(); }
+
+  // Return the current maximum number of regions in the heap (dynamic max heap)
+  uint dynamic_max_heap_length() const { return (uint)_dynamic_max_heap_length; }
+
+  void set_dynamic_max_heap_length(uint len) {
+    guarantee(len <= max_length(), "must be");
+    _dynamic_max_heap_length = len;
+  }
 
   MemoryUsage get_auxiliary_data_memory_usage() const;
 
