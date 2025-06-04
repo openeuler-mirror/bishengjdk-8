@@ -2757,6 +2757,13 @@ class CommandLineFlags {
   product(bool, PrintFlagsFinal, false,                                     \
           "Print all VM flags after argument and ergonomic processing")     \
                                                                             \
+  product(ccstr, AutoSharedArchivePath, NULL,                               \
+          "Auto enable the AppCDS feature"                                  \
+          "the path save classlist and jsa file")                           \
+                                                                            \
+  product(bool, PrintAutoAppCDS, false,                                     \
+          "Print some information about AutoSharedArchivePath")             \
+                                                                            \
   notproduct(bool, PrintFlagsWithComments, false,                           \
           "Print all VM flags with default values and descriptions and "    \
           "exit")                                                           \
