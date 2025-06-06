@@ -767,6 +767,33 @@ void fileStream::flush() {
   fflush(_file);
 }
 
+randomAccessFileStream::randomAccessFileStream() : fileStream() {  }
+
+randomAccessFileStream::randomAccessFileStream(const char* file_name, const char* open_mode)
+  : fileStream(file_name, open_mode) {  }
+
+void randomAccessFileStream::write(const char* s, size_t len, long pos) {
+  assert(pos <= fileSize(), "pos check");
+  if (_file != NULL)  {
+    long old_pos = ::ftell(_file);
+    if (old_pos != pos) {
+      int ret = seek(pos, SEEK_SET);
+      assert(ret != -1, "fseek return value check");
+    }
+    size_t count = fwrite(s, 1, len, _file);
+    if (old_pos != pos) {
+      seek(old_pos, SEEK_SET);
+    }
+  }
+}
+
+void randomAccessFileStream::write(const char* s, size_t len) {
+  if (_file != NULL)  {
+    // Make an unused local variable to avoid warning from gcc 4.x compiler.
+    size_t count = fwrite(s, 1, len, _file);
+  }
+}
+
 jsaFileStream::jsaFileStream(const char* file_name) : fileStream(file_name, "a") {
 #ifdef __linux__
   if (_file != NULL) {

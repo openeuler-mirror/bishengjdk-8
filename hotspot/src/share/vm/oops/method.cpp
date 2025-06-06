@@ -32,6 +32,7 @@
 #include "interpreter/bytecodes.hpp"
 #include "interpreter/interpreter.hpp"
 #include "interpreter/oopMapCache.hpp"
+#include "jprofilecache/jitProfileCache.hpp"
 #include "memory/gcLocker.hpp"
 #include "memory/generation.hpp"
 #include "memory/heapInspection.hpp"
@@ -96,6 +97,13 @@ Method::Method(ConstMethod* xconst, AccessFlags access_flags, int size) {
   set_method_data(NULL);
   clear_method_counters();
   set_vtable_index(Method::garbage_vtable_index);
+
+  set_first_invoke_init_order(INVALID_FIRST_INVOKE_INIT_ORDER);
+  set_compiled_by_jprofilecache(false);
+
+#ifndef PRODUCT
+  set_deopted_by_jprofilecache(false);
+#endif
 
   // Fix and bury in Method*
   set_interpreter_entry(NULL); // sets i2i entry and from_int

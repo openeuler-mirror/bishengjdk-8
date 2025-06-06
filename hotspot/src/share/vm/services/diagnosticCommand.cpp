@@ -22,6 +22,7 @@
  *
  */
 
+#include "jprofilecache/jitProfileCacheDcmds.hpp"
 #include "precompiled.hpp"
 #include "cds/dynamicArchive.hpp"
 #include "classfile/classLoaderHierarchyDCmd.hpp"
@@ -84,6 +85,7 @@ void DCmdRegistrant::register_dcmds(){
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<TrimCLibcHeapDCmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<MallocInfoDcmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<PerfMapDCmd>(full_export, true, false));
+  DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<JitProfileCacheDCmds>(full_export, true, false));
 #endif // LINUX
 
   // Enhanced JMX Agent Support

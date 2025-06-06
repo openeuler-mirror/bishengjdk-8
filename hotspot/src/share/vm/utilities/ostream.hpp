@@ -202,7 +202,7 @@ class fileStream : public outputStream {
   fileStream(const char* file_name);
   fileStream(const char* file_name, const char* opentype);
   fileStream(FILE* file, bool need_close = false) { _file = file; _need_close = need_close; }
-  ~fileStream();
+  virtual ~fileStream();
   bool is_open() const { return _file != NULL; }
   void set_need_close(bool b) { _need_close = b;}
   virtual void write(const char* c, size_t len);
@@ -212,6 +212,18 @@ class fileStream : public outputStream {
   long fileSize();
   void rewind() { ::rewind(_file); }
   void flush();
+};
+
+class randomAccessFileStream : public fileStream {
+public:
+    randomAccessFileStream();
+    randomAccessFileStream(const char* file_name, const char* open_mode);
+    virtual ~randomAccessFileStream() {  }
+    virtual void write(const char* data, size_t length);
+
+    int seek(long offset, int position) { return ::fseek(_file, offset, position); }
+    long tell() { return ::ftell(_file); }
+    virtual void write(const char* data, size_t length, long position);
 };
 
 class jsaFileStream : public fileStream {

@@ -141,6 +141,12 @@ class Method : public Metadata {
   nmethod* volatile _code;                       // Points to the corresponding piece of native code
   volatile address           _from_interpreted_entry; // Cache of _code ? _adapter->i2c_entry() : _i2i_entry
 
+  int _first_invoke_init_order;  // record class initialize order when this method first been invoked
+  bool _compiled_by_jprofilecache;
+#ifndef PRODUCT
+  bool _deopted_by_jprofilecache;
+#endif
+
   // Constructor
   Method(ConstMethod* xconst, AccessFlags access_flags, int size);
  public:
@@ -205,6 +211,21 @@ class Method : public Metadata {
   }
   AnnotationArray* type_annotations() const      {
     return constMethod()->type_annotations();
+  }
+
+  int  first_invoke_init_order()                   { return _first_invoke_init_order; }
+  void set_first_invoke_init_order(int value)      { _first_invoke_init_order = value; }
+
+  bool compiled_by_jprofilecache()                      { return _compiled_by_jprofilecache; }
+  void set_compiled_by_jprofilecache(bool value)        { _compiled_by_jprofilecache = value; }
+
+#ifndef PRODUCT
+  bool deopted_by_jprofilecache()                        { return _deopted_by_jprofilecache; }
+  void set_deopted_by_jprofilecache(bool value)          { _deopted_by_jprofilecache = value; }
+#endif
+
+  static ByteSize first_invoke_init_order_offset() {
+    return byte_offset_of(Method, _first_invoke_init_order);
   }
 
   // Helper routine: get klass name + "." + method name + signature as

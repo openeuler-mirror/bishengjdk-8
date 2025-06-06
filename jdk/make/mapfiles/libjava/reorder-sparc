@@ -105,3 +105,4 @@ text: .text%findJavaTZ_md;
 text: .text%Java_java_lang_StrictMath_log;
 text: .text%Java_java_lang_StrictMath_sqrt;
 text: .text%Java_com_huawei_jvm_gc_AdaptiveHeapMXBeanImpl_registerNatives;
+text: .text%Java_com_huawei_jprofilecache_JProfileCache_registerNatives;

@@ -32,6 +32,7 @@
 #include "classfile/systemDictionaryShared.hpp"
 #include "classfile/vmSymbols.hpp"
 #include "interpreter/linkResolver.hpp"
+#include "jprofilecache/jitProfileCache.hpp"
 #include "memory/heapInspection.hpp"
 #include "memory/metadataFactory.hpp"
 #include "memory/oopFactory.hpp"
@@ -44,6 +45,9 @@
 #include "runtime/javaCalls.hpp"
 #include "runtime/signature.hpp"
 #include "runtime/vframe.hpp"
+#include "utilities/stack.hpp"
+#include "utilities/stack.inline.hpp"
+#include "jprofilecache/jitProfileCacheLog.hpp"
 
 PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 
@@ -59,12 +63,19 @@ ConstantPool* ConstantPool::allocate(ClassLoaderData* loader_data, int length, T
   // the resolved_references array, which is recreated at startup time.
   // But that could be moved to InstanceKlass (although a pain to access from
   // assembly code).  Maybe it could be moved to the cpCache which is RW.
-  return new (loader_data, size, false, MetaspaceObj::ConstantPoolType, THREAD) ConstantPool(tags);
+  if (JProfilingCacheCompileAdvance) {
+    Array<u1>* jpc_tags = NULL;
+    jpc_tags = MetadataFactory::new_array<u1>(loader_data, length, 0, CHECK_NULL);
+    return new (loader_data, size, false, MetaspaceObj::ConstantPoolType, THREAD) ConstantPool(tags, jpc_tags);
+  } else {
+    return new (loader_data, size, false, MetaspaceObj::ConstantPoolType, THREAD) ConstantPool(tags);
+  }
 }
 
 ConstantPool::ConstantPool(Array<u1>* tags) {
   set_length(tags->length());
   set_tags(NULL);
+  set_jpc_tags(NULL);
   set_cache(NULL);
   set_reference_map(NULL);
   set_resolved_references(NULL);
@@ -84,6 +95,35 @@ ConstantPool::ConstantPool(Array<u1>* tags) {
   set_tags(tags);
 }
 
+ConstantPool::ConstantPool(Array<u1>* raw_tags, Array<u1>* jpt_markers) {
+  assert(JProfilingCacheCompileAdvance, "must in JProfilingCacheCompileAdvance");
+  assert(jpt_markers != NULL, "invariant");
+  assert(jpt_markers->length() == raw_tags->length(), "invariant");
+  set_length(raw_tags->length());
+  set_flags(0);
+  set_version(0);
+  set_tags(NULL);
+  set_cache(NULL);
+  set_jpc_tags(NULL);
+  set_operands(NULL);
+  set_reference_map(NULL);
+  set_resolved_references(NULL);
+  set_pool_holder(NULL);
+
+  set_lock(new Monitor(Monitor::nonleaf + 2, "A constant pool lock"));
+
+  int length = raw_tags->length();
+  for (int index = 0; index < length; index++) {
+    raw_tags->at_put(index, JVM_CONSTANT_Invalid);
+  }
+  set_tags(raw_tags);
+
+  for (int i = 0; i < jpt_markers->length(); i++) {
+    jpt_markers->at_put(i, _jwp_has_not_been_traversed);
+  }
+  set_jpc_tags(jpt_markers);
+}
+
 void ConstantPool::deallocate_contents(ClassLoaderData* loader_data) {
   MetadataFactory::free_metadata(loader_data, cache());
   set_cache(NULL);
@@ -98,6 +138,12 @@ void ConstantPool::deallocate_contents(ClassLoaderData* loader_data) {
   // free tag array
   MetadataFactory::free_array<u1>(loader_data, tags());
   set_tags(NULL);
+
+  if (JProfilingCacheCompileAdvance) {
+    assert(jwp_tags() != NULL, "should not be NULL");
+    MetadataFactory::free_array<u1>(loader_data, jwp_tags());
+    set_jpc_tags(NULL);
+  }
 }
 
 void ConstantPool::release_C_heap_structures() {
@@ -1992,9 +2038,85 @@ void ConstantPool::preload_and_initialize_all_classes(ConstantPool* obj, TRAPS) 
 
 #endif
 
+void ConstantPool::preload_jprofilecache_classes(TRAPS) {
+  constantPoolHandle cp(THREAD, this);
+  guarantee(cp->pool_holder() != NULL, "must be fully loaded");
+  if (THREAD->is_eager_class_loading_active()) {
+    return;
+  }
+  THREAD->set_is_eager_class_loading_active(true);
+  Stack<InstanceKlass*, mtClass> s;
+  s.push(cp->pool_holder());
+  preload_classes_for_jprofilecache(s, THREAD);
+  THREAD->set_is_eager_class_loading_active(false);
+}
+
+Klass* ConstantPool::resolve_class_at_index(int constant_pool_index, TRAPS) {
+  assert(THREAD->is_Java_thread(), "must be a Java thread");
+  if (CompilationProfileCacheResolveClassEagerly) {
+    Klass* k = klass_at(constant_pool_index, CHECK_NULL);
+    return k;
+  } else {
+    Handle mirror_handle;
+    constantPoolHandle current_pool(THREAD, this);
+    Symbol* name = NULL;
+    Handle  loader;
+    {
+      if (current_pool->tag_at(constant_pool_index).is_unresolved_klass()) {
+        if (current_pool->tag_at(constant_pool_index).is_unresolved_klass_in_error()) {
+          return NULL;
+        } else {
+          name   = current_pool->klass_name_at(constant_pool_index);
+          loader = Handle(THREAD, current_pool->pool_holder()->class_loader());
+        }
+      }
+    }
+    oop protection_domain = current_pool->pool_holder()->protection_domain();
+    Handle protection_domain_handle (THREAD, protection_domain);
+    Klass* loaded_oop = SystemDictionary::resolve_or_fail(name, loader, protection_domain_handle, true, THREAD);
+    return loaded_oop;
+  }
+}
+
+void ConstantPool::preload_classes_for_jprofilecache(Stack<InstanceKlass*, mtClass>& class_processing_stack,
+                                                  TRAPS) {
+  JitProfileCache* jprofilecache = JitProfileCache::instance();
+  while (!class_processing_stack.is_empty()) {
+    constantPoolHandle current_constant_pool(class_processing_stack.pop()->constants());
+    for (int i = 0; i< current_constant_pool->length();  i++) {
+      bool is_unresolved = false;
+      Symbol* name = NULL;
+      {
+        if (current_constant_pool->tag_at(i).is_unresolved_klass() && !current_constant_pool->jprofilecache_traversed_at(i)) {
+          name = current_constant_pool->klass_name_at(i);
+          is_unresolved = true;
+          current_constant_pool->jprofilecache_has_traversed_at(i);
+        }
+      }
+      if (is_unresolved) {
+        if (name != NULL && !jprofilecache->preloader()->should_preload_class(name)) {
+          continue;
+        }
+        Klass* klass = current_constant_pool->resolve_class_at_index(i, THREAD);
+        if (HAS_PENDING_EXCEPTION) {
+          ResourceMark rm;
+          if (LogLevel::Warning >= LogLevel::LogLevelNum) {
+            tty->print_cr("[JitProfileCache] WARNING : resolve %s from constant pool failed",
+                        name->as_C_string());
+          }
+          if (PENDING_EXCEPTION->is_a(SystemDictionary::LinkageError_klass())) {
+            CLEAR_PENDING_EXCEPTION;
+          }
+        }
+        if (klass != NULL && klass->oop_is_instance()) {
+          class_processing_stack.push((InstanceKlass*)klass);
+        }
+      }
+    }
+  }
+}
 
 // Printing
-
 void ConstantPool::print_on(outputStream* st) const {
   EXCEPTION_MARK;
   assert(is_constantPool(), "must be constantPool");

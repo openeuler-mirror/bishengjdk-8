@@ -5548,6 +5548,9 @@ os::Linux::heap_vector_get_next_t os::Linux::_heap_vector_get_next;
 os::Linux::heap_vector_free_t os::Linux::_heap_vector_free;
 os::Linux::dmh_g1_can_shrink_t os::Linux::_dmh_g1_can_shrink;
 os::Linux::dmh_g1_get_region_limit_t os::Linux::_dmh_g1_get_region_limit;
+os::Linux::get_class_state_t os::Linux::_get_class_state;
+os::Linux::handle_skipped_t os::Linux::_handle_skipped;
+os::Linux::handle_ignore_class_t os::Linux::_handle_ignore_class;
 
 void os::Linux::load_ACC_library_before_ergo() {
     _dmh_g1_can_shrink = CAST_TO_FN_PTR(dmh_g1_can_shrink_t, dlsym(RTLD_DEFAULT, "DynamicMaxHeap_G1CanShrink"));
@@ -5579,6 +5582,9 @@ void os::Linux::load_ACC_library() {
     _heap_vector_add = CAST_TO_FN_PTR(heap_vector_add_t, dlsym(RTLD_DEFAULT, "HeapVector_Add"));
     _heap_vector_get_next = CAST_TO_FN_PTR(heap_vector_get_next_t, dlsym(RTLD_DEFAULT, "HeapVector_GetNext"));
     _heap_vector_free= CAST_TO_FN_PTR(heap_vector_free_t, dlsym(RTLD_DEFAULT, "HeapVector_Free"));
+    _get_class_state= CAST_TO_FN_PTR(get_class_state_t, dlsym(RTLD_DEFAULT, "Get_Class_State"));
+    _handle_skipped= CAST_TO_FN_PTR(handle_skipped_t, dlsym(RTLD_DEFAULT, "Handle_Skipped"));
+    _handle_ignore_class= CAST_TO_FN_PTR(handle_ignore_class_t, dlsym(RTLD_DEFAULT, "Handle_Ignore_Class"));
 
     char path[JVM_MAXPATHLEN];
     char ebuf[1024];
@@ -5607,6 +5613,15 @@ void os::Linux::load_ACC_library() {
         }
         if(_heap_vector_free == NULL) {
             _heap_vector_free = CAST_TO_FN_PTR(heap_vector_free_t, dlsym(handle, "HeapVector_Free"));
+        }
+        if(_get_class_state == NULL) {
+          _get_class_state = CAST_TO_FN_PTR(get_class_state_t, dlsym(handle, "Get_Class_State"));
+        }
+        if(_handle_skipped == NULL) {
+          _handle_skipped = CAST_TO_FN_PTR(handle_skipped_t, dlsym(handle, "Handle_Skipped"));
+        }
+        if(_handle_ignore_class == NULL) {
+          _handle_ignore_class = CAST_TO_FN_PTR(handle_ignore_class_t, dlsym(handle, "Handle_Ignore_Class"));
         }
     }
 }

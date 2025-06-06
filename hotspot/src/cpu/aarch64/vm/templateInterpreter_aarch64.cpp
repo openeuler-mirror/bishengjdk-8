@@ -359,6 +359,23 @@ void InterpreterGenerator::generate_counter_incr(
       __ addw(r1, r1, 1);
       __ strw(r1, Address(rscratch2, MethodCounters::interpreter_invocation_counter_offset()));
     }
+#ifdef _LP64
+    if (JProfilingCacheRecording) {
+      Label skip_record;
+      JitProfileCache* jitprofilecache = JitProfileCache::instance();
+      assert(jitprofilecache != NULL, "jitprofilecache should not be NULL");
+      __ ldrw(r1, Address(rscratch2, MethodCounters::interpreter_invocation_counter_offset()));
+      __ cmp(r1, 1);
+      __ br(Assembler::HI, skip_record);
+      unsigned long offset;
+      __ adrp(rscratch2, ExternalAddress(jitprofilecache->recorder()->current_init_order_addr()), offset);
+      __ ldrw(r1, Address(rscratch2, offset));
+      __ strw(r1, Address(rmethod, Method::first_invoke_init_order_offset()));
+      // restore method_counters_offset to rscratch2
+      __ ldr(rscratch2, Address(rmethod, Method::method_counters_offset()));
+      __ bind(skip_record);
+    }
+#endif
     // Update standard invocation counters
     __ ldrw(r1, invocation_counter);
     __ ldrw(r0, backedge_counter);

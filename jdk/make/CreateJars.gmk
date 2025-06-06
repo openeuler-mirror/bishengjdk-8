@@ -557,6 +557,7 @@ EXCLUDE_PROPWARN_PKGS = com.sun.java.swing.plaf.windows \
 #
 EXPORTED_PRIVATE_PKGS = com.oracle.net \
     com.oracle.nio \
+    com.huawei.jprofilecache \
     com.huawei.management \
     com.huawei.jvm.gc
 

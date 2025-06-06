@@ -107,3 +107,4 @@ text: .text%Java_java_lang_Class_isInstance;
 text: .text%Java_java_util_TimeZone_getSystemTimeZoneID;
 text: .text%findJavaTZ_md;
 text: .text%Java_java_lang_StrictMath_log;
+text: .text%Java_com_huawei_jprofilecache_JProfileCache_registerNatives;

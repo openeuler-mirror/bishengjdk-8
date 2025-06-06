@@ -27,6 +27,8 @@
 #include "code/icBuffer.hpp"
 #include "gc_interface/collectedHeap.hpp"
 #include "interpreter/bytecodes.hpp"
+#include "jprofilecache/jitProfileCache.hpp"
+#include "jprofilecache/jitProfileRecord.hpp"
 #include "memory/universe.hpp"
 #include "prims/methodHandles.hpp"
 #include "runtime/handles.inline.hpp"
@@ -108,6 +110,15 @@ jint init_globals() {
   if (status != JNI_OK)
     return status;
 
+  if (JProfilingCacheRecording) {
+    JitProfileCache* jpc = JitProfileCache::create_instance();
+    jpc->init();
+    if (!jpc->is_valid()) {
+      tty->print_cr("[JitProfileCache] ERROR: init fail.");
+      vm_exit(-1);
+    }
+  }
+
   AsyncLogWriter::initialize();
   interpreter_init(); // before any methods loaded
   invocationCounter_init();  // before any methods loaded
@@ -116,6 +127,14 @@ jint init_globals() {
   templateTable_init();
   InterfaceSupport_init();
   SharedRuntime::generate_stubs();
+  if (JProfilingCacheCompileAdvance) {
+    JitProfileCache* jpc = JitProfileCache::create_instance();
+    jpc->init();
+    if (!jpc->is_valid()) {
+      tty->print_cr("[JitProfileCache] ERROR: init fail.");
+      vm_exit(-1);
+    }
+  }
   universe2_init();  // dependent on codeCache_init and stubRoutines_init1
   referenceProcessor_init();
   jni_handles_init();

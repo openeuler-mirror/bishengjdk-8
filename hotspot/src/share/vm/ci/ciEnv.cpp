@@ -710,6 +710,63 @@ ciField* ciEnv::get_field_by_index(ciInstanceKlass* accessor,
 }
 
 // ------------------------------------------------------------------
+// ciEnv::is_field_resolved
+//
+// is whether this field has been resolved.
+bool ciEnv::is_field_resolved(ciInstanceKlass* accessor_klass,
+                                 int constant_pool_index) {
+  GUARDED_VM_ENTRY(
+  ciConstantPoolCache* field_cache = accessor_klass->field_cache();
+  if (field_cache != NULL) {
+    ciField* field = (ciField*)field_cache->get(constant_pool_index);
+    if (field != NULL) {
+      return true;
+    }
+  }
+  CompilerThread *current_thread = CompilerThread::current();
+  assert(accessor_klass->get_instanceKlass()->is_linked(), "must be linked before using its constant-pool");
+  constantPoolHandle constant_pool(current_thread, accessor_klass->get_instanceKlass()->constants());
+
+  // Get the field's name, signature, and type.
+  Symbol* name = constant_pool->name_ref_at(constant_pool_index);
+  if (name == NULL) {
+    return false;
+  }
+  int name_index = constant_pool->name_and_type_ref_index_at(constant_pool_index);
+  int signature_index = constant_pool->signature_ref_index_at(name_index);
+  Symbol* signature = constant_pool->symbol_at(signature_index);
+  if (signature == NULL) {
+    return false;
+  }
+    return true;
+  )
+}
+
+// ------------------------------------------------------------------
+//
+// Check if all fields needed by this method in ConstantPool are resolved
+bool ciEnv::are_method_fields_all_resolved(ciMethod* method) {
+  ciInstanceKlass* holder_klass = method->holder();
+  ciBytecodeStream bytecode_stream(method);
+  int start_bci = 0;
+  int end_bci = method->code_size();
+  bytecode_stream.reset_to_bci(start_bci);
+  Bytecodes::Code current_opcode;
+  while ((current_opcode = bytecode_stream.next()) != ciBytecodeStream::EOBC() &&
+         bytecode_stream.cur_bci() < end_bci) {
+    if (current_opcode == Bytecodes::_getfield   ||
+        current_opcode == Bytecodes::_getstatic  ||
+        current_opcode == Bytecodes::_putfield   ||
+        current_opcode == Bytecodes::_putstatic) {
+      if (!is_field_resolved(holder_klass, bytecode_stream.get_index_u2_cpcache())) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+// ------------------------------------------------------------------
 // ciEnv::lookup_method
 //
 // Perform an appropriate method lookup based on accessor, holder,

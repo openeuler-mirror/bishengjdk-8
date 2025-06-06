@@ -362,6 +362,7 @@
   template(privilegedContext_name,                    "privilegedContext")                        \
   template(contextClassLoader_name,                   "contextClassLoader")                       \
   template(inheritedAccessControlContext_name,        "inheritedAccessControlContext")            \
+  template(jprofilecache_dummy_name,                  "dummy")                                    \
   template(isPrivileged_name,                         "isPrivileged")                             \
   template(isAuthorized_name,                         "isAuthorized")                             \
   template(getClassContext_name,                      "getClassContext")                          \
@@ -413,6 +414,10 @@
   template(init_lock_name,                            "init_lock")                                \
   template(signers_name,                              "signers_name")                             \
   template(loader_data_name,                          "loader_data")                              \
+  template(com_huawei_jprofilecache_JProfileCache,    "com/huawei/jprofilecache/JProfileCache")   \
+  template(jprofilecache_trigger_precompilation_name, "triggerPrecompilation")                    \
+  template(jprofilecache_check_if_compilation_is_complete_name, "checkIfCompilationIsComplete")   \
+  template(jprofilecache_notify_jvm_deopt_profilecache_methods_name, "notifyJVMDeoptProfileCacheMethods") \
   template(vmdependencies_name,                       "vmdependencies")                           \
   template(input_stream_void_signature,               "(Ljava/io/InputStream;)V")                 \
   template(getFileURL_name,                           "getFileURL")                               \
