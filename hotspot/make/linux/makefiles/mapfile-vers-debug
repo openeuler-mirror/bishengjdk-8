@@ -164,6 +164,9 @@ SUNWprivate_1.1 {
                 JVM_GetStackAccessControlContext;
                 JVM_GetStackTraceDepth;
                 JVM_GetStackTraceElement;
+                JVM_TriggerPrecompilation;
+                JVM_CheckJProfileCacheCompilationIsComplete;
+                JVM_NotifyJVMDeoptProfileCacheMethods;
                 JVM_GetSystemPackage;
                 JVM_GetSystemPackages;
                 JVM_GetTemporaryDirectory;

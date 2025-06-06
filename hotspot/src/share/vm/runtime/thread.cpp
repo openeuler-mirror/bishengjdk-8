@@ -35,6 +35,9 @@
 #include "interpreter/oopMapCache.hpp"
 #include "jfr/jfrEvents.hpp"
 #include "jvmtifiles/jvmtiEnv.hpp"
+#include "jprofilecache/jitProfileCache.hpp"
+#include "jprofilecache/jitProfileCacheThread.hpp"
+#include "jprofilecache/jitProfileCacheDcmds.hpp"
 #include "memory/allocation.hpp"
 #include "memory/gcLocker.inline.hpp"
 #include "memory/metaspaceShared.hpp"
@@ -240,6 +243,7 @@ Thread::Thread() {
   set_active_handles(NULL);
   set_free_handle_block(NULL);
   set_last_handle_mark(NULL);
+  set_is_eager_class_loading_active(false);
 
   // This initial value ==> never claimed.
   _oops_do_parity = 0;
@@ -261,6 +265,7 @@ Thread::Thread() {
   _current_pending_monitor = NULL;
   _current_pending_monitor_is_from_java = true;
   _current_waiting_monitor = NULL;
+  _super_class_resolution_depth = 0;
   _num_nested_signal = 0;
   omFreeList = NULL ;
   omFreeCount = 0 ;
@@ -3893,6 +3898,12 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
   BiasedLocking::init();
 
+  if (JProfilingCacheCompileAdvance) {
+    JitProfileCache* jprofilecache = JitProfileCache::instance();
+    assert(jprofilecache != NULL, "sanity check");
+    jprofilecache->preloader()->jvm_booted_is_done();
+  }
+
 #if INCLUDE_RTM_OPT
   RTMLockingCounters::init();
 #endif
@@ -4599,6 +4610,10 @@ void Threads::print_on(outputStream* st, bool print_stacks,
     st->cr();
   }
   CompileBroker::print_compiler_threads_on(st);
+  if (JProfilingCacheRecording) {
+    JitProfileCacheThread::print_jit_profile_cache_thread_info_on(st);
+    st->cr();
+  }
   if (UseAsyncGCLog) {
     AsyncLogWriter* aio_writer = AsyncLogWriter::instance();
     if (aio_writer != NULL) {

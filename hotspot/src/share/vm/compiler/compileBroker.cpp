@@ -327,6 +327,8 @@ void CompileTask::initialize(int compile_id,
   _comment = comment;
   _failure_reason = NULL;
 
+  _is_jprofilecache_compilation = false;
+
   if (LogCompilation) {
     _time_queued = os::elapsed_counter();
     if (hot_method.not_null()) {
@@ -1596,6 +1598,9 @@ CompileTask* CompileBroker::create_compile_task(CompileQueue* queue,
   new_task->initialize(compile_id, method, osr_bci, comp_level,
                        hot_method, hot_count, comment,
                        blocking);
+  if (strcmp(comment, "JitProfileCache") == 0) {
+    new_task->mark_jprofilecache_compilation();
+  }
   queue->add(new_task);
   return new_task;
 }

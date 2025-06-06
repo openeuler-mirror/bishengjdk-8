@@ -4199,7 +4199,51 @@ class CommandLineFlags {
                                                                             \
   diagnostic(bool, PrintAsyncGCLog, false,                                  \
           "Print some information of Async GC Log")                         \
-
+                                                                            \
+  lp64_product(bool, JProfilingCacheRecording, false,                       \
+          "Collect profiling information for JProfilingCache")              \
+                                                                            \
+  lp64_product(bool, JProfilingCacheCompileAdvance, false,                  \
+          "Enable JProfilingCacheCompileAdvance from a log file")           \
+                                                                            \
+  lp64_product(ccstr, ProfilingCacheLogLevel, "info",                       \
+          "Log level for JProfilingCache")                                  \
+                                                                            \
+  lp64_product(ccstr, ProfilingCacheFile, NULL,                             \
+          "Log file name for JProfilingCache")                              \
+                                                                            \
+  lp64_product(uintx, JProfilingCacheRecordTime, 0,                         \
+          "Sleep time (in seconds) before flushing profling "               \
+          "information to log file ")                                       \
+                                                                            \
+  lp64_product(uintx, CompilationProfileCacheAppID, 0,                      \
+          "Application ID written in log file for verification ")           \
+                                                                            \
+  lp64_product(ccstr, CompilationProfileCacheExclude, NULL,                 \
+          "JProfilingCacheCompileAdvance excluding list ")                  \
+                                                                            \
+  lp64_product(bool, CompilationProfileCacheExplicitDeopt, false,           \
+          "Deoptimize JProfileCache methods by explicit api")               \
+                                                                            \
+  lp64_product(uintx, JProfilingCacheDeoptTime, 1200,                       \
+          "Sleep time (in seconds) before deoptimizing methods "            \
+          "compiled by JProfileCache ")                                     \
+                                                                            \
+  diagnostic(uintx, CompilationProfileCacheDeoptMinInterval, 5,             \
+          "JProfileCache method deoptimization minimum interval (in seconds)")    \
+                                                                            \
+  diagnostic(uintx, CompilationProfileCacheDeoptNumOfMethodsPerIter, 10,    \
+          "The max number of methods marked for "                           \
+          "deoptimization per iteration")                                   \
+                                                                            \
+  diagnostic(bool, CompilationProfileCacheResolveClassEagerly, true,        \
+          "resolve class from constant pool eagerly")                       \
+                                                                            \
+  lp64_product(bool, DeoptimizeBeforeProfileCache, false,                   \
+          "Deoptimize recorded methods before JProfileCache compilation")         \
+                                                                            \
+  lp64_product(intx, CompilationProfileCacheRecordMinLevel, 3,              \
+          "Minimal compilation level recorded in JProfileCache recording phase")  \
 /*
  *  Macros for factoring of globals
  */

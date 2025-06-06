@@ -35,8 +35,10 @@
 #include "classfile/systemDictionaryShared.hpp"
 #endif
 #include "classfile/vmSymbols.hpp"
+#include "code/codeCache.hpp"
 #include "gc_interface/collectedHeap.inline.hpp"
 #include "interpreter/bytecode.hpp"
+#include "jprofilecache/jitProfileCache.hpp"
 #include "jfr/jfrEvents.hpp"
 #include "memory/oopFactory.hpp"
 #include "memory/referenceType.hpp"
@@ -52,6 +54,7 @@
 #include "prims/nativeLookup.hpp"
 #include "prims/privilegedStack.hpp"
 #include "runtime/arguments.hpp"
+#include "runtime/compilationPolicy.hpp"
 #include "runtime/dtraceJSDT.hpp"
 #include "runtime/handles.inline.hpp"
 #include "runtime/init.hpp"
@@ -4776,5 +4779,68 @@ JVM_ENTRY(void, JVM_GetVersionInfo(JNIEnv* env, jvm_version_info* info, size_t i
   // consider to expose this new capability in the sun.rt.jvmCapabilities jvmstat
   // counter defined in runtimeService.cpp.
   info->is_attachable = AttachListener::is_attach_supported();
+}
+JVM_END
+
+JVM_ENTRY(void, JVM_TriggerPrecompilation(JNIEnv* env, jclass clz))
+{
+  JVMWrapper("JVM_TriggerPrecompilation");
+  if (!JProfilingCacheCompileAdvance) {
+    tty->print_cr("JProfilingCacheCompileAdvance is off, "
+                  "triggerPrecompilation is invalid");
+    return;
+  }
+  Handle mirror(THREAD, JNIHandles::resolve_non_null(clz));
+  assert(mirror() != NULL, "sanity check");
+  Klass* k = java_lang_Class::as_Klass(mirror());
+  Method* dummy_method = k->lookup_method(vmSymbols::jprofilecache_dummy_name(), vmSymbols::void_method_signature());
+  assert(dummy_method != NULL, "Cannot find dummy method in com.huawei.jprofilecache.JProfileCache");
+  JitProfileCache* jprofilecache = JitProfileCache::instance();
+  assert(jprofilecache != NULL, "sanity check");
+  jprofilecache->set_dummy_method(dummy_method);
+  jprofilecache->preloader()->notify_precompilation();
+}
+JVM_END
+
+JVM_ENTRY(jboolean, JVM_CheckJProfileCacheCompilationIsComplete(JNIEnv *env, jclass ignored))
+{
+  JVMWrapper("JVM_CheckJProfileCacheCompilationIsComplete");
+  if (!JProfilingCacheCompileAdvance) {
+    tty->print_cr("JProfilingCacheCompileAdvance is off, "
+                  "checkIfCompilationIsComplete is invalid");
+    return JNI_TRUE;
+  }
+  JitProfileCache* jprofilecache = JitProfileCache::instance();
+  Method* dummyMethod = jprofilecache->dummy_method();
+  assert(dummyMethod != NULL, "sanity check");
+  if (dummyMethod->code() != NULL) {
+    return JNI_TRUE;
+  } else {
+    return JNI_FALSE;
+  }
+}
+JVM_END
+
+JVM_ENTRY(void, JVM_NotifyJVMDeoptProfileCacheMethods(JNIEnv *env, jclass clazz))
+{
+  JVMWrapper("JVM_notifyJVMDeoptProfileCacheMethods");
+  if (!(JProfilingCacheCompileAdvance && CompilationProfileCacheExplicitDeopt)) {
+    tty->print_cr("JProfilingCacheCompileAdvance or CompilationProfileCacheExplicitDeopt is off, "
+                  "notifyJVMDeoptProfileCacheMethods is invalid");
+    return;
+  }
+  JitProfileCache* jprofilecache = JitProfileCache::instance();
+  Method* dm = jprofilecache->dummy_method();
+  if (dm != NULL && dm->code() != NULL) {
+    ProfileCacheClassChain* chain = jprofilecache->preloader()->chain();
+    assert(chain != NULL, "sanity check");
+    if (chain->notify_deopt_signal()) {
+      tty->print_cr("JitProfileCache: receive signal to deoptimize warmup methods");
+    } else {
+      tty->print_cr("JitProfileCache: deoptimize signal is ignore");
+    }
+  } else {
+    tty->print_cr("JitProfileCache: deoptimize signal is ignore because warmup is not finished");
+  }
 }
 JVM_END

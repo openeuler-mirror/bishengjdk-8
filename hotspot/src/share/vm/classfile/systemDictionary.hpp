@@ -27,6 +27,7 @@
 
 #include "classfile/classFileStream.hpp"
 #include "classfile/classLoader.hpp"
+#include "jprofilecache/jitProfileCache.hpp"
 #include "oops/objArrayOop.hpp"
 #include "oops/symbol.hpp"
 #include "runtime/java.hpp"
@@ -204,6 +205,8 @@ class SymbolPropertyTable;
 class SystemDictionary : AllStatic {
   friend class VMStructs;
   friend class SystemDictionaryHandles;
+  friend class JitProfileCache;
+  friend class JitProfileCacheInfo;
 
  public:
   enum WKID {

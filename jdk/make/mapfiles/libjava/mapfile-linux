@@ -283,6 +283,8 @@ SUNWprivate_1.1 {
 		Java_jdk_internal_platform_CgroupMetrics_isUseContainerSupport;
 		Java_jdk_internal_platform_CgroupMetrics_getTotalMemorySize0;
 
+        Java_com_huawei_jprofilecache_JProfileCache_registerNatives;
+
                 # ZipFile.c needs this one
 		throwFileNotFoundException;
                 # zip_util.c needs this

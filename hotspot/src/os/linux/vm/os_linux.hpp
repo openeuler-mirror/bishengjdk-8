@@ -305,6 +305,9 @@ private:
   typedef void* (*heap_vector_add_t)(void* val, void* heap_vector, bool &_inserted);
   typedef void* (*heap_vector_get_next_t)(void* heap_vector, void* heap_vector_node, int &_cnt, void** &_items);
   typedef void (*heap_vector_free_t)(void* heap_vector);
+  typedef int (*get_class_state_t)();
+  typedef void (*handle_skipped_t)(char* class_name, char* class_loader_name, char* class_path, bool is_log_detail);
+  typedef void (*handle_ignore_class_t)(char* class_name, int index, bool is_log_detail);
   typedef bool (*dmh_g1_can_shrink_t)(double used_after_gc_d, size_t _new_max_heap, double maximum_used_percentage, size_t max_heap_size);
   typedef uint (*dmh_g1_get_region_limit_t)(size_t _new_max_heap, size_t region_size);
   static heap_dict_add_t _heap_dict_add;
@@ -313,6 +316,9 @@ private:
   static heap_vector_add_t _heap_vector_add;
   static heap_vector_get_next_t _heap_vector_get_next;
   static heap_vector_free_t _heap_vector_free;
+  static get_class_state_t _get_class_state;
+  static handle_skipped_t _handle_skipped;
+  static handle_ignore_class_t _handle_ignore_class;
   static sched_getcpu_func_t _sched_getcpu;
   static numa_node_to_cpus_func_t _numa_node_to_cpus;
   static numa_max_node_func_t _numa_max_node;
@@ -615,6 +621,25 @@ public:
       result = _dmh_g1_get_region_limit(_new_max_heap, region_size);
     }
     return result;
+  }
+
+  static int get_class_state() {
+    if(_get_class_state != NULL) {
+      return _get_class_state();
+    }
+    return 0;
+  }
+
+  static void handle_skipped(char* class_name, char* class_loader_name, char* class_path, bool is_log_detail) {
+    if(_handle_skipped != NULL) {
+      _handle_skipped(class_name, class_loader_name, class_path, is_log_detail);
+    }
+  }
+
+  static void handle_ignore_class(char* class_name, int index, bool is_log_detail) {
+    if(_handle_ignore_class != NULL) {
+      _handle_ignore_class(class_name, index, is_log_detail);
+    }
   }
 };
 

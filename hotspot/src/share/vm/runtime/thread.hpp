@@ -214,6 +214,18 @@ class Thread: public ThreadShadow {
   void leave_signal_handler() { _num_nested_signal--; }
   bool is_inside_signal_handler() const { return _num_nested_signal > 0; }
 
+  // JProfileCache support
+private:
+  int  _super_class_resolution_depth;
+  bool _is_eager_class_loading_active;
+
+public:
+  void super_class_depth_add()    { _super_class_resolution_depth++; }
+  void super_class_depth_dec()    { _super_class_resolution_depth--; }
+  bool is_eager_class_loading_active()               { return _is_eager_class_loading_active; }
+  void set_is_eager_class_loading_active(bool value) { _is_eager_class_loading_active = value; } 
+  bool is_super_class_resolution_active() const         { return _super_class_resolution_depth > 0; }
+
  private:
   // Debug tracing
   static void trace(const char* msg, const Thread* const thread) PRODUCT_RETURN;

@@ -296,6 +296,29 @@ Klass* SystemDictionary::resolve_array_class_or_null(Symbol* class_name,
   return k;
 }
 
+class SuperClassRecursionTracker : public StackObj {
+public:
+  SuperClassRecursionTracker() {
+    initialize(Thread::current());
+  }
+
+  SuperClassRecursionTracker(Thread* thread) {
+    initialize(thread);
+  }
+
+  ~SuperClassRecursionTracker() {
+    assert(JProfilingCacheCompileAdvance, "wrong usage");
+    _thread->super_class_depth_dec();
+  }
+protected:
+  void initialize(Thread* thread) {
+    assert(JProfilingCacheCompileAdvance, "wrong usage");
+    _thread = thread;
+    _thread->super_class_depth_add();
+  }
+private:
+  Thread* _thread;
+};
 
 // Must be called for any super-class or super-interface resolution
 // during class definition to allow class circularity checking
@@ -397,11 +420,21 @@ Klass* SystemDictionary::resolve_super_or_fail(Symbol* child_name,
 // java.lang.Object should have been found above
   assert(class_name != NULL, "null super class for resolving");
   // Resolve the super class or interface, check results on return
-  Klass* superk = SystemDictionary::resolve_or_null(class_name,
-                                                 class_loader,
-                                                 protection_domain,
-                                                 THREAD);
-
+  Klass* superk = NULL;
+  if (JProfilingCacheCompileAdvance) {
+    SuperClassRecursionTracker superClassRecursionTracker;
+    superk =
+      SystemDictionary::resolve_or_null(class_name,
+                                        class_loader,
+                                        protection_domain,
+                                        THREAD);
+  } else {
+    superk =
+      SystemDictionary::resolve_or_null(class_name,
+                                        class_loader,
+                                        protection_domain,
+                                        THREAD);
+  }
   KlassHandle superk_h(THREAD, superk);
 
   // Clean up of placeholders moved so that each classloadAction registrar self-cleans up
@@ -909,6 +942,14 @@ Klass* SystemDictionary::resolve_instance_class_or_null(Symbol* name,
   }
 #endif
 
+  if (JProfilingCacheCompileAdvance) {
+    if (!class_has_been_loaded) {
+      JitProfileCache* jprofilecache = JitProfileCache::instance();
+      assert(jprofilecache != NULL, "sanity check");
+      jprofilecache->preloader()->resolve_loaded_klass(k());
+    }
+  }
+
   // return if the protection domain in NULL
   if (protection_domain() == NULL) return k();
 
@@ -1268,6 +1309,12 @@ Klass* SystemDictionary::resolve_from_stream(Symbol* class_name,
       assert(check == check2, "name inconsistancy in SystemDictionary");
     }
   } );
+
+  if (JProfilingCacheCompileAdvance) {
+    JitProfileCache* jprofilecache = JitProfileCache::instance();
+    assert(jprofilecache != NULL, "sanity check");
+    jprofilecache->preloader()->resolve_loaded_klass(k());
+  }
 
   return k();
 }

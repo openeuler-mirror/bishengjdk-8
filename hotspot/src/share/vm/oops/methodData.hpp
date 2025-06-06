@@ -30,6 +30,7 @@
 #include "oops/method.hpp"
 #include "oops/oop.hpp"
 #include "runtime/orderAccess.hpp"
+#include "jprofilecache/jitProfileRecord.hpp"
 
 class BytecodeStream;
 class KlassSizeStats;
@@ -282,6 +283,8 @@ class ProfileData : public ResourceObj {
   friend class TypeEntries;
   friend class ReturnTypeEntry;
   friend class TypeStackSlotEntries;
+  friend class JitProfileRecorder;
+  friend class JitProfileCacheInfo;
 private:
 #ifndef PRODUCT
   enum {

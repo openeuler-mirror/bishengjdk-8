@@ -47,6 +47,9 @@
 
 extern Mutex*   Patching_lock;                   // a lock used to guard code patching of compiled code
 extern Monitor* SystemDictionary_lock;           // a lock on the system dictonary
+extern Mutex*   JitProfileRecorder_lock;         // a lock on the JProfileCache class JitProfileRecorder
+extern Mutex*   ProfileCacheClassChain_lock;     // a lock on the JProfileCache preload class chain
+extern Mutex*   JitProfileCachePrint_lock;       // a lock on the JProfileCache jstack print
 extern Mutex*   SharedDictionary_lock;           // a lock on the CDS shared dictionary
 extern Mutex*   PackageTable_lock;               // a lock on the class loader package table
 extern Mutex*   CompiledIC_lock;                 // a lock used to guard compiled IC patching and access

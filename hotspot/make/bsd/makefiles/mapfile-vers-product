@@ -161,6 +161,9 @@
                 _JVM_GetStackAccessControlContext
                 _JVM_GetStackTraceDepth
                 _JVM_GetStackTraceElement
+                _JVM_TriggerPrecompilation
+                _JVM_CheckJProfileCacheCompilationIsComplete
+                _JVM_NotifyJVMDeoptProfileCacheMethods
                 _JVM_GetSystemPackage
                 _JVM_GetSystemPackages
                 _JVM_GetTemporaryDirectory

@@ -2556,5 +2556,6 @@ javax/swing/plaf/basic/BasicToolBarSeparatorUI
 java/awt/event/AdjustmentEvent
 java/awt/MenuBar
 sun/awt/X11/XErrorEvent
+com/huawei/jprofilecache/JProfileCache
 com/huawei/jvm/gc
 # eea35d9d56e0006e

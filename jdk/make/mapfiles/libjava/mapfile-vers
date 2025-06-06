@@ -280,6 +280,8 @@ SUNWprivate_1.1 {
 		Java_sun_misc_VMSupport_initAgentProperties;
 		Java_sun_misc_VMSupport_getVMTemporaryDirectory;
 
+        Java_com_huawei_jprofilecache_JProfileCache_registerNatives;
+
                 # ZipFile.c needs this one
 		throwFileNotFoundException;
                 # zip_util.c needs this

@@ -758,6 +758,14 @@ bool ClassLoaderDataGraph::do_unloading(BoolObjectClosure* is_alive_closure, boo
   ClassLoaderData* prev = NULL;
   bool seen_dead_loader = false;
 
+  // Unload ProfileCacheClassChain
+  if (JProfilingCacheCompileAdvance) {
+    JitProfileCache* jpc = JitProfileCache::instance();
+    assert(jpc != NULL, "JitProfileCache object is null");
+    ProfileCacheClassChain* chain = jpc->preloader()->chain();
+    chain->unload_class(is_alive_closure);
+  }
+
   // Save previous _unloading pointer for CMS which may add to unloading list before
   // purging and we don't want to rewalk the previously unloaded class loader data.
   _saved_unloading = _unloading;
