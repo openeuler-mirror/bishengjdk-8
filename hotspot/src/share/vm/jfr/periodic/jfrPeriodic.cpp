@@ -52,6 +52,7 @@
 #include "runtime/thread.inline.hpp"
 #include "runtime/sweeper.hpp"
 #include "runtime/vmThread.hpp"
+#include "runtime/deoptimization.hpp"
 #include "services/classLoadingService.hpp"
 #include "services/management.hpp"
 #include "services/threadService.hpp"

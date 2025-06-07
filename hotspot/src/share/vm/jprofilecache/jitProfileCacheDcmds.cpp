@@ -13,6 +13,8 @@
 #include "oops/oop.inline.hpp"
 #include "oops/symbol.hpp"
 #include "runtime/handles.inline.hpp"
+#include "runtime/javaCalls.hpp"
+#include "runtime/init.hpp"
 #include "services/diagnosticArgument.hpp"
 #include "services/diagnosticFramework.hpp"
 #include "utilities/globalDefinitions.hpp"
