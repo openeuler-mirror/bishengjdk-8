@@ -585,6 +585,14 @@ public final class Recording implements Closeable {
         internal.setDuration(duration);
     }
 
+    public void setPreRecord(long pre) {
+        internal.setPreRecord(pre);
+    }
+
+    public long getPreRecord() {
+        return internal.getPreRecord();
+    }
+
     /**
      * Enables the event with the specified name.
      * <p>

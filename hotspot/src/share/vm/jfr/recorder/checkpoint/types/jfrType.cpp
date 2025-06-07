@@ -348,3 +348,21 @@ void JfrThreadConstant::serialize(JfrCheckpointWriter& writer) {
   writer.write(thread_group_id);
   JfrThreadGroup::serialize(&writer, thread_group_id);
 }
+
+void BytecodeConstant::serialize(JfrCheckpointWriter& writer) {
+  static const u4 nof_entries = Bytecodes::number_of_codes;
+  writer.write_count(nof_entries);
+  for (u4 i = 0; i < nof_entries; ++i) {
+    writer.write_key(i);
+    writer.write(Bytecodes::name((Bytecodes::Code)i));
+  }
+}
+ 
+void CompilerTypeConstant::serialize(JfrCheckpointWriter& writer) {
+  static const u4 nof_entries = compiler_number_of_types;
+  writer.write_count(nof_entries);
+  for (u4 i = 0; i < nof_entries; ++i) {
+    writer.write_key(i);
+    writer.write(compilertype2name((CompilerType)i));
+  }
+}

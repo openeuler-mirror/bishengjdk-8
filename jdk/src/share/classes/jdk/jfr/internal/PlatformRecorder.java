@@ -248,7 +248,7 @@ public final class PlatformRecorder {
             updateSettings();
             writeMetaEvents();
             if (currentChunk != null) {
-                finishChunk(currentChunk, now, recording);
+                finishChunk(currentChunk, now, recording.getPreRecord() == 0 ? recording : null);
             }
             currentChunk = newChunk;
         }

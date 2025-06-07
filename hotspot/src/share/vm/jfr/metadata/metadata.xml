@@ -513,6 +513,19 @@
     <Field type="int" name="fullCount" label="Full Count" />
   </Event>
 
+  <Event name="Deoptimization" category="Java Virtual Machine, Compiler" label="Deoptimization"
+         description="Describes the detection of an uncommon situation in a compiled method which may lead to deoptimization of the method"
+         thread="true" stackTrace="true" startTime="false">
+    <Field type="uint" name="compileId" label="Compilation Identifier" relation="CompileId" />
+    <Field type="CompilerType" name="compiler" label="Compiler" />
+    <Field type="Method" name="method" label="Method" />
+    <Field type="int" name="lineNumber" label="Line Number" />
+    <Field type="int" name="bci" label="Bytecode Index" />
+    <Field type="Bytecode" name="instruction" label="Instruction" />
+    <Field type="DeoptimizationReason" name="reason" label="Reason"/>
+    <Field type="DeoptimizationAction" name="action" label="Action"/>
+  </Event>
+
   <Event name="SafepointBegin" category="Java Virtual Machine, Runtime, Safepoint" label="Safepoint Begin" description="Safepointing begin" thread="true">
     <Field type="int" name="safepointId" label="Safepoint Identifier" relation="SafepointId" />
     <Field type="int" name="totalThreadCount" label="Total Threads" description="The total number of threads at the start of safe point" />
@@ -731,6 +744,7 @@
     <Field type="int" name="bailoutCount" label="Bailouts" />
     <Field type="int" name="invalidatedCount" label="Invalidated Compilations" />
     <Field type="int" name="osrCompileCount" label="OSR Compilations" />
+    <Field type="int" name="deoptimizationCount" label="Deoptimizations" />
     <Field type="int" name="standardCompileCount" label="Standard Compilations" />
     <Field type="ulong" contentType="bytes" name="osrBytesCompiled" label="OSR Bytes Compiled" />
     <Field type="ulong" contentType="bytes" name="standardBytesCompiled" label="Standard Bytes Compiled" />
@@ -906,6 +920,22 @@
     <Field type="ZStatisticsSamplerType" name="id" label="Id" />
     <Field type="ulong" name="value" label="Value" />
   </Event>
+
+  <Type name="DeoptimizationReason" label="Deoptimization Reason">
+    <Field type="string" name="reason" label="Reason" />
+  </Type>
+
+  <Type name="DeoptimizationAction" label="Deoptimization Action">
+    <Field type="string" name="action" label="Action" />
+  </Type>
+
+  <Type name="Bytecode" label="Bytecode Instruction">
+    <Field type="string" name="bytecode" label="Instruction" />
+  </Type>
+
+  <Type name="CompilerType" label="Compiler Type">
+    <Field type="string" name="compiler" label="Compiler" />
+  </Type>
 
   <Type name="ZStatisticsCounterType" label="Z Statistics Counter">
     <Field type="string" name="counter" label="Counter" />

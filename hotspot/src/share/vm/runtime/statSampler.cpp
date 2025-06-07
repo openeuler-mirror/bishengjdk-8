@@ -151,7 +151,6 @@ void StatSampler::destroy() {
 void StatSampler::sample_data(PerfDataList* list) {
 
   assert(list != NULL, "null list unexpected");
-
   for (int index = 0; index < list->length(); index++) {
     PerfData* item = list->at(index);
     item->sample();

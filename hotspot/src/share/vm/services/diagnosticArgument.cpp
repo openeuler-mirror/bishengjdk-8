@@ -192,6 +192,7 @@ template <> void DCmdArgument<NanoTimeArgument>::parse_value(const char* str,
               "Integer parsing error nanotime value: syntax error");
   }
   size_t idx = 0;
+  if (_value._time < 0) idx++;
   while(idx < len && isdigit(str[idx])) {
     idx++;
   }

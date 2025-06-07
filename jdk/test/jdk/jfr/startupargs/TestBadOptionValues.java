@@ -95,11 +95,11 @@ public class TestBadOptionValues {
             "duration");
         test(START_FLIGHT_RECORDING, "Integer parsing error nanotime value: illegal unit",
             "delay=1000mq",
-            "duration=2000mss",
-            "maxage=-1000");
+            "duration=2000mss");
         test(START_FLIGHT_RECORDING, "Integer parsing error nanotime value: unit required",
             "delay=3037",
-            "maxage=1");
+            "maxage=1",
+            "maxage=-1000");
 
         // Memory size options
         test(START_FLIGHT_RECORDING, "Parsing error memory size value: negative values not allowed",

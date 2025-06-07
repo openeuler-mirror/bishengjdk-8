@@ -30,6 +30,17 @@
 #include "runtime/frame.hpp"
 #include "runtime/handles.hpp"
 
+enum CompilerType {
+  compiler_none,
+  compiler_c1,
+  compiler_c2,
+  compiler_jvmci,
+  compiler_number_of_types
+};
+
+extern const char* compilertype2name_tab[compiler_number_of_types];     // Map CompilerType to its name
+inline const char* compilertype2name(CompilerType t) { return (uint)t < compiler_number_of_types ? compilertype2name_tab[t] : NULL; }
+
 // CodeBlob Types
 // Used in the CodeCache to assign CodeBlobs to different CodeHeaps
 struct CodeBlobType {
@@ -117,6 +128,7 @@ class CodeBlob VALUE_OBJ_CLASS_SPEC {
   virtual bool is_compiled_by_c2() const         { return false; }
   virtual bool is_compiled_by_c1() const         { return false; }
 
+  CompilerType compiler_type() const { return is_compiled_by_c1() ? compiler_c1 : compiler_c2; }
   // Casting
   nmethod* as_nmethod_or_null()                  { return is_nmethod() ? (nmethod*) this : NULL; }
 
