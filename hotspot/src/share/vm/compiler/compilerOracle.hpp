@@ -49,6 +49,8 @@ class CompilerOracle : AllStatic {
   // Tells whether we want to inline this method
   static bool should_inline(methodHandle method);
 
+  static bool should_not_prediction(const methodHandle& method);
+
   // Tells whether we want to disallow inlining of this method
   static bool should_not_inline(methodHandle method);
 

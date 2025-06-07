@@ -64,6 +64,7 @@ public final class PlatformRecording implements AutoCloseable {
     private Duration duration;
     private Duration maxAge;
     private long maxSize;
+    private long preRecord;
 
     private WriteableUserPath destination;
 
@@ -613,6 +614,14 @@ public final class PlatformRecording implements AutoCloseable {
                 updateTimer();
             }
         }
+    }
+
+    public void setPreRecord(long pre) {
+        this.preRecord = pre;
+    }
+
+    public long getPreRecord() {
+        return preRecord;
     }
 
     void updateTimer() {

@@ -305,6 +305,7 @@ enum OracleCommand {
   ExcludeCommand,
   InlineCommand,
   DontInlineCommand,
+  DontPredictionCommand,
   CompileOnlyCommand,
   LogCommand,
   OptionCommand,
@@ -320,6 +321,7 @@ static const char * command_names[] = {
   "exclude",
   "inline",
   "dontinline",
+  "dontprediction",
   "compileonly",
   "log",
   "option",
@@ -410,6 +412,9 @@ bool CompilerOracle::should_inline(methodHandle method) {
   return (check_predicate(InlineCommand, method));
 }
 
+bool CompilerOracle::should_not_prediction(const methodHandle& method) {
+  return (check_predicate(DontPredictionCommand, method));
+}
 
 bool CompilerOracle::should_not_inline(methodHandle method) {
   return (check_predicate(DontInlineCommand, method));

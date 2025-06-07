@@ -85,6 +85,10 @@
 # include "adfiles/ad_ppc_64.hpp"
 #endif
 #endif // COMPILER2
+#if INCLUDE_JFR
+#include "jfr/jfrEvents.hpp"
+#include "jfr/metadata/jfrSerializer.hpp"
+#endif
 
 PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 
@@ -1316,6 +1320,65 @@ void Deoptimization::load_class_by_index(constantPoolHandle constant_pool, int i
   }
 }
 
+class DeoptReasonSerializer : public JfrSerializer {
+ public:
+  void serialize(JfrCheckpointWriter& writer) {
+    writer.write_count((u4)(Deoptimization::Reason_LIMIT + 1)); // + Reason::many (-1)
+    for (int i = -1; i < Deoptimization::Reason_LIMIT; ++i) {
+      writer.write_key((u8)i);
+      writer.write(Deoptimization::trap_reason_name(i));
+    }
+  }
+};
+
+class DeoptActionSerializer : public JfrSerializer {
+ public:
+  void serialize(JfrCheckpointWriter& writer) {
+    static const u4 nof_actions = Deoptimization::Action_LIMIT;
+    writer.write_count(nof_actions);
+    for (u4 i = 0; i < Deoptimization::Action_LIMIT; ++i) {
+      writer.write_key(i);
+      writer.write(Deoptimization::trap_action_name((int)i));
+    }
+  }
+};
+
+static void register_serializers() {
+  static int critical_section = 0;
+  if (1 == critical_section || Atomic::cmpxchg(1, &critical_section, 0) == 1) {
+    return;
+  }
+  JfrSerializer::register_serializer(TYPE_DEOPTIMIZATIONREASON, false, true, new DeoptReasonSerializer());
+  JfrSerializer::register_serializer(TYPE_DEOPTIMIZATIONACTION, false, true, new DeoptActionSerializer());
+}
+
+static void post_deoptimization_event(nmethod* nm,
+                                      const Method* method,
+                                      int trap_bci,
+                                      int instruction,
+                                      Deoptimization::DeoptReason reason,
+                                      Deoptimization::DeoptAction action) {
+  assert(nm != NULL, "invariant");
+  assert(method != NULL, "invariant");
+  if (EventDeoptimization::is_enabled()) {
+    static bool serializers_registered = false;
+    if (!serializers_registered) {
+      register_serializers();
+      serializers_registered = true;
+    }
+    EventDeoptimization event;
+    event.set_compileId(nm->compile_id());
+    event.set_compiler(nm->compiler_type());
+    event.set_method(method);
+    event.set_lineNumber(method->line_number_from_bci(trap_bci));
+    event.set_bci(trap_bci);
+    event.set_instruction(instruction);
+    event.set_reason(reason);
+    event.set_action(action);
+    event.commit();
+  }
+}
+
 JRT_ENTRY(void, Deoptimization::uncommon_trap_inner(JavaThread* thread, jint trap_request)) {
   HandleMark hm;
 
@@ -1366,6 +1429,8 @@ JRT_ENTRY(void, Deoptimization::uncommon_trap_inner(JavaThread* thread, jint tra
 
     MethodData* trap_mdo =
       get_method_data(thread, trap_method, create_if_missing);
+
+    JFR_ONLY(post_deoptimization_event(nm, trap_method(), trap_bci, trap_bc, reason, action);)
 
     // Log a message
     Events::log_deopt_message(thread, "Uncommon trap: reason=%s action=%s pc=" INTPTR_FORMAT " method=%s @ %d",

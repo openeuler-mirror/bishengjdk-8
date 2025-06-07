@@ -498,6 +498,9 @@ TRACE_REQUEST_FUNC(CompilerStatistics) {
   event.set_bailoutCount(CompileBroker::get_total_bailout_count());
   event.set_invalidatedCount(CompileBroker::get_total_invalidated_count());
   event.set_osrCompileCount(CompileBroker::get_total_osr_compile_count());
+#ifdef COMPILER2
+  event.set_deoptimizationCount(Deoptimization::total_deoptimization_count());
+#endif
   event.set_standardCompileCount(CompileBroker::get_total_standard_compile_count());
   event.set_osrBytesCompiled(CompileBroker::get_sum_osr_bytes_compiled());
   event.set_standardBytesCompiled(CompileBroker::get_sum_standard_bytes_compiled());

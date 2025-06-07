@@ -61,6 +61,13 @@
 #include "c1/c1_Runtime1.hpp"
 #endif
 
+const char* compilertype2name_tab[compiler_number_of_types] = {
+  "",
+  "c1",
+  "c2",
+  "jvmci"
+};
+ 
 unsigned int CodeBlob::align_code_offset(int offset) {
   // align the size to CodeEntryAlignment
   return
