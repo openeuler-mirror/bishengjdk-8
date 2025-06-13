@@ -89,6 +89,11 @@ void JitProfileRecorder::init() {
     _record_file_name = buf;
   } else {
     set_logfile_name(ProfilingCacheFile);
+    if (_record_file_name == NULL) {
+      jprofilecache_log_error(profilecache)("[JitProfileCache] ERROR: file name check fail, file name is too long.");
+      _recorder_state = IS_ERR;
+      return;
+    }
   }
 
   _class_init_list = new (ResourceObj::C_HEAP, mtInternal) LinkedListImpl<ClassSymbolEntry>();
@@ -553,6 +558,14 @@ void JitProfileRecorder::flush_record() {
     return;
   }
   set_flushed(true);
+
+  // set log permission
+  int fd = open(logfile_name(), O_CREAT, S_IRUSR | S_IWUSR);
+  if (fd < 0) {
+    jprofilecache_log_error(profilecache)("[JitProfileCache] ERROR : open log file fail! path is %s", logfile_name());
+    return;
+  }
+  close(fd);
 
   // open randomAccessFileStream
   _profilelog = new (ResourceObj::C_HEAP, mtInternal) randomAccessFileStream(logfile_name(), "wb+");
