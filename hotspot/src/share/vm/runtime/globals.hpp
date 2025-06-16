@@ -4200,32 +4200,32 @@ class CommandLineFlags {
   diagnostic(bool, PrintAsyncGCLog, false,                                  \
           "Print some information of Async GC Log")                         \
                                                                             \
-  lp64_product(bool, JProfilingCacheRecording, false,                       \
+  experimental(bool, JProfilingCacheRecording, false,                       \
           "Collect profiling information for JProfilingCache")              \
                                                                             \
-  lp64_product(bool, JProfilingCacheCompileAdvance, false,                  \
+  experimental(bool, JProfilingCacheCompileAdvance, false,                  \
           "Enable JProfilingCacheCompileAdvance from a log file")           \
                                                                             \
-  lp64_product(ccstr, ProfilingCacheLogLevel, "info",                       \
+  experimental(ccstr, ProfilingCacheLogLevel, "info",                       \
           "Log level for JProfilingCache")                                  \
                                                                             \
-  lp64_product(ccstr, ProfilingCacheFile, NULL,                             \
+  experimental(ccstr, ProfilingCacheFile, NULL,                             \
           "Log file name for JProfilingCache")                              \
                                                                             \
-  lp64_product(uintx, JProfilingCacheRecordTime, 0,                         \
+  experimental(uintx, JProfilingCacheRecordTime, 0,                         \
           "Sleep time (in seconds) before flushing profling "               \
           "information to log file ")                                       \
                                                                             \
-  lp64_product(uintx, CompilationProfileCacheAppID, 0,                      \
+  experimental(uintx, CompilationProfileCacheAppID, 0,                      \
           "Application ID written in log file for verification ")           \
                                                                             \
-  lp64_product(ccstr, CompilationProfileCacheExclude, NULL,                 \
+  experimental(ccstr, CompilationProfileCacheExclude, NULL,                 \
           "JProfilingCacheCompileAdvance excluding list ")                  \
                                                                             \
-  lp64_product(bool, CompilationProfileCacheExplicitDeopt, false,           \
+  experimental(bool, CompilationProfileCacheExplicitDeopt, false,           \
           "Deoptimize JProfileCache methods by explicit api")               \
                                                                             \
-  lp64_product(uintx, JProfilingCacheDeoptTime, 1200,                       \
+  experimental(uintx, JProfilingCacheDeoptTime, 1200,                       \
           "Sleep time (in seconds) before deoptimizing methods "            \
           "compiled by JProfileCache ")                                     \
                                                                             \
@@ -4239,10 +4239,10 @@ class CommandLineFlags {
   diagnostic(bool, CompilationProfileCacheResolveClassEagerly, true,        \
           "resolve class from constant pool eagerly")                       \
                                                                             \
-  lp64_product(bool, DeoptimizeBeforeProfileCache, false,                   \
-          "Deoptimize recorded methods before JProfileCache compilation")         \
+  experimental(bool, DeoptimizeBeforeProfileCache, false,                   \
+          "Deoptimize recorded methods before JProfileCache compilation")   \
                                                                             \
-  lp64_product(intx, CompilationProfileCacheRecordMinLevel, 3,              \
+  experimental(intx, CompilationProfileCacheRecordMinLevel, 3,              \
           "Minimal compilation level recorded in JProfileCache recording phase")  \
 /*
  *  Macros for factoring of globals
