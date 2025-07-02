@@ -64,6 +64,7 @@
 #include "runtime/init.hpp"
 #include "runtime/java.hpp"
 #include "runtime/javaCalls.hpp"
+#include "runtime/logAsyncWriter.hpp"
 #include "runtime/sharedRuntime.hpp"
 #include "runtime/synchronizer.hpp"
 #include "runtime/thread.inline.hpp"
@@ -1435,6 +1436,10 @@ void Universe::verify(VerifyOption option, const char* prefix, bool silent) {
     CodeCache::verify_oops();
   }
   if (!silent) gclog_or_tty->print_cr("]");
+
+  if (!silent && UseAsyncGCLog) {
+    AsyncLogWriter::flush();
+  }
 
   _verify_in_progress = false;
 }
