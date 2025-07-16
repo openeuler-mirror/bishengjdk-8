@@ -663,6 +663,11 @@ void VM_Version::get_processor_features() {
     FLAG_SET_DEFAULT(UseHBaseUtilIntrinsics, false);
   }
 
+  if (NUMANodesRandom != 0) {
+    warning("NUMANodesRandom is not supported in this VM.");
+    FLAG_SET_DEFAULT(NUMANodesRandom, 0);
+  }
+
   // Adjust RTM (Restricted Transactional Memory) flags
   if (!supports_rtm() && UseRTMLocking) {
     // Can't continue because UseRTMLocking affects UseBiasedLocking flag

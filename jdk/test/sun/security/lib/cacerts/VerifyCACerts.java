@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -28,7 +28,7 @@
  *      8223499 8225392 8232019 8234245 8233223 8225068 8225069 8243321 8243320
  *      8243559 8225072 8258630 8259312 8256421 8225081 8225082 8225083 8245654
  *      8305975 8304760 8307134 8295894 8314960 8317373 8317374 8318759 8319187
- *      8321408 8316138 8341057
+ *      8321408 8316138 8341057 8303770 8350498 8359170
  * @summary Check root CA entries in cacerts file
  */
 import java.io.ByteArrayInputStream;
@@ -54,12 +54,12 @@ public class VerifyCACerts {
             + File.separator + "security" + File.separator + "cacerts";
 
     // The numbers of certs now.
-    private static final int COUNT = 106;
+    private static final int COUNT = 107;
 
     // SHA-256 of cacerts, can be generated with
     // shasum -a 256 cacerts | sed -e 's/../&:/g' | tr '[:lower:]' '[:upper:]' | cut -c1-95
     private static final String CHECKSUM
-            = "73:5F:49:B0:EC:C0:E4:43:27:B1:5F:D1:9B:A7:8A:05:B4:25:84:A6:81:9F:FC:A7:A7:04:8F:86:82:97:FF:7C";
+            = "CE:E3:02:30:9D:6E:E9:71:85:2E:2D:96:CA:0F:16:D0:EA:12:32:14:BE:B4:44:48:86:C8:52:E4:2F:35:E5:3A";
 
     // map of cert alias to SHA-256 fingerprint
     @SuppressWarnings("serial")
@@ -74,10 +74,6 @@ public class VerifyCACerts {
                     "ED:F7:EB:BC:A2:7A:2A:38:4D:38:7B:7D:40:10:C6:66:E2:ED:B4:84:3E:4C:29:B4:AE:1D:5B:93:32:E6:B2:4D");
             put("camerfirmachambersca [jdk]",
                     "06:3E:4A:FA:C4:91:DF:D3:32:F3:08:9B:85:42:E9:46:17:D8:93:D7:FE:94:4E:10:A7:93:7E:E2:9D:96:93:C0");
-            put("camerfirmachambersignca [jdk]",
-                    "13:63:35:43:93:34:A7:69:80:16:A0:D3:24:DE:72:28:4E:07:9D:7B:52:20:BB:8F:BD:74:78:16:EE:BE:BA:CA");
-            put("camerfirmachamberscommerceca [jdk]",
-                    "0C:25:8A:12:A5:67:4A:EF:25:F2:8B:A7:DC:FA:EC:EE:A3:48:E5:41:E6:F5:CC:4E:E6:3B:71:B3:61:60:6A:C3");
             put("certumca [jdk]",
                     "D8:E0:FE:BC:1D:B2:E3:8D:00:94:0F:37:D2:7D:41:34:4D:99:3E:73:4B:99:D5:65:6D:97:78:D4:D8:14:36:24");
             put("certumtrustednetworkca [jdk]",
@@ -94,8 +90,6 @@ public class VerifyCACerts {
                     "E7:93:C9:B0:2F:D8:AA:13:E2:1C:31:22:8A:CC:B0:81:19:64:3B:74:9C:89:89:64:B1:74:6D:46:C3:D4:CB:D2");
             put("usertrusteccca [jdk]",
                     "4F:F4:60:D5:4B:9C:86:DA:BF:BC:FC:57:12:E0:40:0D:2B:ED:3F:BC:4D:4F:BD:AA:86:E0:6A:DC:D2:A9:AD:7A");
-            put("baltimorecybertrustca [jdk]",
-                    "16:AF:57:A9:F6:76:B0:AB:12:60:95:AA:5E:BA:DE:F2:2A:B3:11:19:D6:44:AC:95:CD:4B:93:DB:F3:F2:6A:EB");
             put("digicertglobalrootca [jdk]",
                     "43:48:A0:E9:44:4C:78:CB:26:5E:05:8D:5E:89:44:B4:D8:4F:96:62:BD:26:DB:25:7F:89:34:A4:43:C7:01:61");
             put("digicertglobalrootg2 [jdk]",
@@ -278,6 +272,14 @@ public class VerifyCACerts {
                     "C3:2F:FD:9F:46:F9:36:D1:6C:36:73:99:09:59:43:4B:9A:D6:0A:AF:BB:9E:7C:F3:36:54:F1:44:CC:1B:A1:43");
             put("ssltlsrootrsa2022 [jdk]",
                     "8F:AF:7D:2E:2C:B4:70:9B:B8:E0:B3:36:66:BF:75:A5:DD:45:B5:DE:48:0F:8E:A8:D4:BF:E6:BE:BC:17:F2:ED");
+            put("sectigotlsrootr46 [jdk]",
+                    "7B:B6:47:A6:2A:EE:AC:88:BF:25:7A:A5:22:D0:1F:FE:A3:95:E0:AB:45:C7:3F:93:F6:56:54:EC:38:F2:5A:06");
+            put("sectigotlsroote46 [jdk]",
+                    "C9:0F:26:F0:FB:1B:40:18:B2:22:27:51:9B:5C:A2:B5:3E:2C:A5:B3:BE:5C:F1:8E:FE:1B:EF:47:38:0C:53:83");
+            put("sectigocodesignrootr46 [jdk]",
+                    "7E:76:26:0A:E6:9A:55:D3:F0:60:B0:FD:18:B2:A8:C0:14:43:C8:7B:60:79:10:30:C9:FA:0B:05:85:10:1A:38");
+            put("sectigocodesignroote46 [jdk]",
+                    "8F:63:71:D8:CC:5A:A7:CA:14:96:67:A9:8B:54:96:39:89:51:E4:31:9F:7A:FB:CC:6A:66:0D:67:3E:43:8D:0B");
         }
     };
 
