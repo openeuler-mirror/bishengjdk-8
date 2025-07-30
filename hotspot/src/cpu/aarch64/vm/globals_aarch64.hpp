@@ -92,7 +92,7 @@ define_pd_global(intx, InlineSmallCode,          1000);
           "Use CRC32 instructions for CRC32 computation")               \
   experimental(bool, UseLSE, false,                                     \
           "Use LSE instructions")                                       \
-  product(bool, UseSIMDForMemoryOps, false,                            \
+  product(bool, UseSIMDForMemoryOps, false,                             \
           "Use SIMD instructions in generated memory move code")        \
   product(bool, AvoidUnalignedAccesses, false,                          \
           "Avoid generating unaligned memory accesses")                 \
@@ -100,6 +100,11 @@ define_pd_global(intx, InlineSmallCode,          1000);
           "Use DC ZVA for block zeroing")                               \
   product(intx, BlockZeroingLowLimit, 256,                              \
           "Minimum size in bytes when block zeroing will be used")      \
-  product(bool, TraceTraps, false, "Trace all traps the signal handler")
+  product(bool, TraceTraps, false, "Trace all traps the signal handler")\
+  product(ccstr, AutoSharedArchivePath, NULL,                           \
+          "Auto enable the AppCDS feature"                              \
+          "the path save classlist and jsa file")                       \
+  product(bool, PrintAutoAppCDS, false,                                 \
+          "Print some information about AutoSharedArchivePath")
 
 #endif // CPU_AARCH64_VM_GLOBALS_AARCH64_HPP
