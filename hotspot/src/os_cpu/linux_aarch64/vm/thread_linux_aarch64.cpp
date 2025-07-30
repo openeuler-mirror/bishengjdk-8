@@ -23,9 +23,12 @@
  */
 
 #include "precompiled.hpp"
+#include "memory/allocation.hpp"
 #include "runtime/frame.inline.hpp"
 #include "runtime/thread.inline.hpp"
 #include "runtime/arguments.hpp"
+
+#include <sys/file.h>
 
 // For Forte Analyzer AsyncGetCallTrace profiling support - thread is
 // currently interrupted by SIGPROF
@@ -205,4 +208,158 @@ bool JavaThread::pd_get_top_frame(frame* fr_addr, void* ucontext, bool isInJava)
 }
 
 void JavaThread::cache_global_variables() { }
+
+static char* get_java_executable_path() {
+  const char* java_home = Arguments::get_property("java.home");
+  if (java_home != NULL) {
+    char* path = NEW_C_HEAP_ARRAY(char, MAXPATHLEN, mtInternal);
+    jio_snprintf(path, MAXPATHLEN, "%s/bin/java", java_home);
+    return path;
+  }
+  return os::strdup("java");
+}
+
+static char* get_complete_classpath() {
+  const char* env_cp = Arguments::get_property("env.class.path");
+  if (env_cp == NULL || env_cp[0] == '\0') {
+    env_cp = Arguments::get_property("java.class.path");
+  }
+  return (char *)env_cp;
+}
+
+static bool can_read_classlist(const char* class_list_path) {
+  int fd = open(class_list_path, O_RDONLY);
+  if (fd >= 0) {
+    if (flock(fd, LOCK_EX | LOCK_NB) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static void construct_path(char *dest, size_t dest_size, const char *base, const char *suffix) {
+  size_t base_len = strlen(base);
+  size_t suffix_len = strlen(suffix);
+  guarantee(base_len + suffix_len < dest_size, "base path too long!");
+
+  jio_snprintf(dest, dest_size, "%s%s", base, suffix);
+}
+
+static void create_jsa(const char* class_list_path, const char* appcds_path, const JavaVMInitArgs* original_args) {
+  pid_t pid = fork();
+  if (pid == 0) {
+    // child process running on background
+    setsid();
+    signal(SIGHUP, SIG_IGN);
+    const char* classpath = get_complete_classpath();
+    if (classpath == NULL) {
+      classpath = ".";
+    }
+    char* java_path = get_java_executable_path();
+    int arg_count   = Arguments::num_jvm_args();
+    char** vm_args  = Arguments::jvm_args_array();
+
+    int total_args = arg_count + 8;
+    char** args = NEW_C_HEAP_ARRAY(char*, total_args + 1, mtInternal);
+    int idx = 0;
+
+    args[idx++] = java_path;
+    args[idx++] = os::strdup("-Xshare:dump");
+    args[idx++] = os::strdup("-XX:+UseAppCDS");
+
+    char shared_class_list_file[PATH_MAX];
+    char shared_archive_file[PATH_MAX];
+    construct_path(shared_class_list_file, sizeof(shared_class_list_file), "-XX:SharedClassListFile=", class_list_path);
+    construct_path(shared_archive_file, sizeof(shared_archive_file), "-XX:SharedArchiveFile=", appcds_path);
+
+    args[idx++] = strdup(shared_class_list_file);
+    args[idx++] = strdup(shared_archive_file);
+
+    args[idx++] = os::strdup("-classpath");
+    args[idx++] = os::strdup(classpath);
+    for (int i = 0; i < arg_count; i++) {
+      if (vm_args[i] != NULL) {
+        args[idx++] = os::strdup(vm_args[i]);
+      }
+    }
+    args[idx++] = os::strdup("-version");
+    args[idx] = NULL;
+
+    if (PrintAutoAppCDS) {
+      int i = 0;
+      while (args[i] != NULL) {
+        tty->print_cr("args[%d] = %s", i, args[i]);
+        i++;
+      }
+    }
+    execv(java_path, args);
+  }
+}
+
+void JavaThread::handle_appcds_for_executor(const JavaVMInitArgs* args) {
+  if (FLAG_IS_DEFAULT(AutoSharedArchivePath)) {
+    return;
+  }
+
+  if (AutoSharedArchivePath == NULL) {
+    warning("AutoSharedArchivePath should not be empty. Please set the specific path.");
+    return;
+  }
+
+  static char base_path[JVM_MAXPATHLEN] = {'\0'};
+  jio_snprintf(base_path, sizeof(base_path), "%s", AutoSharedArchivePath);
+
+  struct stat st;
+  if (stat(base_path, &st) != 0) {
+    if (mkdir(base_path, 0755) != 0) {
+      vm_exit_during_initialization(err_msg("can't create dirs %s : %s", base_path, strerror(errno)));
+    }
+  }
+
+  char class_list_path[PATH_MAX];
+  char appcds_path[PATH_MAX];
+
+  construct_path(class_list_path, sizeof(class_list_path), base_path, "/appcds.lst");
+  construct_path(appcds_path, sizeof(appcds_path), base_path, "/appcds.jsa");
+
+  if (PrintAutoAppCDS) {
+    tty->print_cr("classlist file : %s", class_list_path);
+    tty->print_cr("jsa file : %s", appcds_path);
+  }
+
+  const char* class_list_ptr = class_list_path;
+  const char* appcds_ptr = appcds_path;
+
+  if (stat(appcds_path, &st) == 0) {
+    FLAG_SET_CMDLINE(bool, UseAppCDS, true);
+    FLAG_SET_CMDLINE(bool, UseSharedSpaces, true);
+    FLAG_SET_CMDLINE(bool, RequireSharedSpaces, true);
+    CommandLineFlags::ccstrAtPut("SharedArchiveFile", &appcds_ptr, Flag::COMMAND_LINE);
+    if (PrintAutoAppCDS) {
+      tty->print_cr("Use AppCDS JSA.");
+    }
+    return;
+  }
+
+  if (stat(class_list_path, &st) == 0) {
+    if (!can_read_classlist(class_list_path)) {
+      if(PrintAutoAppCDS) {
+        tty->print_cr("classlist is generating.");
+      }
+      return;
+    }
+    if (stat(appcds_path, &st) != 0) {
+      if (PrintAutoAppCDS) {
+        tty->print_cr("Create JSA file.");
+      }
+      create_jsa(class_list_path, appcds_path, args);
+    }
+  } else {
+    can_read_classlist(class_list_path);
+    FLAG_SET_CMDLINE(bool, UseAppCDS, true);
+    FLAG_SET_CMDLINE(bool, UseSharedSpaces, false);
+    FLAG_SET_CMDLINE(bool, RequireSharedSpaces, false);
+    CommandLineFlags::ccstrAtPut("DumpLoadedClassList", &class_list_ptr, Flag::COMMAND_LINE);
+  }
+}
 
