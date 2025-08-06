@@ -1,5 +1,6 @@
 /*
-* Copyright (c) 2025, Huawei and/or its affiliates. Ltd. All rights reserved.
+ * Copyright (c) 2025, Huawei Technologies Co., Ltd. All rights reserved.
+ * Copyright (c) 2019 Alibaba Group Holding Limited. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
