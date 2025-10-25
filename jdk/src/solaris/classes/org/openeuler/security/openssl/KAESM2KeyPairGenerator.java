@@ -1,13 +1,10 @@
 /*
- * Copyright (c) 2003, 2014, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2021, Huawei Technologies Co., Ltd. All rights reserved.
+ * Copyright (c) 2024, Huawei Technologies Co., Ltd. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.  Oracle designates this
- * particular file as subject to the "Classpath" exception as provided
- * by Oracle in the LICENSE file that accompanied this code.
+ * published by the Free Software Foundation.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -28,79 +25,43 @@ package org.openeuler.security.openssl;
 
 import java.math.BigInteger;
 import java.security.InvalidAlgorithmParameterException;
-import java.security.InvalidParameterException;
 import java.security.InvalidKeyException;
+import java.security.InvalidParameterException;
 import java.security.KeyPair;
-import java.security.KeyPairGeneratorSpi;
 import java.security.ProviderException;
 import java.security.SecureRandom;
 import java.security.spec.AlgorithmParameterSpec;
 import java.security.spec.ECFieldFp;
-import java.security.spec.ECField;
 import java.security.spec.ECGenParameterSpec;
 import java.security.spec.ECParameterSpec;
 import java.security.spec.ECPoint;
 import java.security.spec.EllipticCurve;
 
-public class KAEECKeyPairGenerator extends KeyPairGeneratorSpi {
+public class KAESM2KeyPairGenerator extends KAEECKeyPairGenerator {
+    private static final String SUPPORTED_CURVE_NAME = "sm2p256v1";
+    private static final int SUPPORTED_KEY_SIZE = 256;
     private ECParameterSpec param = null;
-    private final int defaultKeySize = 256;
 
     @Override
     public void initialize(int keysize, SecureRandom random) {
-        String curveName = KAEUtils.getCurveBySize(keysize);
-        if (curveName == null) {
+        if (keysize != SUPPORTED_KEY_SIZE) {
             throw new InvalidParameterException("unknown key size " + keysize);
         }
-        if (KAEUtils.getCurveByAlias(curveName) != null) {
-            curveName = KAEUtils.getCurveByAlias(curveName);
-        }
-        this.param = getParamsByCurve(curveName);
-    }
-
-    protected ECParameterSpec getParamsByCurve(String curveName) {
-        byte[][] params = nativeGenerateParam(curveName);
-        // check params
-        checkParams(params, curveName);
-        BigInteger p = new BigInteger(params[0]);
-        BigInteger a = new BigInteger(params[1]);
-        BigInteger b = new BigInteger(params[2]);
-        BigInteger x = new BigInteger(params[3]);
-        BigInteger y = new BigInteger(params[4]);
-        BigInteger order = new BigInteger(params[5]);
-        BigInteger cofactor = new BigInteger(params[6]);
-        ECField field = new ECFieldFp(p);
-        EllipticCurve curve = new EllipticCurve(field, a, b);
-        ECPoint g = new ECPoint(x, y);
-        ECParameterSpec spec = new ECParameterSpec(curve, g, order, cofactor.intValue());
-        return spec;
-    }
-
-    private void checkParams(byte[][] params, String curveName) {
-        if (params == null) {
-            throw new InvalidParameterException("Unknown curve " + curveName);
-        }
-        // The params needs to contain at least 7 byte arrays, which are p,a,b,x,y,order and cofactor.
-        if (params.length < 7) {
-            throw new InvalidParameterException("The params length is less than 7.");
-        }
-        for (int i = 0; i < params.length; i++) {
-            if (params[i] == null) {
-                throw new InvalidParameterException("The params[" + i + "]" + "is null.");
-            }
-        }
+        String curveName = KAEUtils.getCurveByAlias(SUPPORTED_CURVE_NAME);
+        param = getParamsByCurve(curveName);
     }
 
     @Override
-    public void initialize(AlgorithmParameterSpec param, SecureRandom random) throws InvalidAlgorithmParameterException {
+    public void initialize(AlgorithmParameterSpec param, SecureRandom random)
+            throws InvalidAlgorithmParameterException {
         if (param instanceof ECParameterSpec) {
             this.param = (ECParameterSpec) param;
         } else if (param instanceof ECGenParameterSpec) {
             ECGenParameterSpec ecParam = (ECGenParameterSpec)param;
-            String curveName = ecParam.getName();
-            if (KAEUtils.getCurveByAlias(curveName) != null) {
-                curveName = KAEUtils.getCurveByAlias(curveName);
+            if (!SUPPORTED_CURVE_NAME.equals(ecParam.getName())) {
+                throw new InvalidAlgorithmParameterException("Only support sm2p256v1");
             }
+            String curveName = KAEUtils.getCurveByAlias(SUPPORTED_CURVE_NAME);
             this.param = getParamsByCurve(curveName);
         } else {
             throw new InvalidAlgorithmParameterException("ECParameterSpec or ECGenParameterSpec for EC");
@@ -110,7 +71,7 @@ public class KAEECKeyPairGenerator extends KeyPairGeneratorSpi {
     @Override
     public KeyPair generateKeyPair() {
         if (param == null) {
-            String curveName = KAEUtils.getCurveBySize(defaultKeySize);
+            String curveName = KAEUtils.getCurveByAlias(SUPPORTED_CURVE_NAME);
             param = getParamsByCurve(curveName);
         }
         EllipticCurve curve = param.getCurve();
@@ -144,9 +105,4 @@ public class KAEECKeyPairGenerator extends KeyPairGeneratorSpi {
         }
         return new KeyPair(publicKey, privateKey);
     }
-
-    protected static native byte[][] nativeGenerateParam(String curveName);
-
-    protected static native byte[][] nativeGenerateKeyPair(byte[] p, byte[] a, byte[] b, byte[] x, byte[] y,
-            byte[] order, int cofactor);
 }

@@ -26,10 +26,7 @@ import org.openeuler.security.openssl.KAEProvider;
 import javax.crypto.Cipher;
 import javax.crypto.Mac;
 import javax.crypto.NoSuchPaddingException;
-import java.security.KeyPairGenerator;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.Security;
+import java.security.*;
 
 /**
  * @test
@@ -53,7 +50,9 @@ public class KaeProviderTest {
             "kae.hmac",
             "kae.rsa",
             "kae.dh",
-            "kae.ec"
+            "kae.ec",
+            "kae.sm2.cipher",
+            "kae.sm2.signature"
     };
 
     private static final String KAE = "KAEProvider";
@@ -85,6 +84,7 @@ public class KaeProviderTest {
         testRsa();
         testDh();
         testEc();
+        testSM2();
     }
 
     public static void testMd5() throws NoSuchAlgorithmException {
@@ -148,6 +148,28 @@ public class KaeProviderTest {
     public static void testEc() throws NoSuchAlgorithmException {
         KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("EC");
         judge("kae.ec",keyPairGenerator.getProvider().getName());
+    }
+
+    public static void testSM2() throws NoSuchAlgorithmException, NoSuchPaddingException {
+        try {
+            KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("SM2");
+            judge("kae.sm2.cipher",keyPairGenerator.getProvider().getName());
+            Cipher cipher = Cipher.getInstance("SM2");
+            judge("kae.sm2.cipher",cipher.getProvider().getName());
+
+        } catch (NoSuchAlgorithmException e) {
+            if(Boolean.parseBoolean(System.getProperty("kae.sm2.cipher"))){
+                throw e;
+            }
+        }
+        try {
+            Signature signature = Signature.getInstance("SM3WithSM2");
+            judge("kae.sm2.signature",signature.getProvider().getName());
+        } catch (NoSuchAlgorithmException e) {
+            if(Boolean.parseBoolean(System.getProperty("kae.sm2.signature"))){
+                throw e;
+            }
+        }
     }
 
     private static void judge(String algorithm , String providerName){

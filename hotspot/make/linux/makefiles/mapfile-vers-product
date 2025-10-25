@@ -277,6 +277,14 @@ SUNWprivate_1.1 {
                 AsyncGetCallTrace;
 
                 # INSERT EXTENDED SYMBOLS HERE
+                # EXTENDED SYMBOLS START
+                HeapDict_Add;
+                HeapDict_Lookup;
+                HeapDict_Free;
+                HeapVector_Add;
+                HeapVector_GetNext;
+                HeapVector_Free;
+                # EXTENDED SYMBOLS END
 
 		# INSERT VTABLE SYMBOLS HERE
 
