@@ -24,6 +24,11 @@
 #ifndef KAE_EXCEPTION_H
 #define KAE_EXCEPTION_H
 
+// openssl3.0 EVP_F_EVP_PKEY_DECRYPT has been removed
+#ifndef SSL_EVP_F_EVP_PKEY_DECRYPT
+#define SSL_EVP_F_EVP_PKEY_DECRYPT                           104
+#endif
+
 #include <jni.h>
 
 /* Throw a Java exception by name */
@@ -40,6 +45,8 @@ void KAE_ThrowFromOpenssl(JNIEnv* env, const char* msg, void (* defaultException
 void KAE_ThrowEvpException(JNIEnv* env, int reason, const char* msg, void (* defaultException)(JNIEnv*, const char*));
 
 void KAE_ThrowRuntimeException(JNIEnv* env, const char* msg);
+
+void KAE_ThrowExceptionInInitializerError(JNIEnv* env, const char* msg);
 
 void KAE_ThrowBadPaddingException(JNIEnv* env, const char* msg);
 

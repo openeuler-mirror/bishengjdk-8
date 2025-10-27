@@ -61,18 +61,29 @@ public class KAEProvider extends Provider {
 
     // init openssl
     private static void initOpenssl() {
-        boolean useGlobalMode = useGlobalMode();
         String engineId = getEngineId();
         boolean[] algorithmKaeFlags = KAEConfig.getUseKaeEngineFlags();
         Throwable throwable = null;
         try {
-            initOpenssl(useGlobalMode, engineId, algorithmKaeFlags);
+            int opensslVersion = useOpensslVersion();
+            int version = initOpenssl(opensslVersion, engineId, algorithmKaeFlags);
+            if (kaeDebug != null) {
+                kaeDebug.println("Use Openssl " + version);
+            }
+        } catch (ExceptionInInitializerError t) {
+            throwable = (Throwable) t;
+            printKaeLog(engineId, t);
+            throw t;
         } catch (Throwable t) {
             throwable = t;
             if (kaeDebug != null) {
                 kaeDebug.println("initOpenssl failed : " + throwable.getMessage());
             }
         }
+        printKaeLog(engineId, throwable);
+    }
+
+    private static void printKaeLog(String engineId, Throwable throwable) {
         boolean[] engineFlags = getEngineFlags();
         boolean[] kaeProviderFlags = KAEConfig.getUseKaeProviderFlags();
         KAELog.log(engineId, throwable, engineFlags, kaeProviderFlags);
@@ -83,12 +94,25 @@ public class KAEProvider extends Provider {
         return KAEConfig.privilegedGetOverridable("kae.engine.id", DEFAULT_ENGINE_ID);
     }
 
-    // whether to set libcrypto.so to GLOBAL mode, by default libcrypto.so is LOCAL mode
-    private static boolean useGlobalMode() {
+    // whether prefer use openssl 1
+    private static int useOpensslVersion() throws ExceptionInInitializerError {
         String explicitLoad = KAEConfig.privilegedGetOverridable(
-                "kae.libcrypto.useGlobalMode", "false");
-        return Boolean.parseBoolean(explicitLoad);
+                "kae.useOpensslVersion", "0");
+        int version = 0;
+        try {
+            if (explicitLoad.trim().isEmpty()) {
+                throw new ExceptionInInitializerError("initOpenssl failed : kae.useOpensslVersion set to empty value");
+            }
+            version = Integer.parseInt(explicitLoad);
+            if (version != 0 && version != 1 && version != 3) {
+                throw new ExceptionInInitializerError("initOpenssl failed : unknown openssl version " + version);
+            }
+        } catch (NumberFormatException e) {
+            throw new ExceptionInInitializerError("initOpenssl failed : cannot convert " + explicitLoad + " to Integer");
+        }
+        return version;
     }
+
 
     public KAEProvider() {
         super("KAEProvider", 1.8d, "KAE provider");
@@ -340,7 +364,7 @@ public class KAEProvider extends Provider {
     }
 
     // init openssl
-    static native void initOpenssl(boolean useGlobalMode, String engineId, boolean[] algorithmKaeFlags)
+    static native int initOpenssl(int useOpensslVersion, String engineId, boolean[] algorithmKaeFlags)
             throws RuntimeException;
 
     static native boolean[] getEngineFlags();

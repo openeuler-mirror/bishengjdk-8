@@ -25,6 +25,7 @@
 #include <openssl/err.h>
 #include "kae_log.h"
 #include "kae_exception.h"
+#include "ssl_utils.h"
 
 void KAE_ThrowByName(JNIEnv* env, const char* name, const char* msg) {
     jclass cls = (*env)->FindClass(env, name);
@@ -56,7 +57,7 @@ void KAE_ThrowEvpException(JNIEnv* env, int reason, const char* msg, void (* def
             break;
         case EVP_R_BAD_DECRYPT:
         case EVP_R_DATA_NOT_MULTIPLE_OF_BLOCK_LENGTH:
-        case EVP_F_EVP_PKEY_DECRYPT:
+        case SSL_EVP_F_EVP_PKEY_DECRYPT:
         case EVP_R_PUBLIC_KEY_NOT_RSA:
         case EVP_R_CTRL_NOT_IMPLEMENTED:
             KAE_ThrowByName(env, "javax/crypto/BadPaddingException", msg);
@@ -69,6 +70,10 @@ void KAE_ThrowEvpException(JNIEnv* env, int reason, const char* msg, void (* def
 
 void KAE_ThrowRuntimeException(JNIEnv* env, const char* msg) {
     KAE_ThrowByName(env, "java/lang/RuntimeException", msg);
+}
+
+void KAE_ThrowExceptionInInitializerError(JNIEnv* env, const char* msg) {
+    KAE_ThrowByName(env, "java/lang/ExceptionInInitializerError", msg);
 }
 
 void KAE_ThrowBadPaddingException(JNIEnv* env, const char* msg) {
@@ -91,7 +96,7 @@ void KAE_ThrowFromOpenssl(JNIEnv* env, const char* msg, void (* defaultException
     unsigned long err;
     static const int ESTRING_SIZE = 256;
 
-    err = ERR_get_error_line_data(&file, &line, &data, &flags);
+    err = SSL_UTILS_ERR_get_error_line_data(&file, &line, &data, &flags);
     if (err == 0) {
         defaultException(env, msg);
         return;
@@ -99,9 +104,11 @@ void KAE_ThrowFromOpenssl(JNIEnv* env, const char* msg, void (* defaultException
 
     if (!(*env)->ExceptionCheck(env)) {
         char estring[ESTRING_SIZE];
-        ERR_error_string_n(err, estring, ESTRING_SIZE);
-        int lib = ERR_GET_LIB(err);
-        int reason = ERR_GET_REASON(err);
+        SSL_UTILS_ERR_error_string_n(err, estring, ESTRING_SIZE);
+        // Those functions below are macros
+        int lib = SSL_UTILS_ERR_GET_LIB(err);
+        int func = SSL_UTILS_ERR_GET_FUNC(err);
+        int reason = SSL_UTILS_ERR_GET_REASON(err);
         KAE_TRACE("OpenSSL error in %s: err=%lx, lib=%x, reason=%x, file=%s, line=%d, estring=%s, data=%s", msg, err,
                   lib, reason, file, line, estring, (flags & ERR_TXT_STRING) ? data : "(no data)");
 
@@ -112,7 +119,7 @@ void KAE_ThrowFromOpenssl(JNIEnv* env, const char* msg, void (* defaultException
         }
     }
 
-    ERR_clear_error();
+    SSL_UTILS_ERR_clear_error();
 }
 
 void KAE_ThrowAEADBadTagException(JNIEnv *env, const char *msg) {

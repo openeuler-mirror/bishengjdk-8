@@ -25,6 +25,7 @@
 #include "kae_util.h"
 #include "kae_log.h"
 #include "kae_exception.h"
+#include "ssl_utils.h"
 #include <openssl/evp.h>
 #include <openssl/ec.h>
 #include <stdbool.h>
@@ -35,7 +36,7 @@ static const EVP_MD* GetEVP_MDByName(JNIEnv *env, const char* algo)
     static const EVP_MD* sm3 = NULL;
 
     if (strcasecmp(algo, "SM3") == 0) {
-        return sm3 == NULL ? sm3 = EVP_sm3() : sm3;
+        return sm3 == NULL ? sm3 = SSL_UTILS_EVP_sm3() : sm3;
     } else {
         KAE_ThrowRuntimeException(env, "GetEVP_MDByName error");
         return NULL;
@@ -56,14 +57,15 @@ Java_org_openeuler_security_openssl_KAESM2Signature_nativeClone(JNIEnv *env, jcl
         return 0;
     }
 
-    EVP_MD_CTX* ctxCopy = EVP_MD_CTX_create();
+    // EVP_MD_CTX_create is macro in openssl 1 and 3
+    EVP_MD_CTX* ctxCopy = SSL_UTILS_EVP_MD_CTX_create();
     if (ctxCopy == NULL) {
         KAE_ThrowOOMException(env, "create EVP_MD_CTX fail");
         return 0;
     }
     KAE_TRACE("KAESM2Signature_nativeClone: create ctxCopy => %p", ctxCopy);
 
-    int result_code = EVP_MD_CTX_copy_ex(ctxCopy, ctx);
+    int result_code = SSL_UTILS_EVP_MD_CTX_copy_ex(ctxCopy, ctx);
     if (result_code == 0) {
         KAE_ThrowFromOpenssl(env, "EVP_MD_CTX_copy_ex failed", KAE_ThrowRuntimeException);
         goto cleanup;
@@ -74,7 +76,7 @@ Java_org_openeuler_security_openssl_KAESM2Signature_nativeClone(JNIEnv *env, jcl
 
 cleanup:
     if (ctxCopy != NULL) {
-        EVP_MD_CTX_free(ctxCopy);
+        SSL_UTILS_EVP_MD_CTX_free(ctxCopy);
     }
     return 0;
 }
@@ -92,7 +94,7 @@ JNIEXPORT void JNICALL Java_org_openeuler_security_openssl_KAESM2Signature_nativ
     }
     EVP_MD_CTX *md_ctx = (EVP_MD_CTX*) ctxAddress;
     if (md_ctx != NULL) {
-        EVP_MD_CTX_free(md_ctx);
+        SSL_UTILS_EVP_MD_CTX_free(md_ctx);
     }
     KAE_TRACE("KAESM2Signature_nativeFreeSM2Ctx: finished");
 }
@@ -119,34 +121,34 @@ JNIEXPORT jlong JNICALL Java_org_openeuler_security_openssl_KAESM2Signature_nati
     const char* sm2_id = (*env)->GetStringUTFChars(env, id, 0);
 
     // new pkey_ctx
-    if ((pctx = EVP_PKEY_CTX_new(pkey, kaeEngine)) == NULL) {
+    if ((pctx = SSL_UTILS_EVP_PKEY_CTX_new(pkey, kaeEngine)) == NULL) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_CTX_new", KAE_ThrowInvalidKeyException);
         goto cleanup;
     }
     
-    // set default_sm_id in pkey_ctx
-    if (EVP_PKEY_CTX_set1_id(pctx, sm2_id, strlen(sm2_id)) <= 0) {
+    // EVP_PKEY_CTX_set1_id is macro in openssl 1
+    if (SSL_UTILS_EVP_PKEY_CTX_set1_id(pctx, sm2_id, strlen(sm2_id)) <= 0) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_CTX_set1_id", KAE_ThrowRuntimeException);
         goto cleanup;
     }
 
     // new md_ctx
-    if ((md_ctx = EVP_MD_CTX_new()) == NULL) {
+    if ((md_ctx = SSL_UTILS_EVP_MD_CTX_new()) == NULL) {
         KAE_ThrowFromOpenssl(env, "EVP_MD_CTX_new", KAE_ThrowRuntimeException);
         goto cleanup;
     }
 
     // set pkey_ctx in md_ctx
-    EVP_MD_CTX_set_pkey_ctx(md_ctx, pctx);
+    SSL_UTILS_EVP_MD_CTX_set_pkey_ctx(md_ctx, pctx);
 
     // init md_ctx
     if(isSign){
-        if (EVP_DigestSignInit(md_ctx, NULL, GetEVP_MDByName(env, algo), kaeEngine, pkey) <= 0) {
+        if (SSL_UTILS_EVP_DigestSignInit(md_ctx, NULL, GetEVP_MDByName(env, algo), kaeEngine, pkey) <= 0) {
             KAE_ThrowFromOpenssl(env, "EVP_DigestSignInit", KAE_ThrowRuntimeException);
             goto cleanup;
         }
     }else {
-        if (EVP_DigestVerifyInit(md_ctx, NULL, GetEVP_MDByName(env, algo), kaeEngine, pkey) <= 0) {
+        if (SSL_UTILS_EVP_DigestVerifyInit(md_ctx, NULL, GetEVP_MDByName(env, algo), kaeEngine, pkey) <= 0) {
             KAE_ThrowFromOpenssl(env, "EVP_DigestVerifyInit", KAE_ThrowRuntimeException);
             goto cleanup;
         }
@@ -158,10 +160,10 @@ cleanup:
     (*env)->ReleaseStringUTFChars(env, digestName, algo);
     (*env)->ReleaseStringUTFChars(env, id, sm2_id);
     if (pctx != NULL) {
-        EVP_PKEY_CTX_free(pctx);
+        SSL_UTILS_EVP_PKEY_CTX_free(pctx);
     }
     if (md_ctx != NULL) {
-        EVP_MD_CTX_free(md_ctx);
+        SSL_UTILS_EVP_MD_CTX_free(md_ctx);
     }
     return 0;
 }
@@ -187,12 +189,12 @@ JNIEXPORT void JNICALL Java_org_openeuler_security_openssl_KAESM2Signature_nativ
     (*env)->GetByteArrayRegion(env, msgArr, 0, msgLen, (jbyte*)msg);
 
     if(isSign){
-        if (EVP_DigestSignUpdate(md_ctx, msg, msgLen) <= 0) {
+        if (SSL_UTILS_EVP_DigestSignUpdate(md_ctx, msg, msgLen) <= 0) {
             KAE_ThrowFromOpenssl(env, "EVP_DigestSignUpdate", KAE_ThrowRuntimeException);
             goto cleanup;
         }
     }else {
-        if (EVP_DigestVerifyUpdate(md_ctx, msg, msgLen) <= 0) {
+        if (SSL_UTILS_EVP_DigestVerifyUpdate(md_ctx, msg, msgLen) <= 0) {
             KAE_ThrowFromOpenssl(env, "EVP_DigestVerifyUpdate", KAE_ThrowRuntimeException);
             goto cleanup;
         }
@@ -220,7 +222,7 @@ JNIEXPORT jbyteArray JNICALL Java_org_openeuler_security_openssl_KAESM2Signature
     md_ctx = (EVP_MD_CTX*) ctxAddress;
 
     // determine the size of the signature
-    if (EVP_DigestSignFinal(md_ctx, NULL, &sig_len) <= 0) {
+    if (SSL_UTILS_EVP_DigestSignFinal(md_ctx, NULL, &sig_len) <= 0) {
          KAE_ThrowFromOpenssl(env, "EVP_DigestSignFinal", KAE_ThrowRuntimeException);
         goto cleanup;
     }
@@ -232,7 +234,7 @@ JNIEXPORT jbyteArray JNICALL Java_org_openeuler_security_openssl_KAESM2Signature
     memset(sig, 0, sig_len);
 
     // sign
-    if (EVP_DigestSignFinal(md_ctx, sig, &sig_len) <= 0) {
+    if (SSL_UTILS_EVP_DigestSignFinal(md_ctx, sig, &sig_len) <= 0) {
          KAE_ThrowFromOpenssl(env, "EVP_DigestSignFinal", KAE_ThrowSignatureException);
         goto cleanup;
     }
@@ -270,7 +272,7 @@ JNIEXPORT jboolean JNICALL Java_org_openeuler_security_openssl_KAESM2Signature_n
     (*env)->GetByteArrayRegion(env, sigBytesArr, 0, sigLen, (jbyte*)sigBytes);
 
     // verify
-    if (EVP_DigestVerifyFinal(md_ctx, sigBytes, sigLen) <= 0) {
+    if (SSL_UTILS_EVP_DigestVerifyFinal(md_ctx, sigBytes, sigLen) <= 0) {
         KAE_ThrowFromOpenssl(env, "EVP_DigestVerifyFinal", KAE_ThrowSignatureException);
         goto cleanup;
     }
