@@ -27,6 +27,7 @@
 #include "kae_util.h"
 #include "kae_exception.h"
 #include "kae_log.h"
+#include "ssl_utils.h"
 #include "org_openeuler_security_openssl_KAEECKeyPairGenerator.h"
 
 #define KAE_EC_PARAM_NUM_SIZE 7
@@ -54,13 +55,13 @@ static void FreeECDHCurveParam(JNIEnv* env, BIGNUM* p, BIGNUM* a, BIGNUM* b, jby
     jbyteArray paramA, jbyteArray paramB)
 {
     if (p != NULL) {
-        BN_free(p);
+        SSL_UTILS_BN_free(p);
     }
     if (a != NULL) {
-        BN_free(a);
+        SSL_UTILS_BN_free(a);
     }
     if (b != NULL) {
-        BN_free(b);
+        SSL_UTILS_BN_free(b);
     }
     if (paramP != NULL) {
         (*env)->DeleteLocalRef(env, paramP);
@@ -82,11 +83,11 @@ static bool SetECDHCurve(JNIEnv* env, EC_GROUP* group, jobjectArray params)
     jbyteArray paramP = NULL;
     jbyteArray paramA = NULL;
     jbyteArray paramB = NULL;
-    if ((p = BN_new()) == NULL || (a = BN_new()) == NULL || (b = BN_new()) == NULL) {
+    if ((p = SSL_UTILS_BN_new()) == NULL || (a = SSL_UTILS_BN_new()) == NULL || (b = SSL_UTILS_BN_new()) == NULL) {
         KAE_ThrowOOMException(env, "failed to allocate BN_new");
         goto cleanup;
     }
-    if (!EC_GROUP_get_curve_GFp(group, p, a, b, NULL)) {
+    if (!SSL_UTILS_EC_GROUP_get_curve_GFp(group, p, a, b, NULL)) {
         goto cleanup;
     }
 
@@ -123,15 +124,15 @@ static bool SetECDHPoint(JNIEnv* env, EC_GROUP* group, jobjectArray params)
     const EC_POINT* generator = NULL;
     jbyteArray paramX = NULL;
     jbyteArray paramY = NULL;
-    if ((x = BN_new()) == NULL || (y = BN_new()) == NULL) {
+    if ((x = SSL_UTILS_BN_new()) == NULL || (y = SSL_UTILS_BN_new()) == NULL) {
         KAE_ThrowOOMException(env, "failed to allocate BN_new");
         goto cleanup;
     }
-    if ((generator = EC_GROUP_get0_generator(group)) == NULL) {
+    if ((generator = SSL_UTILS_EC_GROUP_get0_generator(group)) == NULL) {
         KAE_ThrowOOMException(env, "failed to allocate ec generator");
         goto cleanup;
     }
-    if (!EC_POINT_get_affine_coordinates_GFp(group, generator, x, y, NULL)) {
+    if (!SSL_UTILS_EC_POINT_get_affine_coordinates_GFp(group, generator, x, y, NULL)) {
         KAE_ThrowFromOpenssl(env, "EC_POINT_set_affine_coordinates_GFp", KAE_ThrowRuntimeException);
         goto cleanup;
     }
@@ -147,18 +148,18 @@ static bool SetECDHPoint(JNIEnv* env, EC_GROUP* group, jobjectArray params)
         goto cleanup;
     }
     (*env)->SetObjectArrayElement(env, params, ecdhY, paramY);
-    BN_free(x);
-    BN_free(y);
+    SSL_UTILS_BN_free(x);
+    SSL_UTILS_BN_free(y);
     (*env)->DeleteLocalRef(env, paramX);
     (*env)->DeleteLocalRef(env, paramY);
     return true;
 
 cleanup:
     if (x != NULL) {
-        BN_free(x);
+        SSL_UTILS_BN_free(x);
     }
     if (y != NULL) {
-        BN_free(y);
+        SSL_UTILS_BN_free(y);
     }
     if (paramX != NULL) {
         (*env)->DeleteLocalRef(env, paramX);
@@ -176,10 +177,10 @@ static bool SetECDHOrderAndCofactor(JNIEnv* env, EC_GROUP* group, jobjectArray p
     BIGNUM* cofactor = NULL;
     jbyteArray paramOrder = NULL;
     jbyteArray paramCofactor = NULL;
-    if ((order = BN_new()) == NULL || (cofactor = BN_new()) == NULL) {
+    if ((order = SSL_UTILS_BN_new()) == NULL || (cofactor = SSL_UTILS_BN_new()) == NULL) {
         goto cleanup;
     }
-    if (!EC_GROUP_get_order(group, order, NULL)) {
+    if (!SSL_UTILS_EC_GROUP_get_order(group, order, NULL)) {
         goto cleanup;
     }
 
@@ -188,7 +189,7 @@ static bool SetECDHOrderAndCofactor(JNIEnv* env, EC_GROUP* group, jobjectArray p
         goto cleanup;
     }
     (*env)->SetObjectArrayElement(env, params, ecdhOrder, paramOrder);
-    if (!EC_GROUP_get_cofactor(group, cofactor, NULL)) {
+    if (!SSL_UTILS_EC_GROUP_get_cofactor(group, cofactor, NULL)) {
         goto cleanup;
     }
 
@@ -197,18 +198,18 @@ static bool SetECDHOrderAndCofactor(JNIEnv* env, EC_GROUP* group, jobjectArray p
         goto cleanup;
     }
     (*env)->SetObjectArrayElement(env, params, ecdhCofactor, paramCofactor);
-    BN_free(order);
-    BN_free(cofactor);
+    SSL_UTILS_BN_free(order);
+    SSL_UTILS_BN_free(cofactor);
     (*env)->DeleteLocalRef(env, paramOrder);
     (*env)->DeleteLocalRef(env, paramCofactor);
     return true;
 
 cleanup:
     if (order != NULL) {
-        BN_free(order);
+        SSL_UTILS_BN_free(order);
     }
     if (cofactor != NULL) {
-        BN_free(cofactor);
+        SSL_UTILS_BN_free(cofactor);
     }
     if (paramOrder != NULL) {
         (*env)->DeleteLocalRef(env, paramOrder);
@@ -223,10 +224,10 @@ static void FreeECDHKeyParam(JNIEnv* env,
     BIGNUM* wX, BIGNUM* wY, jbyteArray keyWX, jbyteArray keyWY, jbyteArray keyS)
 {
     if (wX != NULL) {
-        BN_free(wX);
+        SSL_UTILS_BN_free(wX);
     }
     if (wY != NULL) {
-        BN_free(wY);
+        SSL_UTILS_BN_free(wY);
     }
     if (keyWX != NULL) {
         (*env)->DeleteLocalRef(env, keyWX);
@@ -250,16 +251,16 @@ static bool SetECDHKey(JNIEnv* env, const EC_GROUP* group, jobjectArray params,
     jbyteArray keyWX = NULL;
     jbyteArray keyWY = NULL;
     jbyteArray keyS = NULL;
-    if ((wX = BN_new()) == NULL || (wY = BN_new()) == NULL) {
+    if ((wX = SSL_UTILS_BN_new()) == NULL || (wY = SSL_UTILS_BN_new()) == NULL) {
         KAE_ThrowOOMException(env, "failed to allocate array");
         goto cleanup;
     }
 
-    if ((pub = EC_KEY_get0_public_key(eckey)) == NULL ||
-        !EC_POINT_get_affine_coordinates_GFp(group, pub, wX, wY, NULL)) {
+    if ((pub = SSL_UTILS_EC_KEY_get0_public_key(eckey)) == NULL ||
+        !SSL_UTILS_EC_POINT_get_affine_coordinates_GFp(group, pub, wX, wY, NULL)) {
         goto cleanup;
     }
-    if ((s = EC_KEY_get0_private_key(eckey)) == NULL) {
+    if ((s = SSL_UTILS_EC_KEY_get0_private_key(eckey)) == NULL) {
         goto cleanup;
     }
 
@@ -374,42 +375,42 @@ static EC_GROUP* GetGroupByParam(JNIEnv* env, jbyteArray pArr, jbyteArray aArr, 
     EC_POINT* generator = NULL;
     if ((p = KAE_GetBigNumFromByteArray(env, pArr)) == NULL || (a = KAE_GetBigNumFromByteArray(env, aArr)) == NULL ||
         (b = KAE_GetBigNumFromByteArray(env, bArr)) == NULL || (x = KAE_GetBigNumFromByteArray(env, xArr)) == NULL ||
-        (y = KAE_GetBigNumFromByteArray(env, yArr)) == NULL || (cofactor = BN_new()) == NULL ||
-        (order = KAE_GetBigNumFromByteArray(env, orderArr)) == NULL || !BN_set_word(cofactor, cofactorInt)) {
+        (y = KAE_GetBigNumFromByteArray(env, yArr)) == NULL || (cofactor = SSL_UTILS_BN_new()) == NULL ||
+        (order = KAE_GetBigNumFromByteArray(env, orderArr)) == NULL || !SSL_UTILS_BN_set_word(cofactor, cofactorInt)) {
         goto cleanup;
     }
 
     // Create the curve.
-    if ((ctx = BN_CTX_new()) == NULL || (group = EC_GROUP_new_curve_GFp(p, a, b, ctx)) == NULL) {
+    if ((ctx = SSL_UTILS_BN_CTX_new()) == NULL || (group = SSL_UTILS_EC_GROUP_new_curve_GFp(p, a, b, ctx)) == NULL) {
         goto cleanup;
     }
 
     // Create the generator and set x, y.
-    if ((generator = EC_POINT_new(group)) == NULL ||
-            !EC_POINT_set_affine_coordinates_GFp(group, generator, x, y, ctx)) {
+    if ((generator = SSL_UTILS_EC_POINT_new(group)) == NULL ||
+            !SSL_UTILS_EC_POINT_set_affine_coordinates_GFp(group, generator, x, y, ctx)) {
         goto cleanup;
     }
 
     // Set the generator, order and cofactor.
-    if (!EC_GROUP_set_generator(group, generator, order, cofactor)) {
+    if (!SSL_UTILS_EC_GROUP_set_generator(group, generator, order, cofactor)) {
         goto cleanup;
     }
 
     FreeECDHParam(p, a, b, x, y, order, cofactor);
-    EC_POINT_free(generator);
-    BN_CTX_free(ctx);
+    SSL_UTILS_EC_POINT_free(generator);
+    SSL_UTILS_BN_CTX_free(ctx);
     return group;
 
 cleanup:
     FreeECDHParam(p, a, b, x, y, order, cofactor);
     if (group != NULL) {
-        EC_GROUP_free(group);
+        SSL_UTILS_EC_GROUP_free(group);
     }
     if (generator != NULL) {
-        EC_POINT_free(generator);
+        SSL_UTILS_EC_POINT_free(generator);
     }
     if (ctx != NULL) {
-        BN_CTX_free(ctx);
+        SSL_UTILS_BN_CTX_free(ctx);
     }
     return NULL;
 }
@@ -428,26 +429,26 @@ JNIEXPORT jobjectArray JNICALL Java_org_openeuler_security_openssl_KAEECKeyPairG
 
     const char *curve = (*env)->GetStringUTFChars(env, curveName, 0);
     KAE_TRACE("KAEECKeyPairGenerator_nativeGenerateParam(curveName = %s)", curve);
-    int nid = OBJ_sn2nid(curve);
+    int nid = SSL_UTILS_OBJ_sn2nid(curve);
     (*env)->ReleaseStringUTFChars(env, curveName, curve);
     if (nid == NID_undef) {
         goto cleanup;
     }
     // Construct a builtin curve.
-    if ((group = EC_GROUP_new_by_curve_name(nid)) == NULL) {
+    if ((group = SSL_UTILS_EC_GROUP_new_by_curve_name(nid)) == NULL) {
         goto cleanup;
     }
     ecdhParam = NewECDHParam(env, group);
 
     if (group != NULL) {
-        EC_GROUP_free(group);
+        SSL_UTILS_EC_GROUP_free(group);
     }
     KAE_TRACE("KAEECKeyPairGenerator_nativeGenerateParam success, ecdhParam = %p", ecdhParam);
     return ecdhParam;
 
 cleanup:
     if (group != NULL) {
-        EC_GROUP_free(group);
+        SSL_UTILS_EC_GROUP_free(group);
     }
     if (ecdhParam != NULL) {
         (*env)->DeleteLocalRef(env, ecdhParam);
@@ -471,32 +472,32 @@ JNIEXPORT jobjectArray JNICALL Java_org_openeuler_security_openssl_KAEECKeyPairG
     if ((group = GetGroupByParam(env, pArr, aArr, bArr, xArr, yArr, orderArr, cofactorInt)) == NULL) {
         goto cleanup;
     }
-    if ((eckey = EC_KEY_new()) == NULL) {
+    if ((eckey = SSL_UTILS_EC_KEY_new()) == NULL) {
         goto cleanup;
     }
-    if (!EC_KEY_set_group(eckey, group)) {
+    if (!SSL_UTILS_EC_KEY_set_group(eckey, group)) {
         goto cleanup;
     }
     // Generates a new public and private key for the supplied eckey object.
     // Refer to {@link https://www.openssl.org/docs/man1.1.0/man3/EC_KEY_generate_key.html} for details.
-    if (!EC_KEY_generate_key(eckey)) {
+    if (!SSL_UTILS_EC_KEY_generate_key(eckey)) {
         goto cleanup;
     }
 
     ecdhKey = NewECDHKey(env, group, eckey);
 
-    EC_KEY_free(eckey);
-    EC_GROUP_free(group);
+    SSL_UTILS_EC_KEY_free(eckey);
+    SSL_UTILS_EC_GROUP_free(group);
 
     KAE_TRACE("KAEECKeyPairGenerator_nativeGenerateKeyPair success, ecdhKey = %p", ecdhKey);
     return ecdhKey;
 
 cleanup:
     if (eckey != NULL) {
-        EC_KEY_free(eckey);
+        SSL_UTILS_EC_KEY_free(eckey);
     }
     if (group != NULL) {
-        EC_GROUP_free(group);
+        SSL_UTILS_EC_GROUP_free(group);
     }
     if (ecdhKey != NULL) {
         (*env)->DeleteLocalRef(env, ecdhKey);

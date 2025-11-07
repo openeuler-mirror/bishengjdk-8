@@ -51,7 +51,9 @@ public class KAEConfig {
             "kae.hmac",
             "kae.rsa",
             "kae.dh",
-            "kae.ec"
+            "kae.ec",
+            "kae.sm2.cipher",
+            "kae.sm2.signature"
     };
 
     // these property names indicate whether KAE hardware acceleration is enabled for each algorithm
@@ -62,7 +64,8 @@ public class KAEConfig {
             "kae.hmac.useKaeEngine",
             "kae.rsa.useKaeEngine",
             "kae.dh.useKaeEngine",
-            "kae.ec.useKaeEngine"
+            "kae.ec.useKaeEngine",
+            "kae.sm2.useKaeEngine"
     };
 
     // algorithm names
@@ -95,7 +98,8 @@ public class KAEConfig {
             "hmac-sha512",
             "rsa",
             "dh",
-            "ec"
+            "ec",
+            "sm2"
     };
 
     // algorithm name and algorithm index mapping
@@ -234,7 +238,8 @@ public class KAEConfig {
                 false, // hmac
                 true,  // rsa
                 true,  // dh
-                false  // ec
+                false, // ec
+                false  // sm2
         };
         for (int i = 0; i < useKaeEnginePropertyNames.length; i++) {
             String configValue = privilegedGetOverridable(useKaeEnginePropertyNames[i]);
@@ -243,8 +248,9 @@ public class KAEConfig {
             }
         }
 
-        // EC algorithm currently does not support KAE hardware acceleration, temporarily use openssl soft calculation.
-        categoryFlagsForEngine[useKaeEnginePropertyNames.length - 1] = false;
+        // EC and SM2 algorithm currently does not support KAE hardware acceleration, temporarily use openssl soft calculation.
+        categoryFlagsForEngine[6] = false;
+        categoryFlagsForEngine[7] = false;
 
         for (int i = 0; i < useKaeEngineFlags.length; i++) {
             Integer algorithmCategoryIndex = algorithmNameCategoryMap.get(algorithmNames[i]);
@@ -296,6 +302,7 @@ public class KAEConfig {
      * 4 : rsa
      * 5 : dh
      * 6 : ec
+     * 7 : sm2
      */
     private static void initAlgorithmNameCategoryMap() {
         algorithmNameCategoryMap.put("md5", 0);
@@ -327,6 +334,7 @@ public class KAEConfig {
         algorithmNameCategoryMap.put("rsa", 4);
         algorithmNameCategoryMap.put("dh", 5);
         algorithmNameCategoryMap.put("ec", 6);
+        algorithmNameCategoryMap.put("sm2", 7);
     }
 
     private static void initAlgorithmNameMap() {
@@ -336,7 +344,7 @@ public class KAEConfig {
 
     private static String[] getDisabledAlgorithms() {
         String disabledAlgorithms = privilegedGetOverridable("kae.engine.disabledAlgorithms",
-                "sha256,sha384");
+                "sha256,sha384,sm2");
         return disabledAlgorithms.replaceAll(" ", "").split("\\,");
     }
 

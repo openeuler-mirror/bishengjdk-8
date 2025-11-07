@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include "kae_util.h"
 #include "kae_log.h"
+#include "ssl_utils.h"
 #include "org_openeuler_security_openssl_KAEDHKeyPairGenerator.h"
 #include "kae_exception.h"
 
@@ -55,7 +56,7 @@ JNIEXPORT jobjectArray JNICALL Java_org_openeuler_security_openssl_KAEDHKeyPairG
 
     KAE_TRACE("Java_org_openeuler_security_openssl_KAEDHKeyPairGenerator_nativeGenerateKeyPair start !");
 
-    if ((dh = DH_new_method(kaeEngine)) == NULL) {
+    if ((dh = SSL_UTILS_DH_new_method(kaeEngine)) == NULL) {
         KAE_ThrowOOMException(env, "Allocate DH failed in nativeGenerateKeyPair!");
         goto cleanup;
     }
@@ -70,15 +71,15 @@ JNIEXPORT jobjectArray JNICALL Java_org_openeuler_security_openssl_KAEDHKeyPairG
         goto cleanup;
     }
 
-    if (!DH_set0_pqg(dh, BN_dup(p_bn), NULL, BN_dup(g_bn))) {
+    if (!SSL_UTILS_DH_set0_pqg(dh, SSL_UTILS_BN_dup(p_bn), NULL, SSL_UTILS_BN_dup(g_bn))) {
         KAE_ThrowRuntimeException(env, "DH_set0_pqg failed in nativeGenerateKeyPair.");
         goto cleanup;
     }
 
     // Return value is fixed to 1, nothing to check.
-    DH_set_length(dh, lSize);
+    SSL_UTILS_DH_set_length(dh, lSize);
 
-    if (!DH_generate_key(dh)) {
+    if (!SSL_UTILS_DH_generate_key(dh)) {
         KAE_ThrowInvalidAlgorithmParameterException(env, "DH generate key failed in nativeGenerateKeyPair.");
         goto cleanup;
     }
@@ -94,8 +95,8 @@ JNIEXPORT jobjectArray JNICALL Java_org_openeuler_security_openssl_KAEDHKeyPairG
     }
 
     // Return the ptr of private  key in dh.
-    pri_key_bn = DH_get0_priv_key(dh);
-    pub_key_bn = DH_get0_pub_key(dh);
+    pri_key_bn = SSL_UTILS_DH_get0_priv_key(dh);
+    pub_key_bn = SSL_UTILS_DH_get0_pub_key(dh);
 
     pub_key = KAE_GetByteArrayFromBigNum(env, pub_key_bn);
     if (pub_key == NULL) {
@@ -116,7 +117,7 @@ JNIEXPORT jobjectArray JNICALL Java_org_openeuler_security_openssl_KAEDHKeyPairG
 
 cleanup:
     if (dh != NULL)
-        DH_free(dh);
+        SSL_UTILS_DH_free(dh);
     if (p_bn != NULL)
         KAE_ReleaseBigNumFromByteArray(p_bn);
     if (g_bn != NULL)
