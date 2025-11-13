@@ -125,7 +125,7 @@ bool DynamicMaxHeapChecker::check_dynamic_max_heap_size_limit() {
     return false;
   }
   if (DynamicMaxHeapSizeLimit <= MaxHeapSize) {
-    warning_and_disable("-XX:DynamicMaxHeapSizeLimit should be larger than MaxHeapSize");
+    warning_and_disable("DynamicMaxHeapSizeLimit should be larger than MaxHeapSize");
     return false;
   }
   return true;
