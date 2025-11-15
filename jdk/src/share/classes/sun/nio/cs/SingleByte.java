@@ -46,13 +46,21 @@ public class SingleByte
         return cr;
     }
 
-    final public static class Decoder extends CharsetDecoder
+    public static final class Decoder extends CharsetDecoder
                                       implements ArrayDecoder {
         private final char[] b2c;
+        private final boolean isASCIICompatible;
 
         public Decoder(Charset cs, char[] b2c) {
             super(cs, 1.0f, 1.0f);
             this.b2c = b2c;
+            this.isASCIICompatible = false;
+        }
+
+        public Decoder(Charset cs, char[] b2c, boolean isASCIICompatible) {
+            super(cs, 1.0f, 1.0f);
+            this.b2c = b2c;
+            this.isASCIICompatible = isASCIICompatible;
         }
 
         private CoderResult decodeArrayLoop(ByteBuffer src, CharBuffer dst) {
@@ -116,6 +124,7 @@ public class SingleByte
             repl = newReplacement.charAt(0);
         }
 
+        @Override
         public int decode(byte[] src, int sp, int len, char[] dst) {
             if (len > dst.length)
                 len = dst.length;
@@ -129,18 +138,25 @@ public class SingleByte
             }
             return dp;
         }
+
+        @Override
+        public boolean isASCIICompatible() {
+            return isASCIICompatible;
+        }
     }
 
-    final public static class Encoder extends CharsetEncoder
+    public static final class Encoder extends CharsetEncoder
                                       implements ArrayEncoder {
         private Surrogate.Parser sgp;
         private final char[] c2b;
         private final char[] c2bIndex;
+        private final boolean isASCIICompatible;
 
-        public Encoder(Charset cs, char[] c2b, char[] c2bIndex) {
+        public Encoder(Charset cs, char[] c2b, char[] c2bIndex, boolean isASCIICompatible) {
             super(cs, 1.0f, 1.0f);
             this.c2b = c2b;
             this.c2bIndex = c2bIndex;
+            this.isASCIICompatible = isASCIICompatible;
         }
 
         public boolean canEncode(char c) {
@@ -160,22 +176,18 @@ public class SingleByte
             byte[] da = dst.array();
             int dp = dst.arrayOffset() + dst.position();
             int dl = dst.arrayOffset() + dst.limit();
+            int len  = Math.min(dl - dp, sl - sp);
 
-            CoderResult cr = CoderResult.UNDERFLOW;
-            if ((dl - dp) < (sl - sp)) {
-                sl = sp + (dl - dp);
-                cr = CoderResult.OVERFLOW;
-            }
-
-            while (sp < sl) {
+            while (len-- > 0) {
                 char c = sa[sp];
                 int b = encode(c);
                 if (b == UNMAPPABLE_ENCODING) {
                     if (Character.isSurrogate(c)) {
                         if (sgp == null)
                             sgp = new Surrogate.Parser();
-                        if (sgp.parse(c, sa, sp, sl) < 0)
+                        if (sgp.parse(c, sa, sp, sl) < 0) {
                             return withResult(sgp.error(), src, sp, dst, dp);
+                        }
                         return withResult(sgp.unmappableResult(), src, sp, dst, dp);
                     }
                     return withResult(CoderResult.unmappableForLength(1),
@@ -184,7 +196,8 @@ public class SingleByte
                 da[dp++] = (byte)b;
                 sp++;
             }
-            return withResult(cr, src, sp, dst, dp);
+            return withResult(sp < sl ? CoderResult.OVERFLOW : CoderResult.UNDERFLOW,
+                              src, sp, dst, dp);
         }
 
         private CoderResult encodeBufferLoop(CharBuffer src, ByteBuffer dst) {
@@ -254,6 +267,51 @@ public class SingleByte
                 dst[dp++] = repl;
             }
             return dp;
+        }
+
+        @Override
+        public int encodeFromLatin1(byte[] src, int sp, int len, byte[] dst) {
+            int dp = 0;
+            int sl = sp + Math.min(len, dst.length);
+            while (sp < sl) {
+                char c = (char)(src[sp++] & 0xff);
+                int b = encode(c);
+                if (b == UNMAPPABLE_ENCODING) {
+                    dst[dp++] = repl;
+                } else {
+                    dst[dp++] = (byte)b;
+                }
+            }
+            return dp;
+        }
+
+        @Override
+        public int encodeFromUTF16(byte[] src, int sp, int len, byte[] dst) {
+            int dp = 0;
+            int sl = sp + Math.min(len, dst.length);
+            while (sp < sl) {
+                char c = StringUTF16.getChar(src, sp++);
+                int b = encode(c);
+                if (b != UNMAPPABLE_ENCODING) {
+                    dst[dp++] = (byte)b;
+                    continue;
+                }
+                if (Character.isHighSurrogate(c) && sp < sl &&
+                    Character.isLowSurrogate(StringUTF16.getChar(src, sp))) {
+                    if (len > dst.length) {
+                        sl++;
+                        len--;
+                    }
+                    sp++;
+                }
+                dst[dp++] = repl;
+            }
+            return dp;
+        }
+
+        @Override
+        public boolean isASCIICompatible() {
+            return isASCIICompatible;
         }
     }
 

@@ -708,19 +708,6 @@ class ProfileBooleanNode : public Node {
   virtual const Type *bottom_type() const { return TypeInt::BOOL; }
 };
 
-//----------------------PartialSubtypeCheckNode--------------------------------
-// The 2nd slow-half of a subtype check.  Scan the subklass's 2ndary superklass
-// array for an instance of the superklass.  Set a hidden internal cache on a
-// hit (cache is checked with exposed code in gen_subtype_check()).  Return
-// not zero for a miss or zero for a hit.
-class PartialSubtypeCheckNode : public Node {
-public:
-  PartialSubtypeCheckNode(Node* c, Node* sub, Node* super) : Node(c,sub,super) {}
-  virtual int Opcode() const;
-  virtual const Type *bottom_type() const { return TypeRawPtr::BOTTOM; }
-  virtual uint ideal_reg() const { return Op_RegP; }
-};
-
 //
 class MoveI2FNode : public Node {
  public:

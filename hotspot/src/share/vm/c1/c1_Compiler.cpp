@@ -218,6 +218,8 @@ bool Compiler::is_intrinsic_supported(methodHandle method) {
   case vmIntrinsics::_dgemv_dgemv:
   case vmIntrinsics::_compareAndSwapInt:
   case vmIntrinsics::_compareAndSwapObject:
+  case vmIntrinsics::_getCharStringU:
+  case vmIntrinsics::_putCharStringU:
 #ifdef JFR_HAVE_INTRINSICS
   case vmIntrinsics::_getClassId:
   case vmIntrinsics::_getEventWriter:

@@ -32,6 +32,8 @@ import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.CoderResult;
 import java.util.Arrays;
+
+import sun.nio.cs.StringUTF16;
 import sun.nio.cs.Surrogate;
 import sun.nio.cs.ArrayDecoder;
 import sun.nio.cs.ArrayEncoder;
@@ -102,7 +104,7 @@ import static sun.nio.cs.CharsetMapping.*;
 
 public class DoubleByte {
 
-    public final static char[] B2C_UNMAPPABLE;
+    public static final char[] B2C_UNMAPPABLE;
     static {
         B2C_UNMAPPABLE = new char[0x100];
         Arrays.fill(B2C_UNMAPPABLE, UNMAPPABLE_DECODING);
@@ -115,6 +117,7 @@ public class DoubleByte {
         final char[] b2cSB;
         final int b2Min;
         final int b2Max;
+        final boolean isASCIICompatible;
 
         // for SimpleEUC override
         protected CoderResult crMalformedOrUnderFlow(int b) {
@@ -130,18 +133,25 @@ public class DoubleByte {
             return CoderResult.unmappableForLength(2);
         }
 
-        Decoder(Charset cs, float avgcpb, float maxcpb,
-                char[][] b2c, char[] b2cSB,
-                int b2Min, int b2Max) {
+        public Decoder(Charset cs, float avgcpb, float maxcpb,
+                       char[][] b2c, char[] b2cSB,
+                       int b2Min, int b2Max,
+                       boolean isASCIICompatible) {
             super(cs, avgcpb, maxcpb);
             this.b2c = b2c;
             this.b2cSB = b2cSB;
             this.b2Min = b2Min;
             this.b2Max = b2Max;
+            this.isASCIICompatible = isASCIICompatible;
         }
 
-        Decoder(Charset cs, char[][] b2c, char[] b2cSB, int b2Min, int b2Max) {
-            this(cs, 0.5f, 1.0f, b2c, b2cSB, b2Min, b2Max);
+        public Decoder(Charset cs, char[][] b2c, char[] b2cSB, int b2Min, int b2Max,
+                       boolean isASCIICompatible) {
+            this(cs, 0.5f, 1.0f, b2c, b2cSB, b2Min, b2Max, isASCIICompatible);
+        }
+
+        public Decoder(Charset cs, char[][] b2c, char[] b2cSB, int b2Min, int b2Max) {
+            this(cs, 0.5f, 1.0f, b2c, b2cSB, b2Min, b2Max, false);
         }
 
         protected CoderResult decodeArrayLoop(ByteBuffer src, CharBuffer dst) {
@@ -215,6 +225,7 @@ public class DoubleByte {
                 return decodeBufferLoop(src, dst);
         }
 
+        @Override
         public int decode(byte[] src, int sp, int len, char[] dst) {
             int dp = 0;
             int sl = sp + len;
@@ -241,6 +252,11 @@ public class DoubleByte {
                 dst[dp++] = c;
             }
             return dp;
+        }
+
+        @Override
+        public boolean isASCIICompatible() {
+            return isASCIICompatible;
         }
 
         public void implReset() {
@@ -273,9 +289,15 @@ public class DoubleByte {
         private static final int SI = 0x0f;
         private int  currentState;
 
-        Decoder_EBCDIC(Charset cs,
-                       char[][] b2c, char[] b2cSB, int b2Min, int b2Max) {
-            super(cs, b2c, b2cSB, b2Min, b2Max);
+        public Decoder_EBCDIC(Charset cs,
+                              char[][] b2c, char[] b2cSB, int b2Min, int b2Max,
+                              boolean isASCIICompatible) {
+            super(cs, b2c, b2cSB, b2Min, b2Max, isASCIICompatible);
+        }
+
+        public Decoder_EBCDIC(Charset cs,
+                              char[][] b2c, char[] b2cSB, int b2Min, int b2Max) {
+            super(cs, b2c, b2cSB, b2Min, b2Max, false);
         }
 
         public void implReset() {
@@ -403,6 +425,7 @@ public class DoubleByte {
             }
         }
 
+        @Override
         public int decode(byte[] src, int sp, int len, char[] dst) {
             int dp = 0;
             int sl = sp + len;
@@ -451,8 +474,13 @@ public class DoubleByte {
             b2cSB_UNMAPPABLE = new char[0x100];
             Arrays.fill(b2cSB_UNMAPPABLE, UNMAPPABLE_DECODING);
         }
-        Decoder_DBCSONLY(Charset cs, char[][] b2c, char[] b2cSB, int b2Min, int b2Max) {
-            super(cs, 0.5f, 1.0f, b2c, b2cSB_UNMAPPABLE, b2Min, b2Max);
+        public Decoder_DBCSONLY(Charset cs, char[][] b2c, char[] b2cSB, int b2Min, int b2Max,
+                                boolean isASCIICompatible) {
+            super(cs, 0.5f, 1.0f, b2c, b2cSB_UNMAPPABLE, b2Min, b2Max, isASCIICompatible);
+        }
+
+        public Decoder_DBCSONLY(Charset cs, char[][] b2c, char[] b2cSB, int b2Min, int b2Max) {
+            super(cs, 0.5f, 1.0f, b2c, b2cSB_UNMAPPABLE, b2Min, b2Max, false);
         }
     }
 
@@ -463,9 +491,10 @@ public class DoubleByte {
         private final int SS2 =  0x8E;
         private final int SS3 =  0x8F;
 
-        Decoder_EUC_SIM(Charset cs,
-                        char[][] b2c, char[] b2cSB, int b2Min, int b2Max) {
-            super(cs, b2c, b2cSB, b2Min, b2Max);
+        public Decoder_EUC_SIM(Charset cs,
+                               char[][] b2c, char[] b2cSB, int b2Min, int b2Max,
+                               boolean isASCIICompatible) {
+            super(cs, b2c, b2cSB, b2Min, b2Max, isASCIICompatible);
         }
 
         // No support provided for G2/G3 for SimpleEUC
@@ -481,6 +510,7 @@ public class DoubleByte {
             return CoderResult.unmappableForLength(2);
         }
 
+        @Override
         public int decode(byte[] src, int sp, int len, char[] dst) {
             int dp = 0;
             int sl = sp + len;
@@ -511,28 +541,36 @@ public class DoubleByte {
     public static class Encoder extends CharsetEncoder
                                 implements ArrayEncoder
     {
-        final int MAX_SINGLEBYTE = 0xff;
+        protected final int MAX_SINGLEBYTE = 0xff;
         private final char[] c2b;
         private final char[] c2bIndex;
-        Surrogate.Parser sgp;
+        protected Surrogate.Parser sgp;
+        final boolean isASCIICompatible;
 
-        protected Encoder(Charset cs, char[] c2b, char[] c2bIndex) {
+        public Encoder(Charset cs, char[] c2b, char[] c2bIndex) {
+            this(cs, c2b, c2bIndex, false);
+        }
+
+        public Encoder(Charset cs, char[] c2b, char[] c2bIndex, boolean isASCIICompatible) {
             super(cs, 2.0f, 2.0f);
             this.c2b = c2b;
             this.c2bIndex = c2bIndex;
+            this.isASCIICompatible = isASCIICompatible;
         }
 
-        Encoder(Charset cs, float avg, float max, byte[] repl, char[] c2b, char[] c2bIndex) {
+        public Encoder(Charset cs, float avg, float max, byte[] repl, char[] c2b, char[] c2bIndex,
+                       boolean isASCIICompatible) {
             super(cs, avg, max, repl);
             this.c2b = c2b;
             this.c2bIndex = c2bIndex;
+            this.isASCIICompatible = isASCIICompatible;
         }
 
         public boolean canEncode(char c) {
             return encodeChar(c) != UNMAPPABLE_ENCODING;
         }
 
-        Surrogate.Parser sgp() {
+        protected Surrogate.Parser sgp() {
             if (sgp == null)
                 sgp = new Surrogate.Parser();
             return sgp;
@@ -624,6 +662,7 @@ public class DoubleByte {
             repl = newReplacement;
         }
 
+        @Override
         public int encode(char[] src, int sp, int len, byte[] dst) {
             int dp = 0;
             int sl = sp + len;
@@ -647,9 +686,67 @@ public class DoubleByte {
                 } else {                          // SingleByte
                     dst[dp++] = (byte)bb;
                 }
+            }
+            return dp;
+        }
+
+        @Override
+        public int encodeFromLatin1(byte[] src, int sp, int len, byte[] dst) {
+            int dp = 0;
+            int sl = sp + len;
+            while (sp < sl) {
+                char c = (char)(src[sp++] & 0xff);
+                int bb = encodeChar(c);
+                if (bb == UNMAPPABLE_ENCODING) {
+                    // no surrogate pair in latin1 string
+                    dst[dp++] = repl[0];
+                    if (repl.length > 1) {
+                        dst[dp++] = repl[1];
+                    }
+                    continue;
+                } //else
+                if (bb > MAX_SINGLEBYTE) { // DoubleByte
+                    dst[dp++] = (byte)(bb >> 8);
+                    dst[dp++] = (byte)bb;
+                } else {                   // SingleByte
+                    dst[dp++] = (byte)bb;
+                }
 
             }
             return dp;
+        }
+
+        @Override
+        public int encodeFromUTF16(byte[] src, int sp, int len, byte[] dst) {
+            int dp = 0;
+            int sl = sp + len;
+            while (sp < sl) {
+                char c = StringUTF16.getChar(src, sp++);
+                int bb = encodeChar(c);
+                if (bb == UNMAPPABLE_ENCODING) {
+                    if (Character.isHighSurrogate(c) && sp < sl &&
+                        Character.isLowSurrogate(StringUTF16.getChar(src, sp))) {
+                        sp++;
+                    }
+                    dst[dp++] = repl[0];
+                    if (repl.length > 1) {
+                        dst[dp++] = repl[1];
+                    }
+                    continue;
+                } //else
+                if (bb > MAX_SINGLEBYTE) { // DoubleByte
+                    dst[dp++] = (byte)(bb >> 8);
+                    dst[dp++] = (byte)bb;
+                } else {                   // SingleByte
+                    dst[dp++] = (byte)bb;
+                }
+            }
+            return dp;
+        }
+
+        @Override
+        public boolean isASCIICompatible() {
+            return isASCIICompatible;
         }
 
         public int encodeChar(char ch) {
@@ -657,7 +754,7 @@ public class DoubleByte {
         }
 
         // init the c2b and c2bIndex tables from b2c.
-        static void initC2B(String[] b2c, String b2cSB, String b2cNR,  String c2bNR,
+        public static void initC2B(String[] b2c, String b2cSB, String b2cNR,  String c2bNR,
                             int b2Min, int b2Max,
                             char[] c2b, char[] c2bIndex)
         {
@@ -741,9 +838,11 @@ public class DoubleByte {
     }
 
     public static class Encoder_DBCSONLY extends Encoder {
-        Encoder_DBCSONLY(Charset cs, byte[] repl,
-                         char[] c2b, char[] c2bIndex) {
-            super(cs, 2.0f, 2.0f, repl, c2b, c2bIndex);
+
+        public Encoder_DBCSONLY(Charset cs, byte[] repl,
+                                char[] c2b, char[] c2bIndex,
+                                boolean isASCIICompatible) {
+            super(cs, 2.0f, 2.0f, repl, c2b, c2bIndex, isASCIICompatible);
         }
 
         public int encodeChar(char ch) {
@@ -754,8 +853,6 @@ public class DoubleByte {
         }
     }
 
-
-
     public static class Encoder_EBCDIC extends Encoder {
         static final int SBCS = 0;
         static final int DBCS = 1;
@@ -764,8 +861,9 @@ public class DoubleByte {
 
         protected int  currentState = SBCS;
 
-        Encoder_EBCDIC(Charset cs, char[] c2b, char[] c2bIndex) {
-            super(cs, 4.0f, 5.0f, new byte[] {(byte)0x6f}, c2b, c2bIndex);
+        public Encoder_EBCDIC(Charset cs, char[] c2b, char[] c2bIndex,
+                              boolean isASCIICompatible) {
+            super(cs, 4.0f, 5.0f, new byte[] {(byte)0x6f}, c2b, c2bIndex, isASCIICompatible);
         }
 
         protected void implReset() {
@@ -878,6 +976,7 @@ public class DoubleByte {
             }
         }
 
+        @Override
         public int encode(char[] src, int sp, int len, byte[] dst) {
             int dp = 0;
             int sl = sp + len;
@@ -904,16 +1003,91 @@ public class DoubleByte {
                     dst[dp++] = (byte)bb;
                 } else {                             // SingleByte
                     if (currentState == DBCS) {
-                         currentState = SBCS;
-                         dst[dp++] = SI;
+                        currentState = SBCS;
+                        dst[dp++] = SI;
                     }
                     dst[dp++] = (byte)bb;
                 }
             }
 
             if (currentState == DBCS) {
-                 currentState = SBCS;
-                 dst[dp++] = SI;
+                currentState = SBCS;
+                dst[dp++] = SI;
+            }
+            return dp;
+        }
+
+        @Override
+        public int encodeFromLatin1(byte[] src, int sp, int len, byte[] dst) {
+            int dp = 0;
+            int sl = sp + len;
+            while (sp < sl) {
+                char c = (char)(src[sp++] & 0xff);
+                int bb = encodeChar(c);
+                if (bb == UNMAPPABLE_ENCODING) {
+                    // no surrogate pair in latin1 string
+                    dst[dp++] = repl[0];
+                    if (repl.length > 1)
+                        dst[dp++] = repl[1];
+                    continue;
+                } //else
+                if (bb > MAX_SINGLEBYTE) {           // DoubleByte
+                    if (currentState == SBCS) {
+                        currentState = DBCS;
+                        dst[dp++] = SO;
+                    }
+                    dst[dp++] = (byte)(bb >> 8);
+                    dst[dp++] = (byte)bb;
+                } else {                             // SingleByte
+                    if (currentState == DBCS) {
+                        currentState = SBCS;
+                        dst[dp++] = SI;
+                    }
+                    dst[dp++] = (byte)bb;
+                }
+            }
+            if (currentState == DBCS) {
+                currentState = SBCS;
+                dst[dp++] = SI;
+            }
+            return dp;
+        }
+
+        @Override
+        public int encodeFromUTF16(byte[] src, int sp, int len, byte[] dst) {
+            int dp = 0;
+            int sl = sp + len;
+            while (sp < sl) {
+                char c = StringUTF16.getChar(src, sp++);
+                int bb = encodeChar(c);
+                if (bb == UNMAPPABLE_ENCODING) {
+                    if (Character.isHighSurrogate(c) && sp < sl &&
+                        Character.isLowSurrogate(StringUTF16.getChar(src, sp))) {
+                        sp++;
+                    }
+                    dst[dp++] = repl[0];
+                    if (repl.length > 1)
+                        dst[dp++] = repl[1];
+                    continue;
+                } //else
+                if (bb > MAX_SINGLEBYTE) {           // DoubleByte
+                    if (currentState == SBCS) {
+                        currentState = DBCS;
+                        dst[dp++] = SO;
+                    }
+                    dst[dp++] = (byte)(bb >> 8);
+                    dst[dp++] = (byte)bb;
+                } else {                             // SingleByte
+                    if (currentState == DBCS) {
+                        currentState = SBCS;
+                        dst[dp++] = SI;
+                    }
+                    dst[dp++] = (byte)bb;
+                }
+            }
+            if (currentState == DBCS) {
+                currentState = SBCS;
+                dst[dp++] = SI;
             }
             return dp;
         }
@@ -921,8 +1095,9 @@ public class DoubleByte {
 
     // EUC_SIMPLE
     public static class Encoder_EUC_SIM extends Encoder {
-        Encoder_EUC_SIM(Charset cs, char[] c2b, char[] c2bIndex) {
-            super(cs, c2b, c2bIndex);
+        public Encoder_EUC_SIM(Charset cs, char[] c2b, char[] c2bIndex,
+                               boolean isASCIICompatible) {
+            super(cs, c2b, c2bIndex, isASCIICompatible);
         }
     }
 

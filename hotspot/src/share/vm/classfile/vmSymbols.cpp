@@ -443,6 +443,47 @@ int vmIntrinsics::predicates_needed(vmIntrinsics::ID id) {
 
 bool vmIntrinsics::is_disabled_by_flags(vmIntrinsics::ID id) {
   assert(id != vmIntrinsics::_none, "must be a VM intrinsic");
+
+  // -XX:-InlineNatives disables nearly all intrinsics except the ones listed in
+  // the following switch statement.
+  if (!InlineNatives) {
+    switch (id) {
+    case vmIntrinsics::_indexOfL:
+    case vmIntrinsics::_indexOfU:
+    case vmIntrinsics::_indexOfUL:
+    case vmIntrinsics::_indexOfIL:
+    case vmIntrinsics::_indexOfIU:
+    case vmIntrinsics::_indexOfIUL:
+    case vmIntrinsics::_indexOfU_char:
+    case vmIntrinsics::_compareToL:
+    case vmIntrinsics::_compareToU:
+    case vmIntrinsics::_compareToLU:
+    case vmIntrinsics::_compareToUL:
+    case vmIntrinsics::_equalsL:
+    case vmIntrinsics::_equalsU:
+    case vmIntrinsics::_equalsC:
+    case vmIntrinsics::_getCharStringU:
+    case vmIntrinsics::_putCharStringU:
+    case vmIntrinsics::_compressStringC:
+    case vmIntrinsics::_compressStringB:
+    case vmIntrinsics::_inflateStringC:
+    case vmIntrinsics::_inflateStringB:
+    case vmIntrinsics::_getAndAddInt:
+    case vmIntrinsics::_getAndAddLong:
+    case vmIntrinsics::_getAndSetInt:
+    case vmIntrinsics::_getAndSetLong:
+    case vmIntrinsics::_getAndSetObject:
+    case vmIntrinsics::_loadFence:
+    case vmIntrinsics::_storeFence:
+    case vmIntrinsics::_fullFence:
+    case vmIntrinsics::_hasNegatives:
+    case vmIntrinsics::_Reference_get:
+      break;
+    default:
+      return true;
+    }
+  }
+
   switch (id) {
   case vmIntrinsics::_isInstance:
   case vmIntrinsics::_isAssignableFrom:
@@ -453,6 +494,7 @@ bool vmIntrinsics::is_disabled_by_flags(vmIntrinsics::ID id) {
   case vmIntrinsics::_getSuperclass:
   case vmIntrinsics::_getLength:
   case vmIntrinsics::_newArray:
+  case vmIntrinsics::_getClass:
     if (!InlineClassNatives) return true;
     break;
   case vmIntrinsics::_currentThread:
@@ -555,6 +597,12 @@ bool vmIntrinsics::is_disabled_by_flags(vmIntrinsics::ID id) {
   case vmIntrinsics::_getAndSetInt:
   case vmIntrinsics::_getAndSetLong:
   case vmIntrinsics::_getAndSetObject:
+  case vmIntrinsics::_loadFence:
+  case vmIntrinsics::_storeFence:
+  case vmIntrinsics::_fullFence:
+  case vmIntrinsics::_compareAndSwapObject:
+  case vmIntrinsics::_compareAndSwapLong:
+  case vmIntrinsics::_compareAndSwapInt:
     if (!InlineUnsafeOps) return true;
     break;
   case vmIntrinsics::_allocateInstance:
@@ -612,19 +660,31 @@ bool vmIntrinsics::is_disabled_by_flags(vmIntrinsics::ID id) {
     // intrinsic mechanism.
     if (!InlineObjectCopy || !InlineArrayCopy) return true;
     break;
-  case vmIntrinsics::_compareTo:
-     if (!SpecialStringCompareTo) return true;
-     break;
-  case vmIntrinsics::_indexOf:
+  case vmIntrinsics::_compareToL:
+  case vmIntrinsics::_compareToU:
+  case vmIntrinsics::_compareToLU:
+  case vmIntrinsics::_compareToUL:
+    if (!SpecialStringCompareTo) return true;
+    break;
+  case vmIntrinsics::_indexOfL:
+  case vmIntrinsics::_indexOfU:
+  case vmIntrinsics::_indexOfUL:
+  case vmIntrinsics::_indexOfIL:
+  case vmIntrinsics::_indexOfIU:
+  case vmIntrinsics::_indexOfIUL:
+  case vmIntrinsics::_indexOfU_char:
     if (!SpecialStringIndexOf) return true;
     break;
-  case vmIntrinsics::_equals:
+  case vmIntrinsics::_equalsL:
+  case vmIntrinsics::_equalsU:
     if (!SpecialStringEquals) return true;
     break;
+  case vmIntrinsics::_equalsB:
   case vmIntrinsics::_equalsC:
     if (!SpecialArraysEquals) return true;
     break;
   case vmIntrinsics::_encodeISOArray:
+  case vmIntrinsics::_encodeByteISOArray:
     if (!SpecialEncodeISOArray) return true;
     break;
   case vmIntrinsics::_getCallerClass:
@@ -661,6 +721,12 @@ bool vmIntrinsics::is_disabled_by_flags(vmIntrinsics::ID id) {
     break;
   case vmIntrinsics::_f2jblas_ddot:
     if (!UseF2jBLASIntrinsics || (StubRoutines::ddotF2jBLAS() == NULL)) return true;
+    break;
+  case vmIntrinsics::_getCharStringU:
+  case vmIntrinsics::_putCharStringU:
+    // Until JDK-8138651 is fixed, we have to rely on a special flag to
+    // disable these intrinsics for experiments.
+    if (!StringCharIntrinsics) return true;
     break;
 #endif // COMPILER2
   default:

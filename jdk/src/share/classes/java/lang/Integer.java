@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1994, 2013, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1994, 2017, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -26,6 +26,12 @@
 package java.lang;
 
 import java.lang.annotation.Native;
+import java.util.Objects;
+import sun.misc.VM;
+
+import static java.lang.String.COMPACT_STRINGS;
+import static java.lang.String.LATIN1;
+import static java.lang.String.UTF16;
 
 /**
  * The {@code Integer} class wraps a value of the primitive type
@@ -47,7 +53,7 @@ import java.lang.annotation.Native;
  * @author  Arthur van Hoff
  * @author  Josh Bloch
  * @author  Joseph D. Darcy
- * @since JDK1.0
+ * @since 1.0
  */
 public final class Integer extends Number implements Comparable<Integer> {
     /**
@@ -66,7 +72,7 @@ public final class Integer extends Number implements Comparable<Integer> {
      * The {@code Class} instance representing the primitive type
      * {@code int}.
      *
-     * @since   JDK1.1
+     * @since   1.1
      */
     @SuppressWarnings("unchecked")
     public static final Class<Integer>  TYPE = (Class<Integer>) Class.getPrimitiveClass("int");
@@ -74,7 +80,7 @@ public final class Integer extends Number implements Comparable<Integer> {
     /**
      * All possible chars for representing a number as a String
      */
-    final static char[] digits = {
+    static final char[] digits = {
         '0' , '1' , '2' , '3' , '4' , '5' ,
         '6' , '7' , '8' , '9' , 'a' , 'b' ,
         'c' , 'd' , 'e' , 'f' , 'g' , 'h' ,
@@ -136,25 +142,47 @@ public final class Integer extends Number implements Comparable<Integer> {
             return toString(i);
         }
 
-        char buf[] = new char[33];
+        if (COMPACT_STRINGS) {
+            byte[] buf = new byte[33];
+            boolean negative = (i < 0);
+            int charPos = 32;
+
+            if (!negative) {
+                i = -i;
+            }
+
+            while (i <= -radix) {
+                buf[charPos--] = (byte)digits[-(i % radix)];
+                i = i / radix;
+            }
+            buf[charPos] = (byte)digits[-i];
+
+            if (negative) {
+                buf[--charPos] = '-';
+            }
+
+            return StringLatin1.newString(buf, charPos, (33 - charPos));
+        }
+        return toStringUTF16(i, radix);
+    }
+
+    private static String toStringUTF16(int i, int radix) {
+        byte[] buf = new byte[33 * 2];
         boolean negative = (i < 0);
         int charPos = 32;
-
         if (!negative) {
             i = -i;
         }
-
         while (i <= -radix) {
-            buf[charPos--] = digits[-(i % radix)];
+            StringUTF16.putChar(buf, charPos--, digits[-(i % radix)]);
             i = i / radix;
         }
-        buf[charPos] = digits[-i];
+        StringUTF16.putChar(buf, charPos, digits[-i]);
 
         if (negative) {
-            buf[--charPos] = '-';
+            StringUTF16.putChar(buf, --charPos, '-');
         }
-
-        return new String(buf, charPos, (33 - charPos));
+        return StringUTF16.newString(buf, charPos, (33 - charPos));
     }
 
     /**
@@ -227,7 +255,7 @@ public final class Integer extends Number implements Comparable<Integer> {
      *          represented by the argument in hexadecimal (base&nbsp;16).
      * @see #parseUnsignedInt(String, int)
      * @see #toUnsignedString(int, int)
-     * @since   JDK1.0.2
+     * @since   1.0.2
      */
     public static String toHexString(int i) {
         return toUnsignedString0(i, 4);
@@ -265,7 +293,7 @@ public final class Integer extends Number implements Comparable<Integer> {
      *          represented by the argument in octal (base&nbsp;8).
      * @see #parseUnsignedInt(String, int)
      * @see #toUnsignedString(int, int)
-     * @since   JDK1.0.2
+     * @since   1.0.2
      */
     public static String toOctalString(int i) {
         return toUnsignedString0(i, 3);
@@ -297,7 +325,7 @@ public final class Integer extends Number implements Comparable<Integer> {
      *          represented by the argument in binary (base&nbsp;2).
      * @see #parseUnsignedInt(String, int)
      * @see #toUnsignedString(int, int)
-     * @since   JDK1.0.2
+     * @since   1.0.2
      */
     public static String toBinaryString(int i) {
         return toUnsignedString0(i, 1);
@@ -310,36 +338,64 @@ public final class Integer extends Number implements Comparable<Integer> {
         // assert shift > 0 && shift <=5 : "Illegal shift value";
         int mag = Integer.SIZE - Integer.numberOfLeadingZeros(val);
         int chars = Math.max(((mag + (shift - 1)) / shift), 1);
-        char[] buf = new char[chars];
-
-        formatUnsignedInt(val, shift, buf, 0, chars);
-
-        // Use special constructor which takes over "buf".
-        return new String(buf, true);
+        if (COMPACT_STRINGS) {
+            byte[] buf = new byte[chars];
+            formatUnsignedInt(val, shift, buf, 0, chars);
+            return new String(buf, LATIN1);
+        } else {
+            byte[] buf = new byte[chars * 2];
+            formatUnsignedIntUTF16(val, shift, buf, 0, chars);
+            return new String(buf, UTF16);
+        }
     }
 
     /**
-     * Format a long (treated as unsigned) into a character buffer.
+     * Format an {@code int} (treated as unsigned) into a character buffer. If
+     * {@code len} exceeds the formatted ASCII representation of {@code val},
+     * {@code buf} will be padded with leading zeroes.
+     *
      * @param val the unsigned int to format
      * @param shift the log2 of the base to format in (4 for hex, 3 for octal, 1 for binary)
      * @param buf the character buffer to write to
      * @param offset the offset in the destination buffer to start at
      * @param len the number of characters to write
-     * @return the lowest character  location used
      */
-     static int formatUnsignedInt(int val, int shift, char[] buf, int offset, int len) {
-        int charPos = len;
+    static void formatUnsignedInt(int val, int shift, char[] buf, int offset, int len) {
+        // assert shift > 0 && shift <=5 : "Illegal shift value";
+        // assert offset >= 0 && offset < buf.length : "illegal offset";
+        // assert len > 0 && (offset + len) <= buf.length : "illegal length";
+        int charPos = offset + len;
         int radix = 1 << shift;
         int mask = radix - 1;
         do {
-            buf[offset + --charPos] = Integer.digits[val & mask];
+            buf[--charPos] = Integer.digits[val & mask];
             val >>>= shift;
-        } while (val != 0 && charPos > 0);
-
-        return charPos;
+        } while (charPos > offset);
     }
 
-    final static char [] DigitTens = {
+    /** byte[]/LATIN1 version    */
+    static void formatUnsignedInt(int val, int shift, byte[] buf, int offset, int len) {
+        int charPos = offset + len;
+        int radix = 1 << shift;
+        int mask = radix - 1;
+        do {
+            buf[--charPos] = (byte)Integer.digits[val & mask];
+            val >>>= shift;
+        } while (charPos > offset);
+    }
+
+    /** byte[]/UTF16 version    */
+    private static void formatUnsignedIntUTF16(int val, int shift, byte[] buf, int offset, int len) {
+        int charPos = offset + len;
+        int radix = 1 << shift;
+        int mask = radix - 1;
+        do {
+            StringUTF16.putChar(buf, --charPos, Integer.digits[val & mask]);
+            val >>>= shift;
+        } while (charPos > offset);
+    }
+
+    static final byte[] DigitTens = {
         '0', '0', '0', '0', '0', '0', '0', '0', '0', '0',
         '1', '1', '1', '1', '1', '1', '1', '1', '1', '1',
         '2', '2', '2', '2', '2', '2', '2', '2', '2', '2',
@@ -352,7 +408,7 @@ public final class Integer extends Number implements Comparable<Integer> {
         '9', '9', '9', '9', '9', '9', '9', '9', '9', '9',
         } ;
 
-    final static char [] DigitOnes = {
+    static final byte[] DigitOnes = {
         '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
         '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
         '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
@@ -365,24 +421,6 @@ public final class Integer extends Number implements Comparable<Integer> {
         '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
         } ;
 
-        // I use the "invariant division by multiplication" trick to
-        // accelerate Integer.toString.  In particular we want to
-        // avoid division by 10.
-        //
-        // The "trick" has roughly the same performance characteristics
-        // as the "classic" Integer.toString code on a non-JIT VM.
-        // The trick avoids .rem and .div calls but has a longer code
-        // path and is thus dominated by dispatch overhead.  In the
-        // JIT case the dispatch overhead doesn't exist and the
-        // "trick" is considerably faster than the classic code.
-        //
-        // TODO-FIXME: convert (x * 52429) into the equiv shift-add
-        // sequence.
-        //
-        // RE:  Division by Invariant Integers using Multiplication
-        //      T Gralund, P Montgomery
-        //      ACM PLDI 1994
-        //
 
     /**
      * Returns a {@code String} object representing the
@@ -395,12 +433,16 @@ public final class Integer extends Number implements Comparable<Integer> {
      * @return  a string representation of the argument in base&nbsp;10.
      */
     public static String toString(int i) {
-        if (i == Integer.MIN_VALUE)
-            return "-2147483648";
-        int size = (i < 0) ? stringSize(-i) + 1 : stringSize(i);
-        char[] buf = new char[size];
-        getChars(i, size, buf);
-        return new String(buf, true);
+        int size = stringSize(i);
+        if (COMPACT_STRINGS) {
+            byte[] buf = new byte[size];
+            getChars(i, size, buf);
+            return new String(buf, LATIN1);
+        } else {
+            byte[] buf = new byte[size * 2];
+            StringUTF16.getChars(i, size, buf);
+            return new String(buf, UTF16);
+        }
     }
 
     /**
@@ -428,50 +470,78 @@ public final class Integer extends Number implements Comparable<Integer> {
      * digit at the specified index (exclusive), and working
      * backwards from there.
      *
-     * Will fail if i == Integer.MIN_VALUE
+     * @implNote This method converts positive inputs into negative
+     * values, to cover the Integer.MIN_VALUE case. Converting otherwise
+     * (negative to positive) will expose -Integer.MIN_VALUE that overflows
+     * integer.
+     *
+     * @param i     value to convert
+     * @param index next index, after the least significant digit
+     * @param buf   target buffer, Latin1-encoded
+     * @return index of the most significant digit or minus sign, if present
      */
-    static void getChars(int i, int index, char[] buf) {
+    static int getChars(int i, int index, byte[] buf) {
         int q, r;
         int charPos = index;
-        char sign = 0;
 
-        if (i < 0) {
-            sign = '-';
+        boolean negative = i < 0;
+        if (!negative) {
             i = -i;
         }
 
         // Generate two digits per iteration
-        while (i >= 65536) {
+        while (i <= -100) {
             q = i / 100;
-        // really: r = i - (q * 100);
-            r = i - ((q << 6) + (q << 5) + (q << 2));
+            r = (q * 100) - i;
             i = q;
-            buf [--charPos] = DigitOnes[r];
-            buf [--charPos] = DigitTens[r];
+            buf[--charPos] = DigitOnes[r];
+            buf[--charPos] = DigitTens[r];
         }
 
-        // Fall thru to fast mode for smaller numbers
-        // assert(i <= 65536, i);
-        for (;;) {
-            q = (i * 52429) >>> (16+3);
-            r = i - ((q << 3) + (q << 1));  // r = i-(q*10) ...
-            buf [--charPos] = digits [r];
-            i = q;
-            if (i == 0) break;
+        // We know there are at most two digits left at this point.
+        q = i / 10;
+        r = (q * 10) - i;
+        buf[--charPos] = (byte)('0' + r);
+
+        // Whatever left is the remaining digit.
+        if (q < 0) {
+            buf[--charPos] = (byte)('0' - q);
         }
-        if (sign != 0) {
-            buf [--charPos] = sign;
+
+        if (negative) {
+            buf[--charPos] = (byte)'-';
         }
+        return charPos;
     }
 
-    final static int [] sizeTable = { 9, 99, 999, 9999, 99999, 999999, 9999999,
+    // Left here for compatibility reasons, see JDK-8143900.
+    static final int [] sizeTable = { 9, 99, 999, 9999, 99999, 999999, 9999999,
                                       99999999, 999999999, Integer.MAX_VALUE };
 
-    // Requires positive x
+    /**
+     * Returns the string representation size for a given int value.
+     *
+     * @param x int value
+     * @return string size
+     *
+     * @implNote There are other ways to compute this: e.g. binary search,
+     * but values are biased heavily towards zero, and therefore linear search
+     * wins. The iteration results are also routinely inlined in the generated
+     * code after loop unrolling.
+     */
     static int stringSize(int x) {
-        for (int i=0; ; i++)
-            if (x <= sizeTable[i])
-                return i+1;
+        int d = 1;
+        if (x >= 0) {
+            d = 0;
+            x = -x;
+        }
+        int p = -10;
+        for (int i = 1; i < 10; i++) {
+            if (x > p)
+                return i + d;
+            p = 10 * p;
+        }
+        return 10 + d;
     }
 
     /**
@@ -552,12 +622,9 @@ public final class Integer extends Number implements Comparable<Integer> {
                                             " greater than Character.MAX_RADIX");
         }
 
-        int result = 0;
         boolean negative = false;
         int i = 0, len = s.length();
         int limit = -Integer.MAX_VALUE;
-        int multmin;
-        int digit;
 
         if (len > 0) {
             char firstChar = s.charAt(0);
@@ -565,21 +632,21 @@ public final class Integer extends Number implements Comparable<Integer> {
                 if (firstChar == '-') {
                     negative = true;
                     limit = Integer.MIN_VALUE;
-                } else if (firstChar != '+')
-                    throw NumberFormatException.forInputString(s);
-
-                if (len == 1) // Cannot have lone "+" or "-"
-                    throw NumberFormatException.forInputString(s);
-                i++;
-            }
-            multmin = limit / radix;
-            while (i < len) {
-                // Accumulating negatively avoids surprises near MAX_VALUE
-                digit = Character.digit(s.charAt(i++),radix);
-                if (digit < 0) {
+                } else if (firstChar != '+') {
                     throw NumberFormatException.forInputString(s);
                 }
-                if (result < multmin) {
+
+                if (len == 1) { // Cannot have lone "+" or "-"
+                    throw NumberFormatException.forInputString(s);
+                }
+                i++;
+            }
+            int multmin = limit / radix;
+            int result = 0;
+            while (i < len) {
+                // Accumulating negatively avoids surprises near MAX_VALUE
+                int digit = Character.digit(s.charAt(i++), radix);
+                if (digit < 0 || result < multmin) {
                     throw NumberFormatException.forInputString(s);
                 }
                 result *= radix;
@@ -588,10 +655,10 @@ public final class Integer extends Number implements Comparable<Integer> {
                 }
                 result -= digit;
             }
+            return negative ? result : -result;
         } else {
             throw NumberFormatException.forInputString(s);
         }
-        return negative ? result : -result;
     }
 
     /**
@@ -694,7 +761,7 @@ public final class Integer extends Number implements Comparable<Integer> {
     /**
      * Parses the string argument as an unsigned decimal integer. The
      * characters in the string must all be decimal digits, except
-     * that the first character may be an an ASCII plus sign {@code
+     * that the first character may be an ASCII plus sign {@code
      * '+'} ({@code '\u005Cu002B'}). The resulting integer value
      * is returned, exactly as if the argument and the radix 10 were
      * given as arguments to the {@link
@@ -774,7 +841,7 @@ public final class Integer extends Number implements Comparable<Integer> {
      * may be controlled by the {@code -XX:AutoBoxCacheMax=<size>} option.
      * During VM initialization, java.lang.Integer.IntegerCache.high property
      * may be set and saved in the private system properties in the
-     * sun.misc.VM class.
+     * jdk.internal.misc.VM class.
      */
 
     private static class IntegerCache {
@@ -786,7 +853,7 @@ public final class Integer extends Number implements Comparable<Integer> {
             // high value may be configured by property
             int h = 127;
             String integerCacheHighPropValue =
-                sun.misc.VM.getSavedProperty("java.lang.Integer.IntegerCache.high");
+                VM.getSavedProperty("java.lang.Integer.IntegerCache.high");
             if (integerCacheHighPropValue != null) {
                 try {
                     int i = parseInt(integerCacheHighPropValue);
@@ -845,6 +912,9 @@ public final class Integer extends Number implements Comparable<Integer> {
      *
      * @param   value   the value to be represented by the
      *                  {@code Integer} object.
+     * It is rarely appropriate to use this constructor. The static factory
+     * {@link #valueOf(int)} is generally a better choice, as it is
+     * likely to yield significantly better space and time performance.
      */
     public Integer(int value) {
         this.value = value;
@@ -857,11 +927,13 @@ public final class Integer extends Number implements Comparable<Integer> {
      * {@code int} value in exactly the manner used by the
      * {@code parseInt} method for radix 10.
      *
-     * @param      s   the {@code String} to be converted to an
-     *                 {@code Integer}.
-     * @exception  NumberFormatException  if the {@code String} does not
-     *               contain a parsable integer.
-     * @see        java.lang.Integer#parseInt(java.lang.String, int)
+     * @param   s   the {@code String} to be converted to an {@code Integer}.
+     * @throws      NumberFormatException if the {@code String} does not
+     *              contain a parsable integer.
+     * It is rarely appropriate to use this constructor.
+     * Use {@link #parseInt(String)} to convert a string to a
+     * {@code int} primitive, or use {@link #valueOf(String)}
+     * to convert a string to an {@code Integer} object.
      */
     public Integer(String s) throws NumberFormatException {
         this.value = parseInt(s, 10);
@@ -948,13 +1020,13 @@ public final class Integer extends Number implements Comparable<Integer> {
     }
 
     /**
-     * Returns a hash code for a {@code int} value; compatible with
+     * Returns a hash code for an {@code int} value; compatible with
      * {@code Integer.hashCode()}.
      *
      * @param value the value to hash
      * @since 1.8
      *
-     * @return a hash code value for a {@code int} value.
+     * @return a hash code value for an {@code int} value.
      */
     public static int hashCode(int value) {
         return value;
@@ -1323,7 +1395,7 @@ public final class Integer extends Number implements Comparable<Integer> {
     @Native public static final int SIZE = 32;
 
     /**
-     * The number of bytes used to represent a {@code int} value in two's
+     * The number of bytes used to represent an {@code int} value in two's
      * complement binary form.
      *
      * @since 1.8
@@ -1514,9 +1586,8 @@ public final class Integer extends Number implements Comparable<Integer> {
         i = (i & 0x55555555) << 1 | (i >>> 1) & 0x55555555;
         i = (i & 0x33333333) << 2 | (i >>> 2) & 0x33333333;
         i = (i & 0x0f0f0f0f) << 4 | (i >>> 4) & 0x0f0f0f0f;
-        i = (i << 24) | ((i & 0xff00) << 8) |
-            ((i >>> 8) & 0xff00) | (i >>> 24);
-        return i;
+
+        return reverseBytes(i);
     }
 
     /**
@@ -1543,10 +1614,10 @@ public final class Integer extends Number implements Comparable<Integer> {
      * @since 1.5
      */
     public static int reverseBytes(int i) {
-        return ((i >>> 24)           ) |
-               ((i >>   8) &   0xFF00) |
-               ((i <<   8) & 0xFF0000) |
-               ((i << 24));
+        return (i << 24)            |
+               ((i & 0xff00) << 8)  |
+               ((i >>> 8) & 0xff00) |
+               (i >>> 24);
     }
 
     /**

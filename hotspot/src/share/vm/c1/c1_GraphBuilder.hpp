@@ -373,6 +373,7 @@ class GraphBuilder VALUE_OBJ_CLASS_SPEC {
   bool append_unsafe_prefetch(ciMethod* callee, bool is_store, bool is_static);
   void append_unsafe_CAS(ciMethod* callee);
   void append_unsafe_get_and_set_obj(ciMethod* callee, bool is_add);
+  void append_char_access(ciMethod* callee, bool is_store);
 
   void print_inlining(ciMethod* callee, const char* msg = NULL, bool success = true);
 

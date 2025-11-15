@@ -3534,6 +3534,8 @@ void GraphBuilder::build_graph_for_intrinsic(ciMethod* callee) {
   case vmIntrinsics::_getAndSetInt       :
   case vmIntrinsics::_getAndSetLong      :
   case vmIntrinsics::_getAndSetObject    : append_unsafe_get_and_set_obj(callee, false); return;
+  case vmIntrinsics::_getCharStringU     : append_char_access(callee, false); return;
+  case vmIntrinsics::_putCharStringU     : append_char_access(callee, true); return;
   default:
     break;
   }
@@ -4293,6 +4295,30 @@ void GraphBuilder::append_unsafe_CAS(ciMethod* callee) {
   compilation()->set_has_unsafe_access(true);
 }
 
+void GraphBuilder::append_char_access(ciMethod* callee, bool is_store) {
+  // This intrinsic accesses byte[] array as char[] array. Computing the offsets
+  // correctly requires matched array shapes.
+  assert (arrayOopDesc::base_offset_in_bytes(T_CHAR) == arrayOopDesc::base_offset_in_bytes(T_BYTE),
+          "sanity: byte[] and char[] bases agree");
+  assert (type2aelembytes(T_CHAR) == type2aelembytes(T_BYTE)*2,
+          "sanity: byte[] and char[] scales agree");
+
+  ValueStack* state_before = copy_state_indexed_access();
+  compilation()->set_has_access_indexed(true);
+  Values* args = state()->pop_arguments(callee->arg_size());
+  Value array = args->at(0);
+  Value index = args->at(1);
+  if (is_store) {
+    Value value = args->at(2);
+    Instruction* store = append(new StoreIndexed(array, index, NULL, T_CHAR, value, state_before, false));
+    store->set_flag(Instruction::NeedsRangeCheckFlag, false);
+    _memory->store_value(value);
+  } else {
+    Instruction* load = append(new LoadIndexed(array, index, NULL, T_CHAR, state_before));
+    load->set_flag(Instruction::NeedsRangeCheckFlag, false);
+    push(load->type(), load);
+  }
+}
 
 static void post_inlining_event(EventCompilerInlining* event,
                                 int compile_id,

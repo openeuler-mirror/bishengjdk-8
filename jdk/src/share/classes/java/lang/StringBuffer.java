@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1994, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1994, 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,12 +25,6 @@
 
 package java.lang;
 
-import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.io.ObjectStreamField;
-import java.io.Serializable;
-import java.io.StreamCorruptedException;
 import java.util.Arrays;
 
 /**
@@ -98,18 +92,18 @@ import java.util.Arrays;
  * @author      Arthur van Hoff
  * @see     java.lang.StringBuilder
  * @see     java.lang.String
- * @since   JDK1.0
+ * @since   1.0
  */
  public final class StringBuffer
     extends AbstractStringBuilder
-    implements Serializable, CharSequence
+    implements java.io.Serializable, CharSequence
 {
 
     /**
      * A cache of the last value returned by toString. Cleared
      * whenever the StringBuffer is modified.
      */
-    private transient char[] toStringCache;
+    private transient String toStringCache;
 
     /** use serialVersionUID from JDK 1.0.2 for interoperability */
     static final long serialVersionUID = 3388685877147921107L;
@@ -171,7 +165,7 @@ import java.util.Arrays;
 
     @Override
     public synchronized int capacity() {
-        return value.length;
+        return super.capacity();
     }
 
 
@@ -204,12 +198,11 @@ import java.util.Arrays;
      */
     @Override
     public synchronized char charAt(int index) {
-        if ((index < 0) || (index >= count))
-            throw new StringIndexOutOfBoundsException(index);
-        return value[index];
+        return super.charAt(index);
     }
 
     /**
+     * @throws IndexOutOfBoundsException {@inheritDoc}
      * @since      1.5
      */
     @Override
@@ -218,6 +211,7 @@ import java.util.Arrays;
     }
 
     /**
+     * @throws IndexOutOfBoundsException {@inheritDoc}
      * @since     1.5
      */
     @Override
@@ -226,6 +220,7 @@ import java.util.Arrays;
     }
 
     /**
+     * @throws IndexOutOfBoundsException {@inheritDoc}
      * @since     1.5
      */
     @Override
@@ -234,6 +229,7 @@ import java.util.Arrays;
     }
 
     /**
+     * @throws IndexOutOfBoundsException {@inheritDoc}
      * @since     1.5
      */
     @Override
@@ -257,10 +253,8 @@ import java.util.Arrays;
      */
     @Override
     public synchronized void setCharAt(int index, char ch) {
-        if ((index < 0) || (index >= count))
-            throw new StringIndexOutOfBoundsException(index);
         toStringCache = null;
-        value[index] = ch;
+        super.setCharAt(index, ch);
     }
 
     @Override
@@ -660,7 +654,7 @@ import java.util.Arrays;
     }
 
     /**
-     * @since   JDK1.0.2
+     * @since   1.0.2
      */
     @Override
     public synchronized StringBuffer reverse() {
@@ -672,9 +666,12 @@ import java.util.Arrays;
     @Override
     public synchronized String toString() {
         if (toStringCache == null) {
-            toStringCache = Arrays.copyOfRange(value, 0, count);
+            toStringCache =
+                    isLatin1() ? StringLatin1.newString(value, 0, count)
+                               : StringUTF16.newString(value, 0, count);
+            return toStringCache;
         }
-        return new String(toStringCache, true);
+        return new String(toStringCache);
     }
 
     /**
@@ -688,38 +685,45 @@ import java.util.Arrays;
      *              A flag indicating whether the backing array is shared.
      *              The value is ignored upon deserialization.
      */
-    private static final ObjectStreamField[] serialPersistentFields =
+    private static final java.io.ObjectStreamField[] serialPersistentFields =
     {
-        new ObjectStreamField("value", char[].class),
-        new ObjectStreamField("count", Integer.TYPE),
-        new ObjectStreamField("shared", Boolean.TYPE),
+        new java.io.ObjectStreamField("value", char[].class),
+        new java.io.ObjectStreamField("count", Integer.TYPE),
+        new java.io.ObjectStreamField("shared", Boolean.TYPE),
     };
 
     /**
-     * The {@code writeObject} method is called to write the state of the
-     * {@code StringBuffer} to a stream.
+     * readObject is called to restore the state of the StringBuffer from
+     * a stream.
      */
-    private synchronized void writeObject(ObjectOutputStream s)
-        throws IOException {
-        ObjectOutputStream.PutField fields = s.putFields();
-        fields.put("value", value);
+    private synchronized void writeObject(java.io.ObjectOutputStream s)
+        throws java.io.IOException {
+        java.io.ObjectOutputStream.PutField fields = s.putFields();
+        char[] val = new char[capacity()];
+        if (isLatin1()) {
+            StringLatin1.getChars(value, 0, count, val, 0);
+        } else {
+            StringUTF16.getChars(value, 0, count, val, 0);
+        }
+        fields.put("value", val);
         fields.put("count", count);
         fields.put("shared", false);
         s.writeFields();
     }
 
     /**
-     * The {@code readObject} method is called to restore the state of the
-     * {@code StringBuffer} from a stream.
+     * readObject is called to restore the state of the StringBuffer from
+     * a stream.
      */
-    private void readObject(ObjectInputStream s)
-        throws IOException, ClassNotFoundException {
-        ObjectInputStream.GetField fields = s.readFields();
-        value = (char[])fields.get("value", null);
-        int c = fields.get("count", 0);
-        if (c < 0 || c > value.length) {
-            throw new StreamCorruptedException("count value invalid");
-        }
-        count = c;
+    private void readObject(java.io.ObjectInputStream s)
+        throws java.io.IOException, ClassNotFoundException {
+        java.io.ObjectInputStream.GetField fields = s.readFields();
+        char[] val = (char[])fields.get("value", null);
+        initBytes(val, 0, val.length);
+        count = fields.get("count", 0);
+    }
+
+    synchronized void getBytes(byte dst[], int dstBegin, byte coder) {
+        super.getBytes(dst, dstBegin, coder);
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2013, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2016, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,7 +27,7 @@
 
 // Assume the utf8 string is in legal form and has been
 // checked in the class file parser/format checker.
-char* UTF8::next(const char* str, jchar* value) {
+template<typename T> char* UTF8::next(const char* str, T* value) {
   unsigned const char *ptr = (const unsigned char *)str;
   unsigned char ch, ch2, ch3;
   int length = -1;              /* bad length */
@@ -68,11 +68,11 @@ char* UTF8::next(const char* str, jchar* value) {
   } /* end of switch */
 
   if (length <= 0) {
-    *value = ptr[0];    /* default bad result; */
+    *value = (T)ptr[0];    /* default bad result; */
     return (char*)(ptr + 1); // make progress somehow
   }
 
-  *value = result;
+  *value = (T)result;
 
   // The assert is correct but the .class file is wrong
   // assert(UNICODE::utf8_size(result) == length, "checking reverse computation");
@@ -96,12 +96,22 @@ char* UTF8::next_character(const char* str, jint* value) {
 // Count bytes of the form 10xxxxxx and deduct this count
 // from the total byte count.  The utf8 string must be in
 // legal form which has been verified in the format checker.
-int UTF8::unicode_length(const char* str, int len) {
+int UTF8::unicode_length(const char* str, int len, bool& is_latin1, bool& has_multibyte) {
   int num_chars = len;
+  has_multibyte = false;
+  is_latin1 = true;
+  unsigned char prev = 0;
   for (int i = 0; i < len; i++) {
-    if ((str[i] & 0xC0) == 0x80) {
+    unsigned char c = str[i];
+    if ((c & 0xC0) == 0x80) {
+      // Multibyte, check if valid latin1 character.
+      has_multibyte = true;
+      if (prev > 0xC3) {
+        is_latin1 = false;
+      }
       --num_chars;
     }
+    prev = c;
   }
   return num_chars;
 }
@@ -110,17 +120,28 @@ int UTF8::unicode_length(const char* str, int len) {
 // 10xxxxxx which only appear in multibyte characters.
 // The utf8 string must be in legal form and has been
 // verified in the format checker.
-int UTF8::unicode_length(const char* str) {
+int UTF8::unicode_length(const char* str, bool& is_latin1, bool& has_multibyte) {
   int num_chars = 0;
+  has_multibyte = false;
+  is_latin1 = true;
+  unsigned char prev = 0;
   for (const char* p = str; *p; p++) {
-    if (((*p) & 0xC0) != 0x80) {
+    unsigned char c = (*p);
+    if ((c & 0xC0) == 0x80) {
+      // Multibyte, check if valid latin1 character.
+      has_multibyte = true;
+      if (prev > 0xC3) {
+        is_latin1 = false;
+      }
+    } else {
       num_chars++;
     }
+    prev = c;
   }
   return num_chars;
 }
 
-// Writes a jchar a utf8 and returns the end
+// Writes a jchar as utf8 and returns the end
 static u_char* utf8_write(u_char* base, jchar ch) {
   if ((ch != 0) && (ch <=0x7f)) {
     base[0] = (u_char) ch;
@@ -145,7 +166,7 @@ static u_char* utf8_write(u_char* base, jchar ch) {
   return base + 3;
 }
 
-void UTF8::convert_to_unicode(const char* utf8_str, jchar* unicode_str, int unicode_length) {
+template<typename T> void UTF8::convert_to_unicode(const char* utf8_str, T* unicode_str, int unicode_length) {
   unsigned char ch;
   const char *ptr = utf8_str;
   int index = 0;
@@ -153,7 +174,7 @@ void UTF8::convert_to_unicode(const char* utf8_str, jchar* unicode_str, int unic
   /* ASCII case loop optimization */
   for (; index < unicode_length; index++) {
     if((ch = ptr[0]) > 0x7F) { break; }
-    unicode_str[index] = ch;
+    unicode_str[index] = (T)ch;
     ptr = (const char *)(ptr + 1);
   }
 
@@ -161,6 +182,12 @@ void UTF8::convert_to_unicode(const char* utf8_str, jchar* unicode_str, int unic
     ptr = UTF8::next(ptr, &unicode_str[index]);
   }
 }
+
+// Explicit instantiation for all supported string types.
+template char* UTF8::next<jchar>(const char* str, jchar* value);
+template char* UTF8::next<jbyte>(const char* str, jbyte* value);
+template void UTF8::convert_to_unicode<jchar>(const char* utf8_str, jchar* unicode_str, int unicode_length);
+template void UTF8::convert_to_unicode<jbyte>(const char* utf8_str, jbyte* unicode_str, int unicode_length);
 
 // returns the quoted ascii length of a 0-terminated utf8 string
 int UTF8::quoted_ascii_length(const char* utf8_str, int utf8_length) {
@@ -306,48 +333,93 @@ jint UTF8::get_supplementary_character(const unsigned char* str) {
                  + ((str[4] & 0x0f) << 6)  + (str[5] & 0x3f);
 }
 
-
 //-------------------------------------------------------------------------------------
 
+bool UNICODE::is_latin1(jchar c) {
+  return (c <= 0x00FF);
+}
+
+bool UNICODE::is_latin1(jchar* base, int length) {
+  for (int index = 0; index < length; index++) {
+    if (base[index] > 0x00FF) {
+      return false;
+    }
+  }
+  return true;
+}
 
 int UNICODE::utf8_size(jchar c) {
-  if ((0x0001 <= c) && (c <= 0x007F)) return 1;
-  if (c <= 0x07FF) return 2;
-  return 3;
-}
-
-int UNICODE::utf8_length(jchar* base, int length) {
-  size_t result = 0;
-  for (int index = 0; index < length; index++) {
-    jchar c = base[index];
-    int sz = utf8_size(c);
-    if (result + sz > INT_MAX-1) {
-      break;
-    }
-    result += sz;
+  if ((0x0001 <= c) && (c <= 0x007F)) {
+    // ASCII character
+    return 1;
+  } else  if (c <= 0x07FF) {
+    return 2;
+  } else {
+    return 3;
   }
-  return static_cast<int>(result);
 }
 
-char* UNICODE::as_utf8(jchar* base, int length) {
+int UNICODE::utf8_size(jbyte c) {
+  if (c >= 0x01) {
+    // ASCII character. Check is equivalent to
+    // (0x01 <= c) && (c <= 0x7F) because c is signed.
+    return 1;
+  } else {
+    // Non-ASCII character or 0x00 which needs to be
+    // two-byte encoded as 0xC080 in modified UTF-8.
+    return 2;
+  }
+}
+
+template<typename T>
+int UNICODE::utf8_length(T* base, int length) {
+  int result = 0;
+  for (int index = 0; index < length; index++) {
+    T c = base[index];
+    result += utf8_size(c);
+  }
+  return result;
+}
+
+template<typename T>
+char* UNICODE::as_utf8(T* base, int& length) {
   int utf8_len = utf8_length(base, length);
-  u_char* result = NEW_RESOURCE_ARRAY(u_char, utf8_len + 1);
-  u_char* p = result;
-  for (int index = 0; index < length; index++) {
-    p = utf8_write(p, base[index]);
-  }
-  *p = '\0';
-  assert(p == &result[utf8_len], "length prediction must be correct");
+  u_char* buf = NEW_RESOURCE_ARRAY(u_char, utf8_len + 1);
+  char* result = as_utf8(base, length, (char*) buf, utf8_len + 1);
+  assert((int) strlen(result) == utf8_len, "length prediction must be correct");
+  // Set string length to utf8 length
+  length = utf8_len;
   return (char*) result;
 }
 
 char* UNICODE::as_utf8(jchar* base, int length, char* buf, int buflen) {
   u_char* p = (u_char*)buf;
-  u_char* end = (u_char*)buf + buflen;
   for (int index = 0; index < length; index++) {
     jchar c = base[index];
-    if (p + utf8_size(c) >= end) break;      // string is truncated
-    p = utf8_write(p, base[index]);
+    buflen -= utf8_size(c);
+    if (buflen <= 0) break; // string is truncated
+    p = utf8_write(p, c);
+  }
+  *p = '\0';
+  return buf;
+}
+
+char* UNICODE::as_utf8(jbyte* base, int length, char* buf, int buflen) {
+  u_char* p = (u_char*)buf;
+  u_char* end = (u_char*)buf + buflen;
+  for (int index = 0; index < length; index++) {
+    jbyte c = base[index];
+    int sz = utf8_size(c);
+    buflen -= sz;
+    if (buflen <= 0) break; // string is truncated
+    if (sz == 1) {
+      // Copy ASCII characters (UTF-8 is ASCII compatible)
+      *p++ = c;
+    } else {
+      // Non-ASCII character or 0x00 which should
+      // be encoded as 0xC080 in "modified" UTF8.
+      p = utf8_write(p, ((jchar) c) & 0xff);
+    }
   }
   *p = '\0';
   return buf;
@@ -361,10 +433,11 @@ void UNICODE::convert_to_utf8(const jchar* base, int length, char* utf8_buffer) 
 }
 
 // returns the quoted ascii length of a unicode string
-int UNICODE::quoted_ascii_length(jchar* base, int length) {
+template<typename T>
+int UNICODE::quoted_ascii_length(T* base, int length) {
   int result = 0;
   for (int i = 0; i < length; i++) {
-    jchar c = base[i];
+    T c = base[i];
     if (c >= 32 && c < 127) {
       result++;
     } else {
@@ -374,12 +447,13 @@ int UNICODE::quoted_ascii_length(jchar* base, int length) {
   return result;
 }
 
-// converts a utf8 string to quoted ascii
-void UNICODE::as_quoted_ascii(const jchar* base, int length, char* buf, int buflen) {
+// converts a unicode string to quoted ascii
+template<typename T>
+void UNICODE::as_quoted_ascii(const T* base, int length, char* buf, int buflen) {
   char* p = buf;
   char* end = buf + buflen;
   for (int index = 0; index < length; index++) {
-    jchar c = base[index];
+    T c = base[index];
     if (c >= 32 && c < 127) {
       if (p + 1 >= end) break;      // string is truncated
       *p++ = (char)c;
@@ -391,3 +465,13 @@ void UNICODE::as_quoted_ascii(const jchar* base, int length, char* buf, int bufl
   }
   *p = '\0';
 }
+
+// Explicit instantiation for all supported types.
+template int UNICODE::utf8_length(jbyte* base, int length);
+template int UNICODE::utf8_length(jchar* base, int length);
+template char* UNICODE::as_utf8(jbyte* base, int& length);
+template char* UNICODE::as_utf8(jchar* base, int& length);
+template int UNICODE::quoted_ascii_length<jbyte>(jbyte* base, int length);
+template int UNICODE::quoted_ascii_length<jchar>(jchar* base, int length);
+template void UNICODE::as_quoted_ascii<jbyte>(const jbyte* base, int length, char* buf, int buflen);
+template void UNICODE::as_quoted_ascii<jchar>(const jchar* base, int length, char* buf, int buflen);

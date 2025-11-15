@@ -32,6 +32,8 @@ import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.CoderResult;
 import java.util.Arrays;
+import sun.nio.cs.StringUTF16;
+import sun.nio.cs.ext.DoubleByte;
 import sun.nio.cs.Surrogate;
 import static sun.nio.cs.CharsetMapping.*;
 
@@ -52,7 +54,7 @@ public class HKSCS {
             // super(cs, 0.5f, 1.0f);
             // need to extends DoubleByte.Decoder so the
             // sun.io can use it. this implementation
-            super(cs, 0.5f, 1.0f, null, null, 0, 0);
+            super(cs, 0.5f, 1.0f, null, null, 0, 0, true);
             this.big5Dec = big5Dec;
             this.b2cBmp = b2cBmp;
             this.b2cSupp = b2cSupp;
@@ -216,7 +218,7 @@ public class HKSCS {
                 return decodeBufferLoop(src, dst);
         }
 
-        static void initb2c(char[][]b2c, String[] b2cStr)
+        public static void initb2c(char[][]b2c, String[] b2cStr)
         {
             for (int i = 0; i < b2cStr.length; i++) {
                 if (b2cStr[i] == null)
@@ -238,7 +240,7 @@ public class HKSCS {
                           char[][] c2bBmp,
                           char[][] c2bSupp)
         {
-            super(cs, null, null);
+            super(cs, null, null, true);
             this.big5Enc = big5Enc;
             this.c2bBmp = c2bBmp;
             this.c2bSupp = c2bSupp;
@@ -388,13 +390,40 @@ public class HKSCS {
             return dp;
         }
 
+        public int encodeFromUTF16(byte[] src, int sp, int len, byte[] dst) {
+            int dp = 0;
+            int sl = sp + len;
+            int dl = dst.length;
+            while (sp < sl) {
+                char c = StringUTF16.getChar(src, sp++);
+                int bb = encodeChar(c);
+                if (bb == UNMAPPABLE_ENCODING) {
+                    if (!Character.isHighSurrogate(c) || sp == sl ||
+                        !Character.isLowSurrogate(StringUTF16.getChar(src, sp)) ||
+                        (bb = encodeSupp(Character.toCodePoint(c, StringUTF16.getChar(src, sp++))))
+                        == UNMAPPABLE_ENCODING) {
+                        dst[dp++] = repl[0];
+                        if (repl.length > 1)
+                            dst[dp++] = repl[1];
+                        continue;
+                    }
+                }
+                if (bb > MAX_SINGLEBYTE) { // DoubleByte
+                    dst[dp++] = (byte)(bb >> 8);
+                    dst[dp++] = (byte)bb;
+                } else {                   // SingleByte
+                    dst[dp++] = (byte)bb;
+                }
+            }
+            return dp;
+        }
 
         static char[] C2B_UNMAPPABLE = new char[0x100];
         static {
             Arrays.fill(C2B_UNMAPPABLE, (char)UNMAPPABLE_ENCODING);
         }
 
-       static void initc2b(char[][] c2b, String[] b2cStr, String pua) {
+        public static void initc2b(char[][] c2b, String[] b2cStr, String pua) {
             // init c2b/c2bSupp from b2cStr and supp
             int b2Min = 0x40;
             Arrays.fill(c2b, C2B_UNMAPPABLE);
@@ -404,6 +433,8 @@ public class HKSCS {
                     continue;
                 for (int i = 0; i < s.length(); i++) {
                     char c = s.charAt(i);
+                    if (c == UNMAPPABLE_DECODING)
+                        continue;
                     int hi = c >> 8;
                     if (c2b[hi] == C2B_UNMAPPABLE) {
                         c2b[hi] = new char[0x100];

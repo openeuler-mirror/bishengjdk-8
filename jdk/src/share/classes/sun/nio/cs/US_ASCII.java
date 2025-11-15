@@ -31,7 +31,6 @@ import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.CoderResult;
-import java.util.Arrays;
 
 public class US_ASCII
     extends Charset
@@ -146,6 +145,10 @@ public class US_ASCII
             }
             return dp;
         }
+
+        public boolean isASCIICompatible() {
+            return true;
+        }
     }
 
     private static class Encoder extends CharsetEncoder
@@ -258,6 +261,10 @@ public class US_ASCII
                 dst[dp++] = repl;
             }
             return dp;
+        }
+
+        public boolean isASCIICompatible() {
+            return true;
         }
     }
 

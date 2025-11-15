@@ -184,6 +184,7 @@
 #include "opto/cfgnode.hpp"
 #include "opto/chaitin.hpp"
 #include "opto/divnode.hpp"
+#include "opto/intrinsicnode.hpp"
 #include "opto/locknode.hpp"
 #include "opto/loopnode.hpp"
 #include "opto/machnode.hpp"

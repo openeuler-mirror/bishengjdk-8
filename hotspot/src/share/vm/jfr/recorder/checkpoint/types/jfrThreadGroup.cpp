@@ -338,9 +338,10 @@ JfrThreadGroup::find_entry(const JfrThreadGroupPointers& ptrs) const {
 // of a corresponding entry in find_entry().
 JfrThreadGroup::JfrThreadGroupEntry*
 JfrThreadGroup::new_entry(JfrThreadGroupPointers& ptrs) {
-  typeArrayOop tg_name = java_lang_ThreadGroup::name(ptrs.thread_group_oop());
+  typeArrayOop tg_name = java_lang_ThreadGroup::name_as_oop(ptrs.thread_group_oop());
+  int length = tg_name->length();
   JfrThreadGroupEntry* const tge =
-    new JfrThreadGroupEntry(UNICODE::as_utf8((jchar*) tg_name->base(T_CHAR), tg_name->length()), ptrs);
+    new JfrThreadGroupEntry(UNICODE::as_utf8((jchar*) tg_name->base(T_CHAR), length), ptrs);
   add_entry(tge);
   return tge;
 }

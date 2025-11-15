@@ -175,10 +175,11 @@ void ObjectSampleDescription::write_class_name() {
 
 void ObjectSampleDescription::write_thread_group_name() {
   assert(_object->is_a(SystemDictionary::ThreadGroup_klass()), "invariant");
-  typeArrayOop tg_name = java_lang_ThreadGroup::name(_object);
+  typeArrayOop tg_name = java_lang_ThreadGroup::name_as_oop(_object);
   if (tg_name != NULL) {
     write_text("Thread Group: ");
-    write_text(UNICODE::as_utf8((jchar*) tg_name->base(T_CHAR), tg_name->length()));
+    int length = tg_name->length();
+    write_text(UNICODE::as_utf8((jchar*) tg_name->base(T_CHAR), length));
   }
 }
 

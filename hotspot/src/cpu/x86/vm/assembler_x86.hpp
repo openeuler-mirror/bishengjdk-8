@@ -26,6 +26,7 @@
 #define CPU_X86_VM_ASSEMBLER_X86_HPP
 
 #include "asm/register.hpp"
+#include "vm_version_x86.hpp"
 
 class BiasedLockingCounters;
 
@@ -502,7 +503,8 @@ class Assembler : public AbstractAssembler  {
     REX_WRXB   = 0x4F,
 
     VEX_3bytes = 0xC4,
-    VEX_2bytes = 0xC5
+    VEX_2bytes = 0xC5,
+    EVEX_4bytes = 0x62
   };
 
   enum VexPrefix {
@@ -510,6 +512,14 @@ class Assembler : public AbstractAssembler  {
     VEX_X = 0x40,
     VEX_R = 0x80,
     VEX_W = 0x80
+  };
+
+  enum ExexPrefix {
+    EVEX_F  = 0x04,
+    EVEX_V  = 0x08,
+    EVEX_Rb = 0x10,
+    EVEX_X  = 0x40,
+    EVEX_Z  = 0x80
   };
 
   enum VexSimdPrefix {
@@ -526,6 +536,38 @@ class Assembler : public AbstractAssembler  {
     VEX_OPCODE_0F_3A = 0x3
   };
 
+  enum AvxVectorLen {
+    AVX_128bit = 0x0,
+    AVX_256bit = 0x1,
+    AVX_512bit = 0x2,
+    AVX_NoVec  = 0x4
+  };
+
+  enum EvexTupleType {
+    EVEX_FV   = 0,
+    EVEX_HV   = 4,
+    EVEX_FVM  = 6,
+    EVEX_T1S  = 7,
+    EVEX_T1F  = 11,
+    EVEX_T2   = 13,
+    EVEX_T4   = 15,
+    EVEX_T8   = 17,
+    EVEX_HVM  = 18,
+    EVEX_QVM  = 19,
+    EVEX_OVM  = 20,
+    EVEX_M128 = 21,
+    EVEX_DUP  = 22,
+    EVEX_ETUP = 23
+  };
+
+  enum EvexInputSizeInBits {
+    EVEX_8bit  = 0,
+    EVEX_16bit = 1,
+    EVEX_32bit = 2,
+    EVEX_64bit = 3,
+    EVEX_NObit = 4
+  };
+
   enum WhichOperand {
     // input to locate_operand, and format code for relocations
     imm_operand  = 0,            // embedded 32-bit|64-bit immediate operand
@@ -539,6 +581,16 @@ class Assembler : public AbstractAssembler  {
 #endif
   };
 
+  enum ComparisonPredicate {
+    eq = 0,
+    lt = 1,
+    le = 2,
+    _false = 3,
+    neq = 4,
+    nlt = 5,
+    nle = 6,
+    _true = 7
+  };
 
 
   // NOTE: The general philopsophy of the declarations here is that 64bit versions
@@ -553,6 +605,14 @@ class Assembler : public AbstractAssembler  {
 
 private:
 
+  bool _legacy_mode_bw;
+  bool _legacy_mode_dq;
+  bool _legacy_mode_vl;
+  bool _legacy_mode_vlbw;
+  bool _is_managed;
+  bool _vector_masking;    // For stub code use only
+
+  class InstructionAttr *_attributes;
 
   // 64bit prefixes
   int prefix_and_encode(int reg_enc, bool byteinst = false);
@@ -577,6 +637,11 @@ private:
   int  rex_prefix_and_encode(int dst_enc, int src_enc,
                              VexSimdPrefix pre, VexOpcode opc, bool rex_w);
 
+  void vex_prefix(bool vex_r, bool vex_b, bool vex_x, int nds_enc, VexSimdPrefix pre, VexOpcode opc);
+
+  void evex_prefix(bool vex_r, bool vex_b, bool vex_x, bool evex_r, bool evex_v,
+                   int nds_enc, VexSimdPrefix pre, VexOpcode opc);
+
   void vex_prefix(bool vex_r, bool vex_b, bool vex_x, bool vex_w,
                   int nds_enc, VexSimdPrefix pre, VexOpcode opc,
                   bool vector256);
@@ -584,6 +649,10 @@ private:
   void vex_prefix(Address adr, int nds_enc, int xreg_enc,
                   VexSimdPrefix pre, VexOpcode opc,
                   bool vex_w, bool vector256);
+
+  void vex_prefix(Address adr, int nds_enc, int xreg_enc,
+                  VexSimdPrefix pre, VexOpcode opc,
+                  InstructionAttr *attributes);
 
   void vex_prefix(XMMRegister dst, XMMRegister nds, Address src,
                   VexSimdPrefix pre, bool vector256 = false) {
@@ -609,6 +678,10 @@ private:
                              VexSimdPrefix pre, VexOpcode opc,
                              bool vex_w, bool vector256);
 
+  int  vex_prefix_and_encode(int dst_enc, int nds_enc, int src_enc,
+                             VexSimdPrefix pre, VexOpcode opc,
+                             InstructionAttr *attributes);
+
   int  vex_prefix_0F38_and_encode(Register dst, Register nds, Register src) {
     bool vex_w = false;
     bool vector256 = false;
@@ -633,6 +706,12 @@ private:
   void simd_prefix(XMMRegister xreg, XMMRegister nds, Address adr,
                    VexSimdPrefix pre, VexOpcode opc = VEX_OPCODE_0F,
                    bool rex_w = false, bool vector256 = false);
+
+  void simd_prefix(XMMRegister xreg, XMMRegister nds, Address adr, VexSimdPrefix pre,
+                   VexOpcode opc, InstructionAttr *attributes);
+
+  int simd_prefix_and_encode(XMMRegister dst, XMMRegister nds, XMMRegister src, VexSimdPrefix pre,
+                             VexOpcode opc, InstructionAttr *attributes);
 
   void simd_prefix(XMMRegister dst, Address src,
                    VexSimdPrefix pre, VexOpcode opc = VEX_OPCODE_0F) {
@@ -824,7 +903,9 @@ private:
   public:
 
   // Creation
-  Assembler(CodeBuffer* code) : AbstractAssembler(code) {}
+  Assembler(CodeBuffer* code) : AbstractAssembler(code) {
+    init_attributes();
+  }
 
   // Decoding
   static address locate_operand(address inst, WhichOperand which);
@@ -836,6 +917,28 @@ private:
   // Generic instructions
   // Does 32bit or 64bit as needed for the platform. In some sense these
   // belong in macro assembler but there is no need for both varieties to exist
+
+  void init_attributes(void) {
+    _legacy_mode_bw = (VM_Version::supports_avx512bw() == false);
+    _legacy_mode_dq = (VM_Version::supports_avx512dq() == false);
+    _legacy_mode_vl = (VM_Version::supports_avx512vl() == false);
+    _legacy_mode_vlbw = (VM_Version::supports_avx512vlbw() == false);
+    _is_managed = false;
+    _vector_masking = false;
+    _attributes = NULL;
+  }
+
+  void set_attributes(InstructionAttr *attributes) { _attributes = attributes; }
+  void clear_attributes(void) { _attributes = NULL; }
+
+  void set_managed(void) { _is_managed = true; }
+  void clear_managed(void) { _is_managed = false; }
+  bool is_managed(void) { return _is_managed; }
+
+  // Following functions are for stub code use only
+  void set_vector_masking(void) { _vector_masking = true; }
+  void clear_vector_masking(void) { _vector_masking = false; }
+  bool is_vector_masking(void) { return _vector_masking; }
 
   void lea(Register dst, Address src);
 
@@ -1476,6 +1579,12 @@ private:
   void pcmpestri(XMMRegister xmm1, XMMRegister xmm2, int imm8);
   void pcmpestri(XMMRegister xmm1, Address src, int imm8);
 
+  void pcmpeqw(XMMRegister dst, XMMRegister src);
+  void vpcmpeqw(XMMRegister dst, XMMRegister nds, XMMRegister src, int vector_len);
+
+  void pmovmskb(Register dst, XMMRegister src);
+  void vpmovmskb(Register dst, XMMRegister src);
+
   // SSE 4.1 extract
   void pextrd(Register dst, XMMRegister src, int imm8);
   void pextrq(Register dst, XMMRegister src, int imm8);
@@ -1497,6 +1606,8 @@ private:
   // SSE4.1 packed move
   void pmovzxbw(XMMRegister dst, XMMRegister src);
   void pmovzxbw(XMMRegister dst, Address src);
+
+  void vpmovzxbw(XMMRegister dst, Address src, int vector_len);
 
 #ifndef _LP64 // no 32bit push/pop on amd64
   void popl(Address dst);
@@ -1878,6 +1989,9 @@ private:
   // duplicate 4-bytes integer data from src into 8 locations in dest
   void vpbroadcastd(XMMRegister dst, XMMRegister src);
 
+  // duplicate 2-bytes integer data from src into 16 locations in dest
+  void vpbroadcastw(XMMRegister dst, XMMRegister src);
+
   // Carry-Less Multiplication Quadword
   void pclmulqdq(XMMRegister dst, XMMRegister src, int mask);
   void vpclmulqdq(XMMRegister dst, XMMRegister nds, XMMRegister src, int mask);
@@ -1897,6 +2011,108 @@ private:
   void xorpd(XMMRegister dst, Address src);
   void xorps(XMMRegister dst, Address src);
 
+};
+
+// The Intel x86/Amd64 Assembler attributes: All fields enclosed here are to guide encoding level decisions.
+// Specific set functions are for specialized use, else defaults or whatever was supplied to object construction
+// are applied.
+class InstructionAttr {
+public:
+  InstructionAttr(
+    int vector_len,     // The length of vector to be applied in encoding - for both AVX and EVEX
+    bool rex_vex_w,     // Width of data: if 32-bits or less, false, else if 64-bit or specially defined, true
+    bool legacy_mode,   // Details if either this instruction is conditionally encoded to AVX or earlier if true else possibly EVEX
+    bool no_reg_mask,   // when true, k0 is used when EVEX encoding is chosen, else k1 is used under the same condition
+    bool uses_vl)       // This instruction may have legacy constraints based on vector length for EVEX
+    :
+      _avx_vector_len(vector_len),
+      _rex_vex_w(rex_vex_w),
+      _rex_vex_w_reverted(false),
+      _legacy_mode(legacy_mode),
+      _no_reg_mask(no_reg_mask),
+      _uses_vl(uses_vl),
+      _tuple_type(Assembler::EVEX_ETUP),
+      _input_size_in_bits(Assembler::EVEX_NObit),
+      _is_evex_instruction(false),
+      _evex_encoding(0),
+      _is_clear_context(true),
+      _is_extended_context(false),
+      _current_assembler(NULL),
+      _embedded_opmask_register_specifier(1) { // hard code k1, it will be initialized for now
+    if (UseAVX < 3) _legacy_mode = true;
+  }
+
+  ~InstructionAttr() {
+    if (_current_assembler != NULL) {
+      _current_assembler->clear_attributes();
+    }
+    _current_assembler = NULL;
+  }
+
+private:
+  int  _avx_vector_len;
+  bool _rex_vex_w;
+  bool _rex_vex_w_reverted;
+  bool _legacy_mode;
+  bool _no_reg_mask;
+  bool _uses_vl;
+  int  _tuple_type;
+  int  _input_size_in_bits;
+  bool _is_evex_instruction;
+  int  _evex_encoding;
+  bool _is_clear_context;
+  bool _is_extended_context;
+  int _embedded_opmask_register_specifier;
+
+  Assembler *_current_assembler;
+
+public:
+  // query functions for field accessors
+  int  get_vector_len(void) const { return _avx_vector_len; }
+  bool is_rex_vex_w(void) const { return _rex_vex_w; }
+  bool is_rex_vex_w_reverted(void) { return _rex_vex_w_reverted; }
+  bool is_legacy_mode(void) const { return _legacy_mode; }
+  bool is_no_reg_mask(void) const { return _no_reg_mask; }
+  bool uses_vl(void) const { return _uses_vl; }
+  int  get_tuple_type(void) const { return _tuple_type; }
+  int  get_input_size(void) const { return _input_size_in_bits; }
+  int  is_evex_instruction(void) const { return _is_evex_instruction; }
+  int  get_evex_encoding(void) const { return _evex_encoding; }
+  bool is_clear_context(void) const { return _is_clear_context; }
+  bool is_extended_context(void) const { return _is_extended_context; }
+  int get_embedded_opmask_register_specifier(void) const { return _embedded_opmask_register_specifier; }
+
+  // Set the vector len manually
+  void set_vector_len(int vector_len) { _avx_vector_len = vector_len; }
+
+  // Set revert rex_vex_w for avx encoding
+  void set_rex_vex_w_reverted(void) { _rex_vex_w_reverted = true; }
+
+  // Set rex_vex_w based on state
+  void set_rex_vex_w(bool state) { _rex_vex_w = state; }
+
+  // Set the instruction to be encoded in AVX mode
+  void set_is_legacy_mode(void) { _legacy_mode = true; }
+
+  // Set the current instuction to be encoded as an EVEX instuction
+  void set_is_evex_instruction(void) { _is_evex_instruction = true; }
+
+  // Internal encoding data used in compressed immediate offset programming
+  void set_evex_encoding(int value) { _evex_encoding = value; }
+
+  // Set the Evex.Z field to be used to clear all non directed XMM/YMM/ZMM components
+  void reset_is_clear_context(void) { _is_clear_context = false; }
+
+  // Map back to current asembler so that we can manage object level assocation
+  void set_current_assembler(Assembler *current_assembler) { _current_assembler = current_assembler; }
+
+  // Address modifiers used for compressed displacement calculation
+  void set_address_attributes(int tuple_type, int input_size_in_bits) {
+    if (VM_Version::supports_evex()) {
+      _tuple_type = tuple_type;
+      _input_size_in_bits = input_size_in_bits;
+    }
+  }
 };
 
 #endif // CPU_X86_VM_ASSEMBLER_X86_HPP

@@ -23,7 +23,7 @@
 
 /*
     @test
-    @bug 4217441 4533872 4900935 8020037 8041791
+    @bug 4217441 4533872 4900935 8020037 8032012 8041791 8042589 8054307
     @summary toLowerCase should lower-case Greek Sigma correctly depending
              on the context (final/non-final).  Also it should handle
              Locale specific (lt, tr, and az) lowercasings and supplementary
@@ -106,14 +106,88 @@ public class ToLowerCase {
         // invalid code point tests:
         test("\uD800\uD800\uD801A\uDC00\uDC00\uDC00B", Locale.US, "\uD800\uD800\uD801a\uDC00\uDC00\uDC00b");
 
+        // lower/uppercase + surrogates
+        test("a\uD801\uDC1c", Locale.ROOT, "a\uD801\uDC44");
+        test("A\uD801\uDC1c", Locale.ROOT, "a\uD801\uDC44");
+        test("a\uD801\uDC00\uD801\uDC01\uD801\uDC02", Locale.US, "a\uD801\uDC28\uD801\uDC29\uD801\uDC2A");
+        test("A\uD801\uDC00\uD801\uDC01\uD801\uDC02", Locale.US, "a\uD801\uDC28\uD801\uDC29\uD801\uDC2A");
+
+        // test bmp + supp1
+        StringBuilder src = new StringBuilder(0x20000);
+        StringBuilder exp = new StringBuilder(0x20000);
+        for (int cp = 0; cp < 0x20000; cp++) {
+            if (cp >= Character.MIN_HIGH_SURROGATE && cp <= Character.MAX_HIGH_SURROGATE) {
+                continue;
+            }
+            if (cp == 0x0130) {
+                // Although UnicodeData.txt has the lower case char as \u0069, it should be
+                // handled with the rules in SpecialCasing.txt, i.e., \u0069\u0307 in
+                // non Turkic locales.
+                continue;
+            }
+            int lowerCase = Character.toLowerCase(cp);
+            if (lowerCase == -1) {    //Character.ERROR
+                continue;
+            }
+            src.appendCodePoint(cp);
+            exp.appendCodePoint(lowerCase);
+        }
+        test(src.toString(), Locale.US, exp.toString());
+
+        // test latin1
+        src = new StringBuilder(0x100);
+        exp = new StringBuilder(0x100);
+        for (int cp = 0; cp < 0x100; cp++) {
+            int lowerCase = Character.toLowerCase(cp);
+            if (lowerCase == -1) {    //Character.ERROR
+                continue;
+            }
+            src.appendCodePoint(cp);
+            exp.appendCodePoint(lowerCase);
+        }
+        test(src.toString(), Locale.US, exp.toString());
+
+        // test non-latin1 -> latin1
+        src = new StringBuilder(0x100).append("abc");
+        exp = new StringBuilder(0x100).append("abc");
+        for (int cp = 0x100; cp < 0x10000; cp++) {
+            int lowerCase  = Character.toLowerCase(cp);
+            if (lowerCase < 0x100 && cp != '\u0130') {
+                src.appendCodePoint(cp);
+                exp.appendCodePoint(lowerCase);
+            }
+        }
+        test(src.toString(), Locale.US, exp.toString());
     }
 
     static void test(String in, Locale locale, String expected) {
+        test0(in, locale,expected);
+        for (String[] ss :  new String[][] {
+                                new String[] {"abc",      "abc"},
+                                new String[] {"aBc",      "abc"},
+                                new String[] {"ABC",      "abc"},
+                                new String[] {"ab\u4e00", "ab\u4e00"},
+                                new String[] {"aB\u4e00", "ab\u4e00"},
+                                new String[] {"AB\u4e00", "ab\u4e00"},
+                                new String[] {"ab\uD800\uDC00", "ab\uD800\uDC00"},
+                                new String[] {"aB\uD800\uDC00", "ab\uD800\uDC00"},
+                                new String[] {"AB\uD800\uDC00", "ab\uD800\uDC00"},
+                                new String[] {"ab\uD801\uDC1C", "ab\uD801\uDC44"},
+                                new String[] {"aB\uD801\uDC1C", "ab\uD801\uDC44"},
+                                new String[] {"AB\uD801\uDC1C", "ab\uD801\uDC44"},
+
+                            }) {
+            test0(ss[0] + " " + in, locale, ss[1] + " " + expected);
+            test0(in + " " + ss[0], locale, expected + " " + ss[1]);
+        }
+    }
+
+    static void test0(String in, Locale locale, String expected) {
         String result = in.toLowerCase(locale);
         if (!result.equals(expected)) {
             System.err.println("input: " + in + ", locale: " + locale +
                     ", expected: " + expected + ", actual: " + result);
             throw new RuntimeException();
         }
-   }
+    }
 }

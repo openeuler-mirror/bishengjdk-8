@@ -532,8 +532,8 @@ void VM_PopulateDumpSharedSpace::doit() {
 
   NOT_PRODUCT(SystemDictionary::verify();)
 
-  // Copy the the symbol table, and the system dictionary to the shared
-  // space in usable form.  Copy the hastable
+  // Copy the symbol table, string table, and the system dictionary to the shared
+  // space in usable form.  Copy the hashtable
   // buckets first [read-write], then copy the linked lists of entries
   // [read-only].
 
