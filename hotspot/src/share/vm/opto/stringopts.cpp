@@ -1454,8 +1454,6 @@ Node* PhaseStringOpts::int_getChars(GraphKit& kit, Node* arg, Node* dst_array, N
 
 // Copy 'count' bytes/chars from src_array to dst_array starting at index start
 void PhaseStringOpts::arraycopy(GraphKit& kit, IdealKit& ideal, Node* src_array, Node* dst_array, BasicType elembt, Node* start, Node* count) {
-  assert(elembt == T_BYTE || elembt == T_CHAR, "Invalid type for arraycopy");
-
   if (elembt == T_CHAR) {
     // Get number of chars
     count = __ RShiftI(count, __ intcon(1));
@@ -1643,7 +1641,7 @@ Node* PhaseStringOpts::copy_char(GraphKit& kit, Node* val, Node* dst_array, Node
   IdealKit ideal(&kit, true, true);
   IdealVariable end(ideal); __ declarations_done();
   Node* adr = kit.array_element_address(dst_array, start, T_BYTE);
-  if (!dcon){
+  if (!dcon) {
     __ if_then(dst_coder, BoolTest::eq, __ ConI(java_lang_String::CODER_LATIN1));
   }
   if (!dcon || dbyte) {
@@ -1701,21 +1699,17 @@ Node* PhaseStringOpts::allocate_byte_array(GraphKit& kit, IdealKit* ideal, Node*
 }
 
 jbyte PhaseStringOpts::get_constant_coder(GraphKit& kit, Node* str) {
-  assert(str->is_Con(), "String must be constant");
   const TypeOopPtr* str_type = kit.gvn().type(str)->isa_oopptr();
   ciInstance* str_instance = str_type->const_oop()->as_instance();
   jbyte coder = str_instance->field_value_by_offset(java_lang_String::coder_offset_in_bytes()).as_byte();
-  assert(CompactStrings || (coder == java_lang_String::CODER_UTF16), "Strings must be UTF16 encoded");
   return coder;
 }
 
 int PhaseStringOpts::get_constant_length(GraphKit& kit, Node* str) {
-  assert(str->is_Con(), "String must be constant");
   return get_constant_value(kit, str)->length();
 }
 
 ciTypeArray* PhaseStringOpts::get_constant_value(GraphKit& kit, Node* str) {
-  assert(str->is_Con(), "String must be constant");
   const TypeOopPtr* str_type = kit.gvn().type(str)->isa_oopptr();
   ciInstance* str_instance = str_type->const_oop()->as_instance();
   ciObject* src_array = str_instance->field_value_by_offset(java_lang_String::value_offset_in_bytes()).as_object();

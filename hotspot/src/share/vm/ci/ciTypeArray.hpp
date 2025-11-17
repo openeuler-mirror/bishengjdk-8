@@ -58,7 +58,6 @@ public:
 
   // Return byte at index.
   jbyte byte_at(int index);
-
 };
 
 #endif // SHARE_VM_CI_CITYPEARRAY_HPP

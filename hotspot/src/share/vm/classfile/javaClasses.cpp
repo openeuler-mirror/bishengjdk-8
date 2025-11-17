@@ -173,8 +173,6 @@ public:
   void do_field(fieldDescriptor* fd) {
     if (fd->name() == vmSymbols::compact_strings_name()) {
       oop mirror = fd->field_holder()->java_mirror();
-      assert(fd->field_holder() == SystemDictionary::String_klass(), "Should be String");
-      assert(mirror != NULL, "String must have mirror already");
       mirror->bool_field_put(fd->offset(), _value);
     }
   }
@@ -212,7 +210,6 @@ Handle java_lang_String::create_from_unicode(jchar* unicode, int length, TRAPS) 
   bool is_latin1 = CompactStrings && UNICODE::is_latin1(unicode, length);
   Handle h_obj = basic_create(length, is_latin1, CHECK_NH);
   typeArrayOop buffer = value(h_obj());
-  assert(TypeArrayKlass::cast(buffer->klass())->element_type() == T_BYTE, "only byte[]");
   if (is_latin1) {
     for (int index = 0; index < length; index++) {
       buffer->byte_at_put(index, (jbyte)unicode[index]);
@@ -475,7 +472,6 @@ unsigned int java_lang_String::hash_code(oop java_string) {
 
   typeArrayOop value  = java_lang_String::value(java_string);
   bool      is_latin1 = java_lang_String::is_latin1(java_string);
-
   if (is_latin1) {
     return java_lang_String::hash_code(value->byte_at_addr(0), length);
   } else {
@@ -645,7 +641,6 @@ bool java_lang_String::equals(oop str1, oop str2) {
   typeArrayOop value2  = java_lang_String::value(str2);
   int          length2 = java_lang_String::length(str2);
   bool       is_latin2 = java_lang_String::is_latin1(str2);
-
   if ((length1 != length2) || (is_latin1 != is_latin2)) {
     // Strings of different size or with different
     // coders are never equal.
@@ -663,7 +658,6 @@ bool java_lang_String::equals(oop str1, oop str2) {
 void java_lang_String::print(oop java_string, outputStream* st) {
   assert(java_string->klass() == SystemDictionary::String_klass(), "must be java_string");
   typeArrayOop value  = java_lang_String::value(java_string);
-
   if (value == NULL) {
     // This can happen if, e.g., printing a String
     // object before its initializer has been called

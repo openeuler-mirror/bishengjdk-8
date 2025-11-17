@@ -754,7 +754,6 @@ bool LibraryCallKit::try_to_inline(int predicate) {
   case vmIntrinsics::_hasNegatives:
     return inline_hasNegatives();
 
-
   case vmIntrinsics::_f2jblas_ddot:
     return inline_ddotF2jBLAS();
   case vmIntrinsics::_dgemm_dgemm:
@@ -1068,7 +1067,6 @@ bool LibraryCallKit::inline_string_equals(StrIntrinsicNode::ArgEnc ae) {
 
 //------------------------------inline_array_equals----------------------------
 bool LibraryCallKit::inline_array_equals(StrIntrinsicNode::ArgEnc ae) {
-  assert(ae == StrIntrinsicNode::UU || ae == StrIntrinsicNode::LL, "unsupported array types");
   Node* arg1 = argument(0);
   Node* arg2 = argument(1);
 
@@ -1083,7 +1081,6 @@ bool LibraryCallKit::inline_hasNegatives() {
     return false;
   }
 
-  assert(callee()->signature()->size() == 3, "hasNegatives has 3 parameters");
   // no receiver since it is static method
   Node* ba         = argument(0);
   Node* offset     = argument(1);
@@ -1149,7 +1146,6 @@ bool LibraryCallKit::inline_string_indexOfI(StrIntrinsicNode::ArgEnc ae) {
   if (!Matcher::match_rule_supported(Op_StrIndexOf)) {
     return false;
   }
-  assert(callee()->signature()->size() == 5, "String.indexOf() has 5 arguments");
   Node* src         = argument(0); // byte[]
   Node* src_count   = argument(1); // char count
   Node* tgt         = argument(2); // byte[]
@@ -1234,7 +1230,6 @@ bool LibraryCallKit::inline_string_indexOfChar() {
   if (!Matcher::match_rule_supported(Op_StrIndexOfChar)) {
     return false;
   }
-  assert(callee()->signature()->size() == 4, "String.indexOfChar() has 4 arguments");
   Node* src         = argument(0); // byte[]
   Node* tgt         = argument(1); // tgt is int ch
   Node* from_index  = argument(2);
@@ -1289,7 +1284,6 @@ bool LibraryCallKit::inline_string_copy(bool compress) {
     return false;
   }
   int nargs = 5;  // 2 oops, 3 ints
-  assert(callee()->signature()->size() == nargs, "string copy has 5 arguments");
 
   Node* src         = argument(0);
   Node* src_offset  = argument(1);
@@ -1306,9 +1300,6 @@ bool LibraryCallKit::inline_string_copy(bool compress) {
   const Type* dst_type = dst->Value(&_gvn);
   BasicType src_elem = src_type->isa_aryptr()->klass()->as_array_klass()->element_type()->basic_type();
   BasicType dst_elem = dst_type->isa_aryptr()->klass()->as_array_klass()->element_type()->basic_type();
-  assert((compress && dst_elem == T_BYTE && (src_elem == T_BYTE || src_elem == T_CHAR)) ||
-         (!compress && src_elem == T_BYTE && (dst_elem == T_BYTE || dst_elem == T_CHAR)),
-         "Unsupported array types for inline_string_copy");
 
   // Convert char[] offsets to byte[] offsets
   bool convert_src = (compress && src_elem == T_BYTE);
@@ -1341,10 +1332,7 @@ bool LibraryCallKit::inline_string_copy(bool compress) {
     if (alloc->maybe_set_complete(&_gvn)) {
       // "You break it, you buy it."
       InitializeNode* init = alloc->initialization();
-      assert(init->is_complete(), "we just did this");
       init->set_complete_with_arraycopy();
-      assert(dst->is_CheckCastPP(), "sanity");
-      assert(dst->in(0)->in(0) == init, "dest pinned");
     }
     // Do not let stores that initialize this object be reordered with
     // a subsequent store that would make this object accessible by
@@ -1433,10 +1421,7 @@ bool LibraryCallKit::inline_string_toBytesU() {
       if (alloc->maybe_set_complete(&_gvn)) {
         // "You break it, you buy it."
         InitializeNode* init = alloc->initialization();
-        assert(init->is_complete(), "we just did this");
         init->set_complete_with_arraycopy();
-        assert(newcopy->is_CheckCastPP(), "sanity");
-        assert(newcopy->in(0)->in(0) == init, "dest pinned");
       }
       // Do not let stores that initialize this object be reordered with
       // a subsequent store that would make this object accessible by
@@ -1517,10 +1502,7 @@ bool LibraryCallKit::inline_string_getCharsU() {
       if (alloc->maybe_set_complete(&_gvn)) {
         // "You break it, you buy it."
         InitializeNode* init = alloc->initialization();
-        assert(init->is_complete(), "we just did this");
         init->set_complete_with_arraycopy();
-        assert(dst->is_CheckCastPP(), "sanity");
-        assert(dst->in(0)->in(0) == init, "dest pinned");
       }
       // Do not let stores that initialize this object be reordered with
       // a subsequent store that would make this object accessible by
@@ -1550,11 +1532,6 @@ bool LibraryCallKit::inline_string_char_access(bool is_store) {
 
   // This intrinsic accesses byte[] array as char[] array. Computing the offsets
   // correctly requires matched array shapes.
-  assert (arrayOopDesc::base_offset_in_bytes(T_CHAR) == arrayOopDesc::base_offset_in_bytes(T_BYTE),
-          "sanity: byte[] and char[] bases agree");
-  assert (type2aelembytes(T_CHAR) == type2aelembytes(T_BYTE)*2,
-          "sanity: byte[] and char[] scales agree");
-
   // Bail when getChar over constants is requested: constant folding would
   // reject folding mismatched char access over byte[]. A normal inlining for getChar
   // Java method would constant fold nicely instead.

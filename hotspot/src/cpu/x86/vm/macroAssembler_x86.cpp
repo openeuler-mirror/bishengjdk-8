@@ -6287,7 +6287,7 @@ void MacroAssembler::string_indexofC8(Register str1, Register str2,
   //     rcx - matched index in string
   assert(cnt1 == rdx && cnt2 == rax && tmp == rcx, "pcmpestri");
   int mode   = (ae == StrIntrinsicNode::LL) ? 0x0c : 0x0d; // bytes or shorts
-  int stride = (ae == StrIntrinsicNode::LL) ? 16 : 8; //UU, UL -> 8
+  int stride = (ae == StrIntrinsicNode::LL) ? 16 : 8; // UU, UL -> 8
   Address::ScaleFactor scale1 = (ae == StrIntrinsicNode::LL) ? Address::times_1 : Address::times_2;
   Address::ScaleFactor scale2 = (ae == StrIntrinsicNode::UL) ? Address::times_1 : scale1;
 
@@ -6339,7 +6339,6 @@ void MacroAssembler::string_indexofC8(Register str1, Register str2,
     jcc(Assembler::negative, RET_NOT_FOUND);  // Left less then substring
 
     addptr(result, (1<<scale1));
-
   } // (int_cnt2 > 8)
 
   // Scan string for start of substr in 16-byte vectors
@@ -6429,7 +6428,6 @@ void MacroAssembler::string_indexofC8(Register str1, Register str2,
     addptr(cnt2, stride);
     jcc(Assembler::negative, SCAN_SUBSTR);
     // Fall through if found full substring
-
   } // (int_cnt2 > 8)
 
   bind(RET_FOUND);
@@ -6440,7 +6438,6 @@ void MacroAssembler::string_indexofC8(Register str1, Register str2,
     shrl(result, 1); // index
   }
   bind(EXIT);
-
 } // string_indexofC8
 
 // Small strings are loaded through stack if they cross page boundary.
@@ -6462,7 +6459,7 @@ void MacroAssembler::string_indexof(Register str1, Register str2,
   // if (substr.count > string.count) return -1;
   // if (substr.count == 0) return 0;
   //
-  int stride = (ae == StrIntrinsicNode::LL) ? 16 : 8; //UU, UL -> 8
+  int stride = (ae == StrIntrinsicNode::LL) ? 16 : 8; // UU, UL -> 8
   assert(int_cnt2 == -1 || (0 < int_cnt2 && int_cnt2 < stride), "should be != 0");
   // This method uses the pcmpestri instruction with bound registers
   //   inputs:
@@ -6516,8 +6513,7 @@ void MacroAssembler::string_indexof(Register str1, Register str2,
           int tail_off = int_cnt2-8;
           pmovzxbw(vec, Address(str2, tail_off));
           psrldq(vec, -2*tail_off);
-        }
-        else {
+        } else {
           int tail_off = int_cnt2*(1<<scale2);
           movdqu(vec, Address(str2, tail_off-16));
           psrldq(vec, 16-tail_off);
@@ -6761,7 +6757,6 @@ void MacroAssembler::string_indexof(Register str1, Register str2,
   }
   bind(CLEANUP);
   pop(rsp); // restore SP
-
 } // string_indexof
 
 void MacroAssembler::string_indexof_char(Register str1, Register cnt1, Register ch, Register result,
@@ -6786,8 +6781,8 @@ void MacroAssembler::string_indexof_char(Register str1, Register cnt1, Register 
     vpbroadcastw(vec1, vec1);
     vpxor(vec2, vec2);
     movl(tmp, cnt1);
-    andl(tmp, 0xFFFFFFF0);  //vector count (in chars)
-    andl(cnt1,0x0000000F);  //tail count (in chars)
+    andl(tmp, 0xFFFFFFF0);  // vector count (in chars)
+    andl(cnt1,0x0000000F);  // tail count (in chars)
 
     bind(SCAN_TO_16_CHAR_LOOP);
     vmovdqu(vec3, Address(result, 0));
@@ -6816,8 +6811,8 @@ void MacroAssembler::string_indexof_char(Register str1, Register cnt1, Register 
     pxor(vec2, vec2);
   }
   movl(tmp, cnt1);
-  andl(tmp, 0xFFFFFFF8);  //vector count (in chars)
-  andl(cnt1,0x00000007);  //tail count (in chars)
+  andl(tmp, 0xFFFFFFF8);  // vector count (in chars)
+  andl(cnt1,0x00000007);  // tail count (in chars)
 
   bind(SCAN_TO_8_CHAR_LOOP);
   movdqu(vec3, Address(result, 0));
@@ -6968,8 +6963,8 @@ void MacroAssembler::string_compare(Register str1, Register str2,
     if (ae == StrIntrinsicNode::LL || ae == StrIntrinsicNode::UU) {
       adr_stride = stride << scale;
     } else {
-      adr_stride1 = 8;  //stride << scale1;
-      adr_stride2 = 16; //stride << scale2;
+      adr_stride1 = 8;  // stride << scale1;
+      adr_stride2 = 16; // stride << scale2;
     }
 
     assert(result == rax && cnt2 == rdx && cnt1 == rcx, "pcmpestri");
@@ -7213,7 +7208,6 @@ void MacroAssembler::string_compare(Register str1, Register str2,
 void MacroAssembler::has_negatives(Register ary1, Register len,
                                    Register result, Register tmp1,
                                    XMMRegister vec1, XMMRegister vec2) {
-
   // rsi: byte array
   // rcx: len
   // rax: result
@@ -7723,23 +7717,22 @@ void MacroAssembler::generate_fill(BasicType t, bool aligned,
 }
 
 // encode char[] to byte[] in ISO_8859_1
-   //@HotSpotIntrinsicCandidate
-   //private static int implEncodeISOArray(byte[] sa, int sp,
-   //byte[] da, int dp, int len) {
-   //  int i = 0;
-   //  for (; i < len; i++) {
-   //    char c = StringUTF16.getChar(sa, sp++);
-   //    if (c > '\u00FF')
-   //      break;
-   //    da[dp++] = (byte)c;
-   //  }
-   //  return i;
-   //}
+   // @HotSpotIntrinsicCandidate
+   // private static int implEncodeISOArray(byte[] sa, int sp,
+   // byte[] da, int dp, int len) {
+   //   int i = 0;
+   //   for (; i < len; i++) {
+   //     char c = StringUTF16.getChar(sa, sp++);
+   //     if (c > '\u00FF')
+   //       break;
+   //     da[dp++] = (byte)c;
+   //   }
+   //   return i;
+   // }
 void MacroAssembler::encode_iso_array(Register src, Register dst, Register len,
   XMMRegister tmp1Reg, XMMRegister tmp2Reg,
   XMMRegister tmp3Reg, XMMRegister tmp4Reg,
   Register tmp5, Register result) {
-
   // rsi: src
   // rdi: dst
   // rdx: len
@@ -7790,7 +7783,6 @@ void MacroAssembler::encode_iso_array(Register src, Register dst, Register len,
       bind(L_copy_32_chars_exit);
       subptr(len, 16);
       jccb(Assembler::greater, L_copy_16_chars_exit);
-
     } else if (UseSSE42Intrinsics) {
       movl(tmp5, 0xff00ff00);   // create mask to test for Unicode chars in vector
       movdl(tmp1Reg, tmp5);
@@ -9067,8 +9059,6 @@ void MacroAssembler::char_array_compress(Register src, Register dst, Register le
   // rsi holds start addr of source char[] to be compressed
   // rdi holds start addr of destination byte[]
   // rdx holds length
-
-  assert(len != result, "");
 
   // save length for return
   push(len);

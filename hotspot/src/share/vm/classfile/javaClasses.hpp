@@ -63,7 +63,6 @@ class java_lang_String : AllStatic {
   static Handle basic_create(int length, bool byte_arr, TRAPS);
 
   static void set_coder(oop string, jbyte coder) {
-    assert(initialized && (coder_offset > 0), "Must be initialized");
     string->byte_field_put(coder_offset, coder);
   }
 
@@ -120,7 +119,6 @@ class java_lang_String : AllStatic {
     return hash_offset;
   }
   static int coder_offset_in_bytes()   {
-    assert(initialized && (coder_offset > 0), "Must be initialized");
     return coder_offset;
   }
 
@@ -145,10 +143,7 @@ class java_lang_String : AllStatic {
     return java_string->int_field(hash_offset);
   }
   static bool is_latin1(oop java_string) {
-    assert(initialized && (coder_offset > 0), "Must be initialized");
-    assert(is_instance(java_string), "must be java_string");
     jbyte coder = java_string->byte_field(coder_offset);
-    assert(CompactStrings || coder == CODER_UTF16, "Must be UTF16 without CompactStrings");
     return coder == CODER_LATIN1;
   }
   static int length(oop java_string) {

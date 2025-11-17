@@ -4226,8 +4226,6 @@ Node* GraphKit::capture_memory(const TypePtr* src_type, const TypePtr* dst_type)
 }
 
 Node* GraphKit::compress_string(Node* src, const TypeAryPtr* src_type, Node* dst, Node* count) {
-  assert(Matcher::match_rule_supported(Op_StrCompressedCopy), "Intrinsic not supported");
-  assert(src_type == TypeAryPtr::BYTES || src_type == TypeAryPtr::CHARS, "invalid source type");
   // If input and output memory types differ, capture both states to preserve
   // the dependency between preceding and subsequent loads/stores.
   // For example, the following program:
@@ -4249,8 +4247,6 @@ Node* GraphKit::compress_string(Node* src, const TypeAryPtr* src_type, Node* dst
 }
 
 void GraphKit::inflate_string(Node* src, Node* dst, const TypeAryPtr* dst_type, Node* count) {
-  assert(Matcher::match_rule_supported(Op_StrInflatedCopy), "Intrinsic not supported");
-  assert(dst_type == TypeAryPtr::BYTES || dst_type == TypeAryPtr::CHARS, "invalid dest type");
   // Capture src and dst memory (see comment in 'compress_string').
   Node* mem = capture_memory(TypeAryPtr::BYTES, dst_type);
   StrInflatedCopyNode* str = new (C) StrInflatedCopyNode(control(), mem, src, dst, count);

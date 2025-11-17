@@ -2372,7 +2372,6 @@ void Assembler::pcmpestri(XMMRegister dst, XMMRegister src, int imm8) {
 }
 // In this context, the dst vector contains the components that are equal, non equal components are zeroed in dst
 void Assembler::pcmpeqw(XMMRegister dst, XMMRegister src) {
-  assert(VM_Version::supports_sse2(), "");
   InstructionAttr attributes(AVX_128bit, /* rex_w */ false, /* legacy_mode */ true, /* no_mask_reg */ false, /* uses_vl */ false);
   int encode = simd_prefix_and_encode(dst, dst, src, VEX_SIMD_66, VEX_OPCODE_0F, &attributes);
   emit_int8(0x75);
@@ -2381,7 +2380,6 @@ void Assembler::pcmpeqw(XMMRegister dst, XMMRegister src) {
 
 // In this context, the dst vector contains the components that are equal, non equal components are zeroed in dst
 void Assembler::vpcmpeqw(XMMRegister dst, XMMRegister nds, XMMRegister src, int vector_len) {
-  assert(VM_Version::supports_avx(), "");
   InstructionAttr attributes(vector_len, /* rex_w */ false, /* legacy_mode */ true, /* no_mask_reg */ false, /* uses_vl */ false);
   int encode = vex_prefix_and_encode(dst->encoding(), nds->encoding(), src->encoding(), VEX_SIMD_66, VEX_OPCODE_0F, &attributes);
   emit_int8(0x75);
@@ -2389,7 +2387,6 @@ void Assembler::vpcmpeqw(XMMRegister dst, XMMRegister nds, XMMRegister src, int 
 }
 
 void Assembler::pmovmskb(Register dst, XMMRegister src) {
-  assert(VM_Version::supports_sse2(), "");
   InstructionAttr attributes(AVX_128bit, /* rex_w */ false, /* legacy_mode */ true, /* no_mask_reg */ false, /* uses_vl */ false);
   int encode = simd_prefix_and_encode(as_XMMRegister(dst->encoding()), xnoreg, src, VEX_SIMD_66, VEX_OPCODE_0F, &attributes);
   emit_int8((unsigned char)0xD7);
@@ -2397,7 +2394,6 @@ void Assembler::pmovmskb(Register dst, XMMRegister src) {
 }
 
 void Assembler::vpmovmskb(Register dst, XMMRegister src) {
-  assert(VM_Version::supports_avx2(), "");
   InstructionAttr attributes(AVX_256bit, /* rex_w */ false, /* legacy_mode */ true, /* no_mask_reg */ false, /* uses_vl */ false);
   int encode = vex_prefix_and_encode(dst->encoding(), 0, src->encoding(), VEX_SIMD_66, VEX_OPCODE_0F, &attributes);
   emit_int8((unsigned char)0xD7);
@@ -2516,9 +2512,7 @@ void Assembler::pmovzxbw(XMMRegister dst, XMMRegister src) {
 }
 
 void Assembler::vpmovzxbw(XMMRegister dst, Address src, int vector_len) {
-  assert(VM_Version::supports_avx(), "");
   InstructionMark im(this);
-  assert(dst != xnoreg, "sanity");
   InstructionAttr attributes(vector_len, /* rex_w */ false, /* legacy_mode */ _legacy_mode_bw, /* no_mask_reg */ true, /* uses_vl */ false);
   attributes.set_address_attributes(/* tuple_type */ EVEX_HVM, /* input_size_in_bits */ EVEX_NObit);
   vex_prefix(src, 0, dst->encoding(), VEX_SIMD_66, VEX_OPCODE_0F_38, &attributes);
@@ -3995,7 +3989,6 @@ void Assembler::vpbroadcastd(XMMRegister dst, XMMRegister src) {
 
 // legacy word/dword replicate
 void Assembler::vpbroadcastw(XMMRegister dst, XMMRegister src) {
-  assert(VM_Version::supports_avx2(), "");
   InstructionAttr attributes(AVX_256bit, /* vex_w */ false, /* legacy_mode */ _legacy_mode_bw, /* no_mask_reg */ true, /* uses_vl */ true);
   int encode = vex_prefix_and_encode(dst->encoding(), 0, src->encoding(), VEX_SIMD_66, VEX_OPCODE_0F_38, &attributes);
   emit_int8(0x79);
@@ -4597,7 +4590,7 @@ void Assembler::vex_prefix(bool vex_r, bool vex_b, bool vex_x, int nds_enc, VexS
 }
 
 // This is a 4 byte encoding
-void Assembler::evex_prefix(bool vex_r, bool vex_b, bool vex_x, bool evex_r, bool evex_v, int nds_enc, VexSimdPrefix pre, VexOpcode opc){
+void Assembler::evex_prefix(bool vex_r, bool vex_b, bool vex_x, bool evex_r, bool evex_v, int nds_enc, VexSimdPrefix pre, VexOpcode opc) {
   // EVEX 0x62 prefix
   prefix(EVEX_4bytes);
   bool vex_w = _attributes->is_rex_vex_w();
@@ -4652,10 +4645,10 @@ void Assembler::vex_prefix(Address adr, int nds_enc, int xreg_enc, VexSimdPrefix
   // if vector length is turned off, revert to AVX for vectors smaller than 512-bit
   if (UseAVX > 2 && _legacy_mode_vl && attributes->uses_vl()) {
     switch (attributes->get_vector_len()) {
-    case AVX_128bit:
-    case AVX_256bit:
-      attributes->set_is_legacy_mode();
-      break;
+      case AVX_128bit:
+      case AVX_256bit:
+        attributes->set_is_legacy_mode();
+        break;
     }
   }
 
@@ -4679,8 +4672,7 @@ void Assembler::vex_prefix(Address adr, int nds_enc, int xreg_enc, VexSimdPrefix
   }
 
   _is_managed = false;
-  if (UseAVX > 2 && !attributes->is_legacy_mode())
-  {
+  if (UseAVX > 2 && !attributes->is_legacy_mode()) {
     bool evex_r = (xreg_enc >= 16);
     bool evex_v = (nds_enc >= 16);
     attributes->set_is_evex_instruction();
@@ -4712,19 +4704,19 @@ int Assembler::vex_prefix_and_encode(int dst_enc, int nds_enc, int src_enc, VexS
   // if vector length is turned off, revert to AVX for vectors smaller than 512-bit
   if (UseAVX > 2 && _legacy_mode_vl && attributes->uses_vl()) {
     switch (attributes->get_vector_len()) {
-    case AVX_128bit:
-    case AVX_256bit:
-      if (check_register_bank) {
-        if (dst_enc >= 16 || nds_enc >= 16 || src_enc >= 16) {
-          // up propagate arithmetic instructions to meet RA requirements
-          attributes->set_vector_len(AVX_512bit);
+      case AVX_128bit:
+      case AVX_256bit:
+        if (check_register_bank) {
+          if (dst_enc >= 16 || nds_enc >= 16 || src_enc >= 16) {
+            // up propagate arithmetic instructions to meet RA requirements
+            attributes->set_vector_len(AVX_512bit);
+          } else {
+            attributes->set_is_legacy_mode();
+          }
         } else {
           attributes->set_is_legacy_mode();
         }
-      } else {
-        attributes->set_is_legacy_mode();
-      }
-      break;
+        break;
     }
   }
 
@@ -4747,8 +4739,7 @@ int Assembler::vex_prefix_and_encode(int dst_enc, int nds_enc, int src_enc, VexS
   }
 
   _is_managed = false;
-  if (UseAVX > 2 && !attributes->is_legacy_mode())
-  {
+  if (UseAVX > 2 && !attributes->is_legacy_mode()) {
     bool evex_r = (dst_enc >= 16);
     bool evex_v = (nds_enc >= 16);
     // can use vex_x as bank extender on rm encoding

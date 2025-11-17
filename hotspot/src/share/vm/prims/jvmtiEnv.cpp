@@ -961,7 +961,6 @@ JvmtiEnv::GetThreadInfo(jthread thread, jvmtiThreadInfo* info_ptr) {
   context_class_loader = Handle(current_thread, loader);
 
   { const char *n;
-
     if (name() != NULL) {
       n = java_lang_String::as_utf8_string(name());
     } else {

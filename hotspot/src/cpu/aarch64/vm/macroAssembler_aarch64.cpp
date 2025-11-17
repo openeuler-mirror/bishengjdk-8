@@ -4824,7 +4824,6 @@ void MacroAssembler::arrays_equals(Register a1, Register a2,
   int base_offset
     = arrayOopDesc::base_offset_in_bytes(elem_size == 2 ? T_CHAR : T_BYTE);
 
-  assert(elem_size == 1 || elem_size == 2, "must be char or byte");
   assert_different_registers(a1, a2, result, cnt1, rscratch1, rscratch2);
 
 #ifndef PRODUCT

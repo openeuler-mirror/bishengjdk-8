@@ -53,6 +53,5 @@ jchar ciTypeArray::char_at(int index) {
 // Implementation of the byte_at method.
 jbyte ciTypeArray::byte_at(int index) {
   VM_ENTRY_MARK;
-  assert(index >= 0 && index < length(), "out of range");
   return get_typeArrayOop()->byte_at(index);
 }

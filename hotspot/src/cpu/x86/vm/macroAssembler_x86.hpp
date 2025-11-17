@@ -1307,7 +1307,6 @@ public:
                           XMMRegister tmp1, Register tmp2);
 
 #undef VIRTUAL
-
 };
 
 /**

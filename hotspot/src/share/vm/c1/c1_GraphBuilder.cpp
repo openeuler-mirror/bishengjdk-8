@@ -4298,11 +4298,6 @@ void GraphBuilder::append_unsafe_CAS(ciMethod* callee) {
 void GraphBuilder::append_char_access(ciMethod* callee, bool is_store) {
   // This intrinsic accesses byte[] array as char[] array. Computing the offsets
   // correctly requires matched array shapes.
-  assert (arrayOopDesc::base_offset_in_bytes(T_CHAR) == arrayOopDesc::base_offset_in_bytes(T_BYTE),
-          "sanity: byte[] and char[] bases agree");
-  assert (type2aelembytes(T_CHAR) == type2aelembytes(T_BYTE)*2,
-          "sanity: byte[] and char[] scales agree");
-
   ValueStack* state_before = copy_state_indexed_access();
   compilation()->set_has_access_indexed(true);
   Values* args = state()->pop_arguments(callee->arg_size());

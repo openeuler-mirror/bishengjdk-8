@@ -592,7 +592,6 @@ class Assembler : public AbstractAssembler  {
     _true = 7
   };
 
-
   // NOTE: The general philopsophy of the declarations here is that 64bit versions
   // of instructions are freely declared without the need for wrapping them an ifdef.
   // (Some dangerous instructions are ifdef's out of inappropriate jvm's.)
@@ -2010,7 +2009,6 @@ private:
   void andps(XMMRegister dst, Address src);
   void xorpd(XMMRegister dst, Address src);
   void xorps(XMMRegister dst, Address src);
-
 };
 
 // The Intel x86/Amd64 Assembler attributes: All fields enclosed here are to guide encoding level decisions.
@@ -2039,7 +2037,9 @@ public:
       _is_extended_context(false),
       _current_assembler(NULL),
       _embedded_opmask_register_specifier(1) { // hard code k1, it will be initialized for now
-    if (UseAVX < 3) _legacy_mode = true;
+    if (UseAVX < 3) {
+      _legacy_mode = true;
+    }
   }
 
   ~InstructionAttr() {
