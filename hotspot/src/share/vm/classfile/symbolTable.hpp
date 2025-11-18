@@ -194,7 +194,7 @@ public:
   // Look up the address of the literal in the SymbolTable for this Symbol*
   static Symbol** lookup_symbol_addr(Symbol* sym);
 
-  // jchar (utf16) version of lookups
+  // jchar (UTF16) version of lookups
   static Symbol* lookup_unicode(const jchar* name, int len, TRAPS);
   static Symbol* lookup_only_unicode(const jchar* name, int len, unsigned int& hash);
 
@@ -311,6 +311,12 @@ private:
   // This allows multiple threads to work on the table at once.
   static void buckets_unlink_or_oops_do(BoolObjectClosure* is_alive, OopClosure* f, int start_idx, int end_idx, BucketUnlinkContext* context);
 
+  // Hashing algorithm, used as the hash value used by the
+  //     StringTable for bucket selection and comparison (stored in the
+  //     HashtableEntry structures).  This is used in the String.intern() method.
+  static unsigned int hash_string(const jchar* s, int len);
+  static unsigned int hash_string(oop string);
+
   StringTable() : RehashableHashtable<oop, mtSymbol>((int)StringTableSize,
                               sizeof (HashtableEntry<oop, mtSymbol>)) {}
 
@@ -354,11 +360,6 @@ public:
     possibly_parallel_unlink_or_oops_do(cl, NULL, processed, removed);
   }
   static void possibly_parallel_oops_do(OopClosure* f);
-
-  // Hashing algorithm, used as the hash value used by the
-  //     StringTable for bucket selection and comparison (stored in the
-  //     HashtableEntry structures).  This is used in the String.intern() method.
-  static unsigned int hash_string(const jchar* s, int len);
 
   // Internal test.
   static void test_alt_hash() PRODUCT_RETURN;

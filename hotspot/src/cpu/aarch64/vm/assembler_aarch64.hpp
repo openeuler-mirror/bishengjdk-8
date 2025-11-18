@@ -2370,6 +2370,24 @@ public:
     f(0b000001, 15, 10), rf(Vn, 5), rf(Vd, 0);
   }
 
+  // AdvSIMD ZIP/UZP/TRN
+#define INSN(NAME, opcode)                                              \
+  void NAME(FloatRegister Vd, SIMD_Arrangement T, FloatRegister Vn, FloatRegister Vm) { \
+    starti;                                                             \
+    f(0, 31), f(0b001110, 29, 24), f(0, 21), f(0b001110, 15, 10);       \
+    rf(Vm, 16), rf(Vn, 5), rf(Vd, 0);                                   \
+    f(T & 1, 30), f(T >> 1, 23, 22);                                    \
+  }
+
+  INSN(uzp1, 0b001);
+  INSN(trn1, 0b010);
+  INSN(zip1, 0b011);
+  INSN(uzp2, 0b101);
+  INSN(trn2, 0b110);
+  INSN(zip2, 0b111);
+
+#undef INSN
+
   // CRC32 instructions
 #define INSN(NAME, sf, sz)                                                \
   void NAME(Register Rd, Register Rn, Register Rm) {                      \

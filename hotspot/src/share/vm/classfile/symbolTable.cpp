@@ -748,6 +748,23 @@ unsigned int StringTable::hash_string(const jchar* s, int len) {
                                     java_lang_String::hash_code(s, len);
 }
 
+unsigned int StringTable::hash_string(oop string) {
+  EXCEPTION_MARK;
+  if (string == NULL) {
+    return hash_string((jchar*)NULL, 0);
+  }
+  ResourceMark rm(THREAD);
+  // All String oops are hashed as unicode
+  int length;
+  jchar* chars = java_lang_String::as_unicode_string(string, length, THREAD);
+  if (chars != NULL) {
+    return hash_string(chars, length);
+  } else {
+    vm_exit_out_of_memory(length, OOM_MALLOC_ERROR, "unable to create Unicode string for verification");
+    return 0;
+  }
+}
+
 oop StringTable::lookup(int index, jchar* name,
                         int len, unsigned int hash) {
   int count = 0;
@@ -1028,7 +1045,7 @@ void StringTable::verify() {
     for ( ; p != NULL; p = p->next()) {
       oop s = p->literal();
       guarantee(s != NULL, "interned string is NULL");
-      unsigned int h = java_lang_String::hash_string(s);
+      unsigned int h = hash_string(s);
       guarantee(p->hash() == h, "broken hash in string table entry");
       guarantee(the_table()->hash_to_index(h) == i,
                 "wrong index in string table");
@@ -1092,7 +1109,7 @@ StringTable::VerifyRetTypes StringTable::verify_entry(int bkt, int e_cnt,
     return _verify_fail_done;
   }
 
-  unsigned int h = java_lang_String::hash_string(str);
+  unsigned int h = hash_string(str);
   if (e_ptr->hash() != h) {
     if (mesg_mode == _verify_with_mesgs) {
       tty->print_cr("ERROR: broken hash value in entry @ bucket[%d][%d], "

@@ -28,6 +28,7 @@ package sun.nio.cs.ext;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CharsetEncoder;
+import sun.nio.cs.ext.DoubleByte;
 import sun.nio.cs.HistoricallyNamedCharset;
 import java.util.Arrays;
 import static sun.nio.cs.CharsetMapping.*;
@@ -50,12 +51,12 @@ public class Big5_Solaris extends Charset implements HistoricallyNamedCharset
 
     public CharsetDecoder newDecoder() {
         initb2c();
-        return new  DoubleByte.Decoder(this, b2c, b2cSB, 0x40, 0xfe);
+        return new DoubleByte.Decoder(this, b2c, b2cSB, 0x40, 0xfe, true);
     }
 
     public CharsetEncoder newEncoder() {
         initc2b();
-        return new DoubleByte.Encoder(this, c2b, c2bIndex);
+        return new DoubleByte.Encoder(this, c2b, c2bIndex, true);
     }
 
     static char[][] b2c;

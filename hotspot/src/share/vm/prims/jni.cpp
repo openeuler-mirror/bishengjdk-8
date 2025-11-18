@@ -3262,12 +3262,18 @@ JNI_QUICK_ENTRY(const jchar*, jni_GetStringChars(
   typeArrayOop s_value = java_lang_String::value(s);
   if (s_value != NULL) {
     int s_len = java_lang_String::length(s);
-    int s_offset = java_lang_String::offset(s);
+    bool is_latin1 = java_lang_String::is_latin1(s);
     buf = NEW_C_HEAP_ARRAY_RETURN_NULL(jchar, s_len + 1, mtInternal);  // add one for zero termination
     /* JNI Specification states return NULL on OOM */
     if (buf != NULL) {
       if (s_len > 0) {
-        memcpy(buf, s_value->char_at_addr(s_offset), sizeof(jchar)*s_len);
+        if (!is_latin1) {
+          memcpy(buf, s_value->char_at_addr(0), sizeof(jchar)*s_len);
+        } else {
+          for (int i = 0; i < s_len; i++) {
+            buf[i] = ((jchar) s_value->byte_at(i)) & 0xff;
+          }
+        }
       }
       buf[s_len] = 0;
       //%note jni_5
@@ -4209,13 +4215,19 @@ JNI_ENTRY(void, jni_GetStringRegion(JNIEnv *env, jstring string, jsize start, js
   DT_VOID_RETURN_MARK(GetStringRegion);
   oop s = JNIHandles::resolve_non_null(string);
   int s_len = java_lang_String::length(s);
-  if (start < 0 || len < 0 || start > s_len - len) {
+  if (start < 0 || len < 0 || start + len > s_len) {
     THROW(vmSymbols::java_lang_StringIndexOutOfBoundsException());
   } else {
     if (len > 0) {
-      int s_offset = java_lang_String::offset(s);
       typeArrayOop s_value = java_lang_String::value(s);
-      memcpy(buf, s_value->char_at_addr(s_offset+start), sizeof(jchar)*len);
+      bool is_latin1 = java_lang_String::is_latin1(s);
+      if (!is_latin1) {
+        memcpy(buf, s_value->char_at_addr(start), sizeof(jchar)*len);
+      } else {
+        for (int i = 0; i < len; i++) {
+          buf[i] = ((jchar) s_value->byte_at(i + start)) & 0xff;
+        }
+      }
     }
   }
 JNI_END
@@ -4238,16 +4250,14 @@ JNI_ENTRY(void, jni_GetStringUTFRegion(JNIEnv *env, jstring string, jsize start,
   DT_VOID_RETURN_MARK(GetStringUTFRegion);
   oop s = JNIHandles::resolve_non_null(string);
   int s_len = java_lang_String::length(s);
-  if (start < 0 || len < 0 || start > s_len - len) {
+  if (start < 0 || len < 0 || start + len > s_len) {
     THROW(vmSymbols::java_lang_StringIndexOutOfBoundsException());
   } else {
     //%note jni_7
     if (len > 0) {
-      ResourceMark rm(THREAD);
-      char *utf_region = java_lang_String::as_utf8_string(s, start, len);
-      int utf_len = (int)strlen(utf_region);
-      memcpy(buf, utf_region, utf_len);
-      buf[utf_len] = 0;
+      // Assume the buffer is large enough as the JNI spec. does not require user error checking
+      java_lang_String::as_utf8_string(s, start, len, buf, INT_MAX);
+      // as_utf8_string null-terminates the result string
     } else {
       // JDK null-terminates the buffer even in len is zero
       if (buf != NULL) {
@@ -4317,18 +4327,26 @@ JNI_ENTRY(const jchar*, jni_GetStringCritical(JNIEnv *env, jstring string, jbool
                                       env, string, (uintptr_t *) isCopy);
 #endif /* USDT2 */
   GC_locker::lock_critical(thread);
-  if (isCopy != NULL) {
-    *isCopy = JNI_FALSE;
-  }
   oop s = JNIHandles::resolve_non_null(string);
-  int s_len = java_lang_String::length(s);
   typeArrayOop s_value = java_lang_String::value(s);
-  int s_offset = java_lang_String::offset(s);
-  const jchar* ret;
-  if (s_len > 0) {
-    ret = s_value->char_at_addr(s_offset);
-  } else {
+  bool is_latin1 = java_lang_String::is_latin1(s);
+  if (isCopy != NULL) {
+    *isCopy = is_latin1 ? JNI_TRUE : JNI_FALSE;
+  }
+  jchar* ret;
+  if (!is_latin1) {
     ret = (jchar*) s_value->base(T_CHAR);
+  } else {
+    // Inflate latin1 encoded string to UTF16
+    int s_len = java_lang_String::length(s);
+    ret = NEW_C_HEAP_ARRAY_RETURN_NULL(jchar, s_len + 1, mtInternal);  // add one for zero termination
+    /* JNI Specification states return NULL on OOM */
+    if (ret != NULL) {
+      for (int i = 0; i < s_len; i++) {
+        ret[i] = ((jchar) s_value->byte_at(i)) & 0xff;
+      }
+      ret[s_len] = 0;
+    }
   }
 #ifndef USDT2
   DTRACE_PROBE1(hotspot_jni, GetStringCritical__return, ret);
@@ -4348,7 +4366,14 @@ JNI_ENTRY(void, jni_ReleaseStringCritical(JNIEnv *env, jstring str, const jchar 
   HOTSPOT_JNI_RELEASESTRINGCRITICAL_ENTRY(
                                           env, str, (uint16_t *) chars);
 #endif /* USDT2 */
-  // The str and chars arguments are ignored
+  // The str and chars arguments are ignored for UTF16 strings
+  oop s = JNIHandles::resolve_non_null(str);
+  bool is_latin1 = java_lang_String::is_latin1(s);
+  if (is_latin1) {
+    // For latin1 string, free jchar array allocated by earlier call to GetStringCritical.
+    // This assumes that ReleaseStringCritical bookends GetStringCritical.
+    FREE_C_HEAP_ARRAY(jchar, chars, mtInternal);
+  }
   GC_locker::unlock_critical(thread);
 #ifndef USDT2
   DTRACE_PROBE(hotspot_jni, ReleaseStringCritical__return);

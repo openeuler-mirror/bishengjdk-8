@@ -107,6 +107,7 @@ public:
     int          _version;                  // (from enum, above.)
     size_t       _alignment;                // how shared archive should be aligned
     int          _obj_alignment;            // value of ObjectAlignmentInBytes
+    bool         _compact_strings;          // value of CompactStrings
     bool         _is_default_jsa;           // indicates whether is the default jsa file
     bool         _compressed_oops;          // save the flag UseCompressedOops
     bool         _compressed_class_ptrs;    // save the flag UseCompressedClassPointers

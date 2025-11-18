@@ -263,8 +263,14 @@ protected:
     CPU_BMI1   = (1 << 22),
     CPU_BMI2   = (1 << 23),
     CPU_RTM    = (1 << 24),  // Restricted Transactional Memory instructions
-    CPU_ADX    = (1 << 25)
+    CPU_ADX    = (1 << 25),
+    CPU_AVX512F  = (1 << 26), // AVX 512bit foundation instructions
+    CPU_AVX512DQ = (1 << 27),
+    CPU_AVX512PF = (1 << 28)
   } cpuFeatureFlags;
+
+#define CPU_AVX512BW ((uint64_t)UCONST64(0x100000000)) // enums are limited to 31 bit
+#define CPU_AVX512VL ((uint64_t)UCONST64(0x200000000)) // EVEX instructions with smaller vector length
 
   enum {
     // AMD
@@ -637,6 +643,12 @@ public:
   static bool supports_bmi1()     { return (_cpuFeatures & CPU_BMI1) != 0; }
   static bool supports_bmi2()     { return (_cpuFeatures & CPU_BMI2) != 0; }
   static bool supports_adx()     { return (_cpuFeatures & CPU_ADX) != 0; }
+  static bool supports_evex()     { return (_cpuFeatures & CPU_AVX512F) != 0; }
+  static bool supports_avx512dq() { return (_cpuFeatures & CPU_AVX512DQ) != 0; }
+  static bool supports_avx512pf() { return (_cpuFeatures & CPU_AVX512PF) != 0; }
+  static bool supports_avx512bw() { return (_cpuFeatures & CPU_AVX512BW) != 0; }
+  static bool supports_avx512vl() { return (_cpuFeatures & CPU_AVX512VL) != 0; }
+  static bool supports_avx512vlbw() { return (supports_avx512bw() && supports_avx512vl()); }
   // Intel features
   static bool is_intel_family_core() { return is_intel() &&
                                        extended_cpu_family() == CPU_FAMILY_INTEL_CORE; }

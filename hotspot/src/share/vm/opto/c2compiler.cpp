@@ -24,6 +24,9 @@
 
 #include "precompiled.hpp"
 #include "opto/c2compiler.hpp"
+#include "opto/compile.hpp"
+#include "opto/optoreg.hpp"
+#include "opto/output.hpp"
 #include "opto/runtime.hpp"
 #if defined AD_MD_HPP
 # include AD_MD_HPP
@@ -91,7 +94,6 @@ bool C2Compiler::init_c2_runtime() {
   return OptoRuntime::generate(thread->env());
 }
 
-
 void C2Compiler::initialize() {
   // The first compiler thread that gets here will initialize the
   // small amount of global state (and runtime stubs) that C2 needs.
@@ -113,10 +115,10 @@ void C2Compiler::compile_method(ciEnv* env, ciMethod* target, int entry_bci) {
   bool subsume_loads = SubsumeLoads;
   bool do_escape_analysis = DoEscapeAnalysis && !env->should_retain_local_variables();
   bool eliminate_boxing = EliminateAutoBox;
+
   while (!env->failing()) {
     // Attempt to compile while subsuming loads into machine instructions.
     Compile C(env, this, target, entry_bci, subsume_loads, do_escape_analysis, eliminate_boxing);
-
 
     // Check result and retry if appropriate.
     if (C.failure_reason() != NULL) {
@@ -161,7 +163,6 @@ void C2Compiler::compile_method(ciEnv* env, ciMethod* target, int entry_bci) {
   }
 }
 
-
 void C2Compiler::print_timers() {
   // do nothing
 }
@@ -197,12 +198,25 @@ bool C2Compiler::is_intrinsic_supported(methodHandle method, bool is_virtual) {
   }
 
   switch (id) {
-  case vmIntrinsics::_compareTo:
+  case vmIntrinsics::_compressStringC:
+  case vmIntrinsics::_compressStringB:
+    if (!Matcher::has_match_rule(Op_StrCompressedCopy)) return false;
+    break;
+  case vmIntrinsics::_inflateStringC:
+  case vmIntrinsics::_inflateStringB:
+    if (!Matcher::has_match_rule(Op_StrInflatedCopy)) return false;
+    break;
+  case vmIntrinsics::_compareToL:
+  case vmIntrinsics::_compareToU:
+  case vmIntrinsics::_compareToLU:
+  case vmIntrinsics::_compareToUL:
     if (!Matcher::match_rule_supported(Op_StrComp)) return false;
     break;
-  case vmIntrinsics::_equals:
+  case vmIntrinsics::_equalsL:
+  case vmIntrinsics::_equalsU:
     if (!Matcher::match_rule_supported(Op_StrEquals)) return false;
     break;
+  case vmIntrinsics::_equalsB:
   case vmIntrinsics::_equalsC:
     if (!Matcher::match_rule_supported(Op_AryEq)) return false;
     break;
@@ -210,7 +224,11 @@ bool C2Compiler::is_intrinsic_supported(methodHandle method, bool is_virtual) {
     if (StubRoutines::unsafe_arraycopy() == NULL) return false;
     break;
   case vmIntrinsics::_encodeISOArray:
+  case vmIntrinsics::_encodeByteISOArray:
     if (!Matcher::match_rule_supported(Op_EncodeISOArray)) return false;
+    break;
+  case vmIntrinsics::_hasNegatives:
+    if (!Matcher::match_rule_supported(Op_HasNegatives)) return false;
     break;
   case vmIntrinsics::_bitCount_i:
     if (!Matcher::match_rule_supported(Op_PopCountI)) return false;
@@ -318,7 +336,17 @@ bool C2Compiler::is_intrinsic_supported(methodHandle method, bool is_virtual) {
   case vmIntrinsics::_min:
   case vmIntrinsics::_max:
   case vmIntrinsics::_arraycopy:
-  case vmIntrinsics::_indexOf:
+  case vmIntrinsics::_indexOfL:
+  case vmIntrinsics::_indexOfU:
+  case vmIntrinsics::_indexOfUL:
+  case vmIntrinsics::_indexOfIL:
+  case vmIntrinsics::_indexOfIU:
+  case vmIntrinsics::_indexOfIUL:
+  case vmIntrinsics::_indexOfU_char:
+  case vmIntrinsics::_toBytesStringU:
+  case vmIntrinsics::_getCharsStringU:
+  case vmIntrinsics::_getCharStringU:
+  case vmIntrinsics::_putCharStringU:
   case vmIntrinsics::_getObject:
   case vmIntrinsics::_getBoolean:
   case vmIntrinsics::_getByte:
@@ -479,22 +507,49 @@ bool C2Compiler::is_intrinsic_disabled_by_flag(methodHandle method, methodHandle
   // the following switch statement.
   if (!InlineNatives) {
     switch (id) {
-    case vmIntrinsics::_indexOf:
-    case vmIntrinsics::_compareTo:
-    case vmIntrinsics::_equals:
-    case vmIntrinsics::_equalsC:
-    case vmIntrinsics::_getAndAddInt:
-    case vmIntrinsics::_getAndAddLong:
-    case vmIntrinsics::_getAndSetInt:
-    case vmIntrinsics::_getAndSetLong:
-    case vmIntrinsics::_getAndSetObject:
-    case vmIntrinsics::_loadFence:
-    case vmIntrinsics::_storeFence:
-    case vmIntrinsics::_fullFence:
-    case vmIntrinsics::_Reference_get:
-      break;
-    default:
-      return true;
+      case vmIntrinsics::_indexOfL:
+      case vmIntrinsics::_indexOfU:
+      case vmIntrinsics::_indexOfUL:
+      case vmIntrinsics::_indexOfIL:
+      case vmIntrinsics::_indexOfIU:
+      case vmIntrinsics::_indexOfIUL:
+      case vmIntrinsics::_indexOfU_char:
+      case vmIntrinsics::_toBytesStringU:
+      case vmIntrinsics::_getCharsStringU:
+      case vmIntrinsics::_getCharStringU:
+      case vmIntrinsics::_putCharStringU:
+      case vmIntrinsics::_compressStringC:
+      case vmIntrinsics::_compressStringB:
+        if (!Matcher::has_match_rule(Op_StrCompressedCopy)) return false;
+        break;
+      case vmIntrinsics::_inflateStringC:
+      case vmIntrinsics::_inflateStringB:
+        if (!Matcher::has_match_rule(Op_StrInflatedCopy)) return false;
+        break;
+      case vmIntrinsics::_compareToL:
+      case vmIntrinsics::_compareToU:
+      case vmIntrinsics::_compareToLU:
+      case vmIntrinsics::_compareToUL:
+        if (!Matcher::match_rule_supported(Op_StrComp)) return false;
+        break;
+      case vmIntrinsics::_equalsL:
+      case vmIntrinsics::_equalsU:
+        if (!Matcher::match_rule_supported(Op_StrEquals)) return false;
+        break;
+      case vmIntrinsics::_equalsB:
+      case vmIntrinsics::_equalsC:
+      case vmIntrinsics::_getAndAddInt:
+      case vmIntrinsics::_getAndAddLong:
+      case vmIntrinsics::_getAndSetInt:
+      case vmIntrinsics::_getAndSetLong:
+      case vmIntrinsics::_getAndSetObject:
+      case vmIntrinsics::_loadFence:
+      case vmIntrinsics::_storeFence:
+      case vmIntrinsics::_fullFence:
+      case vmIntrinsics::_Reference_get:
+        break;
+      default:
+        return true;
     }
   }
 

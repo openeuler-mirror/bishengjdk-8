@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1994, 2013, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1994, 2017, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,7 +27,11 @@ package java.lang;
 
 import java.lang.annotation.Native;
 import java.math.*;
+import java.util.Objects;
 
+import static java.lang.String.COMPACT_STRINGS;
+import static java.lang.String.LATIN1;
+import static java.lang.String.UTF16;
 
 /**
  * The {@code Long} class wraps a value of the primitive type {@code
@@ -49,7 +53,7 @@ import java.math.*;
  * @author  Arthur van Hoff
  * @author  Josh Bloch
  * @author  Joseph D. Darcy
- * @since   JDK1.0
+ * @since   1.0
  */
 public final class Long extends Number implements Comparable<Long> {
     /**
@@ -68,7 +72,7 @@ public final class Long extends Number implements Comparable<Long> {
      * The {@code Class} instance representing the primitive type
      * {@code long}.
      *
-     * @since   JDK1.1
+     * @since   1.1
      */
     @SuppressWarnings("unchecked")
     public static final Class<Long>     TYPE = (Class<Long>) Class.getPrimitiveClass("long");
@@ -122,25 +126,46 @@ public final class Long extends Number implements Comparable<Long> {
             radix = 10;
         if (radix == 10)
             return toString(i);
-        char[] buf = new char[65];
+
+        if (COMPACT_STRINGS) {
+            byte[] buf = new byte[65];
+            int charPos = 64;
+            boolean negative = (i < 0);
+
+            if (!negative) {
+                i = -i;
+            }
+
+            while (i <= -radix) {
+                buf[charPos--] = (byte)Integer.digits[(int)(-(i % radix))];
+                i = i / radix;
+            }
+            buf[charPos] = (byte)Integer.digits[(int)(-i)];
+
+            if (negative) {
+                buf[--charPos] = '-';
+            }
+            return StringLatin1.newString(buf, charPos, (65 - charPos));
+        }
+        return toStringUTF16(i, radix);
+    }
+
+    private static String toStringUTF16(long i, int radix) {
+        byte[] buf = new byte[65 * 2];
         int charPos = 64;
         boolean negative = (i < 0);
-
         if (!negative) {
             i = -i;
         }
-
         while (i <= -radix) {
-            buf[charPos--] = Integer.digits[(int)(-(i % radix))];
+            StringUTF16.putChar(buf, charPos--, Integer.digits[(int)(-(i % radix))]);
             i = i / radix;
         }
-        buf[charPos] = Integer.digits[(int)(-i)];
-
+        StringUTF16.putChar(buf, charPos, Integer.digits[(int)(-i)]);
         if (negative) {
-            buf[--charPos] = '-';
+            StringUTF16.putChar(buf, --charPos, '-');
         }
-
-        return new String(buf, charPos, (65 - charPos));
+        return StringUTF16.newString(buf, charPos, (65 - charPos));
     }
 
     /**
@@ -266,7 +291,7 @@ public final class Long extends Number implements Comparable<Long> {
      *          (base&nbsp;16).
      * @see #parseUnsignedLong(String, int)
      * @see #toUnsignedString(long, int)
-     * @since   JDK 1.0.2
+     * @since   1.0.2
      */
     public static String toHexString(long i) {
         return toUnsignedString0(i, 4);
@@ -305,7 +330,7 @@ public final class Long extends Number implements Comparable<Long> {
      *          value represented by the argument in octal (base&nbsp;8).
      * @see #parseUnsignedLong(String, int)
      * @see #toUnsignedString(long, int)
-     * @since   JDK 1.0.2
+     * @since   1.0.2
      */
     public static String toOctalString(long i) {
         return toUnsignedString0(i, 3);
@@ -338,7 +363,7 @@ public final class Long extends Number implements Comparable<Long> {
      *          value represented by the argument in binary (base&nbsp;2).
      * @see #parseUnsignedLong(String, int)
      * @see #toUnsignedString(long, int)
-     * @since   JDK 1.0.2
+     * @since   1.0.2
      */
     public static String toBinaryString(long i) {
         return toUnsignedString0(i, 1);
@@ -353,31 +378,82 @@ public final class Long extends Number implements Comparable<Long> {
         // assert shift > 0 && shift <=5 : "Illegal shift value";
         int mag = Long.SIZE - Long.numberOfLeadingZeros(val);
         int chars = Math.max(((mag + (shift - 1)) / shift), 1);
-        char[] buf = new char[chars];
-
-        formatUnsignedLong(val, shift, buf, 0, chars);
-        return new String(buf, true);
+        if (COMPACT_STRINGS) {
+            byte[] buf = new byte[chars];
+            formatUnsignedLong0(val, shift, buf, 0, chars);
+            return new String(buf, LATIN1);
+        } else {
+            byte[] buf = new byte[chars * 2];
+            formatUnsignedLong0UTF16(val, shift, buf, 0, chars);
+            return new String(buf, UTF16);
+        }
     }
 
     /**
-     * Format a long (treated as unsigned) into a character buffer.
+     * Format a long (treated as unsigned) into a character buffer. If
+     * {@code len} exceeds the formatted ASCII representation of {@code val},
+     * {@code buf} will be padded with leading zeroes.
+     *
      * @param val the unsigned long to format
      * @param shift the log2 of the base to format in (4 for hex, 3 for octal, 1 for binary)
      * @param buf the character buffer to write to
      * @param offset the offset in the destination buffer to start at
      * @param len the number of characters to write
-     * @return the lowest character location used
      */
-     static int formatUnsignedLong(long val, int shift, char[] buf, int offset, int len) {
-        int charPos = len;
+
+    /** byte[]/LATIN1 version    */
+    static void formatUnsignedLong0(long val, int shift, byte[] buf, int offset, int len) {
+        int charPos = offset + len;
         int radix = 1 << shift;
         int mask = radix - 1;
         do {
-            buf[offset + --charPos] = Integer.digits[((int) val) & mask];
+            buf[--charPos] = (byte)Integer.digits[((int) val) & mask];
             val >>>= shift;
-        } while (val != 0 && charPos > 0);
+        } while (charPos > offset);
+    }
 
-        return charPos;
+    /** byte[]/UTF16 version    */
+    private static void formatUnsignedLong0UTF16(long val, int shift, byte[] buf, int offset, int len) {
+        int charPos = offset + len;
+        int radix = 1 << shift;
+        int mask = radix - 1;
+        do {
+            StringUTF16.putChar(buf, --charPos, Integer.digits[((int) val) & mask]);
+            val >>>= shift;
+        } while (charPos > offset);
+    }
+
+    static String fastUUID(long lsb, long msb) {
+        if (COMPACT_STRINGS) {
+            byte[] buf = new byte[36];
+            formatUnsignedLong0(lsb,        4, buf, 24, 12);
+            formatUnsignedLong0(lsb >>> 48, 4, buf, 19, 4);
+            formatUnsignedLong0(msb,        4, buf, 14, 4);
+            formatUnsignedLong0(msb >>> 16, 4, buf, 9,  4);
+            formatUnsignedLong0(msb >>> 32, 4, buf, 0,  8);
+
+            buf[23] = '-';
+            buf[18] = '-';
+            buf[13] = '-';
+            buf[8]  = '-';
+
+            return new String(buf, LATIN1);
+        } else {
+            byte[] buf = new byte[72];
+
+            formatUnsignedLong0UTF16(lsb,        4, buf, 24, 12);
+            formatUnsignedLong0UTF16(lsb >>> 48, 4, buf, 19, 4);
+            formatUnsignedLong0UTF16(msb,        4, buf, 14, 4);
+            formatUnsignedLong0UTF16(msb >>> 16, 4, buf, 9,  4);
+            formatUnsignedLong0UTF16(msb >>> 32, 4, buf, 0,  8);
+
+            StringUTF16.putChar(buf, 23, '-');
+            StringUTF16.putChar(buf, 18, '-');
+            StringUTF16.putChar(buf, 13, '-');
+            StringUTF16.putChar(buf,  8, '-');
+
+            return new String(buf, UTF16);
+        }
     }
 
     /**
@@ -391,12 +467,16 @@ public final class Long extends Number implements Comparable<Long> {
      * @return  a string representation of the argument in base&nbsp;10.
      */
     public static String toString(long i) {
-        if (i == Long.MIN_VALUE)
-            return "-9223372036854775808";
-        int size = (i < 0) ? stringSize(-i) + 1 : stringSize(i);
-        char[] buf = new char[size];
-        getChars(i, size, buf);
-        return new String(buf, true);
+        int size = stringSize(i);
+        if (COMPACT_STRINGS) {
+            byte[] buf = new byte[size];
+            getChars(i, size, buf);
+            return new String(buf, LATIN1);
+        } else {
+            byte[] buf = new byte[size * 2];
+            StringUTF16.getChars(i, size, buf);
+            return new String(buf, UTF16);
+        }
     }
 
     /**
@@ -418,30 +498,36 @@ public final class Long extends Number implements Comparable<Long> {
     }
 
     /**
-     * Places characters representing the integer i into the
+     * Places characters representing the long i into the
      * character array buf. The characters are placed into
      * the buffer backwards starting with the least significant
      * digit at the specified index (exclusive), and working
      * backwards from there.
      *
-     * Will fail if i == Long.MIN_VALUE
+     * @implNote This method converts positive inputs into negative
+     * values, to cover the Long.MIN_VALUE case. Converting otherwise
+     * (negative to positive) will expose -Long.MIN_VALUE that overflows
+     * long.
+     *
+     * @param i     value to convert
+     * @param index next index, after the least significant digit
+     * @param buf   target buffer, Latin1-encoded
+     * @return index of the most significant digit or minus sign, if present
      */
-    static void getChars(long i, int index, char[] buf) {
+    static int getChars(long i, int index, byte[] buf) {
         long q;
         int r;
         int charPos = index;
-        char sign = 0;
 
-        if (i < 0) {
-            sign = '-';
+        boolean negative = (i < 0);
+        if (!negative) {
             i = -i;
         }
 
         // Get 2 digits/iteration using longs until quotient fits into an int
-        while (i > Integer.MAX_VALUE) {
+        while (i <= Integer.MIN_VALUE) {
             q = i / 100;
-            // really: r = i - (q * 100);
-            r = (int)(i - ((q << 6) + (q << 5) + (q << 2)));
+            r = (int)((q * 100) - i);
             i = q;
             buf[--charPos] = Integer.DigitOnes[r];
             buf[--charPos] = Integer.DigitTens[r];
@@ -450,38 +536,54 @@ public final class Long extends Number implements Comparable<Long> {
         // Get 2 digits/iteration using ints
         int q2;
         int i2 = (int)i;
-        while (i2 >= 65536) {
+        while (i2 <= -100) {
             q2 = i2 / 100;
-            // really: r = i2 - (q * 100);
-            r = i2 - ((q2 << 6) + (q2 << 5) + (q2 << 2));
+            r  = (q2 * 100) - i2;
             i2 = q2;
             buf[--charPos] = Integer.DigitOnes[r];
             buf[--charPos] = Integer.DigitTens[r];
         }
 
-        // Fall thru to fast mode for smaller numbers
-        // assert(i2 <= 65536, i2);
-        for (;;) {
-            q2 = (i2 * 52429) >>> (16+3);
-            r = i2 - ((q2 << 3) + (q2 << 1));  // r = i2-(q2*10) ...
-            buf[--charPos] = Integer.digits[r];
-            i2 = q2;
-            if (i2 == 0) break;
+        // We know there are at most two digits left at this point.
+        q2 = i2 / 10;
+        r  = (q2 * 10) - i2;
+        buf[--charPos] = (byte)('0' + r);
+
+        // Whatever left is the remaining digit.
+        if (q2 < 0) {
+            buf[--charPos] = (byte)('0' - q2);
         }
-        if (sign != 0) {
-            buf[--charPos] = sign;
+
+        if (negative) {
+            buf[--charPos] = (byte)'-';
         }
+        return charPos;
     }
 
-    // Requires positive x
+    /**
+     * Returns the string representation size for a given long value.
+     *
+     * @param x long value
+     * @return string size
+     *
+     * @implNote There are other ways to compute this: e.g. binary search,
+     * but values are biased heavily towards zero, and therefore linear search
+     * wins. The iteration results are also routinely inlined in the generated
+     * code after loop unrolling.
+     */
     static int stringSize(long x) {
-        long p = 10;
-        for (int i=1; i<19; i++) {
-            if (x < p)
-                return i;
-            p = 10*p;
+        int d = 1;
+        if (x >= 0) {
+            d = 0;
+            x = -x;
         }
-        return 19;
+        long p = -10;
+        for (int i = 1; i < 19; i++) {
+            if (x > p)
+                return i + d;
+            p = 10 * p;
+        }
+        return 19 + d;
     }
 
     /**
@@ -561,12 +663,9 @@ public final class Long extends Number implements Comparable<Long> {
                                             " greater than Character.MAX_RADIX");
         }
 
-        long result = 0;
         boolean negative = false;
         int i = 0, len = s.length();
         long limit = -Long.MAX_VALUE;
-        long multmin;
-        int digit;
 
         if (len > 0) {
             char firstChar = s.charAt(0);
@@ -574,21 +673,21 @@ public final class Long extends Number implements Comparable<Long> {
                 if (firstChar == '-') {
                     negative = true;
                     limit = Long.MIN_VALUE;
-                } else if (firstChar != '+')
-                    throw NumberFormatException.forInputString(s);
-
-                if (len == 1) // Cannot have lone "+" or "-"
-                    throw NumberFormatException.forInputString(s);
-                i++;
-            }
-            multmin = limit / radix;
-            while (i < len) {
-                // Accumulating negatively avoids surprises near MAX_VALUE
-                digit = Character.digit(s.charAt(i++),radix);
-                if (digit < 0) {
+                } else if (firstChar != '+') {
                     throw NumberFormatException.forInputString(s);
                 }
-                if (result < multmin) {
+
+                if (len == 1) { // Cannot have lone "+" or "-"
+                    throw NumberFormatException.forInputString(s);
+                }
+                i++;
+            }
+            long multmin = limit / radix;
+            long result = 0;
+            while (i < len) {
+                // Accumulating negatively avoids surprises near MAX_VALUE
+                int digit = Character.digit(s.charAt(i++),radix);
+                if (digit < 0 || result < multmin) {
                     throw NumberFormatException.forInputString(s);
                 }
                 result *= radix;
@@ -597,10 +696,92 @@ public final class Long extends Number implements Comparable<Long> {
                 }
                 result -= digit;
             }
+            return negative ? result : -result;
         } else {
             throw NumberFormatException.forInputString(s);
         }
-        return negative ? result : -result;
+    }
+
+    /**
+     * Parses the {@link CharSequence} argument as a signed {@code long} in
+     * the specified {@code radix}, beginning at the specified
+     * {@code beginIndex} and extending to {@code endIndex - 1}.
+     *
+     * <p>The method does not take steps to guard against the
+     * {@code CharSequence} being mutated while parsing.
+     *
+     * @param      s   the {@code CharSequence} containing the {@code long}
+     *                  representation to be parsed
+     * @param      beginIndex   the beginning index, inclusive.
+     * @param      endIndex     the ending index, exclusive.
+     * @param      radix   the radix to be used while parsing {@code s}.
+     * @return     the signed {@code long} represented by the subsequence in
+     *             the specified radix.
+     * @throws     NullPointerException  if {@code s} is null.
+     * @throws     IndexOutOfBoundsException  if {@code beginIndex} is
+     *             negative, or if {@code beginIndex} is greater than
+     *             {@code endIndex} or if {@code endIndex} is greater than
+     *             {@code s.length()}.
+     * @throws     NumberFormatException  if the {@code CharSequence} does not
+     *             contain a parsable {@code int} in the specified
+     *             {@code radix}, or if {@code radix} is either smaller than
+     *             {@link java.lang.Character#MIN_RADIX} or larger than
+     *             {@link java.lang.Character#MAX_RADIX}.
+     * @since  9
+     */
+    public static long parseLong(CharSequence s, int beginIndex, int endIndex, int radix)
+                throws NumberFormatException {
+        s = Objects.requireNonNull(s);
+
+        if (beginIndex < 0 || beginIndex > endIndex || endIndex > s.length()) {
+            throw new IndexOutOfBoundsException();
+        }
+        if (radix < Character.MIN_RADIX) {
+            throw new NumberFormatException("radix " + radix +
+                    " less than Character.MIN_RADIX");
+        }
+        if (radix > Character.MAX_RADIX) {
+            throw new NumberFormatException("radix " + radix +
+                    " greater than Character.MAX_RADIX");
+        }
+
+        boolean negative = false;
+        int i = beginIndex;
+        long limit = -Long.MAX_VALUE;
+
+        if (i < endIndex) {
+            char firstChar = s.charAt(i);
+            if (firstChar < '0') { // Possible leading "+" or "-"
+                if (firstChar == '-') {
+                    negative = true;
+                    limit = Long.MIN_VALUE;
+                } else if (firstChar != '+') {
+                    throw new NumberFormatException("");
+                }
+                i++;
+            }
+            if (i >= endIndex) { // Cannot have lone "+", "-" or ""
+                throw new NumberFormatException("");
+            }
+            long multmin = limit / radix;
+            long result = 0;
+            while (i < endIndex) {
+                // Accumulating negatively avoids surprises near MAX_VALUE
+                int digit = Character.digit(s.charAt(i), radix);
+                if (digit < 0 || result < multmin) {
+                    throw new NumberFormatException("");
+                }
+                result *= radix;
+                if (result < limit + digit) {
+                    throw new NumberFormatException("");
+                }
+                i++;
+                result -= digit;
+            }
+            return negative ? result : -result;
+        } else {
+            throw new NumberFormatException("");
+        }
     }
 
     /**
@@ -694,27 +875,64 @@ public final class Long extends Number implements Comparable<Long> {
                 }
 
                 // No need for range checks on len due to testing above.
-                long first = parseLong(s.substring(0, len - 1), radix);
+                long first = parseLong(s, 0, len - 1, radix);
                 int second = Character.digit(s.charAt(len - 1), radix);
                 if (second < 0) {
                     throw new NumberFormatException("Bad digit at end of " + s);
                 }
                 long result = first * radix + second;
-                if (compareUnsigned(result, first) < 0) {
+
+                /*
+                 * Test leftmost bits of multiprecision extension of first*radix
+                 * for overflow. The number of bits needed is defined by
+                 * GUARD_BIT = ceil(log2(Character.MAX_RADIX)) + 1 = 7. Then
+                 * int guard = radix*(int)(first >>> (64 - GUARD_BIT)) and
+                 * overflow is tested by splitting guard in the ranges
+                 * guard < 92, 92 <= guard < 128, and 128 <= guard, where
+                 * 92 = 128 - Character.MAX_RADIX. Note that guard cannot take
+                 * on a value which does not include a prime factor in the legal
+                 * radix range.
+                 */
+                int guard = radix * (int) (first >>> 57);
+                if (guard >= 128 ||
+                    (result >= 0 && guard >= 128 - Character.MAX_RADIX)) {
                     /*
-                     * The maximum unsigned value, (2^64)-1, takes at
-                     * most one more digit to represent than the
-                     * maximum signed value, (2^63)-1.  Therefore,
-                     * parsing (len - 1) digits will be appropriately
-                     * in-range of the signed parsing.  In other
-                     * words, if parsing (len -1) digits overflows
-                     * signed parsing, parsing len digits will
-                     * certainly overflow unsigned parsing.
+                     * For purposes of exposition, the programmatic statements
+                     * below should be taken to be multi-precision, i.e., not
+                     * subject to overflow.
                      *
-                     * The compareUnsigned check above catches
-                     * situations where an unsigned overflow occurs
-                     * incorporating the contribution of the final
-                     * digit.
+                     * A) Condition guard >= 128:
+                     * If guard >= 128 then first*radix >= 2^7 * 2^57 = 2^64
+                     * hence always overflow.
+                     *
+                     * B) Condition guard < 92:
+                     * Define left7 = first >>> 57.
+                     * Given first = (left7 * 2^57) + (first & (2^57 - 1)) then
+                     * result <= (radix*left7)*2^57 + radix*(2^57 - 1) + second.
+                     * Thus if radix*left7 < 92, radix <= 36, and second < 36,
+                     * then result < 92*2^57 + 36*(2^57 - 1) + 36 = 2^64 hence
+                     * never overflow.
+                     *
+                     * C) Condition 92 <= guard < 128:
+                     * first*radix + second >= radix*left7*2^57 + second
+                     * so that first*radix + second >= 92*2^57 + 0 > 2^63
+                     *
+                     * D) Condition guard < 128:
+                     * radix*first <= (radix*left7) * 2^57 + radix*(2^57 - 1)
+                     * so
+                     * radix*first + second <= (radix*left7) * 2^57 + radix*(2^57 - 1) + 36
+                     * thus
+                     * radix*first + second < 128 * 2^57 + 36*2^57 - radix + 36
+                     * whence
+                     * radix*first + second < 2^64 + 2^6*2^57 = 2^64 + 2^63
+                     *
+                     * E) Conditions C, D, and result >= 0:
+                     * C and D combined imply the mathematical result
+                     * 2^63 < first*radix + second < 2^64 + 2^63. The lower
+                     * bound is therefore negative as a signed long, but the
+                     * upper bound is too small to overflow again after the
+                     * signed long overflows to positive above 2^64 - 1. Hence
+                     * result >= 0 implies overflow given C and D.
                      */
                     throw new NumberFormatException(String.format("String value %s exceeds " +
                                                                   "range of unsigned long.", s));
@@ -729,7 +947,7 @@ public final class Long extends Number implements Comparable<Long> {
     /**
      * Parses the string argument as an unsigned decimal {@code long}. The
      * characters in the string must all be decimal digits, except
-     * that the first character may be an an ASCII plus sign {@code
+     * that the first character may be an ASCII plus sign {@code
      * '+'} ({@code '\u005Cu002B'}). The resulting integer value
      * is returned, exactly as if the argument and the radix 10 were
      * given as arguments to the {@link
@@ -804,34 +1022,13 @@ public final class Long extends Number implements Comparable<Long> {
     }
 
     private static class LongCache {
-        static final int low;
-        static final int high;
-
         private LongCache(){}
 
-        static final Long cache[];
+        static final Long cache[] = new Long[-(-128) + 127 + 1];
 
         static {
-            int h = 127;
-            String longCacheHighPropValue =
-                sun.misc.VM.getSavedProperty("java.lang.Long.LongCache.high");
-            if (longCacheHighPropValue != null) {
-                // high value may be configured by property
-                try {
-                    int i = Integer.parseInt(longCacheHighPropValue);
-                    i = Math.max(i, 127);
-                    // Maximum array size is Integer.MAX_VALUE
-                    h = Math.min(i, Integer.MAX_VALUE/2 -1);
-                } catch( NumberFormatException nfe) {
-                    // If the property cannot be parsed into an int, ignore it.
-                }
-            }
-            high = h;
-            low = -h - 1;
-            cache = new Long[(high - low) + 1];
-            int j = low;
-            for(int k = 0; k < cache.length; k++)
-               cache[k] = new Long(j++);
+            for(int i = 0; i < cache.length; i++)
+                cache[i] = new Long(i - 128);
         }
     }
 
@@ -854,8 +1051,10 @@ public final class Long extends Number implements Comparable<Long> {
      * @since  1.5
      */
     public static Long valueOf(long l) {
-        if (l >= LongCache.low && l <= LongCache.high)
-            return LongCache.cache[(int) l + (-LongCache.low)];
+        final int offset = 128;
+        if (l >= -128 && l <= 127) { // will cache
+            return LongCache.cache[(int)l + offset];
+        }
         return new Long(l);
     }
 
@@ -962,6 +1161,9 @@ public final class Long extends Number implements Comparable<Long> {
      *
      * @param   value   the value to be represented by the
      *          {@code Long} object.
+     * It is rarely appropriate to use this constructor. The static factory
+     * {@link #valueOf(long)} is generally a better choice, as it is
+     * likely to yield significantly better space and time performance.
      */
     public Long(long value) {
         this.value = value;
@@ -978,7 +1180,10 @@ public final class Long extends Number implements Comparable<Long> {
      *             {@code Long}.
      * @throws     NumberFormatException  if the {@code String} does not
      *             contain a parsable {@code long}.
-     * @see        java.lang.Long#parseLong(java.lang.String, int)
+     * It is rarely appropriate to use this constructor.
+     * Use {@link #parseLong(String)} to convert a string to a
+     * {@code long} primitive, or use {@link #valueOf(String)}
+     * to convert a string to a {@code Long} object.
      */
     public Long(String s) throws NumberFormatException {
         this.value = parseLong(s, 10);
@@ -1485,7 +1690,7 @@ public final class Long extends Number implements Comparable<Long> {
      * @since 1.5
      */
      public static int bitCount(long i) {
-        // HD, Figure 5-14
+        // HD, Figure 5-2
         i = i - ((i >>> 1) & 0x5555555555555555L);
         i = (i & 0x3333333333333333L) + ((i >>> 2) & 0x3333333333333333L);
         i = (i + (i >>> 4)) & 0x0f0f0f0f0f0f0f0fL;
@@ -1558,10 +1763,8 @@ public final class Long extends Number implements Comparable<Long> {
         i = (i & 0x5555555555555555L) << 1 | (i >>> 1) & 0x5555555555555555L;
         i = (i & 0x3333333333333333L) << 2 | (i >>> 2) & 0x3333333333333333L;
         i = (i & 0x0f0f0f0f0f0f0f0fL) << 4 | (i >>> 4) & 0x0f0f0f0f0f0f0f0fL;
-        i = (i & 0x00ff00ff00ff00ffL) << 8 | (i >>> 8) & 0x00ff00ff00ff00ffL;
-        i = (i << 48) | ((i & 0xffff0000L) << 16) |
-            ((i >>> 16) & 0xffff0000L) | (i >>> 48);
-        return i;
+
+        return reverseBytes(i);
     }
 
     /**
@@ -1636,5 +1839,4 @@ public final class Long extends Number implements Comparable<Long> {
 
     /** use serialVersionUID from JDK 1.0.2 for interoperability */
     @Native private static final long serialVersionUID = 4290774380558885855L;
-
 }

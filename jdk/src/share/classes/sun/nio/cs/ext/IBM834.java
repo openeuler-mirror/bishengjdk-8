@@ -34,6 +34,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.CoderResult;
+import sun.nio.cs.ext.DoubleByte;
 import static sun.nio.cs.CharsetMapping.*;
 
 // EBCDIC DBCS-only Korean
@@ -61,7 +62,7 @@ public class IBM834 extends Charset
     protected static class Encoder extends DoubleByte.Encoder_DBCSONLY {
         public Encoder(Charset cs) {
             super(cs, new byte[] {(byte)0xfe, (byte)0xfe},
-                  IBM933.c2b, IBM933.c2bIndex);
+                  IBM933.c2b, IBM933.c2bIndex, false);
         }
 
         public int encodeChar(char ch) {

@@ -295,6 +295,7 @@ void FileMapInfo::FileMapHeader::populate(FileMapInfo* mapinfo, size_t alignment
   _version = current_version();
   _alignment = alignment;
   _obj_alignment = ObjectAlignmentInBytes;
+  _compact_strings = CompactStrings;
 
   _compressed_oops = UseCompressedOops;
   _compressed_class_ptrs = UseCompressedClassPointers;
@@ -1059,6 +1060,13 @@ bool FileMapInfo::FileMapHeader::validate() {
     FileMapInfo::fail_continue("The shared archive file's ObjectAlignmentInBytes of %d"
                   " does not equal the current ObjectAlignmentInBytes of %d.",
                   _obj_alignment, ObjectAlignmentInBytes);
+    return false;
+  }
+  if (_compact_strings != CompactStrings) {
+    FileMapInfo::fail_continue("The shared archive file's CompactStrings setting (%s)"
+                  " does not equal the current CompactStrings setting (%s).",
+                  _compact_strings ? "enabled" : "disabled",
+                  CompactStrings   ? "enabled" : "disabled");
     return false;
   }
   if (PrintSharedSpaces) {

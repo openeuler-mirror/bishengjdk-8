@@ -977,8 +977,8 @@ void LIRGenerator::do_dgemm_dgemm(Intrinsic* x) {
   LIR_Opr tb_value = load_String_value(tb_base);
   LIR_Opr tb_offset = load_String_offset(tb_base);
 
-  LIR_Address* addr_ta = emit_array_address(ta_value, ta_offset, T_CHAR, false);
-  LIR_Address* addr_tb = emit_array_address(tb_value, tb_offset, T_CHAR, false);
+  LIR_Address* addr_ta = emit_array_address(ta_value, ta_offset, T_BYTE, false);
+  LIR_Address* addr_tb = emit_array_address(tb_value, tb_offset, T_BYTE, false);
   LIR_Address* addr_a = emit_array_address(a_base, r_a_offset, T_DOUBLE, false);
   LIR_Address* addr_b = emit_array_address(b_base, r_b_offset, T_DOUBLE, false);
   LIR_Address* addr_c = emit_array_address(c_base, r_c_offset, T_DOUBLE, false);
@@ -1207,7 +1207,7 @@ void LIRGenerator::do_dgemv_dgemv(Intrinsic* x) {
 
   LIR_Opr addr_trans_base = LIRGenerator::load_String_value(res_trans_base);
   LIR_Opr addr_trans_offset = LIRGenerator::load_String_offset(res_trans_base);
-  LIR_Address* addr_trans = emit_array_address(addr_trans_base, addr_trans_offset, T_CHAR, false);
+  LIR_Address* addr_trans = emit_array_address(addr_trans_base, addr_trans_offset, T_BYTE, false);
 
   LIR_Address* addr_a = emit_array_address(res_a_base, res_a_offset, T_DOUBLE, false);
   LIR_Address* addr_x = emit_array_address(res_x_base, res_x_offset, T_DOUBLE, false);

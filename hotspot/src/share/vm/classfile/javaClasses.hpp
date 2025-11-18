@@ -56,25 +56,24 @@ class java_lang_String : AllStatic {
   static int offset_offset;
   static int count_offset;
   static int hash_offset;
+  static int coder_offset;
 
   static bool initialized;
 
-  static Handle basic_create(int length, TRAPS);
+  static Handle basic_create(int length, bool byte_arr, TRAPS);
 
-  static void set_offset(oop string, int offset) {
-    assert(initialized, "Must be initialized");
-    if (offset_offset > 0) {
-      string->int_field_put(offset_offset, offset);
-    }
-  }
-  static void set_count( oop string, int count) {
-    assert(initialized, "Must be initialized");
-    if (count_offset > 0) {
-      string->int_field_put(count_offset,  count);
-    }
+  static void set_coder(oop string, jbyte coder) {
+    string->byte_field_put(coder_offset, coder);
   }
 
  public:
+
+  // Coders
+  enum Coder {
+    CODER_LATIN1 =  0,
+    CODER_UTF16  =  1
+  };
+
   static void compute_offsets();
 
   // Instance creation
@@ -101,6 +100,8 @@ class java_lang_String : AllStatic {
     return (hash_offset > 0);
   }
 
+  static void set_compact_strings(bool value);
+
   static int value_offset_in_bytes()  {
     assert(initialized && (value_offset > 0), "Must be initialized");
     return value_offset;
@@ -116,6 +117,9 @@ class java_lang_String : AllStatic {
   static int hash_offset_in_bytes()   {
     assert(initialized && (hash_offset > 0), "Must be initialized");
     return hash_offset;
+  }
+  static int coder_offset_in_bytes()   {
+    return coder_offset;
   }
 
   static void set_value(oop string, typeArrayOop buffer) {
@@ -138,23 +142,23 @@ class java_lang_String : AllStatic {
     assert(is_instance(java_string), "must be java_string");
     return java_string->int_field(hash_offset);
   }
-  static int offset(oop java_string) {
-    assert(initialized, "Must be initialized");
-    assert(is_instance(java_string), "must be java_string");
-    if (offset_offset > 0) {
-      return java_string->int_field(offset_offset);
-    } else {
-      return 0;
-    }
+  static bool is_latin1(oop java_string) {
+    jbyte coder = java_string->byte_field(coder_offset);
+    return coder == CODER_LATIN1;
   }
   static int length(oop java_string) {
     assert(initialized, "Must be initialized");
     assert(is_instance(java_string), "must be java_string");
-    if (count_offset > 0) {
-      return java_string->int_field(count_offset);
-    } else {
-      return ((typeArrayOop)java_string->obj_field(value_offset))->length();
+    typeArrayOop value_array = ((typeArrayOop)java_string->obj_field(value_offset));
+    if (value_array == NULL) {
+      return 0;
     }
+    int arr_length = value_array->length();
+    if (!is_latin1(java_string)) {
+      assert((arr_length & 1) == 0, "should be even for UTF16 string");
+      arr_length >>= 1; // convert number of bytes to number of elements
+    }
+    return arr_length;
   }
   static int utf8_length(oop java_string);
 
@@ -162,6 +166,7 @@ class java_lang_String : AllStatic {
   static char*  as_utf8_string(oop java_string);
   static char*  as_utf8_string(oop java_string, char* buf, int buflen);
   static char*  as_utf8_string(oop java_string, int start, int len);
+  static char*  as_utf8_string(oop java_string, int start, int len, char* buf, int buflen);
   static char*  as_platform_dependent_str(Handle java_string, TRAPS);
   static jchar* as_unicode_string(oop java_string, int& length, TRAPS);
   // produce an ascii string with all other values quoted using \u####
@@ -196,6 +201,7 @@ class java_lang_String : AllStatic {
   }
 
   static unsigned int hash_code(oop java_string);
+  static unsigned int latin1_hash_code(typeArrayOop value, int len);
 
   // This is the string hash code used by the StringTable, which may be
   // the same as String.hashCode or an alternate hash code.
@@ -220,6 +226,7 @@ class java_lang_String : AllStatic {
   // Debugging
   static void print(oop java_string, outputStream* st);
   friend class JavaClasses;
+  friend class SymbolTable;
 };
 
 
@@ -449,8 +456,10 @@ class java_lang_ThreadGroup : AllStatic {
  public:
   // parent ThreadGroup
   static oop  parent(oop java_thread_group);
+  // name_as_oop
+  static typeArrayOop name_as_oop(oop java_thread_group);
   // name
-  static typeArrayOop name(oop java_thread_group);
+  static const char* name(oop java_thread_group);
   // ("name as oop" accessor is not necessary)
   // Number of threads in group
   static int nthreads(oop java_thread_group);

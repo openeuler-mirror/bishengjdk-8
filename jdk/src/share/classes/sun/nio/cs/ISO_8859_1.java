@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000, 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2000, 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -32,8 +32,9 @@ import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.CoderResult;
 import java.util.Arrays;
+import java.util.Objects;
 
-class ISO_8859_1
+public class ISO_8859_1
     extends Charset
     implements HistoricallyNamedCharset
 {
@@ -129,6 +130,10 @@ class ISO_8859_1
                 dst[dp++] = (char)(src[sp++] & 0xff);
             return dp;
         }
+
+        public boolean isASCIICompatible() {
+            return true;
+        }
     }
 
     private static class Encoder extends CharsetEncoder
@@ -147,10 +152,18 @@ class ISO_8859_1
 
         private final Surrogate.Parser sgp = new Surrogate.Parser();
 
-        // JVM may replace this method with intrinsic code.
-        // don't pass len value <= 0
+        // Method possible replaced with a compiler intrinsic.
         private static int encodeISOArray(char[] sa, int sp,
-                                          byte[] da, int dp, int len)
+                                          byte[] da, int dp, int len) {
+            if (len <= 0) {
+                return 0;
+            }
+            encodeISOArrayCheck(sa, sp, da, dp, len);
+            return implEncodeISOArray(sa, sp, da, dp, len);
+        }
+
+        private static int implEncodeISOArray(char[] sa, int sp,
+                                              byte[] da, int dp, int len)
         {
             int i = 0;
             for (; i < len; i++) {
@@ -160,6 +173,30 @@ class ISO_8859_1
                 da[dp++] = (byte)c;
             }
             return i;
+        }
+
+        private static void encodeISOArrayCheck(char[] sa, int sp,
+                                                byte[] da, int dp, int len) {
+            Objects.requireNonNull(sa);
+            Objects.requireNonNull(da);
+
+            if (sp < 0 || sp >= sa.length) {
+                throw new ArrayIndexOutOfBoundsException(sp);
+            }
+
+            if (dp < 0 || dp >= da.length) {
+                throw new ArrayIndexOutOfBoundsException(dp);
+            }
+
+            int endIndexSP = sp + len - 1;
+            if (endIndexSP < 0 || endIndexSP >= sa.length) {
+                throw new ArrayIndexOutOfBoundsException(endIndexSP);
+            }
+
+            int endIndexDP = dp + len - 1;
+            if (endIndexDP < 0 || endIndexDP >= da.length) {
+                throw new ArrayIndexOutOfBoundsException(endIndexDP);
+            }
         }
 
         private CoderResult encodeArrayLoop(CharBuffer src,
@@ -181,7 +218,7 @@ class ISO_8859_1
             int slen = sl - sp;
             int len  = (dlen < slen) ? dlen : slen;
             try {
-                int ret = (len <= 0) ? 0 : encodeISOArray(sa, sp, da, dp, len);
+                int ret = encodeISOArray(sa, sp, da, dp, len);
                 sp = sp + ret;
                 dp = dp + ret;
                 if (ret != len) {
@@ -241,8 +278,7 @@ class ISO_8859_1
             int slen = Math.min(len, dst.length);
             int sl = sp + slen;
             while (sp < sl) {
-                int ret =
-                    (slen <= 0) ? 0 : encodeISOArray(src, sp, dst, dp, slen);
+                int ret = encodeISOArray(src, sp, dst, dp, slen);
                 sp = sp + ret;
                 dp = dp + ret;
                 if (ret != slen) {
@@ -260,6 +296,10 @@ class ISO_8859_1
                 }
             }
             return dp;
+        }
+
+        public boolean isASCIICompatible() {
+            return true;
         }
     }
 }

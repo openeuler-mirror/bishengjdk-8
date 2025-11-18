@@ -2370,6 +2370,35 @@ void Assembler::pcmpestri(XMMRegister dst, XMMRegister src, int imm8) {
   emit_int8((unsigned char)(0xC0 | encode));
   emit_int8(imm8);
 }
+// In this context, the dst vector contains the components that are equal, non equal components are zeroed in dst
+void Assembler::pcmpeqw(XMMRegister dst, XMMRegister src) {
+  InstructionAttr attributes(AVX_128bit, /* rex_w */ false, /* legacy_mode */ true, /* no_mask_reg */ false, /* uses_vl */ false);
+  int encode = simd_prefix_and_encode(dst, dst, src, VEX_SIMD_66, VEX_OPCODE_0F, &attributes);
+  emit_int8(0x75);
+  emit_int8((unsigned char)(0xC0 | encode));
+}
+
+// In this context, the dst vector contains the components that are equal, non equal components are zeroed in dst
+void Assembler::vpcmpeqw(XMMRegister dst, XMMRegister nds, XMMRegister src, int vector_len) {
+  InstructionAttr attributes(vector_len, /* rex_w */ false, /* legacy_mode */ true, /* no_mask_reg */ false, /* uses_vl */ false);
+  int encode = vex_prefix_and_encode(dst->encoding(), nds->encoding(), src->encoding(), VEX_SIMD_66, VEX_OPCODE_0F, &attributes);
+  emit_int8(0x75);
+  emit_int8((unsigned char)(0xC0 | encode));
+}
+
+void Assembler::pmovmskb(Register dst, XMMRegister src) {
+  InstructionAttr attributes(AVX_128bit, /* rex_w */ false, /* legacy_mode */ true, /* no_mask_reg */ false, /* uses_vl */ false);
+  int encode = simd_prefix_and_encode(as_XMMRegister(dst->encoding()), xnoreg, src, VEX_SIMD_66, VEX_OPCODE_0F, &attributes);
+  emit_int8((unsigned char)0xD7);
+  emit_int8((unsigned char)(0xC0 | encode));
+}
+
+void Assembler::vpmovmskb(Register dst, XMMRegister src) {
+  InstructionAttr attributes(AVX_256bit, /* rex_w */ false, /* legacy_mode */ true, /* no_mask_reg */ false, /* uses_vl */ false);
+  int encode = vex_prefix_and_encode(dst->encoding(), 0, src->encoding(), VEX_SIMD_66, VEX_OPCODE_0F, &attributes);
+  emit_int8((unsigned char)0xD7);
+  emit_int8((unsigned char)(0xC0 | encode));
+}
 
 void Assembler::pextrd(Register dst, XMMRegister src, int imm8) {
   assert(VM_Version::supports_sse4_1(), "");
@@ -2480,6 +2509,15 @@ void Assembler::pmovzxbw(XMMRegister dst, XMMRegister src) {
   int encode = simd_prefix_and_encode(dst, xnoreg, src, VEX_SIMD_66, VEX_OPCODE_0F_38);
   emit_int8(0x30);
   emit_int8((unsigned char)(0xC0 | encode));
+}
+
+void Assembler::vpmovzxbw(XMMRegister dst, Address src, int vector_len) {
+  InstructionMark im(this);
+  InstructionAttr attributes(vector_len, /* rex_w */ false, /* legacy_mode */ _legacy_mode_bw, /* no_mask_reg */ true, /* uses_vl */ false);
+  attributes.set_address_attributes(/* tuple_type */ EVEX_HVM, /* input_size_in_bits */ EVEX_NObit);
+  vex_prefix(src, 0, dst->encoding(), VEX_SIMD_66, VEX_OPCODE_0F_38, &attributes);
+  emit_int8(0x30);
+  emit_operand(dst, src);
 }
 
 // generic
@@ -3949,6 +3987,14 @@ void Assembler::vpbroadcastd(XMMRegister dst, XMMRegister src) {
   emit_int8((unsigned char)(0xC0 | encode));
 }
 
+// legacy word/dword replicate
+void Assembler::vpbroadcastw(XMMRegister dst, XMMRegister src) {
+  InstructionAttr attributes(AVX_256bit, /* vex_w */ false, /* legacy_mode */ _legacy_mode_bw, /* no_mask_reg */ true, /* uses_vl */ true);
+  int encode = vex_prefix_and_encode(dst->encoding(), 0, src->encoding(), VEX_SIMD_66, VEX_OPCODE_0F_38, &attributes);
+  emit_int8(0x79);
+  emit_int8((unsigned char)(0xC0 | encode));
+}
+
 // Carry-Less Multiplication Quadword
 void Assembler::pclmulqdq(XMMRegister dst, XMMRegister src, int mask) {
   assert(VM_Version::supports_clmul(), "");
@@ -4518,6 +4564,127 @@ void Assembler::vex_prefix(Address adr, int nds_enc, int xreg_enc, VexSimdPrefix
   vex_prefix(vex_r, vex_b, vex_x, vex_w, nds_enc, pre, opc, vector256);
 }
 
+void Assembler::vex_prefix(bool vex_r, bool vex_b, bool vex_x, int nds_enc, VexSimdPrefix pre, VexOpcode opc) {
+  int vector_len = _attributes->get_vector_len();
+  bool vex_w = _attributes->is_rex_vex_w();
+  if (vex_b || vex_x || vex_w || (opc == VEX_OPCODE_0F_38) || (opc == VEX_OPCODE_0F_3A)) {
+    prefix(VEX_3bytes);
+
+    int byte1 = (vex_r ? VEX_R : 0) | (vex_x ? VEX_X : 0) | (vex_b ? VEX_B : 0);
+    byte1 = (~byte1) & 0xE0;
+    byte1 |= opc;
+    emit_int8(byte1);
+
+    int byte2 = ((~nds_enc) & 0xf) << 3;
+    byte2 |= (vex_w ? VEX_W : 0) | ((vector_len > 0) ? 4 : 0) | pre;
+    emit_int8(byte2);
+  } else {
+    prefix(VEX_2bytes);
+
+    int byte1 = vex_r ? VEX_R : 0;
+    byte1 = (~byte1) & 0x80;
+    byte1 |= ((~nds_enc) & 0xf) << 3;
+    byte1 |= ((vector_len > 0 ) ? 4 : 0) | pre;
+    emit_int8(byte1);
+  }
+}
+
+// This is a 4 byte encoding
+void Assembler::evex_prefix(bool vex_r, bool vex_b, bool vex_x, bool evex_r, bool evex_v, int nds_enc, VexSimdPrefix pre, VexOpcode opc) {
+  // EVEX 0x62 prefix
+  prefix(EVEX_4bytes);
+  bool vex_w = _attributes->is_rex_vex_w();
+  int evex_encoding = (vex_w ? VEX_W : 0);
+  // EVEX.b is not currently used for broadcast of single element or data rounding modes
+  _attributes->set_evex_encoding(evex_encoding);
+
+  // P0: byte 2, initialized to RXBR`00mm
+  // instead of not'd
+  int byte2 = (vex_r ? VEX_R : 0) | (vex_x ? VEX_X : 0) | (vex_b ? VEX_B : 0) | (evex_r ? EVEX_Rb : 0);
+  byte2 = (~byte2) & 0xF0;
+  // confine opc opcode extensions in mm bits to lower two bits
+  // of form {0F, 0F_38, 0F_3A}
+  byte2 |= opc;
+  emit_int8(byte2);
+
+  // P1: byte 3 as Wvvvv1pp
+  int byte3 = ((~nds_enc) & 0xf) << 3;
+  // p[10] is always 1
+  byte3 |= EVEX_F;
+  byte3 |= (vex_w & 1) << 7;
+  // confine pre opcode extensions in pp bits to lower two bits
+  // of form {66, F3, F2}
+  byte3 |= pre;
+  emit_int8(byte3);
+
+  // P2: byte 4 as zL'Lbv'aaa
+  // kregs are implemented in the low 3 bits as aaa (hard code k1, it will be initialized for now)
+  int byte4 = (_attributes->is_no_reg_mask()) ?
+              0 :
+              _attributes->get_embedded_opmask_register_specifier();
+  // EVEX.v` for extending EVEX.vvvv or VIDX
+  byte4 |= (evex_v ? 0: EVEX_V);
+  // third EXEC.b for broadcast actions
+  byte4 |= (_attributes->is_extended_context() ? EVEX_Rb : 0);
+  // fourth EVEX.L'L for vector length : 0 is 128, 1 is 256, 2 is 512, currently we do not support 1024
+  byte4 |= ((_attributes->get_vector_len())& 0x3) << 5;
+  // last is EVEX.z for zero/merge actions
+  if (_attributes->is_no_reg_mask() == false) {
+    byte4 |= (_attributes->is_clear_context() ? EVEX_Z : 0);
+  }
+  emit_int8(byte4);
+}
+
+void Assembler::vex_prefix(Address adr, int nds_enc, int xreg_enc, VexSimdPrefix pre, VexOpcode opc, InstructionAttr *attributes) {
+  bool vex_r = ((xreg_enc & 8) == 8) ? 1 : 0;
+  bool vex_b = adr.base_needs_rex();
+  bool vex_x = adr.index_needs_rex();
+  set_attributes(attributes);
+  attributes->set_current_assembler(this);
+
+  // if vector length is turned off, revert to AVX for vectors smaller than 512-bit
+  if (UseAVX > 2 && _legacy_mode_vl && attributes->uses_vl()) {
+    switch (attributes->get_vector_len()) {
+      case AVX_128bit:
+      case AVX_256bit:
+        attributes->set_is_legacy_mode();
+        break;
+    }
+  }
+
+  // For pure EVEX check and see if this instruction
+  // is allowed in legacy mode and has resources which will
+  // fit in it.  Pure EVEX instructions will use set_is_evex_instruction in their definition,
+  // else that field is set when we encode to EVEX
+  if (UseAVX > 2 && !attributes->is_legacy_mode() &&
+      !_is_managed && !attributes->is_evex_instruction()) {
+    if (!_legacy_mode_vl && attributes->get_vector_len() != AVX_512bit) {
+      bool check_register_bank = NOT_IA32(true) IA32_ONLY(false);
+      if (check_register_bank) {
+        // check nds_enc and xreg_enc for upper bank usage
+        if (nds_enc < 16 && xreg_enc < 16) {
+          attributes->set_is_legacy_mode();
+        }
+      } else {
+        attributes->set_is_legacy_mode();
+      }
+    }
+  }
+
+  _is_managed = false;
+  if (UseAVX > 2 && !attributes->is_legacy_mode()) {
+    bool evex_r = (xreg_enc >= 16);
+    bool evex_v = (nds_enc >= 16);
+    attributes->set_is_evex_instruction();
+    evex_prefix(vex_r, vex_b, vex_x, evex_r, evex_v, nds_enc, pre, opc);
+  } else {
+    if (UseAVX > 2 && attributes->is_rex_vex_w_reverted()) {
+      attributes->set_rex_vex_w(false);
+    }
+    vex_prefix(vex_r, vex_b, vex_x, nds_enc, pre, opc);
+  }
+}
+
 int Assembler::vex_prefix_and_encode(int dst_enc, int nds_enc, int src_enc, VexSimdPrefix pre, VexOpcode opc, bool vex_w, bool vector256) {
   bool vex_r = (dst_enc >= 8);
   bool vex_b = (src_enc >= 8);
@@ -4526,6 +4693,69 @@ int Assembler::vex_prefix_and_encode(int dst_enc, int nds_enc, int src_enc, VexS
   return (((dst_enc & 7) << 3) | (src_enc & 7));
 }
 
+int Assembler::vex_prefix_and_encode(int dst_enc, int nds_enc, int src_enc, VexSimdPrefix pre, VexOpcode opc, InstructionAttr *attributes) {
+  bool vex_r = ((dst_enc & 8) == 8) ? 1 : 0;
+  bool vex_b = ((src_enc & 8) == 8) ? 1 : 0;
+  bool vex_x = false;
+  set_attributes(attributes);
+  attributes->set_current_assembler(this);
+  bool check_register_bank = NOT_IA32(true) IA32_ONLY(false);
+
+  // if vector length is turned off, revert to AVX for vectors smaller than 512-bit
+  if (UseAVX > 2 && _legacy_mode_vl && attributes->uses_vl()) {
+    switch (attributes->get_vector_len()) {
+      case AVX_128bit:
+      case AVX_256bit:
+        if (check_register_bank) {
+          if (dst_enc >= 16 || nds_enc >= 16 || src_enc >= 16) {
+            // up propagate arithmetic instructions to meet RA requirements
+            attributes->set_vector_len(AVX_512bit);
+          } else {
+            attributes->set_is_legacy_mode();
+          }
+        } else {
+          attributes->set_is_legacy_mode();
+        }
+        break;
+    }
+  }
+
+  // For pure EVEX check and see if this instruction
+  // is allowed in legacy mode and has resources which will
+  // fit in it.  Pure EVEX instructions will use set_is_evex_instruction in their definition,
+  // else that field is set when we encode to EVEX
+  if (UseAVX > 2 && !attributes->is_legacy_mode() &&
+      !_is_managed && !attributes->is_evex_instruction()) {
+    if (!_legacy_mode_vl && attributes->get_vector_len() != AVX_512bit) {
+      if (check_register_bank) {
+        // check dst_enc, nds_enc and src_enc for upper bank usage
+        if (dst_enc < 16 && nds_enc < 16 && src_enc < 16) {
+          attributes->set_is_legacy_mode();
+        }
+      } else {
+        attributes->set_is_legacy_mode();
+      }
+    }
+  }
+
+  _is_managed = false;
+  if (UseAVX > 2 && !attributes->is_legacy_mode()) {
+    bool evex_r = (dst_enc >= 16);
+    bool evex_v = (nds_enc >= 16);
+    // can use vex_x as bank extender on rm encoding
+    vex_x = (src_enc >= 16);
+    attributes->set_is_evex_instruction();
+    evex_prefix(vex_r, vex_b, vex_x, evex_r, evex_v, nds_enc, pre, opc);
+  } else {
+    if (UseAVX > 2 && attributes->is_rex_vex_w_reverted()) {
+      attributes->set_rex_vex_w(false);
+    }
+    vex_prefix(vex_r, vex_b, vex_x, nds_enc, pre, opc);
+  }
+
+  // return modrm byte components for operands
+  return (((dst_enc & 7) << 3) | (src_enc & 7));
+}
 
 void Assembler::simd_prefix(XMMRegister xreg, XMMRegister nds, Address adr, VexSimdPrefix pre, VexOpcode opc, bool rex_w, bool vector256) {
   if (UseAVX > 0) {
@@ -4538,6 +4768,18 @@ void Assembler::simd_prefix(XMMRegister xreg, XMMRegister nds, Address adr, VexS
   }
 }
 
+void Assembler::simd_prefix(XMMRegister xreg, XMMRegister nds, Address adr, VexSimdPrefix pre,
+                            VexOpcode opc, InstructionAttr *attributes) {
+  if (UseAVX > 0) {
+    int xreg_enc = xreg->encoding();
+    int nds_enc = nds->is_valid() ? nds->encoding() : 0;
+    vex_prefix(adr, nds_enc, xreg_enc, pre, opc, attributes);
+  } else {
+    assert((nds == xreg) || (nds == xnoreg), "wrong sse encoding");
+    rex_prefix(adr, xreg, pre, opc, attributes->is_rex_vex_w());
+  }
+}
+
 int Assembler::simd_prefix_and_encode(XMMRegister dst, XMMRegister nds, XMMRegister src, VexSimdPrefix pre, VexOpcode opc, bool rex_w, bool vector256) {
   int dst_enc = dst->encoding();
   int src_enc = src->encoding();
@@ -4547,6 +4789,19 @@ int Assembler::simd_prefix_and_encode(XMMRegister dst, XMMRegister nds, XMMRegis
   } else {
     assert((nds == dst) || (nds == src) || (nds == xnoreg), "wrong sse encoding");
     return rex_prefix_and_encode(dst_enc, src_enc, pre, opc, rex_w);
+  }
+}
+
+int Assembler::simd_prefix_and_encode(XMMRegister dst, XMMRegister nds, XMMRegister src, VexSimdPrefix pre,
+                                      VexOpcode opc, InstructionAttr *attributes) {
+  int dst_enc = dst->encoding();
+  int src_enc = src->encoding();
+  if (UseAVX > 0) {
+    int nds_enc = nds->is_valid() ? nds->encoding() : 0;
+    return vex_prefix_and_encode(dst_enc, nds_enc, src_enc, pre, opc, attributes);
+  } else {
+    assert((nds == dst) || (nds == src) || (nds == xnoreg), "wrong sse encoding");
+    return rex_prefix_and_encode(dst_enc, src_enc, pre, opc, attributes->is_rex_vex_w());
   }
 }
 

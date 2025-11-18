@@ -1200,16 +1200,26 @@ public:
 
   void string_compare(Register str1, Register str2,
                       Register cnt1, Register cnt2, Register result,
-                      Register tmp1);
-  void string_equals(Register str1, Register str2,
-                     Register cnt, Register result,
-                     Register tmp1);
-  void char_arrays_equals(Register ary1, Register ary2,
-                          Register result, Register tmp1);
+                      Register tmp1,
+                      FloatRegister vtmp, FloatRegister vtmpZ, int ae);
+
+  void arrays_equals(Register a1, Register a2,
+                     Register result, Register cnt1,
+                     int elem_size, bool is_string);
+
   void fill_words(Register base, Register cnt, Register value);
   void zero_words(Register base, u_int64_t cnt);
   void zero_words(Register base, Register cnt);
   void block_zero(Register base, Register cnt, bool is_large = false);
+
+  void byte_array_inflate(Register src, Register dst, Register len,
+                          FloatRegister vtmp1, FloatRegister vtmp2,
+                          FloatRegister vtmp3, Register tmp4);
+
+  void char_array_compress(Register src, Register dst, Register len,
+                           FloatRegister tmp1Reg, FloatRegister tmp2Reg,
+                           FloatRegister tmp3Reg, FloatRegister tmp4Reg,
+                           Register result);
 
   void encode_iso_array(Register src, Register dst,
                         Register len, Register result,
@@ -1219,7 +1229,10 @@ public:
                       Register cnt1, Register cnt2,
                       Register tmp1, Register tmp2,
                       Register tmp3, Register tmp4,
-                      int int_cnt1, Register result);
+                      int int_cnt1, Register result, int ae);
+  void string_indexof_char(Register str1, Register cnt1,
+                           Register ch, Register result,
+                           Register tmp1, Register tmp2, Register tmp3);
 private:
   void add2_with_carry(Register final_dest_hi, Register dest_hi, Register dest_lo,
                        Register src1, Register src2);

@@ -892,9 +892,13 @@ class GraphKit : public Phase {
   Node* load_String_offset(Node* ctrl, Node* str);
   Node* load_String_length(Node* ctrl, Node* str);
   Node* load_String_value(Node* ctrl, Node* str);
-  void store_String_offset(Node* ctrl, Node* str, Node* value);
-  void store_String_length(Node* ctrl, Node* str, Node* value);
+  Node* load_String_coder(Node* ctrl, Node* str);
   void store_String_value(Node* ctrl, Node* str, Node* value);
+  void store_String_coder(Node* ctrl, Node* str, Node* value);
+  Node* capture_memory(const TypePtr* src_type, const TypePtr* dst_type);
+  Node* compress_string(Node* src, const TypeAryPtr* src_type, Node* dst, Node* count);
+  void inflate_string(Node* src, Node* dst, const TypeAryPtr* dst_type, Node* count);
+  void inflate_string_slow(Node* src, Node* dst, Node* start, Node* count);
 
   // Handy for making control flow
   IfNode* create_and_map_if(Node* ctrl, Node* tst, float prob, float cnt) {
