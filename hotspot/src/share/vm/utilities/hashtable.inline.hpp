@@ -112,4 +112,21 @@ template <MEMFLAGS F> inline void BasicHashtable<F>::free_entry(BasicHashtableEn
   --_number_of_entries;
 }
 
+// LingQu
+template <MEMFLAGS F> inline void BasicHashtable<F>::safe_add_entry(int index, BasicHashtableEntry<F>* entry) {
+  BasicHashtableEntry<F>* e;
+  do {
+    e = bucket(index);
+    entry->set_next(e);
+  } while (Atomic::cmpxchg_ptr((void*)entry, (volatile void*)(_buckets[index].entry_addr()), e) != e);
+  ++_number_of_entries;
+}
+
+template <MEMFLAGS F> inline void BasicHashtable<F>::safe_set_entry(int index, BasicHashtableEntry<F>* entry) {
+  BasicHashtableEntry<F>* e;
+  do {
+    e = bucket(index);
+  } while (Atomic::cmpxchg_ptr((void*)entry, (volatile void*)(_buckets[index].entry_addr()), e) != e);
+}
+
 #endif // SHARE_VM_UTILITIES_HASHTABLE_INLINE_HPP

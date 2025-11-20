@@ -4237,6 +4237,18 @@ class CommandLineFlags {
                                                                             \
   experimental(intx, CompilationProfileCacheRecordMinLevel, 3,              \
           "Minimal compilation level recorded in JProfileCache recording phase")  \
+                                                                            \
+  product(bool, UseUBMem, false,                                            \
+          "Use UB Memory")                                                  \
+                                                                            \
+  product(ccstr, UBConfPath, "allowlist.txt",                               \
+          "UB conf path")                                                   \
+                                                                            \
+  product(bool, PrintUBLog, false,                                          \
+          "Print UB log")                                                   \
+                                                                            \
+  product(ccstr, UBLogPath, NULL,                                           \
+          "UB log path")                                                    \
 /*
  *  Macros for factoring of globals
  */
