@@ -310,6 +310,20 @@ private:
   typedef void (*handle_ignore_class_t)(char* class_name, int index, bool is_log_detail);
   typedef bool (*dmh_g1_can_shrink_t)(double used_after_gc_d, size_t _new_max_heap, double maximum_used_percentage, size_t max_heap_size);
   typedef uint (*dmh_g1_get_region_limit_t)(size_t _new_max_heap, size_t region_size);
+
+  typedef int   (*ub_malloc_func_t)(const char* name, size_t size);
+  typedef void* (*ub_mmap_func_t)(const char* name, size_t size);
+  typedef int   (*ub_flush_func_t)(void* start, size_t size);
+  typedef int   (*ub_munmap_func_t)(void* start, size_t size);
+  typedef int   (*ub_free_func_t)(const char* name);
+  typedef int   (*ub_length_func_t)(void* start, size_t* size);
+  typedef void* (*ub_seek_func_t)(void* start, size_t off, size_t* size, size_t* offset);
+  typedef int   (*ub_rename_func_t)(const char* from, const char* to);
+  typedef int   (*ub_name_exist_func_t)(const char* name, bool* exist);
+  typedef int   (*ub_addr_exist_func_t)(void* addr, bool* exist);
+  typedef int   (*ub_prepare_env_func_t)();
+  typedef int   (*ub_mem_info_func_t)(size_t* used, size_t* alloc, size_t* total);
+
   static heap_dict_add_t _heap_dict_add;
   static heap_dict_lookup_t _heap_dict_lookup;
   static heap_dict_free_t _heap_dict_free;
@@ -341,6 +355,18 @@ private:
   static numa_bitmask_free_func_t _numa_bitmask_free;
   static dmh_g1_can_shrink_t _dmh_g1_can_shrink;
   static dmh_g1_get_region_limit_t _dmh_g1_get_region_limit;
+  static ub_malloc_func_t  _ub_malloc;
+  static ub_mmap_func_t    _ub_mmap;
+  static ub_flush_func_t   _ub_flush;
+  static ub_munmap_func_t  _ub_munmap;
+  static ub_free_func_t    _ub_free;
+  static ub_length_func_t  _ub_length;
+  static ub_seek_func_t    _ub_seek;
+  static ub_rename_func_t  _ub_rename;
+  static ub_name_exist_func_t   _ub_name_exist;
+  static ub_addr_exist_func_t   _ub_addr_exist;
+  static ub_prepare_env_func_t  _ub_prepare_env;
+  static ub_mem_info_func_t     _ub_mem_info;
 
   static unsigned long* _numa_all_nodes;
   static struct bitmask* _numa_all_nodes_ptr;
@@ -640,6 +666,97 @@ public:
     if(_handle_ignore_class != NULL) {
       _handle_ignore_class(class_name, index, is_log_detail);
     }
+  }
+
+  static int ub_malloc(const char* name, size_t size = 0) {
+    if (_ub_malloc == NULL) {
+        return -1;
+    }
+    return _ub_malloc(name, size);
+  }
+
+  static void* ub_mmap(const char* name, size_t size = 0) {
+      if (_ub_mmap == NULL) {
+          return NULL;
+      }
+      return _ub_mmap(name, size);
+  }
+
+  static int ub_flush(void* start, size_t size = 0) {
+      if (_ub_flush == NULL) {
+          return -1;
+      }
+      return _ub_flush(start, size);
+  }
+
+  static int ub_munmap(void* start, size_t size = 0) {
+      if (_ub_munmap == NULL) {
+          return -1;
+      }
+      return _ub_munmap(start, size);
+  }
+
+  static int ub_free(const char* name) {
+      if (_ub_free == NULL) {
+          return -1;
+      }
+      return _ub_free(name);
+  }
+
+  static int ub_length(void* start, size_t* size) {
+      if (_ub_length == NULL) {
+          return -1;
+      }
+      return _ub_length(start, size);
+  }
+
+  static void* ub_seek(void* start, size_t off, size_t* size, size_t* offset) {
+      if (_ub_seek == NULL) {
+          return NULL;
+      }
+      return _ub_seek(start, off, size, offset);
+  }
+
+  static int ub_rename(const char* from, const char* to) {
+      if (_ub_rename == NULL) {
+          return -1;
+      }
+      return _ub_rename(from, to);
+  }
+
+  static int ub_name_exist(const char* name, bool* exist) {
+      if (_ub_name_exist == NULL) {
+          return -1;
+      }
+      return _ub_name_exist(name, exist);
+  }
+
+  static int ub_addr_exist(void* addr, bool* exist) {
+      if (_ub_addr_exist == NULL) {
+          return -1;
+      }
+      return _ub_addr_exist(addr, exist);
+  }
+
+  static int ub_prepare_env() {
+      if (_ub_prepare_env == NULL) {
+          return -1;
+      }
+      return _ub_prepare_env();
+  }
+
+  static int ub_mem_info(size_t* used, size_t* alloc, size_t* total) {
+      if (_ub_mem_info == NULL) {
+          return -1;
+      }
+      return _ub_mem_info(used, alloc, total);
+  }
+
+  static bool ub_libs_ready() {
+      if (_ub_prepare_env == NULL) {
+          return false;
+      }
+      return true;
   }
 };
 

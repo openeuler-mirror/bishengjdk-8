@@ -239,6 +239,10 @@ public:
 
   void add_entry(int index, BasicHashtableEntry<F>* entry);
 
+  // LingQu
+  void safe_set_entry(int index, BasicHashtableEntry<F>* entry);
+  void safe_add_entry(int index, BasicHashtableEntry<F>* entry);
+
   void free_entry(BasicHashtableEntry<F>* entry);
 
   int number_of_entries() { return _number_of_entries; }
