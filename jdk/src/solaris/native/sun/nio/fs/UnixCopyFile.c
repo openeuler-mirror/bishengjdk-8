@@ -53,6 +53,12 @@ JNIEXPORT void JNICALL
 Java_sun_nio_fs_UnixCopyFile_transfer
     (JNIEnv* env, jclass this, jint dst, jint src, jlong cancelAddress)
 {
+    // LingQu
+    jint fd_limit = Java_sun_nio_ch_IOUtil_fdLimit(env, this);
+    if (src >= fd_limit) {
+        // printf("[UB] Java_sun_nio_fs_UnixCopyFile_transfer\n");
+    }
+
     char buf[8192];
     volatile jint* cancel = (jint*)jlong_to_ptr(cancelAddress);
 

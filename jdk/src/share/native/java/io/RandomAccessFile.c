@@ -60,6 +60,11 @@ Java_java_io_RandomAccessFile_open0(JNIEnv *env,
         else if (mode & java_io_RandomAccessFile_O_DSYNC)
             flags |= O_DSYNC;
     }
+    // LingQu
+    if ((*env)->UbCheckStack(env) == JNI_TRUE) {
+        int ub_fd = ubMemOpen(env, this, path, raf_fd, flags);
+        if (ub_fd != -1) return;
+    }
     fileOpen(env, this, path, raf_fd, flags);
 }
 
@@ -71,6 +76,12 @@ Java_java_io_RandomAccessFile_read0(JNIEnv *env, jobject this) {
 JNIEXPORT jint JNICALL
 Java_java_io_RandomAccessFile_readBytes(JNIEnv *env,
     jobject this, jbyteArray bytes, jint off, jint len) {
+    // LingQu
+    FD fd = GET_FD(this, raf_fd);
+    if (fd >= fd_limit) {
+        jint res = ubMemReadBytes(env, this, bytes, off, len, fd);
+        return res;
+    }
     return readBytes(env, this, bytes, off, len, raf_fd);
 }
 
@@ -82,6 +93,12 @@ Java_java_io_RandomAccessFile_write0(JNIEnv *env, jobject this, jint byte) {
 JNIEXPORT void JNICALL
 Java_java_io_RandomAccessFile_writeBytes(JNIEnv *env,
     jobject this, jbyteArray bytes, jint off, jint len) {
+    // LingQu
+    FD fd = GET_FD(this, raf_fd);
+    if (fd >= fd_limit) {
+        ubMemWriteBytes(env, this, bytes, off, len, JNI_FALSE, fd, raf_fd);
+        return;
+    }
     writeBytes(env, this, bytes, off, len, JNI_FALSE, raf_fd);
 }
 

@@ -58,10 +58,35 @@ FD handleOpen(const char *path, int oflag, int mode);
     (*env)->GetObjectField(env, (this), (fid)) == NULL ? \
         -1 : (*env)->GetIntField(env, (*env)->GetObjectField(env, (this), (fid)), IO_fd_fdID)
 
+#define SET_UB_MEM_ADDR(this, addr, fid) \
+    if ((*env)->GetObjectField(env, (this), (fid)) != NULL) \
+        (*env)->SetLongField(env, (*env)->GetObjectField(env, (this), (fid)),IO_fd_ubMemAddrID, (addr))
+
+#define GET_UB_MEM_ADDR(this, fid) \
+    (*env)->GetObjectField(env, (this), (fid)) == NULL ? \
+        0 : (*env)->GetLongField(env, (*env)->GetObjectField(env, (this), (fid)), IO_fd_ubMemAddrID)
+
+#define SET_UB_MEM_SIZE(this, size, fid) \
+    if ((*env)->GetObjectField(env, (this), (fid)) != NULL) \
+        (*env)->SetLongField(env, (*env)->GetObjectField(env, (this), (fid)),IO_fd_ubMemSizeID, (size))
+
+#define GET_UB_MEM_SIZE(this, fid) \
+    (*env)->GetObjectField(env, (this), (fid)) == NULL ? \
+        0 : (*env)->GetLongField(env, (*env)->GetObjectField(env, (this), (fid)), IO_fd_ubMemSizeID)
+
+#define SET_UB_MEM_OFFSET(this, offset, fid) \
+    if ((*env)->GetObjectField(env, (this), (fid)) != NULL) \
+        (*env)->SetLongField(env, (*env)->GetObjectField(env, (this), (fid)),IO_fd_ubMemOffsetID, (offset))
+
+#define GET_UB_MEM_OFFSET(this, fid) \
+    (*env)->GetObjectField(env, (this), (fid)) == NULL ? \
+        0 : (*env)->GetLongField(env, (*env)->GetObjectField(env, (this), (fid)), IO_fd_ubMemOffsetID)
+
 /*
  * Macros to set/get fd when inside java.io.FileDescriptor
  */
 #define THIS_FD(obj) (*env)->GetIntField(env, obj, IO_fd_fdID)
+#define THIS_UB_MEM_ADDR(obj) (*env)->GetLongField(env, obj, IO_fd_ubMemAddrID)
 
 /*
  * Route the routines
@@ -106,3 +131,9 @@ void fileClose(JNIEnv *env, jobject this, jfieldID fid);
 #ifdef MACOSX
 jstring newStringPlatform(JNIEnv *env, const char* str);
 #endif
+
+/*
+ * LingQu
+ */
+int ubMemOpen(JNIEnv *env, jobject this, jstring path, jfieldID fid, int flags);
+void ubMemClose(JNIEnv *env, jobject this, jint fd);

@@ -30,12 +30,19 @@
 #include "io_util_md.h"
 #include "java_io_FileDescriptor.h"
 
+// LingQu
+#include "java_lang_Integer.h"
+#include <sys/resource.h>
+
 /*******************************************************************/
 /*  BEGIN JNI ********* BEGIN JNI *********** BEGIN JNI ************/
 /*******************************************************************/
 
 /* field id for jint 'fd' in java.io.FileDescriptor */
 jfieldID IO_fd_fdID;
+
+// LingQu
+int fd_limit;
 
 /**************************************************************
  * static methods to store field ID's in initializers
@@ -44,6 +51,18 @@ jfieldID IO_fd_fdID;
 JNIEXPORT void JNICALL
 Java_java_io_FileDescriptor_initIDs(JNIEnv *env, jclass fdClass) {
     CHECK_NULL(IO_fd_fdID = (*env)->GetFieldID(env, fdClass, "fd", "I"));
+    // LingQu
+    struct rlimit rlp;
+    if (getrlimit(RLIMIT_NOFILE, &rlp) < 0) {
+        JNU_ThrowIOExceptionWithLastError(env, "getrlimit failed");
+        return;
+    }
+    if (rlp.rlim_max < 0 || rlp.rlim_max > java_lang_Integer_MAX_VALUE) {
+        JNU_ThrowIOExceptionWithLastError(env, "rlimit invalid");
+        return;
+    } else {
+        fd_limit = rlp.rlim_max;
+    }
 }
 
 /**************************************************************
@@ -53,6 +72,12 @@ Java_java_io_FileDescriptor_initIDs(JNIEnv *env, jclass fdClass) {
 JNIEXPORT void JNICALL
 Java_java_io_FileDescriptor_sync(JNIEnv *env, jobject this) {
     FD fd = THIS_FD(this);
+
+    // LingQu
+    if (fd >= fd_limit) {
+        return;
+    }
+    
     if (IO_Sync(fd) == -1) {
         JNU_ThrowByName(env, "java/io/SyncFailedException", "sync failed");
     }

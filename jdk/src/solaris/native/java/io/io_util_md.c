@@ -47,6 +47,9 @@
 
 #include <CoreFoundation/CoreFoundation.h>
 
+// LingQu
+extern int fd_limit;
+
 __private_extern__
 jstring newStringPlatform(JNIEnv *env, const char* str)
 {
@@ -222,4 +225,31 @@ getLastErrorString(char *buf, size_t len)
     if (errno == 0 || len < 1) return 0;
     getErrorString(errno, buf, len);
     return strlen(buf);
+}
+
+// LingQu
+int
+ubMemOpen(JNIEnv *env, jobject this, jstring path, jfieldID fid, int flags)
+{
+    FD fd;
+    WITH_PLATFORM_STRING(env, path, ps) {
+
+#if defined(__linux__) || defined(_ALLBSD_SOURCE)
+        /* Remove trailing slashes, since the kernel won't */
+        char *p = (char *)ps + strlen(ps) - 1;
+        while ((p > ps) && (*p == '/'))
+            *p-- = '\0';
+#endif
+        const char* name = ps;
+
+        fd = (*env)->UbOpen(env, name, flags);
+        if (fd != -1) SET_FD(this, fd, fid);
+    } END_PLATFORM_STRING(env, ps);
+    return fd;
+}
+
+void
+ubMemClose(JNIEnv *env, jobject this, jint fd)
+{
+    (*env)->UbClose(env, fd);
 }

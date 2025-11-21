@@ -115,7 +115,11 @@ Java_java_io_UnixFileSystem_getBooleanAttributes0(JNIEnv *env, jobject this,
 
     WITH_FIELD_PLATFORM_STRING(env, file, ids.path, path) {
         int mode;
-        if (statMode(path, &mode)) {
+        // LingQu
+        if ((*env)->IsUbFile(env, path) != -1) {
+            rv = (jint) (java_io_FileSystem_BA_EXISTS | java_io_FileSystem_BA_REGULAR);
+        }
+        else if (statMode(path, &mode)) {
             int fmt = mode & S_IFMT;
             rv = (jint) (java_io_FileSystem_BA_EXISTS
                   | ((fmt == S_IFREG) ? java_io_FileSystem_BA_REGULAR : 0)
@@ -229,7 +233,12 @@ Java_java_io_UnixFileSystem_getLength(JNIEnv *env, jobject this,
 
     WITH_FIELD_PLATFORM_STRING(env, file, ids.path, path) {
         struct stat64 sb;
-        if (stat64(path, &sb) == 0) {
+        // LingQu
+        jint fd = (*env)->IsUbFile(env, path);
+        if (fd != -1) {
+            rv = (*env)->UbSizeWithName(env, path);
+        }
+        else if (stat64(path, &sb) == 0) {
             rv = sb.st_size;
         }
     } END_PLATFORM_STRING(env, path);
@@ -272,7 +281,11 @@ Java_java_io_UnixFileSystem_delete0(JNIEnv *env, jobject this,
     jboolean rv = JNI_FALSE;
 
     WITH_FIELD_PLATFORM_STRING(env, file, ids.path, path) {
-        if (remove(path) == 0) {
+        // LingQu
+        if ((*env)->IsUbFile(env, path) != -1) {
+            rv = (*env)->UbRemove(env, path);
+        }
+        else if (remove(path) == 0) {
             rv = JNI_TRUE;
         }
     } END_PLATFORM_STRING(env, path);
@@ -295,6 +308,10 @@ Java_java_io_UnixFileSystem_list(JNIEnv *env, jobject this,
     CHECK_NULL_RETURN(str_class, NULL);
 
     WITH_FIELD_PLATFORM_STRING(env, file, ids.path, path) {
+        // LingQu
+        if ((*env)->UbCheckStack(env) == JNI_TRUE) {
+            (*env)->UbRemoveDir(env, path);
+        }
         dir = opendir(path);
     } END_PLATFORM_STRING(env, path);
     if (dir == NULL) return NULL;
@@ -377,7 +394,11 @@ Java_java_io_UnixFileSystem_rename0(JNIEnv *env, jobject this,
 
     WITH_FIELD_PLATFORM_STRING(env, from, ids.path, fromPath) {
         WITH_FIELD_PLATFORM_STRING(env, to, ids.path, toPath) {
-            if (rename(fromPath, toPath) == 0) {
+            // LingQu
+            if ((*env)->IsUbFile(env, fromPath) != -1) {
+                rv = (*env)->UbRename(env, fromPath, toPath);
+            }
+            else if (rename(fromPath, toPath) == 0) {
                 rv = JNI_TRUE;
             }
         } END_PLATFORM_STRING(env, toPath);
