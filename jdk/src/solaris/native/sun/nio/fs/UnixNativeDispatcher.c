@@ -38,6 +38,9 @@
 #include <sys/statvfs.h>
 #include <sys/time.h>
 
+// LingQu
+#include "jvm.h"
+
 #ifdef __solaris__
 #include <strings.h>
 #endif
@@ -387,6 +390,11 @@ Java_sun_nio_fs_UnixNativeDispatcher_open0(JNIEnv* env, jclass this,
 {
     jint fd;
     const char* path = (const char*)jlong_to_ptr(pathAddress);
+    // LingQu
+    if ((*env)->UbCheckStack(env) == JNI_TRUE) {
+        int ub_fd = (*env)->UbOpen(env, path, oflags);
+        if (ub_fd != -1) return ub_fd;
+    }
 
     RESTARTABLE(open64(path, (int)oflags, (mode_t)mode), fd);
     if (fd == -1) {
@@ -416,6 +424,12 @@ Java_sun_nio_fs_UnixNativeDispatcher_openat0(JNIEnv* env, jclass this, jint dfd,
 
 JNIEXPORT void JNICALL
 Java_sun_nio_fs_UnixNativeDispatcher_close(JNIEnv* env, jclass this, jint fd) {
+    // LingQu
+    jint fd_limit = Java_sun_nio_ch_IOUtil_fdLimit(env, this);
+    if (fd >= fd_limit) {
+        (*env)->UbClose(env, fd);
+        return;
+    }
     int err;
     /* TDB - need to decide if EIO and other errors should cause exception */
     RESTARTABLE(close((int)fd), err);
@@ -427,6 +441,15 @@ Java_sun_nio_fs_UnixNativeDispatcher_read(JNIEnv* env, jclass this, jint fd,
 {
     ssize_t n;
     void* bufp = jlong_to_ptr(address);
+    // LingQu
+    jint fd_limit = Java_sun_nio_ch_IOUtil_fdLimit(env, this);
+    if (fd >= fd_limit) {
+        jlong nread;
+        void* addr = (*env)->UbRead(env, fd, &nread, nbytes);
+        memcpy(bufp, addr, nread);
+        return (jint)nread;
+    }
+
     RESTARTABLE(read((int)fd, bufp, (size_t)nbytes), n);
     if (n == -1) {
         throwUnixException(env, errno);
@@ -440,6 +463,15 @@ Java_sun_nio_fs_UnixNativeDispatcher_write(JNIEnv* env, jclass this, jint fd,
 {
     ssize_t n;
     void* bufp = jlong_to_ptr(address);
+    // LingQu
+    jint fd_limit = Java_sun_nio_ch_IOUtil_fdLimit(env, this);
+    if (fd >= fd_limit) {
+        jlong nwrite;
+        void* addr = (*env)->UbWrite(env, fd, &nwrite, nbytes);
+        memcpy(addr, bufp, nwrite);
+        return nwrite;
+    }
+
     RESTARTABLE(write((int)fd, bufp, (size_t)nbytes), n);
     if (n == -1) {
         throwUnixException(env, errno);
@@ -497,6 +529,15 @@ Java_sun_nio_fs_UnixNativeDispatcher_lstat0(JNIEnv* env, jclass this,
     int err;
     struct stat64 buf;
     const char* path = (const char*)jlong_to_ptr(pathAddress);
+
+    // LingQu
+    if ((*env)->IsUbFile(env, path) != -1) {
+        // need a specific interface to mock a stat64 struct
+        buf.st_mode = S_IFREG;
+        buf.st_size = (*env)->UbSizeWithName(env, path);
+        prepAttributes(env, &buf, attrs);
+        return;
+    }
 
     RESTARTABLE(lstat64(path, &buf), err);
     if (err == -1) {
@@ -805,6 +846,12 @@ Java_sun_nio_fs_UnixNativeDispatcher_rename0(JNIEnv* env, jclass this,
 {
     const char* from = (const char*)jlong_to_ptr(fromAddress);
     const char* to = (const char*)jlong_to_ptr(toAddress);
+
+    // LingQu
+    if ((*env)->IsUbFile(env, from) != -1) {
+        (*env)->UbRename(env, from, to);
+        return;
+    }
 
     /* EINTR not listed as a possible error */
     if (rename(from, to) == -1) {

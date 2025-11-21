@@ -55,22 +55,47 @@ Java_java_io_FileOutputStream_initIDs(JNIEnv *env, jclass fdClass) {
 JNIEXPORT void JNICALL
 Java_java_io_FileOutputStream_open0(JNIEnv *env, jobject this,
                                     jstring path, jboolean append) {
+    // LingQu
+
+    if ((*env)->UbCheckStack(env) == JNI_TRUE) {
+        int ub_fd = ubMemOpen(env, this, path, fos_fd,
+             O_WRONLY | O_CREAT | (append ? O_APPEND : O_TRUNC));
+        if (ub_fd != -1) return;
+    }
     fileOpen(env, this, path, fos_fd,
              O_WRONLY | O_CREAT | (append ? O_APPEND : O_TRUNC));
 }
 
 JNIEXPORT void JNICALL
 Java_java_io_FileOutputStream_write(JNIEnv *env, jobject this, jint byte, jboolean append) {
+    // LingQu
+    FD fd = GET_FD(this, fos_fd);
+    if (fd >= fd_limit) {
+        ubWriteSingle(env, this, byte, append, fd);
+        return;
+    }
     writeSingle(env, this, byte, append, fos_fd);
 }
 
 JNIEXPORT void JNICALL
 Java_java_io_FileOutputStream_writeBytes(JNIEnv *env,
     jobject this, jbyteArray bytes, jint off, jint len, jboolean append) {
+    // LingQu
+    FD fd = GET_FD(this, fos_fd);
+    if (fd >= fd_limit) {
+        ubMemWriteBytes(env, this, bytes, off, len, append, fd, fos_fd);
+        return;
+    }
     writeBytes(env, this, bytes, off, len, append, fos_fd);
 }
 
 JNIEXPORT void JNICALL
 Java_java_io_FileOutputStream_close0(JNIEnv *env, jobject this) {
+    // LingQu
+    FD fd = GET_FD(this, fos_fd);
+    if (fd >= fd_limit) {
+        ubMemClose(env, this, fd);
+        return;
+    }
     fileClose(env, this, fos_fd);
 }

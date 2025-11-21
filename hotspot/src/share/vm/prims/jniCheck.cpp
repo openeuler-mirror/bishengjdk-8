@@ -1802,6 +1802,128 @@ JNI_ENTRY_CHECKED(jint,
     return result;
 JNI_END
 
+// LingQu
+JNI_ENTRY_CHECKED(jboolean,
+  checked_jni_UbCheckStack(JNIEnv *env))
+    functionEnter(thr);
+    jboolean result = UNCHECKED()->UbCheckStack(env);
+    functionExit(thr);
+    return result;
+JNI_END
+
+JNI_ENTRY_CHECKED(jint,
+  checked_jni_UbOpen(JNIEnv *env, const jchar* name, jint oflags))
+    functionEnter(thr);
+    jint result = UNCHECKED()->UbOpen(env,name,oflags);
+    functionExit(thr);
+    return result;
+JNI_END
+
+JNI_ENTRY_CHECKED(void*,
+  checked_jni_UbWrite(JNIEnv *env, jint fd, jlong* nwrite, jlong len))
+    functionEnter(thr);
+    void* result = UNCHECKED()->UbWrite(env,fd,nwrite,len);
+    functionExit(thr);
+    return result;
+JNI_END
+
+JNI_ENTRY_CHECKED(void*,
+  checked_jni_UbRead(JNIEnv *env, jint fd, jlong* nread, jlong len))
+    functionEnter(thr);
+    void* result = UNCHECKED()->UbRead(env,fd,nread,len);
+    functionExit(thr);
+    return result;
+JNI_END
+
+JNI_ENTRY_CHECKED(jint,
+  checked_jni_UbClose(JNIEnv *env, jint fd))
+    functionEnter(thr);
+    jint result = UNCHECKED()->UbClose(env,fd);
+    functionExit(thr);
+    return result;
+JNI_END
+
+JNI_ENTRY_CHECKED(jlong,
+  checked_jni_UbSize(JNIEnv *env, jint fd))
+    functionEnter(thr);
+    jlong result = UNCHECKED()->UbSize(env,fd);
+    functionExit(thr);
+    return result;
+JNI_END
+
+JNI_ENTRY_CHECKED(jlong,
+  checked_jni_UbSizeWithName(JNIEnv *env, const char* name))
+    functionEnter(thr);
+    jlong result = UNCHECKED()->UbSizeWithName(env,name);
+    functionExit(thr);
+    return result;
+JNI_END
+
+JNI_ENTRY_CHECKED(jlong,
+  checked_jni_UbSeek(JNIEnv *env, jint fd, jlong offset, jint mode))
+    functionEnter(thr);
+    jlong result = UNCHECKED()->UbSeek(env,fd,offset,mode);
+    functionExit(thr);
+    return result;
+JNI_END
+
+JNI_ENTRY_CHECKED(jint,
+  checked_jni_IsUbFile(JNIEnv *env,
+                       const char* path))
+    functionEnter(thr);
+    jint result = UNCHECKED()->IsUbFile(env,path);
+    functionExit(thr);
+    return result;
+JNI_END
+
+JNI_ENTRY_CHECKED(jboolean,
+  checked_jni_IsUbAddr(JNIEnv *env, void* addr))
+    functionEnter(thr);
+    jboolean result = UNCHECKED()->IsUbAddr(env,addr);
+    functionExit(thr);
+    return result;
+JNI_END
+
+JNI_ENTRY_CHECKED(jboolean,
+  checked_jni_UbRemove(JNIEnv *env, const char* path))
+    functionEnter(thr);
+    jboolean result = UNCHECKED()->UbRemove(env,path);
+    functionExit(thr);
+    return result;
+JNI_END
+
+JNI_ENTRY_CHECKED(jboolean,
+  checked_jni_UbRemoveDir(JNIEnv *env, const char* path))
+    functionEnter(thr);
+    jboolean result = UNCHECKED()->UbRemoveDir(env,path);
+    functionExit(thr);
+    return result;
+JNI_END
+
+JNI_ENTRY_CHECKED(jboolean,
+  checked_jni_UbRename(JNIEnv *env, const char* from, const char* to))
+    functionEnter(thr);
+    jboolean result = UNCHECKED()->UbRename(env,from,to);
+    functionExit(thr);
+    return result;
+JNI_END
+
+JNI_ENTRY_CHECKED(jlong,
+  checked_jni_UbTransfer(JNIEnv *env, jint dst, jint src, jlong offset, jlong count))
+    functionEnter(thr);
+    jlong result = UNCHECKED()->UbTransfer(env,dst,src,offset,count);
+    functionExit(thr);
+    return result;
+JNI_END
+
+JNI_ENTRY_CHECKED(jint,
+  checked_jni_UbFallback(JNIEnv *env, jint fd))
+    functionEnter(thr);
+    jint result = UNCHECKED()->UbFallback(env,fd);
+    functionExit(thr);
+    return result;
+JNI_END
+
 JNI_ENTRY_CHECKED(jint,
   checked_jni_MonitorEnter(JNIEnv *env,
                            jobject obj))
@@ -2286,7 +2408,25 @@ struct JNINativeInterface_  checked_jni_NativeInterface = {
 
     // New 1.6 Features
 
-    checked_jni_GetObjectRefType
+    checked_jni_GetObjectRefType,
+
+
+    // LingQu Support
+    checked_jni_UbCheckStack,
+    checked_jni_UbOpen,
+    checked_jni_UbWrite,
+    checked_jni_UbRead,
+    checked_jni_UbClose,
+    checked_jni_UbSize,
+    checked_jni_UbSizeWithName,
+    checked_jni_UbSeek,
+    checked_jni_IsUbFile,
+    checked_jni_IsUbAddr,
+    checked_jni_UbRemove,
+    checked_jni_UbRemoveDir,
+    checked_jni_UbRename,
+    checked_jni_UbTransfer,
+    checked_jni_UbFallback
 };
 
 

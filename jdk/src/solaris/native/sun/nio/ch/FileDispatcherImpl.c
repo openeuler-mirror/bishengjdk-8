@@ -37,6 +37,8 @@
 #include <linux/fs.h>
 #include <sys/ioctl.h>
 #endif
+// LingQu
+#include <sys/resource.h>
 
 #if defined(_ALLBSD_SOURCE)
 #define lseek64 lseek
@@ -62,6 +64,8 @@
 #include "nio_util.h"
 #include "sun_nio_ch_FileDispatcherImpl.h"
 #include "java_lang_Long.h"
+// LingQu
+#include "java_lang_Integer.h"
 
 #if defined(aarch64)
   __asm__(".symver fcntl64,fcntl@GLIBC_2.17");
@@ -71,6 +75,8 @@
 static int preCloseFD = -1;     /* File descriptor to which we dup other fd's
                                    before closing them for real */
 
+// LingQu
+int fd_limit;
 
 JNIEXPORT void JNICALL
 Java_sun_nio_ch_FileDispatcherImpl_init(JNIEnv *env, jclass cl)
@@ -82,6 +88,18 @@ Java_sun_nio_ch_FileDispatcherImpl_init(JNIEnv *env, jclass cl)
     }
     preCloseFD = sp[0];
     close(sp[1]);
+    // LingQu
+    struct rlimit rlp;
+    if (getrlimit(RLIMIT_NOFILE, &rlp) < 0) {
+        JNU_ThrowIOExceptionWithLastError(env, "getrlimit failed");
+        return;
+    }
+    if (rlp.rlim_max < 0 || rlp.rlim_max > java_lang_Integer_MAX_VALUE) {
+        JNU_ThrowIOExceptionWithLastError(env, "rlimit invalid");
+        return;
+    } else {
+        fd_limit = rlp.rlim_max;
+    }
 }
 
 JNIEXPORT jint JNICALL
@@ -90,6 +108,14 @@ Java_sun_nio_ch_FileDispatcherImpl_read0(JNIEnv *env, jclass clazz,
 {
     jint fd = fdval(env, fdo);
     void *buf = (void *)jlong_to_ptr(address);
+    // LingQu
+    if (fd >= fd_limit) {
+        // printf("[UB] Java_sun_nio_ch_FileDispatcherImpl_read0\n");
+        jlong nread;
+        void* addr = (*env)->UbRead(env, fd, &nread, len);
+        memcpy(buf, addr, nread);
+        return (jint)nread;
+    }
 
     return convertReturnVal(env, read(fd, buf, len), JNI_TRUE);
 }
@@ -119,6 +145,15 @@ Java_sun_nio_ch_FileDispatcherImpl_write0(JNIEnv *env, jclass clazz,
 {
     jint fd = fdval(env, fdo);
     void *buf = (void *)jlong_to_ptr(address);
+
+    // LingQu
+    if (fd >= fd_limit) {
+        // printf("[UB] Java_sun_nio_ch_FileDispatcherImpl_write0\n");
+        jlong nwrite;
+        void* addr = (*env)->UbWrite(env, fd, &nwrite, len);
+        memcpy(addr, buf, len);
+        return (jint)nwrite;
+    }
 
     return convertReturnVal(env, write(fd, buf, len), JNI_FALSE);
 }
@@ -158,6 +193,16 @@ Java_sun_nio_ch_FileDispatcherImpl_seek0(JNIEnv *env, jclass clazz,
                                          jobject fdo, jlong offset)
 {
     jint fd = fdval(env, fdo);
+    // LingQu
+    if (fd >= fd_limit) {
+        // printf("[UB] Java_sun_nio_ch_FileDispatcherImpl_seek0\n");
+        if (offset < 0) {
+            return (*env)->UbSeek(env, fd, 0, (jint)SEEK_CUR);
+        } else {
+            return (*env)->UbSeek(env, fd, offset, (jint)SEEK_SET);
+        }
+    }
+
     off64_t result;
     if (offset < 0) {
         result = lseek64(fd, 0, SEEK_CUR);
@@ -208,6 +253,13 @@ JNIEXPORT jlong JNICALL
 Java_sun_nio_ch_FileDispatcherImpl_size0(JNIEnv *env, jobject this, jobject fdo)
 {
     jint fd = fdval(env, fdo);
+
+    // LingQu
+    if (fd >= fd_limit) {
+        // printf("[UB] Java_sun_nio_ch_FileDispatcherImpl_size0\n");
+        return (*env)->UbSize(env, fd);
+    }
+
     struct stat64 fbuf;
 
     if (fstat64(fd, &fbuf) < 0)
@@ -299,6 +351,12 @@ JNIEXPORT void JNICALL
 Java_sun_nio_ch_FileDispatcherImpl_close0(JNIEnv *env, jclass clazz, jobject fdo)
 {
     jint fd = fdval(env, fdo);
+    // LingQu
+    if (fd >= fd_limit) {
+        // printf("[UB] Java_sun_nio_ch_FileDispatcherImpl_close0\n");
+        (*env)->UbClose(env, fd);
+        return;
+    }
     closeFileDescriptor(env, fd);
 }
 

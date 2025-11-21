@@ -40,6 +40,9 @@
 #include "services/memTracker.hpp"
 #include "utilities/macros.hpp"
 
+// LingQu
+#include "matrix/allowList.hpp"
+
 
 // Initialization done by VM thread in vm_init_globals()
 void check_ThreadShadow();
@@ -94,7 +97,6 @@ void vm_init_globals() {
   chunkpool_init();
   perfMemory_init();
 }
-
 
 jint init_globals() {
   HandleMark hm;

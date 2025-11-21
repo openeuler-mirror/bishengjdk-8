@@ -26,6 +26,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stddef.h>
+// LingQu
+#include <time.h>
 
 #include "jni.h"
 #include "jni_util.h"
@@ -224,5 +226,83 @@ throwFileNotFoundException(JNIEnv *env, jstring path)
                             path, why);
     if (x != NULL) {
         (*env)->Throw(env, x);
+    }
+}
+
+
+/* LingQu */
+
+void
+ubMemWriteBytes(JNIEnv *env, jobject this, jbyteArray bytes,
+           jint off, jint len, jboolean append, jint fd, jfieldID fid)
+{
+    if (len == 0) return;
+    jlong nwrite = 0;
+    while (nwrite < len) {
+        jlong write_size = 0;
+        void* write_addr = (*env)->UbWrite(env, fd, &write_size, len - nwrite);
+        if (write_addr == NULL) {
+            jint new_fd = (*env)->UbFallback(env, fd);
+            SET_FD(this, new_fd, fid);
+            writeBytes(env, this, bytes, off + nwrite, len - nwrite, append, fid);
+            return;
+        }
+        (*env)->GetByteArrayRegion(env, bytes, off + nwrite, write_size, (jbyte *)write_addr);
+        nwrite += write_size;
+    }
+}
+
+jint
+ubMemReadBytes(JNIEnv *env, jobject this, jbyteArray bytes,
+          jint off, jint len, jint fd)
+{
+    if (len == 0) return 0;
+    jlong nread;
+    void* addr = (*env)->UbRead(env, fd, &nread, len);
+    if (nread == 0) { /* EOF */
+        return -1;
+    } else if (nread == -1) {
+        JNU_ThrowIOExceptionWithLastError(env, "Read error");
+        return -1;
+    }
+    (*env)->SetByteArrayRegion(env, bytes, off, nread, (jbyte *)addr);
+    while (nread < len) {
+        jlong read_size = 0;
+        void* read_addr = (*env)->UbRead(env, fd, &read_size, len - nread);
+        if (read_size == 0) { /* EOF */
+            break;
+        }
+        (*env)->SetByteArrayRegion(env, bytes, off + nread, read_size, (jbyte *)read_addr);
+        nread += read_size;
+    }
+    return (jint)nread;
+}
+
+jint
+ubReadSingle(JNIEnv *env, jobject this, jint fd) {
+    jlong nread;
+    char ret;
+    void* addr = (*env)->UbRead(env, fd, &nread, 1);
+    memcpy(&ret, addr, 1);
+    if (nread == 0) { /* EOF */
+        return -1;
+    } else if (nread == -1) { /* error */
+        JNU_ThrowIOExceptionWithLastError(env, "Read error");
+    }
+    return ret & 0xFF;
+}
+
+void
+ubWriteSingle(JNIEnv *env, jobject this, jint byte, jboolean append, jint fd) {
+    // Discard the 24 high-order bits of byte. See OutputStream#write(int)
+    char c = (char) byte;
+    jlong n;
+    if (append != JNI_TRUE) {
+        printf("[ERROR] ubWriteSingle %d append != JNI_TRUE\n", fd);
+    }
+    void* addr = (*env)->UbWrite(env, fd, &n, 1);
+    memcpy(addr, &c, 1);
+    if (n == -1) {
+        JNU_ThrowIOExceptionWithLastError(env, "Write error");
     }
 }

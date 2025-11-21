@@ -765,6 +765,38 @@ struct JNINativeInterface_ {
 
     jobjectRefType (JNICALL *GetObjectRefType)
         (JNIEnv* env, jobject obj);
+
+    /* LingQu Support */
+    jboolean (JNICALL *UbCheckStack)
+      (JNIEnv *env);
+    jint (JNICALL *UbOpen)
+      (JNIEnv *env, const jchar* name, jint oflags);
+    void* (JNICALL *UbWrite)
+      (JNIEnv *env, jint fd, jlong* nwrite, jlong size);
+    void* (JNICALL *UbRead)
+      (JNIEnv *env, jint fd, jlong* nread, jlong size);
+    jint (JNICALL *UbClose)
+      (JNIEnv *env, jint fd);
+    jlong (JNICALL *UbSize)
+      (JNIEnv *env, jint fd);
+    jlong (JNICALL *UbSizeWithName)
+      (JNIEnv *env, const char* name);
+    jlong (JNICALL *UbSeek)
+      (JNIEnv *env, jint fd, jlong offset, jint mode);
+    jint (JNICALL *IsUbFile)
+      (JNIEnv *env, const char* path);
+    jboolean (JNICALL *IsUbAddr)
+      (JNIEnv *env, void* addr);
+    jboolean (JNICALL *UbRemove)
+      (JNIEnv *env, const char* path);
+    jboolean (JNICALL *UbRemoveDir)
+      (JNIEnv *env, const char* path);
+    jboolean (JNICALL *UbRename)
+      (JNIEnv *env, const char* from, const char* to);
+    jlong (JNICALL *UbTransfer)
+      (JNIEnv *env, jint dst, jint src, jlong offset, jlong count);
+    jint (JNICALL *UbFallback)
+      (JNIEnv *env, jint fd);
 };
 
 /*
@@ -1855,6 +1887,53 @@ struct JNIEnv_ {
     }
     jobjectRefType GetObjectRefType(jobject obj) {
         return functions->GetObjectRefType(this, obj);
+    }
+
+    // LingQu Support
+    jboolean UbCheckStack() {
+        return functions->UbCheckStack(this);
+    }
+    jint UbOpen(const jchar* name, jint oflags) {
+        return functions->UbOpen(this, name, oflags);
+    }
+    void* UbWrite(jint fd, jlong *nwrite, jlong size) {
+        return functions->UbWrite(this, fd, nwrite, size);
+    }
+    void* UbRead(jint fd, jlong *nread, jlong size) {
+        return functions->UbRead(this, fd, nread, size);
+    }
+    jint UbClose(jint fd) {
+        return functions->UbClose(this, fd);
+    }
+    jlong UbSize(jint fd) {
+        return functions->UbSize(this, fd);
+    }
+    jlong UbSizeWithName(const char* name) {
+        return functions->UbSizeWithName(this, name);
+    }
+    jlong UbSeek(jint fd, jlong offset, jint mode) {
+        return functions->UbSeek(this, fd, offset, mode);
+    }
+    jint IsUbFile(const char* path) {
+        return functions->IsUbFile(this, path);
+    }
+    jboolean IsUbAddr(void* addr) {
+        return functions->IsUbAddr(this, addr);
+    }
+    jboolean UbRemove(const char* path) {
+        return functions->UbRemove(this, path);
+    }
+    jboolean UbRemoveDir(const char* path) {
+        return functions->UbRemoveDir(this, path);
+    }
+    jboolean UbRename(const char* from, const char* to) {
+        return functions->UbRename(this, from, to);
+    }
+    jlong UbTransfer(jint dst, jint src, jlong offset, jlong count) {
+        return functions->UbTransfer(this, dst, src, offset, count);
+    }
+    jint UbFallback(jint fd) {
+        return functions->UbFallback(this, fd);
     }
 
 #endif /* __cplusplus */

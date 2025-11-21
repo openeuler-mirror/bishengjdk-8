@@ -95,6 +95,10 @@
 # include "os_bsd.inline.hpp"
 #endif
 
+// LingQu
+#include "matrix/allowList.hpp"
+#include "matrix/matrixManager.hpp"
+
 static jint CurrentVersion = JNI_VERSION_1_8;
 
 #ifdef _WIN32
@@ -4127,6 +4131,294 @@ JNI_ENTRY(jint, jni_UnregisterNatives(JNIEnv *env, jclass clazz))
 JNI_END
 
 //
+// LingQu Support
+//
+
+JNI_ENTRY(jboolean, jni_UbCheckStack(JNIEnv *env))
+  JNIWrapper("UbCheckStack");
+#ifndef USDT2
+  DTRACE_PROBE1(hotspot_jni, UbCheckStack__entry, env);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBCHECKSTACK_ENTRY(
+                                env);
+#endif /* USDT2 */
+  bool res = MatrixGlobal::check_stack() ? JNI_TRUE : JNI_FALSE;
+#ifndef USDT2
+  DTRACE_PROBE1(hotspot_jni, UbCheckStack__return, res);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBCHECKSTACK_RETURN(
+                                 res);
+#endif /* USDT2 */
+  return res;
+JNI_END
+
+JNI_ENTRY(jint, jni_UbOpen(JNIEnv *env, const jchar* name, jint oflags))
+  JNIWrapper("UbOpen");
+#ifndef USDT2
+  DTRACE_PROBE3(hotspot_jni, UbOpen__entry, env, name, oflags);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBOPEN_ENTRY(
+                          env, name, oflags);
+#endif /* USDT2 */
+  JavaThread* jt = JavaThread::thread_from_jni_environment(env);
+  jint res = jt->ub_file_manager.open((const char*)name, oflags);
+#ifndef USDT2
+  DTRACE_PROBE1(hotspot_jni, UbOpen__return, res);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBOPEN_RETURN(
+                           res);
+#endif /* USDT2 */
+  return res;
+JNI_END
+
+JNI_ENTRY(void*, jni_UbWrite(JNIEnv *env, jint fd, jlong* nwrite, jlong len))
+  JNIWrapper("UbWrite");
+#ifndef USDT2
+  DTRACE_PROBE4(hotspot_jni, UbWrite__entry, env, fd, nwrite, len);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBWRITE_ENTRY(
+                           env, fd, nwrite, len);
+#endif /* USDT2 */
+  JavaThread* jt = JavaThread::thread_from_jni_environment(env);
+  void* res = jt->ub_file_manager.pre_write(fd, (long*)nwrite, len);
+#ifndef USDT2
+  DTRACE_PROBE1(hotspot_jni, UbWrite__return, res);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBWRITE_RETURN(
+                            res);
+#endif /* USDT2 */
+  return res;
+JNI_END
+
+JNI_ENTRY(void*, jni_UbRead(JNIEnv *env, jint fd, jlong* nread, jlong len))
+  JNIWrapper("UbRead");
+#ifndef USDT2
+  DTRACE_PROBE4(hotspot_jni, UbRead__entry, env, fd, nread, len);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBREAD_ENTRY(
+                          env, fd, nread, len);
+#endif /* USDT2 */
+  JavaThread* jt = JavaThread::thread_from_jni_environment(env);
+  void* res = jt->ub_file_manager.pre_read(fd, (long*)nread, len);
+#ifndef USDT2
+  DTRACE_PROBE1(hotspot_jni, UbRead__return, res);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBREAD_RETURN(
+                           res);
+#endif /* USDT2 */
+  return res;
+JNI_END
+
+JNI_ENTRY(jint, jni_UbClose(JNIEnv *env, jint fd))
+  JNIWrapper("UbClose");
+#ifndef USDT2
+  DTRACE_PROBE2(hotspot_jni, UbClose__entry, env, fd);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBCLOSE_ENTRY(
+                           env, fd);
+#endif /* USDT2 */
+  JavaThread* jt = JavaThread::thread_from_jni_environment(env);
+  jint res = jt->ub_file_manager.close(fd);
+#ifndef USDT2
+  DTRACE_PROBE1(hotspot_jni, UbClose__return, res);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBCLOSE_RETURN(
+                            res);
+#endif /* USDT2 */
+  return res;
+JNI_END
+
+JNI_ENTRY(jlong, jni_UbSize(JNIEnv *env, jint fd))
+  JNIWrapper("UbSize");
+#ifndef USDT2
+  DTRACE_PROBE2(hotspot_jni, UbSize__entry, env, fd);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBSIZE_ENTRY(
+                          env, fd);
+#endif /* USDT2 */
+  JavaThread* jt = JavaThread::thread_from_jni_environment(env);
+  jlong res = jt->ub_file_manager.size(fd);
+#ifndef USDT2
+  DTRACE_PROBE1(hotspot_jni, UbSize__return, res);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBSIZE_RETURN(
+                           res);
+#endif /* USDT2 */
+  return res;
+JNI_END
+
+JNI_ENTRY(jlong, jni_UbSizeWithName(JNIEnv *env, const char* name))
+  JNIWrapper("UbSizeWithName");
+#ifndef USDT2
+  DTRACE_PROBE2(hotspot_jni, UbSizeWithName__entry, env, name);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBSIZEWITHNAME_ENTRY(
+                                  env, name);
+#endif /* USDT2 */
+  JavaThread* jt = JavaThread::thread_from_jni_environment(env);
+  jlong res = jt->ub_file_manager.size(name);
+#ifndef USDT2
+  DTRACE_PROBE1(hotspot_jni, UbSizeWithName__return, res);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBSIZEWITHNAME_RETURN(
+                                   res);
+#endif /* USDT2 */
+  return res;
+JNI_END
+
+JNI_ENTRY(jlong, jni_UbSeek(JNIEnv *env, jint fd, jlong offset, jint mode))
+  JNIWrapper("UbSeek");
+#ifndef USDT2
+  DTRACE_PROBE4(hotspot_jni, UbSeek__entry, env, fd, offset, mode);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBSEEK_ENTRY(
+                          env, fd, offset);
+#endif /* USDT2 */
+  JavaThread* jt = JavaThread::thread_from_jni_environment(env);
+  jlong res = jt->ub_file_manager.seek(fd, offset, mode);
+#ifndef USDT2
+  DTRACE_PROBE1(hotspot_jni, UbSeek__return, res);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBSEEK_RETURN(
+                           res);
+#endif /* USDT2 */
+  return res;
+JNI_END
+
+JNI_ENTRY(jint, jni_IsUbFile(JNIEnv *env, const char* path))
+  JNIWrapper("IsUbFile");
+#ifndef USDT2
+  DTRACE_PROBE2(hotspot_jni, IsUbFile__entry, env, path);
+#else /* USDT2 */
+ HOTSPOT_JNI_ISUBFILE_ENTRY(
+                            env, path);
+#endif /* USDT2 */
+  JavaThread* jt = JavaThread::thread_from_jni_environment(env);
+  jint res = jt->ub_file_manager.is_ub_file(path);
+#ifndef USDT2
+  DTRACE_PROBE1(hotspot_jni, IsUbFile__return, res);
+#else /* USDT2 */
+ HOTSPOT_JNI_ISUBFILE_RETURN(
+                             res);
+#endif /* USDT2 */
+  return res;
+JNI_END
+
+JNI_ENTRY(jboolean, jni_IsUbAddr(JNIEnv *env, void* addr))
+  JNIWrapper("IsUbAddr");
+#ifndef USDT2
+  DTRACE_PROBE2(hotspot_jni, IsUbAddr__entry, env, addr);
+#else /* USDT2 */
+ HOTSPOT_JNI_ISUBADDR_ENTRY(
+                            env, addr);
+#endif /* USDT2 */
+  JavaThread* jt = JavaThread::thread_from_jni_environment(env);
+  jboolean res = jt->ub_file_manager.is_ub_addr(addr) ? JNI_TRUE : JNI_FALSE;
+#ifndef USDT2
+  DTRACE_PROBE1(hotspot_jni, IsUbAddr__return, res);
+#else /* USDT2 */
+ HOTSPOT_JNI_ISUBADDR_RETURN(
+                             res);
+#endif /* USDT2 */
+  return res;
+JNI_END
+
+JNI_ENTRY(jboolean, jni_UbRemove(JNIEnv *env, const char* path))
+  JNIWrapper("UbRemove");
+#ifndef USDT2
+  DTRACE_PROBE2(hotspot_jni, UbRemove__entry, env, path);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBREMOVE_ENTRY(
+                            env, path);
+#endif /* USDT2 */
+  JavaThread* jt = JavaThread::thread_from_jni_environment(env);
+  jboolean res = jt->ub_file_manager.remove(path) ? JNI_TRUE : JNI_FALSE;
+#ifndef USDT2
+  DTRACE_PROBE1(hotspot_jni, UbRemove__return, res);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBREMOVE_RETURN(
+                            res);
+#endif /* USDT2 */
+  return res;
+JNI_END
+
+JNI_ENTRY(jboolean, jni_UbRemoveDir(JNIEnv *env, const char* path))
+  JNIWrapper("UbRemoveDir");
+#ifndef USDT2
+  DTRACE_PROBE2(hotspot_jni, UbRemoveDir__entry, env, path);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBREMOVEDIR_ENTRY(
+                               env, path);
+#endif /* USDT2 */
+  JavaThread* jt = JavaThread::thread_from_jni_environment(env);
+  jboolean res = jt->ub_file_manager.remove_dir(path) ? JNI_TRUE : JNI_FALSE;
+#ifndef USDT2
+  DTRACE_PROBE1(hotspot_jni, UbRemoveDir__return, res);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBREMOVEDIR_RETURN(
+                                res);
+#endif /* USDT2 */
+  return res;
+JNI_END
+
+JNI_ENTRY(jboolean, jni_UbRename(JNIEnv *env, const char* from, const char* to))
+  JNIWrapper("UbRename");
+#ifndef USDT2
+  DTRACE_PROBE3(hotspot_jni, UbRename__entry, env, from, to);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBRENAME_ENTRY(
+                            env, from, to);
+#endif /* USDT2 */
+  JavaThread* jt = JavaThread::thread_from_jni_environment(env);
+  jboolean res = jt->ub_file_manager.rename(from, to) ? JNI_TRUE : JNI_FALSE;
+#ifndef USDT2
+  DTRACE_PROBE1(hotspot_jni, UbRename__return, res);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBRENAME_RETURN(
+                             res);
+#endif /* USDT2 */
+  return res;
+JNI_END
+
+JNI_ENTRY(jlong, jni_UbTransfer(JNIEnv *env, jint dst, jint src, jlong offset, jlong count))
+  JNIWrapper("UbTransfer");
+#ifndef USDT2
+  DTRACE_PROBE5(hotspot_jni, UbTransfer__entry, env, dst, src, offset, count);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBTRANSFER_ENTRY(
+                              env, dst, src, offset, count);
+#endif /* USDT2 */
+  JavaThread* jt = JavaThread::thread_from_jni_environment(env);
+  jlong res = jt->ub_file_manager.transfer(dst, src, offset, count);
+#ifndef USDT2
+  DTRACE_PROBE1(hotspot_jni, UbTransfer__return, res);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBTRANSFER_RETURN(
+                               res);
+#endif /* USDT2 */
+  return res;
+JNI_END
+
+JNI_ENTRY(jint, jni_UbFallback(JNIEnv *env, jint fd))
+  JNIWrapper("UbFallback");
+#ifndef USDT2
+  DTRACE_PROBE2(hotspot_jni, UbFallback__entry, env, fd);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBFALLBACK_ENTRY(
+                              env, fd);
+#endif /* USDT2 */
+  JavaThread* jt = JavaThread::thread_from_jni_environment(env);
+  jint res = jt->ub_file_manager.fallback(fd);
+#ifndef USDT2
+  DTRACE_PROBE1(hotspot_jni, UbFallback__return, res);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBFALLBACK_RETURN(
+                               res);
+#endif /* USDT2 */
+  return res;
+JNI_END
+
+//
 // Monitor functions
 //
 
@@ -4948,7 +5240,24 @@ struct JNINativeInterface_ jni_NativeInterface = {
 
     // New 1_6 features
 
-    jni_GetObjectRefType
+    jni_GetObjectRefType,
+
+    // LingQu Support
+    jni_UbCheckStack,
+    jni_UbOpen,
+    jni_UbWrite,
+    jni_UbRead,
+    jni_UbClose,
+    jni_UbSize,
+    jni_UbSizeWithName,
+    jni_UbSeek,
+    jni_IsUbFile,
+    jni_IsUbAddr,
+    jni_UbRemove,
+    jni_UbRemoveDir,
+    jni_UbRename,
+    jni_UbTransfer,
+    jni_UbFallback
 };
 
 

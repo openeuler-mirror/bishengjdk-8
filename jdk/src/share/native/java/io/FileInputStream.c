@@ -35,6 +35,8 @@
 #include <fcntl.h>
 #include <limits.h>
 
+#include <time.h>
+
 #include "io_util_md.h"
 
 /*******************************************************************/
@@ -58,17 +60,33 @@ Java_java_io_FileInputStream_initIDs(JNIEnv *env, jclass fdClass) {
 
 JNIEXPORT void JNICALL
 Java_java_io_FileInputStream_open0(JNIEnv *env, jobject this, jstring path) {
+    // LingQu
+    if ((*env)->UbCheckStack(env) == JNI_TRUE) {
+        int ub_fd = ubMemOpen(env, this, path, fis_fd, O_RDONLY);
+        if (ub_fd != -1) return;
+    }
     fileOpen(env, this, path, fis_fd, O_RDONLY);
 }
 
 JNIEXPORT jint JNICALL
 Java_java_io_FileInputStream_read0(JNIEnv *env, jobject this) {
+    // LingQu
+    FD fd = GET_FD(this, fis_fd);
+    if (fd >= fd_limit) {
+        return ubReadSingle(env, this, fd);
+    }
     return readSingle(env, this, fis_fd);
 }
 
 JNIEXPORT jint JNICALL
 Java_java_io_FileInputStream_readBytes(JNIEnv *env, jobject this,
         jbyteArray bytes, jint off, jint len) {
+    // LingQu
+    FD fd = GET_FD(this, fis_fd);
+    if (fd >= fd_limit) {
+        jint res = ubMemReadBytes(env, this, bytes, off, len, fd);
+        return res;
+    }
     return readBytes(env, this, bytes, off, len, fis_fd);
 }
 
@@ -80,6 +98,12 @@ Java_java_io_FileInputStream_skip0(JNIEnv *env, jobject this, jlong toSkip) {
     if (fd == -1) {
         JNU_ThrowIOException (env, "Stream Closed");
         return 0;
+    }
+    // LingQu
+    if (fd >= fd_limit) {
+        cur = (*env)->UbSeek(env, fd, 0, (jint)SEEK_CUR);
+        end = (*env)->UbSeek(env, fd, toSkip, (jint)SEEK_CUR);
+        return (end - cur);
     }
     if ((cur = IO_Lseek(fd, (jlong)0, (jint)SEEK_CUR)) == -1) {
         JNU_ThrowIOExceptionWithLastError(env, "Seek error");
@@ -93,9 +117,23 @@ JNIEXPORT jint JNICALL
 Java_java_io_FileInputStream_available0(JNIEnv *env, jobject this) {
     jlong ret;
     FD fd = GET_FD(this, fis_fd);
+
+
     if (fd == -1) {
         JNU_ThrowIOException (env, "Stream Closed");
         return 0;
+    }
+    // LingQu
+    if (fd >= fd_limit) {
+        jlong size = (*env)->UbSize(env, fd);
+        jlong offset = (*env)->UbSeek(env, fd, 0, (jint)SEEK_CUR);
+        ret = size - offset;
+        if (ret > INT_MAX) {
+            ret = (jlong) INT_MAX;
+        } else if (ret < 0) {
+            ret = 0;
+        }
+        return jlong_to_jint(ret);
     }
     if (IO_Available(fd, &ret)) {
         if (ret > INT_MAX) {

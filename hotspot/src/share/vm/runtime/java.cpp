@@ -111,6 +111,9 @@
 HS_DTRACE_PROBE_DECL(hotspot, vm__shutdown);
 #endif /* !USDT2 */
 
+// LingQu
+#include "matrix/matrixManager.hpp"
+
 #ifndef PRODUCT
 
 // Statistics printing (method invocation histogram)
@@ -555,6 +558,9 @@ void before_exit(JavaThread * thread) {
   }
 
   JFR_ONLY(Jfr::on_vm_shutdown();)
+
+  // LingQu
+  MatrixGlobal::before_exit();
 
   // Always call even when there are not JVMTI environments yet, since environments
   // may be attached late and JVMTI must track phases of VM execution
