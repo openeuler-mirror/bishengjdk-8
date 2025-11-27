@@ -27,11 +27,12 @@
 #include "kae_log.h"
 #include "kae_util.h"
 #include "kae_exception.h"
+#include "ssl_utils.h"
 
 // get EVP_MD by digestName
 static const EVP_MD* getEvpMd(JNIEnv* env, jstring digestName) {
     const char* digestNameUtf = (*env)->GetStringUTFChars(env, digestName, 0);
-    const EVP_MD* md = (EVP_MD*)EVP_get_digestbyname(digestNameUtf);
+    const EVP_MD* md = (EVP_MD*)SSL_UTILS_EVP_get_digestbyname(digestNameUtf);
     (*env)->ReleaseStringUTFChars(env, digestName, digestNameUtf);
     if (md == NULL) {
         KAE_ThrowSignatureException(env, "Unsupported digest algorithm.");
@@ -49,7 +50,7 @@ static void signRelease(JNIEnv* env, jbyteArray digestValue, jbyte* digestBytes,
         free(sigBytes);
     }
     if (pkeyCtx != NULL) {
-        EVP_PKEY_CTX_free(pkeyCtx);
+        SSL_UTILS_EVP_PKEY_CTX_free(pkeyCtx);
     }
 }
 
@@ -63,14 +64,14 @@ static void verifyRelease(JNIEnv* env, jbyteArray digestValue, jbyte* digestByte
         (*env)->ReleaseByteArrayElements(env, sigValue, sigBytes, 0);
     }
     if (pkeyCtx != NULL) {
-        EVP_PKEY_CTX_free(pkeyCtx);
+        SSL_UTILS_EVP_PKEY_CTX_free(pkeyCtx);
     }
 }
 
 // set rsa PkeyCtx parameters
 static bool setRsaPkeyCtxParameters(JNIEnv* env, EVP_PKEY_CTX* pkeyCtx, jint paddingType, jstring digestName) {
     // set rsa padding
-    if (EVP_PKEY_CTX_set_rsa_padding(pkeyCtx, paddingType) <= 0) {
+    if (SSL_UTILS_EVP_PKEY_CTX_set_rsa_padding(pkeyCtx, paddingType) <= 0) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_CTX_set_rsa_padding", KAE_ThrowSignatureException);
         return false;
     }
@@ -81,7 +82,7 @@ static bool setRsaPkeyCtxParameters(JNIEnv* env, EVP_PKEY_CTX* pkeyCtx, jint pad
         return false;
     }
 
-    if (EVP_PKEY_CTX_set_signature_md(pkeyCtx, md) <= 0) {
+    if (SSL_UTILS_EVP_PKEY_CTX_set_signature_md(pkeyCtx, md) <= 0) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_CTX_set_signature_md", KAE_ThrowSignatureException);
         return false;
     }
@@ -104,13 +105,13 @@ JNIEXPORT jbyteArray JNICALL Java_org_openeuler_security_openssl_KAERSASignature
     KAE_TRACE("KAERSASignatureNative_rsaSign: kaeEngine => %p", kaeEngine);
 
     // new EVP_PKEY_CTX
-    if ((pkeyCtx = EVP_PKEY_CTX_new(pkey, kaeEngine)) == NULL) {
+    if ((pkeyCtx = SSL_UTILS_EVP_PKEY_CTX_new(pkey, kaeEngine)) == NULL) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_new", KAE_ThrowSignatureException);
         goto cleanup;
     }
 
     // sign init
-    if (EVP_PKEY_sign_init(pkeyCtx) <= 0) {
+    if (SSL_UTILS_EVP_PKEY_sign_init(pkeyCtx) <= 0) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_sign_init", KAE_ThrowSignatureException);
         goto cleanup;
     }
@@ -121,7 +122,7 @@ JNIEXPORT jbyteArray JNICALL Java_org_openeuler_security_openssl_KAERSASignature
     }
 
     // sign
-    size_t sigLen = (size_t)EVP_PKEY_size(pkey);
+    size_t sigLen = (size_t)SSL_UTILS_EVP_PKEY_size(pkey);
     if (sigLen <= 0) {
         KAE_ThrowSignatureException(env, "The sigLen size cannot be zero or negative");
         goto cleanup;
@@ -135,7 +136,7 @@ JNIEXPORT jbyteArray JNICALL Java_org_openeuler_security_openssl_KAERSASignature
         goto cleanup;
     }
     size_t digestLen = (size_t)(*env)->GetArrayLength(env, digestValue);
-    if (EVP_PKEY_sign(pkeyCtx, (unsigned char*)sigBytes, &sigLen,
+    if (SSL_UTILS_EVP_PKEY_sign(pkeyCtx, (unsigned char*)sigBytes, &sigLen,
                       (const unsigned char*)digestBytes, digestLen) <= 0) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_sign", KAE_ThrowSignatureException);
         goto cleanup;
@@ -169,13 +170,13 @@ JNIEXPORT jboolean JNICALL Java_org_openeuler_security_openssl_KAERSASignatureNa
     KAE_TRACE("KAERSASignatureNative_rsaVerify: kaeEngine => %p", kaeEngine);
 
     // new EVP_PKEY_CTX
-    if ((pkeyCtx = EVP_PKEY_CTX_new(pkey, kaeEngine)) == NULL) {
+    if ((pkeyCtx = SSL_UTILS_EVP_PKEY_CTX_new(pkey, kaeEngine)) == NULL) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_new", KAE_ThrowSignatureException);
         goto cleanup;
     }
 
     // verify init
-    if (EVP_PKEY_verify_init(pkeyCtx) <= 0) {
+    if (SSL_UTILS_EVP_PKEY_verify_init(pkeyCtx) <= 0) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_sign_init", KAE_ThrowSignatureException);
         goto cleanup;
     }
@@ -196,7 +197,7 @@ JNIEXPORT jboolean JNICALL Java_org_openeuler_security_openssl_KAERSASignatureNa
     }
     size_t sigLen = (size_t)(*env)->GetArrayLength(env, sigValue);
     size_t digestLen = (size_t)(*env)->GetArrayLength(env, digestValue);
-    if (EVP_PKEY_verify(pkeyCtx, (const unsigned char*)sigBytes, sigLen,
+    if (SSL_UTILS_EVP_PKEY_verify(pkeyCtx, (const unsigned char*)sigBytes, sigLen,
                         (const unsigned char*)digestBytes, digestLen) <= 0) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_verify", KAE_ThrowSignatureException);
         goto cleanup;
@@ -212,7 +213,7 @@ cleanup:
 static bool setPssPkeyCtxParameters(JNIEnv* env, EVP_PKEY_CTX* pkeyCtx, jint paddingType, jstring digestName,
     jstring mgf1DigestName, jint saltLen) {
     // set rsa padding
-    if (EVP_PKEY_CTX_set_rsa_padding(pkeyCtx, paddingType) <= 0) {
+    if (SSL_UTILS_EVP_PKEY_CTX_set_rsa_padding(pkeyCtx, paddingType) <= 0) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_CTX_set_rsa_padding", KAE_ThrowSignatureException);
         return false;
     }
@@ -222,7 +223,7 @@ static bool setPssPkeyCtxParameters(JNIEnv* env, EVP_PKEY_CTX* pkeyCtx, jint pad
     if (md == NULL) {
         return false;
     }
-    if (EVP_PKEY_CTX_set_signature_md(pkeyCtx, md) <= 0) {
+    if (SSL_UTILS_EVP_PKEY_CTX_set_signature_md(pkeyCtx, md) <= 0) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_CTX_set_signature_md", KAE_ThrowSignatureException);
         return false;
     }
@@ -232,13 +233,13 @@ static bool setPssPkeyCtxParameters(JNIEnv* env, EVP_PKEY_CTX* pkeyCtx, jint pad
     if (mgf1Md == NULL) {
         return false;
     }
-    if (EVP_PKEY_CTX_set_rsa_mgf1_md(pkeyCtx, mgf1Md) <= 0) {
+    if (SSL_UTILS_EVP_PKEY_CTX_set_rsa_mgf1_md(pkeyCtx, mgf1Md) <= 0) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_CTX_set_rsa_mgf1_md", KAE_ThrowSignatureException);
         return false;
     }
 
     // set salt len
-    if (EVP_PKEY_CTX_set_rsa_pss_saltlen(pkeyCtx, saltLen) <= 0) {
+    if (SSL_UTILS_EVP_PKEY_CTX_set_rsa_pss_saltlen(pkeyCtx, saltLen) <= 0) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_CTX_set_rsa_pss_saltlen", KAE_ThrowSignatureException);
         return false;
     }
@@ -262,13 +263,13 @@ JNIEXPORT jbyteArray JNICALL Java_org_openeuler_security_openssl_KAERSASignature
     KAE_TRACE("KAERSASignatureNative_pssSign: kaeEngine => %p", kaeEngine);
 
     // new EVP_PKEY_CTX
-    if ((pkeyCtx = EVP_PKEY_CTX_new(pkey, kaeEngine)) == NULL) {
+    if ((pkeyCtx = SSL_UTILS_EVP_PKEY_CTX_new(pkey, kaeEngine)) == NULL) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_new", KAE_ThrowSignatureException);
         goto cleanup;
     }
 
     // sign init
-    if (EVP_PKEY_sign_init(pkeyCtx) <= 0) {
+    if (SSL_UTILS_EVP_PKEY_sign_init(pkeyCtx) <= 0) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_sign_init", KAE_ThrowSignatureException);
         goto cleanup;
     }
@@ -279,7 +280,7 @@ JNIEXPORT jbyteArray JNICALL Java_org_openeuler_security_openssl_KAERSASignature
     }
 
     // sign
-    size_t sigLen = (size_t)EVP_PKEY_size(pkey);
+    size_t sigLen = (size_t)SSL_UTILS_EVP_PKEY_size(pkey);
     if (sigLen <= 0) {
         KAE_ThrowSignatureException(env, "The sigLen size cannot be zero or negative");
         goto cleanup;
@@ -293,7 +294,7 @@ JNIEXPORT jbyteArray JNICALL Java_org_openeuler_security_openssl_KAERSASignature
         goto cleanup;
     }
     size_t digestLen = (size_t)(*env)->GetArrayLength(env, digestValue);
-    if (EVP_PKEY_sign(pkeyCtx, (unsigned char*)sigBytes, &sigLen,
+    if (SSL_UTILS_EVP_PKEY_sign(pkeyCtx, (unsigned char*)sigBytes, &sigLen,
                       (const unsigned char*)digestBytes, digestLen) <= 0) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_sign", KAE_ThrowSignatureException);
         goto cleanup;
@@ -328,13 +329,13 @@ JNIEXPORT jboolean JNICALL Java_org_openeuler_security_openssl_KAERSASignatureNa
     KAE_TRACE("KAERSASignatureNative_pssVerify: kaeEngine => %p", kaeEngine);
 
     // new EVP_PKEY_CTX
-    if ((pkeyCtx = EVP_PKEY_CTX_new(pkey, kaeEngine)) == NULL) {
+    if ((pkeyCtx = SSL_UTILS_EVP_PKEY_CTX_new(pkey, kaeEngine)) == NULL) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_new", KAE_ThrowSignatureException);
         goto cleanup;
     }
 
     // verify init
-    if (EVP_PKEY_verify_init(pkeyCtx) <= 0) {
+    if (SSL_UTILS_EVP_PKEY_verify_init(pkeyCtx) <= 0) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_sign_init", KAE_ThrowSignatureException);
         goto cleanup;
     }
@@ -355,7 +356,7 @@ JNIEXPORT jboolean JNICALL Java_org_openeuler_security_openssl_KAERSASignatureNa
     }
     size_t sigLen = (size_t)(*env)->GetArrayLength(env, sigValue);
     size_t digestLen = (size_t)(*env)->GetArrayLength(env, digestValue);
-    if (EVP_PKEY_verify(pkeyCtx, (const unsigned char*)sigBytes, sigLen,
+    if (SSL_UTILS_EVP_PKEY_verify(pkeyCtx, (const unsigned char*)sigBytes, sigLen,
                         (const unsigned char*)digestBytes, digestLen) <= 0) {
         KAE_ThrowFromOpenssl(env, "EVP_PKEY_verify", KAE_ThrowSignatureException);
         goto cleanup;

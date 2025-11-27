@@ -27,6 +27,7 @@
 #include "kae_exception.h"
 #include "kae_log.h"
 #include "kae_util.h"
+#include "ssl_utils.h"
 #include "org_openeuler_security_openssl_KAEDigest.h"
 
 #define DIGEST_STACK_SIZE 1024
@@ -53,7 +54,7 @@ Java_org_openeuler_security_openssl_KAEDigest_nativeInit(JNIEnv *env, jclass cls
     const char* algo_utf = (*env)->GetStringUTFChars(env, algorithmName, 0);
     kaeEngine = GetDigestEngineByAlgorithmName(algo_utf);
     KAE_TRACE("KAEDigest_nativeInit: kaeEngine => %p", kaeEngine);
-    EVP_MD* md = (EVP_MD*) EVP_get_digestbyname(algo_utf);
+    EVP_MD* md = (EVP_MD*) SSL_UTILS_EVP_get_digestbyname(algo_utf);
     (*env)->ReleaseStringUTFChars(env, algorithmName, algo_utf);
     if (md == NULL) {
         KAE_TRACE("%s not supported", algo_utf);
@@ -61,7 +62,8 @@ Java_org_openeuler_security_openssl_KAEDigest_nativeInit(JNIEnv *env, jclass cls
     }
     KAE_TRACE("KAEDigest_nativeInit: create md => %p", md);
 
-    ctx = EVP_MD_CTX_create();
+    ctx = SSL_UTILS_EVP_MD_CTX_new();
+
     if (ctx == NULL) {
         KAE_ThrowOOMException(env, "create EVP_MD_CTX fail");
         return 0;
@@ -69,7 +71,7 @@ Java_org_openeuler_security_openssl_KAEDigest_nativeInit(JNIEnv *env, jclass cls
     KAE_TRACE("KAEDigest_nativeInit: create ctx => %p", ctx);
 
     // EVP_DigestInit_ex
-    int result_code = EVP_DigestInit_ex(ctx, md, kaeEngine);
+    int result_code = SSL_UTILS_EVP_DigestInit_ex(ctx, md, kaeEngine);
     if (result_code == 0) {
         KAE_ThrowFromOpenssl(env, "EVP_DigestInit_ex failed", KAE_ThrowRuntimeException);
         goto cleanup;
@@ -80,7 +82,8 @@ Java_org_openeuler_security_openssl_KAEDigest_nativeInit(JNIEnv *env, jclass cls
     return (jlong) ctx;
 
 cleanup:
-    EVP_MD_CTX_destroy(ctx);
+    // changed from macro, "# define EVP_MD_CTX_destroy(ctx) EVP_MD_CTX_free((ctx))" in openssl 1 and 3
+    SSL_UTILS_EVP_MD_CTX_destroy(ctx);
     return 0;
 }
 
@@ -105,7 +108,7 @@ Java_org_openeuler_security_openssl_KAEDigest_nativeUpdate(JNIEnv *env, jclass c
     if (in_size <= DIGEST_STACK_SIZE) { // allocation on the stack
         jbyte buffer[DIGEST_STACK_SIZE];
         (*env)->GetByteArrayRegion(env, input, offset, inLen, buffer);
-        result_code = EVP_DigestUpdate(ctx, buffer, inLen);
+        result_code = SSL_UTILS_EVP_DigestUpdate(ctx, buffer, inLen);
     } else { // data chunk
         jint remaining = in_size;
         jint buf_size = (remaining >= DIGEST_CHUNK_SIZE) ? DIGEST_CHUNK_SIZE : remaining;
@@ -117,7 +120,7 @@ Java_org_openeuler_security_openssl_KAEDigest_nativeUpdate(JNIEnv *env, jclass c
         while (remaining > 0) {
             jint chunk_size = (remaining >= buf_size) ? buf_size : remaining;
             (*env)->GetByteArrayRegion(env, input, in_offset, chunk_size, buffer);
-            result_code = EVP_DigestUpdate(ctx, buffer, chunk_size);
+            result_code = SSL_UTILS_EVP_DigestUpdate(ctx, buffer, chunk_size);
             if (!result_code) {
                 break;
             }
@@ -163,7 +166,7 @@ Java_org_openeuler_security_openssl_KAEDigest_nativeDigest(JNIEnv *env, jclass c
     }
 
     // EVP_DigestFinal_ex
-    int result_code = EVP_DigestFinal_ex(ctx, md, &bytesWritten);
+    int result_code = SSL_UTILS_EVP_DigestFinal_ex(ctx, md, &bytesWritten);
     if (result_code == 0) {
         KAE_ThrowFromOpenssl(env, "EVP_DigestFinal_ex failed", KAE_ThrowRuntimeException);
         goto cleanup;
@@ -193,14 +196,15 @@ Java_org_openeuler_security_openssl_KAEDigest_nativeClone(JNIEnv *env, jclass cl
         return 0;
     }
 
-    EVP_MD_CTX* ctxCopy = EVP_MD_CTX_create();
+    // change from macro, "# define EVP_MD_CTX_create()     EVP_MD_CTX_new()" in openssl 1 and 3
+    EVP_MD_CTX* ctxCopy = SSL_UTILS_EVP_MD_CTX_create();
     if (ctxCopy == NULL) {
         KAE_ThrowOOMException(env, "create EVP_MD_CTX fail");
         return 0;
     }
     KAE_TRACE("KAEDigest_nativeClone: create ctxCopy => %p", ctxCopy);
 
-    int result_code = EVP_MD_CTX_copy_ex(ctxCopy, ctx);
+    int result_code = SSL_UTILS_EVP_MD_CTX_copy_ex(ctxCopy, ctx);
     if (result_code == 0) {
         KAE_ThrowFromOpenssl(env, "EVP_MD_CTX_copy_ex failed", KAE_ThrowRuntimeException);
         goto cleanup;
@@ -210,7 +214,8 @@ Java_org_openeuler_security_openssl_KAEDigest_nativeClone(JNIEnv *env, jclass cl
     return (jlong) ctxCopy;
 
 cleanup:
-    EVP_MD_CTX_destroy(ctxCopy);
+    // changed from macro, "# define EVP_MD_CTX_destroy(ctx) EVP_MD_CTX_free((ctx))" in openssl 1 and 3
+    SSL_UTILS_EVP_MD_CTX_destroy(ctxCopy);
     return 0;
 }
 
@@ -225,7 +230,8 @@ Java_org_openeuler_security_openssl_KAEDigest_nativeFree(JNIEnv *env, jclass cls
     EVP_MD_CTX* ctx = (EVP_MD_CTX*) ctxAddress;
     KAE_TRACE("KAEDigest_nativeFree(ctx = %p)", ctx);
     if (ctx != NULL) {
-        EVP_MD_CTX_destroy(ctx);
+        // changed from macro, "# define EVP_MD_CTX_destroy(ctx) EVP_MD_CTX_free((ctx))" in openssl 1 and 3
+        SSL_UTILS_EVP_MD_CTX_destroy(ctx);
     }
 
     KAE_TRACE("KAEDigest_nativeFree: finished");

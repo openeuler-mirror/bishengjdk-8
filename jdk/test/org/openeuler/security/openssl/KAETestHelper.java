@@ -67,7 +67,8 @@ class KAETestHelper {
             "hmac-sha512",
             "rsa",
             "dh",
-            "ec"
+            "ec",
+            "sm2"
     };
     private static final Map<String, Integer> ALGORITHM_NAME_MAP = new HashMap<>();
 

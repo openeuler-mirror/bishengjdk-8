@@ -27,6 +27,7 @@ package org.openeuler.security.openssl;
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
+import java.math.BigInteger;
 import java.security.*;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
@@ -198,16 +199,50 @@ class KAEUtils {
         }
     }
 
+    /**
+     * Return the passed in value as an unsigned byte array of the specified length, padded with
+     * leading zeros as necessary..
+     *
+     * @param length the fixed length of the result
+     * @param value  the value to be converted.
+     * @return a byte array padded to a fixed length with leading zeros.
+     */
+    protected static byte[] asUnsignedByteArray(int length, BigInteger value) {
+        byte[] bytes = value.toByteArray();
+        if (bytes.length == length) {
+            return bytes;
+        }
+
+        int start = (bytes[0] == 0 && bytes.length != 1) ? 1 : 0;
+        int count = bytes.length - start;
+
+        if (count > length) {
+            throw new IllegalArgumentException("standard length exceeded for value");
+        }
+
+        byte[] tmp = new byte[length];
+        System.arraycopy(bytes, start, tmp, tmp.length - count, count);
+        return tmp;
+    }
+
     private static void initECDH() {
         SIZE_TO_CURVE.put(224, "secp224r1");
         SIZE_TO_CURVE.put(256, "prime256v1");
         SIZE_TO_CURVE.put(384, "secp384r1");
         SIZE_TO_CURVE.put(521, "secp521r1");
+
+        CURVE_ALIAS.put("secp224r1", "secp224r1");
+        CURVE_ALIAS.put("prime256v1", "prime256v1");
+        CURVE_ALIAS.put("secp384r1", "secp384r1");
+        CURVE_ALIAS.put("secp521r1", "secp521r1");
+
         CURVE_ALIAS.put("secp256r1", "prime256v1");
+        CURVE_ALIAS.put("sm2p256v1", "SM2");
         CURVE_ALIAS.put("1.3.132.0.33", "secp224r1");
         CURVE_ALIAS.put("1.3.132.0.34", "secp384r1");
         CURVE_ALIAS.put("1.3.132.0.35", "secp521r1");
         CURVE_ALIAS.put("1.2.840.10045.3.1.7", "prime256v1");
+        CURVE_ALIAS.put("1.2.156.10197.1.301", "SM2");
     }
 
     static String getCurveBySize(int size) {
