@@ -25,6 +25,7 @@
 #include <string.h>
 #include "kae_util.h"
 #include "kae_exception.h"
+#include "ssl_utils.h"
 
 static ENGINE* kaeEngine = NULL;
 
@@ -48,7 +49,7 @@ BIGNUM* KAE_GetBigNumFromByteArray(JNIEnv* env, jbyteArray byteArray) {
         return NULL;
     }
 
-    BIGNUM* bn = BN_new();
+    BIGNUM* bn = SSL_UTILS_BN_new();
     if (bn == NULL) {
         KAE_ThrowFromOpenssl(env, "BN_new", KAE_ThrowRuntimeException);
         return NULL;
@@ -59,7 +60,7 @@ BIGNUM* KAE_GetBigNumFromByteArray(JNIEnv* env, jbyteArray byteArray) {
         KAE_ThrowNullPointerException(env, "GetByteArrayElements failed");
         goto cleanup;
     }
-    BIGNUM* result = BN_bin2bn((const unsigned char*) bytes, len, bn);
+    BIGNUM* result = SSL_UTILS_BN_bin2bn((const unsigned char*) bytes, len, bn);
     (*env)->ReleaseByteArrayElements(env, byteArray, bytes, 0);
     if (result == NULL) {
         KAE_ThrowFromOpenssl(env, "BN_bin2bn", KAE_ThrowRuntimeException);
@@ -68,13 +69,19 @@ BIGNUM* KAE_GetBigNumFromByteArray(JNIEnv* env, jbyteArray byteArray) {
     return bn;
 
 cleanup:
-    BN_free(bn);
+    SSL_UTILS_BN_free(bn);
     return NULL;
 }
 
 void KAE_ReleaseBigNumFromByteArray(BIGNUM* bn) {
     if (bn != NULL) {
-        BN_free(bn);
+        SSL_UTILS_BN_free(bn);
+    }
+}
+
+void KAE_ReleaseBigNumFromByteArray_Clear(BIGNUM* bn) {
+    if (bn != NULL) {
+        SSL_UTILS_BN_clear_free(bn);
     }
 }
 
@@ -83,7 +90,8 @@ jbyteArray KAE_GetByteArrayFromBigNum(JNIEnv* env, const BIGNUM* bn) {
         return NULL;
     }
     // bn size need plus 1,  for example 65535 , BN_num_bytes return 2
-    int bnSize = BN_num_bytes(bn);
+    // Changed from macro, BN_num_bytes(bn) is ((BN_num_bits(bn)+7)/8);
+    int bnSize = SSL_UTILS_BN_num_bytes(bn);
     if (bnSize <= 0) {
         return NULL;
     }
@@ -99,7 +107,7 @@ jbyteArray KAE_GetByteArrayFromBigNum(JNIEnv* env, const BIGNUM* bn) {
         return NULL;
     }
     unsigned char* tmp = (unsigned char*) bytes;
-    if (BN_bn2bin(bn, tmp + 1) <= 0) {
+    if (SSL_UTILS_BN_bn2bin(bn, tmp + 1) <= 0) {
         KAE_ThrowFromOpenssl(env, "BN_bn2bin", KAE_ThrowRuntimeException);
         javaBytes = NULL;
         goto cleanup;
@@ -111,7 +119,7 @@ cleanup:
     return javaBytes;
 }
 
-#define ENGINE_LENGTH (EC_INDEX + 1)
+#define ENGINE_LENGTH (SM2_INDEX + 1)
 static ENGINE* engines[ENGINE_LENGTH] = {NULL};
 static jboolean engineFlags[ENGINE_LENGTH] = {JNI_FALSE};
 static KAEAlgorithm kaeAlgorithms[ENGINE_LENGTH] = {
@@ -143,7 +151,8 @@ static KAEAlgorithm kaeAlgorithms[ENGINE_LENGTH] = {
         {HMAC_SHA512_INDEX, "hmac-sha512"},
         {RSA_INDEX,         "rsa"},
         {DH_INDEX,          "dh"},
-        {EC_INDEX,          "ec"}
+        {EC_INDEX,          "ec"},
+        {SM2_INDEX,         "sm2"}
 };
 
 void initEngines(JNIEnv* env, jbooleanArray algorithmKaeFlags) {

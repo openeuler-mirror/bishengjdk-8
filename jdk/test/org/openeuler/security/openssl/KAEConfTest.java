@@ -26,10 +26,16 @@ import org.openeuler.security.openssl.KAEProvider;
 
 import java.io.File;
 import java.io.FileWriter;
+import java.io.BufferedReader;
+import java.io.FileInputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /*
  * @test
@@ -47,6 +53,7 @@ public class KAEConfTest {
 
     private static final String SPECIFY_LOG_PATH = System.getProperty("user.dir") + File.separator + "kae.log";
     private static final List<File> files = new ArrayList<>();
+    private static final Pattern CONFIG_PATTERN = Pattern.compile("^\\s*(?!#.*kae\\.useOpensslVersion)kae\\.useOpensslVersion\\s*=\\s*(.+?)\\s*(#.*)?$"); 
 
     enum Mode {
         DEFAULT,
@@ -73,6 +80,16 @@ public class KAEConfTest {
 
     private static void init(Mode mode) throws IOException {
         if (Mode.SPECIFY.equals(mode)) {
+            String default_opensslVersion = "0";
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(System.getProperty("kae.conf", DEFAULT_CONF)), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    Matcher matcher = CONFIG_PATTERN.matcher(line);
+                    if (matcher.matches()) {
+                        default_opensslVersion = matcher.group(1).trim();
+                    }
+                }
+            }
             System.setProperty("kae.conf", SPECIFY_CONF);
             File file = new File(SPECIFY_CONF);
             if (!file.exists()) {
@@ -80,7 +97,9 @@ public class KAEConfTest {
             }
             files.add(file);
             try (FileWriter fileWriter = new FileWriter(file)) {
-                fileWriter.write("kae.log=true");
+                fileWriter.write("kae.log=true\n");
+                // use same opensslVersion with default conf
+                fileWriter.write("kae.useOpensslVersion=" + default_opensslVersion + "\n");
                 fileWriter.flush();
             }
         }

@@ -317,7 +317,7 @@ ifeq ($(ENABLE_KAE), true)
         MAPFILE := $(JDK_TOPDIR)/make/mapfiles/libj2kae/mapfile-vers, \
         LDFLAGS := $(LDFLAGS_JDKLIB) \
               $(call SET_SHARED_LIBRARY_ORIGIN), \
-        LDFLAGS_SUFFIX_linux := $(LIBDL) -lssl -lcrypto, \
+        LDFLAGS_SUFFIX_linux := $(LIBDL) -lm, \
         LDFLAGS_SUFFIX_posix := $(LIBDL), \
         LDFLAGS_SUFFIX_solaris := -lc, \
         VERSIONINFO_RESOURCE := $(JDK_TOPDIR)/src/windows/resource/version.rc, \

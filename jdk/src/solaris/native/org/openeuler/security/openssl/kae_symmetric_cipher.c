@@ -29,6 +29,7 @@
 #include "kae_exception.h"
 #include "kae_log.h"
 #include "kae_util.h"
+#include "ssl_utils.h"
 #include "org_openeuler_security_openssl_KAESymmetricCipherBase.h"
 
 bool StartsWith(const char* str1, const char* str2)
@@ -61,13 +62,13 @@ static const EVP_CIPHER* EVPGetSm4CipherByName(JNIEnv* env, const char* algo)
     static const EVP_CIPHER* sm4Ofb = NULL;
 
     if (strcasecmp(algo, "sm4-ecb") == 0) {
-        return sm4Ecb == NULL ? sm4Ecb = EVP_get_cipherbyname(algo) : sm4Ecb;
+        return sm4Ecb == NULL ? sm4Ecb = SSL_UTILS_EVP_get_cipherbyname(algo) : sm4Ecb;
     } else if (strcasecmp(algo, "sm4-cbc") == 0) {
-        return sm4Cbc == NULL ? sm4Cbc = EVP_get_cipherbyname(algo) : sm4Cbc;
+        return sm4Cbc == NULL ? sm4Cbc = SSL_UTILS_EVP_get_cipherbyname(algo) : sm4Cbc;
     } else if (strcasecmp(algo, "sm4-ctr") == 0) {
-        return sm4Ctr == NULL ? sm4Ctr = EVP_get_cipherbyname(algo) : sm4Ctr;
+        return sm4Ctr == NULL ? sm4Ctr = SSL_UTILS_EVP_get_cipherbyname(algo) : sm4Ctr;
     } else if (strcasecmp(algo, "sm4-ofb") == 0) {
-        return sm4Ofb == NULL ? sm4Ofb = EVP_get_cipherbyname(algo) : sm4Ofb;
+        return sm4Ofb == NULL ? sm4Ofb = SSL_UTILS_EVP_get_cipherbyname(algo) : sm4Ofb;
     } else {
         KAE_ThrowRuntimeException(env, "EVPGetSm4CipherByName error");
         return 0;
@@ -90,29 +91,29 @@ static const EVP_CIPHER* EVPGetAesCipherByName(JNIEnv* env, const char* algo)
     static const EVP_CIPHER* aes256Gcm = NULL;
 
     if (strcasecmp(algo, "aes-128-ecb") == 0) {
-        return aes128Ecb == NULL ? aes128Ecb = EVP_get_cipherbyname(algo) : aes128Ecb;
+        return aes128Ecb == NULL ? aes128Ecb = SSL_UTILS_EVP_get_cipherbyname(algo) : aes128Ecb;
     } else if (strcasecmp(algo, "aes-128-cbc") == 0) {
-        return aes128Cbc == NULL ? aes128Cbc = EVP_get_cipherbyname(algo) : aes128Cbc;
+        return aes128Cbc == NULL ? aes128Cbc = SSL_UTILS_EVP_get_cipherbyname(algo) : aes128Cbc;
     } else if (strcasecmp(algo, "aes-128-ctr") == 0) {
-        return aes128Ctr == NULL ? aes128Ctr = EVP_get_cipherbyname(algo) : aes128Ctr;
+        return aes128Ctr == NULL ? aes128Ctr = SSL_UTILS_EVP_get_cipherbyname(algo) : aes128Ctr;
     } else if (strcasecmp(algo, "aes-128-gcm") == 0) {
-        return aes128Gcm == NULL ? aes128Gcm = EVP_get_cipherbyname(algo) : aes128Gcm;
+        return aes128Gcm == NULL ? aes128Gcm = SSL_UTILS_EVP_get_cipherbyname(algo) : aes128Gcm;
     } else if (strcasecmp(algo, "aes-192-ecb") == 0) {
-        return aes192Ecb == NULL ? aes192Ecb = EVP_get_cipherbyname(algo) : aes192Ecb;
+        return aes192Ecb == NULL ? aes192Ecb = SSL_UTILS_EVP_get_cipherbyname(algo) : aes192Ecb;
     } else if (strcasecmp(algo, "aes-192-cbc") == 0) {
-        return aes192Cbc == NULL ? aes192Cbc = EVP_get_cipherbyname(algo) : aes192Cbc;
+        return aes192Cbc == NULL ? aes192Cbc = SSL_UTILS_EVP_get_cipherbyname(algo) : aes192Cbc;
     } else if (strcasecmp(algo, "aes-192-ctr") == 0) {
-        return aes192Ctr == NULL ? aes192Ctr = EVP_get_cipherbyname(algo) : aes192Ctr;
+        return aes192Ctr == NULL ? aes192Ctr = SSL_UTILS_EVP_get_cipherbyname(algo) : aes192Ctr;
     } else if (strcasecmp(algo, "aes-192-gcm") == 0) {
-        return aes192Gcm == NULL ? aes192Gcm = EVP_get_cipherbyname(algo) : aes192Gcm;
+        return aes192Gcm == NULL ? aes192Gcm = SSL_UTILS_EVP_get_cipherbyname(algo) : aes192Gcm;
     } else if (strcasecmp(algo, "aes-256-ecb") == 0) {
-        return aes256Ecb == NULL ? aes256Ecb = EVP_get_cipherbyname(algo) : aes256Ecb;
+        return aes256Ecb == NULL ? aes256Ecb = SSL_UTILS_EVP_get_cipherbyname(algo) : aes256Ecb;
     } else if (strcasecmp(algo, "aes-256-cbc") == 0) {
-        return aes256Cbc == NULL ? aes256Cbc = EVP_get_cipherbyname(algo) : aes256Cbc;
+        return aes256Cbc == NULL ? aes256Cbc = SSL_UTILS_EVP_get_cipherbyname(algo) : aes256Cbc;
     } else if (strcasecmp(algo, "aes-256-ctr") == 0) {
-        return aes256Ctr == NULL ? aes256Ctr = EVP_get_cipherbyname(algo) : aes256Ctr;
+        return aes256Ctr == NULL ? aes256Ctr = SSL_UTILS_EVP_get_cipherbyname(algo) : aes256Ctr;
     } else if (strcasecmp(algo, "aes-256-gcm") == 0) {
-        return aes256Gcm == NULL ? aes256Gcm = EVP_get_cipherbyname(algo) : aes256Gcm;
+        return aes256Gcm == NULL ? aes256Gcm = SSL_UTILS_EVP_get_cipherbyname(algo) : aes256Gcm;
     } else {
         KAE_ThrowRuntimeException(env, "EVPGetAesCipherByName error");
         return 0;
@@ -163,7 +164,7 @@ Java_org_openeuler_security_openssl_KAESymmetricCipherBase_nativeInit(JNIEnv* en
         KAE_ThrowOOMException(env, "create EVP_CIPHER fail");
         goto cleanup;
     }
-    if ((ctx = EVP_CIPHER_CTX_new()) == NULL) {
+    if ((ctx = SSL_UTILS_EVP_CIPHER_CTX_new()) == NULL) {
         KAE_ThrowOOMException(env, "create EVP_CIPHER_CTX fail");
         goto cleanup;
     }
@@ -176,7 +177,7 @@ Java_org_openeuler_security_openssl_KAESymmetricCipherBase_nativeInit(JNIEnv* en
         keyBytes = (*env)->GetByteArrayElements(env, key, NULL);
     }
 
-    if (!EVP_CipherInit_ex(ctx, cipher, kaeEngine, NULL,
+    if (!SSL_UTILS_EVP_CipherInit_ex(ctx, cipher, kaeEngine, NULL,
             NULL, encrypt ? 1 : 0)) {
         KAE_ThrowFromOpenssl(env, "EVP_CipherInit_ex failed", KAE_ThrowRuntimeException);
         goto cleanup;
@@ -184,19 +185,19 @@ Java_org_openeuler_security_openssl_KAESymmetricCipherBase_nativeInit(JNIEnv* en
 
     if (strcasecmp(algo + 8, "gcm") == 0) {
         /* Set IV length if default 12 bytes (96 bits) is not appropriate */
-        if(!EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, ivLength, NULL)) {
+        if(!SSL_UTILS_EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, ivLength, NULL)) {
             KAE_ThrowFromOpenssl(env, "EVP_CIPHER_CTX_ctrl failed", KAE_ThrowRuntimeException);
             goto cleanup;
         }
     }
 
-    if (!EVP_CipherInit_ex(ctx, NULL, kaeEngine, (const unsigned char*)keyBytes,
+    if (!SSL_UTILS_EVP_CipherInit_ex(ctx, NULL, kaeEngine, (const unsigned char*)keyBytes,
             (const unsigned char*)ivBytes, encrypt ? 1 : 0)) {
         KAE_ThrowFromOpenssl(env, "EVP_CipherInit_ex int key & iv failed", KAE_ThrowRuntimeException);
         goto cleanup;
     }
 
-    EVP_CIPHER_CTX_set_padding(ctx, padding ? 1 : 0);
+    SSL_UTILS_EVP_CIPHER_CTX_set_padding(ctx, padding ? 1 : 0);
 
     (*env)->ReleaseStringUTFChars(env, cipherType, algo);
     FreeMemoryFromInit(env, iv, ivBytes, key, keyBytes, keyLength);
@@ -204,7 +205,7 @@ Java_org_openeuler_security_openssl_KAESymmetricCipherBase_nativeInit(JNIEnv* en
 
 cleanup:
     if (ctx != NULL) {
-        EVP_CIPHER_CTX_free(ctx);
+        SSL_UTILS_EVP_CIPHER_CTX_free(ctx);
     }
     (*env)->ReleaseStringUTFChars(env, cipherType, algo);
     FreeMemoryFromInit(env, iv, ivBytes, key, keyBytes, keyLength);
@@ -264,13 +265,13 @@ Java_org_openeuler_security_openssl_KAESymmetricCipherBase_nativeUpdate(JNIEnv* 
         (*env)->GetByteArrayRegion(env, gcmAAD, 0, aadLen, (jbyte*)aad);
 
         // Specify aad.
-        if (EVP_CipherUpdate(ctx, NULL, &bytesWritten, aad, aadLen) == 0) {
+        if (SSL_UTILS_EVP_CipherUpdate(ctx, NULL, &bytesWritten, aad, aadLen) == 0) {
             KAE_ThrowFromOpenssl(env, "EVP_CipherUpdate failed", KAE_ThrowRuntimeException);
             goto cleanup;
         }
     }
 
-    if (EVP_CipherUpdate(ctx, out, &bytesWritten, in, inLen) == 0) {
+    if (SSL_UTILS_EVP_CipherUpdate(ctx, out, &bytesWritten, in, inLen) == 0) {
         KAE_ThrowFromOpenssl(env, "EVP_CipherUpdate failed", KAE_ThrowRuntimeException);
         goto cleanup;
     }
@@ -308,7 +309,7 @@ Java_org_openeuler_security_openssl_KAESymmetricCipherBase_nativeFinal(JNIEnv* e
     }
     memset(out, 0, outLen);
     int bytesWritten = 0;
-    int result_code = EVP_CipherFinal_ex(ctx, out, &bytesWritten);
+    int result_code = SSL_UTILS_EVP_CipherFinal_ex(ctx, out, &bytesWritten);
     if (result_code == 0) {
         KAE_ThrowFromOpenssl(env, "EVP_CipherFinal_ex failed", KAE_ThrowBadPaddingException);
         goto cleanup;
@@ -365,7 +366,7 @@ JNIEXPORT jint JNICALL Java_org_openeuler_security_openssl_KAESymmetricCipherBas
             goto cleanup;
         }
         memset(out, 0, outLen);
-        if (EVP_CipherFinal_ex(ctx, out, &bytesWritten) == 0) {
+        if (SSL_UTILS_EVP_CipherFinal_ex(ctx, out, &bytesWritten) == 0) {
             KAE_ThrowFromOpenssl(env, "EVP_CipherFinal_ex failed", KAE_ThrowBadPaddingException);
             goto cleanup;
         }
@@ -373,7 +374,7 @@ JNIEXPORT jint JNICALL Java_org_openeuler_security_openssl_KAESymmetricCipherBas
 
         // Writes tagLength bytes of the tag value to the buffer.
         // Refer to {@link https://www.openssl.org/docs/man1.1.0/man3/EVP_CIPHER_CTX_ctrl.html} for details.
-        if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, tagLength, out + bytesWritten) == 0) {
+        if (SSL_UTILS_EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, tagLength, out + bytesWritten) == 0) {
             KAE_ThrowFromOpenssl(env, "EVP_CIPHER_CTX_ctrl failed", KAE_ThrowRuntimeException);
             goto cleanup;
         }
@@ -392,14 +393,14 @@ JNIEXPORT jint JNICALL Java_org_openeuler_security_openssl_KAESymmetricCipherBas
         (*env)->GetByteArrayRegion(env, gcmTagArr, 0, tagLength, (jbyte*)gcmTag);
         // Sets the expected gcmTag to tagLength bytes from gcmTag.
         // Refer to {@link https://www.openssl.org/docs/man1.1.0/man3/EVP_CIPHER_CTX_ctrl.html} for details.
-        if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, tagLength, gcmTag) == 0) {
+        if (SSL_UTILS_EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, tagLength, gcmTag) == 0) {
             KAE_ThrowFromOpenssl(env, "EVP_CTRL_AEAD_SET_TAG failed", KAE_ThrowRuntimeException);
             goto cleanup;
         }
 
         (*env)->GetByteArrayRegion(env, outArr, 0, outOfs, (jbyte*)gcmOut);
         // Finalise: note get no output for GCM
-        if (EVP_CipherFinal_ex(ctx, gcmOut, &bytesWritten) == 0) {
+        if (SSL_UTILS_EVP_CipherFinal_ex(ctx, gcmOut, &bytesWritten) == 0) {
             KAE_ThrowFromOpenssl(env, "EVP_CipherFinal_ex failed", KAE_ThrowAEADBadTagException);
             goto cleanup;
         }
@@ -424,7 +425,7 @@ Java_org_openeuler_security_openssl_KAESymmetricCipherBase_nativeFree(JNIEnv* en
     EVP_CIPHER_CTX* ctx = (EVP_CIPHER_CTX*)ctxAddress;
     KAE_TRACE("KAESymmetricCipherBase_nativeFree(ctx = %p)", ctx);
     if (ctx != NULL) {
-        EVP_CIPHER_CTX_free(ctx);
+        SSL_UTILS_EVP_CIPHER_CTX_free(ctx);
         ctx = NULL;
     }
 

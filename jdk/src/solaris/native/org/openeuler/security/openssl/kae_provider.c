@@ -27,69 +27,50 @@
 #include <dlfcn.h>
 #include "kae_exception.h"
 #include "kae_util.h"
+#include "kae_log.h"
+#include "ssl_utils.h"
 #include "org_openeuler_security_openssl_KAEProvider.h"
-
-#define KAE_OPENSSL_LIBRARY "libcrypto.so"
 
 /*
  * Class:     Java_org_openeuler_security_openssl_KAEProvider
  * Method:    initOpenssl
  * Signature: ()V
  */
-JNIEXPORT void JNICALL Java_org_openeuler_security_openssl_KAEProvider_initOpenssl
-        (JNIEnv *env, jclass cls, jboolean useGlobalMode, jstring engineId, jbooleanArray algorithmKaeFlags) {
-    SSL_load_error_strings();
-    ERR_load_BIO_strings();
-    OpenSSL_add_all_algorithms();
-
-    /*
-     * If the same shared object is opened again with dlopen(), the same object handle is returned.
-     * The dynamic linker maintains reference counts for object handles.
-     * An object that was previously opened with RTLD_LOCAL can be promoted to RTLD_GLOBAL in a subsequent dlopen().
-     *
-     * RTLD_GLOBAL
-	 *     The symbols defined by this shared object will be made
-	 *     available for symbol resolution of subsequently loaded
-	 *     shared objects.
-     * RTLD_LOCAL
-	 *     This is the converse of RTLD_GLOBAL, and the default if
-	 *     neither flag is specified.  Symbols defined in this shared
-	 *     object are not made available to resolve references in
-	 *     subsequently loaded shared objects.
-     * For more information see https://man7.org/linux/man-pages/man3/dlopen.3.html.
-     */
-    if (useGlobalMode) {
-        char msg[1024];
-        void *handle = NULL;
-        // Promote the flags of the loaded libcrypto.so library from RTLD_LOCAL to RTLD_GLOBAL
-        handle = dlopen(KAE_OPENSSL_LIBRARY, RTLD_LAZY | RTLD_GLOBAL);
-        if (handle == NULL) {
-            snprintf(msg, sizeof(msg), "Cannot load %s (%s)!", KAE_OPENSSL_LIBRARY,  dlerror());
-            KAE_ThrowByName(env, "java/lang/UnsatisfiedLinkError", msg);
-            return;
-        }
-        dlclose(handle);
+JNIEXPORT int JNICALL Java_org_openeuler_security_openssl_KAEProvider_initOpenssl(JNIEnv *env, jclass cls,
+    jint useOpensslVersion, jstring engineId, jbooleanArray algorithmKaeFlags)
+{
+    // Load openssl functions by dlsym(), according to current libssl.so file version.
+    jboolean init_result = SSL_UTILS_func_ptr_init(env, useOpensslVersion);
+    if (!init_result) {
+        return -1;
     }
+    // Change from macro, SSL_load_error_strings is a macro in openssl 1 and 3.
+    SSL_UTILS_SSL_load_error_strings();
+    SSL_UTILS_ERR_load_BIO_strings();
+    // Change from macro, OpenSSL_add_all_algorithms ia a macro, defined by OPENSSL_LOAD_CONF value.
+    SSL_UTILS_OpenSSL_add_all_algorithms();
 
     // check if KaeEngine holder is already set
     ENGINE* e = GetKaeEngine();
     if (e != NULL) {
-        ENGINE_free(e);
+        SSL_UTILS_ENGINE_free(e);
         e = NULL;
     }
 
     // determine whether KAE is loaded successfully
     const char* id = (*env)->GetStringUTFChars(env, engineId, 0);
-    e = ENGINE_by_id(id);
+    e = SSL_UTILS_ENGINE_by_id(id);
     (*env)->ReleaseStringUTFChars(env, engineId, id);
     if (e == NULL) {
         KAE_ThrowFromOpenssl(env, "ENGINE_by_id", KAE_ThrowRuntimeException);
-        return;
+        return -1;
     }
     SetKaeEngine(e);
 
     // initialize the engine for each algorithm
     initEngines(env, algorithmKaeFlags);
+
+    return get_sslVersion();
 }
 
 /*
@@ -100,4 +81,4 @@ JNIEXPORT void JNICALL Java_org_openeuler_security_openssl_KAEProvider_initOpens
 JNIEXPORT jbooleanArray JNICALL Java_org_openeuler_security_openssl_KAEProvider_getEngineFlags
         (JNIEnv *env, jclass cls) {
     return getEngineFlags(env);
-}
+} 

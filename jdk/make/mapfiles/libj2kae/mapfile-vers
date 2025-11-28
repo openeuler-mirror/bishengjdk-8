@@ -62,6 +62,17 @@ SUNWprivate_1.1 {
 		Java_org_openeuler_security_openssl_KAERSASignatureNative_rsaVerify;
 		Java_org_openeuler_security_openssl_KAERSASignatureNative_pssSign;
 		Java_org_openeuler_security_openssl_KAERSASignatureNative_pssVerify;
+		Java_org_openeuler_security_openssl_KAESM2Cipher_nativeCreateSM2PublicKey;
+        Java_org_openeuler_security_openssl_KAESM2Cipher_nativeCreateSM2PrivateKey;
+        Java_org_openeuler_security_openssl_KAESM2Cipher_nativeFreeKey;
+        Java_org_openeuler_security_openssl_KAESM2Cipher_nativeSM2Encrypt;
+        Java_org_openeuler_security_openssl_KAESM2Cipher_nativeSM2Decrypt;
+        Java_org_openeuler_security_openssl_KAESM2Signature_nativeClone;
+        Java_org_openeuler_security_openssl_KAESM2Signature_nativeFreeSM2Ctx;
+        Java_org_openeuler_security_openssl_KAESM2Signature_nativeInitSM2Ctx;
+        Java_org_openeuler_security_openssl_KAESM2Signature_nativeSM2Update;
+        Java_org_openeuler_security_openssl_KAESM2Signature_nativeSM2SignFinal;
+        Java_org_openeuler_security_openssl_KAESM2Signature_nativeSM2VerifyFinal;
 
 	local:
 		*;
