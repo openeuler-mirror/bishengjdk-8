@@ -1336,7 +1336,7 @@ void *open_ssl_lib(JNIEnv *env, jint useOpensslVersion, jboolean *init_result)
         char* msg = (char*)malloc(strlen(prefix) + strlen(lib_name) + 1);
         strcpy(msg, prefix);
         strcat(msg, lib_name);
-        KAE_ThrowRuntimeException(env, msg);
+        KAE_ThrowExceptionInInitializerError(env, msg);
         free(msg);
         return res;
     }
