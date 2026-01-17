@@ -149,7 +149,7 @@ public class KAEDisabledAlgorithmsTest {
         }
 
         // test other algorithms that are not disabled (except ec)
-        for (int i = 0; i < useKaeEngineFlags.length - 1; i++) {
+        for (int i = 0; i < useKaeEngineFlags.length - 2; i++) {
             if (!disabledAlgorithmIndexSet.contains(i) && !useKaeEngineFlags[i]) {
                 throw new RuntimeException(KAETestHelper.getAlgorithmName(i) + " algorithm is not disabled");
             }

@@ -116,6 +116,11 @@ public class KAEUseEngineTest {
                 false, false, false, false, false, false, true, true, true, true,
                 false, false, false, false, false, false, true, true, false, false
         }, 6, true),
+        SM2_ENABLE(new boolean[]{
+                true, false, false, true, false, false, false, false, false, false,
+                false, false, false, false, false, false, true, true, true, true,
+                false, false, false, false, false, false, true, true, false, false
+        }, 7, true),
         ALL_ENABLE(new boolean[]{
                 true, false, false, true, true, true, true, true, true, true,
                 true, true, true, true, true, true, true, true, true, true,
