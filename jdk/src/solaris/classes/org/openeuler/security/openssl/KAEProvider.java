@@ -354,6 +354,7 @@ public class KAEProvider extends Provider {
     private void putSM2Cipher() {
         put("KeyPairGenerator.SM2", "org.openeuler.security.openssl.KAESM2KeyPairGenerator");
         put("KeyFactory.SM2", "org.openeuler.security.openssl.KAEECKeyFactory");
+        put("AlgorithmParameters.EC", "org.openeuler.security.openssl.KAEECParameters");
         put("AlgorithmParameters.SM2", "org.openeuler.security.openssl.KAEECParameters");
         put("Alg.Alias.AlgorithmParameters.1.2.156.10197.1.301", "SM2");
         put("Cipher.SM2","org.openeuler.security.openssl.KAESM2Cipher");
