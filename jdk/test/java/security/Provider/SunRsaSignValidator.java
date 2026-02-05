@@ -18,7 +18,7 @@
  * 2 along with this work; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- * Please visit https://gitee.com/openeuler/bishengjdk-8 if you need additional
+ * Please visit https://gitcode.com/openeuler/bishengjdk-8 if you need additional
  * information or have any questions.
  */
 
