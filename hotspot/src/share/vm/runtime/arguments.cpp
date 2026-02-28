@@ -51,6 +51,11 @@
 #if INCLUDE_JFR
 #include "jfr/jfr.hpp"
 #endif
+#ifdef AARCH64
+#include "jprofilecache/jitProfileRecord.hpp"
+#include "jprofilecache/jitProfileCacheLog.hpp"
+#include <sys/file.h>
+#endif
 #ifdef TARGET_OS_FAMILY_linux
 # include "os_linux.inline.hpp"
 #endif
@@ -2822,6 +2827,125 @@ bool Arguments::check_vm_args_consistency() {
 
 #ifdef COMPILER2
   status &= verify_min_value(BoxTypeCachedMax, 1, "BoxTypeCachedMax");
+#endif
+
+#ifdef AARCH64
+  if (JProfilingCacheAutoArchiveDir != NULL) {
+    if (FLAG_IS_CMDLINE(JProfilingCacheRecording) || FLAG_IS_CMDLINE(JProfilingCacheCompileAdvance)) {
+      warning("Profile cache file will be dumped automatically. "
+              "No need to set JProfilingCacheRecording/JProfilingCacheCompileAdvance");
+      JProfilingCacheRecording = false;
+      JProfilingCacheCompileAdvance = false;
+    }
+
+    if (FLAG_IS_CMDLINE(ProfilingCacheFile)) {
+      warning("ProfilingCacheFile will be ignored");
+    }
+
+    DIR* dir = os::opendir(JProfilingCacheAutoArchiveDir);
+    if (dir == NULL) {
+      int err_code = errno;
+      switch (err_code) {
+        case ENOENT:
+          if (::mkdir(JProfilingCacheAutoArchiveDir, 0750) == OS_ERR) {
+            if (errno == EEXIST) break;
+            else {
+              jio_fprintf(defaultStream::error_stream(),
+                          "Fail to create JProfilingCacheAutoArchiveDir directory '%s'\n",
+                          JProfilingCacheAutoArchiveDir);
+              return false;
+            }
+          }
+          break;
+        case EACCES:
+          jio_fprintf(defaultStream::error_stream(),
+                      "Permission denied to open JProfilingCacheAutoArchiveDir directory '%s'\n",
+                      JProfilingCacheAutoArchiveDir);
+          return false;
+        case ENOTDIR:
+          jio_fprintf(defaultStream::error_stream(),
+                      "JProfilingCacheAutoArchiveDir '%s' is not a directory\n",
+                      JProfilingCacheAutoArchiveDir);
+          return false;
+        default:
+          jio_fprintf(defaultStream::error_stream(),
+                      "Couldn't open JProfilingCacheAutoArchiveDir directory '%s'\n",
+                      JProfilingCacheAutoArchiveDir);
+          return false;
+      }
+    } else {
+      os::closedir(dir);
+    }
+
+    const char* jpc_path = JitProfileRecorder::auto_jpcfile_name();
+    const char* jpc_tmp_path = JitProfileRecorder::auto_temp_jpcfile_name();
+    struct stat st;
+    if (os::stat(jpc_tmp_path, &st) == 0) { // recording jprofile by other JVM
+      // Test temp file is still valid.
+      int jpc_tmp_fd = ::open(jpc_tmp_path, O_RDWR, 0600);
+      if (jpc_tmp_fd != -1) {
+        if (flock(jpc_tmp_fd, LOCK_EX | LOCK_NB) == 0) {
+          ::unlink(jpc_tmp_path);
+          flock(jpc_tmp_fd, LOCK_UN);
+        }
+        ::close(jpc_tmp_fd);
+      }
+    } else {
+      if (os::stat(jpc_path, &st) == 0) { // jprofilecache file exists, replay profile data
+        JProfilingCacheCompileAdvance = true;
+      } else {
+        int jpc_fd = ::open(jpc_tmp_path, O_RDWR | O_CREAT, 0600);
+        if (jpc_fd == -1) {
+          jio_fprintf(defaultStream::error_stream(),
+                      "Could not open/create jprofile cache file under JProfilingCacheAutoArchiveDir '%s'\n",
+                      JProfilingCacheAutoArchiveDir);
+        } else {
+          if (flock(jpc_fd, LOCK_EX | LOCK_NB) == 0) { // lock temp file for recording.
+            FILE* jpc_file = ::fdopen(jpc_fd, "wb+");
+            if (jpc_file == NULL) {
+              jio_fprintf(defaultStream::error_stream(),
+                          "Could not open/create jprofile cache file under JProfilingCacheAutoArchiveDir '%s'\n",
+                          JProfilingCacheAutoArchiveDir);
+            } else {
+              jprofilecache_log_info(jprofilecache, "AutoJProfileCache use Record Mode");
+              JitProfileRecorder::set_jpcfile_filepointer(jpc_file);
+              JProfilingCacheRecording = true;
+              bool has_cmdline_class_unloading_flags = FLAG_IS_CMDLINE(ClassUnloading);
+#if INCLUDE_ALL_GCS
+              has_cmdline_class_unloading_flags =
+                  has_cmdline_class_unloading_flags ||
+                  FLAG_IS_CMDLINE(CMSClassUnloadingEnabled) ||
+                  FLAG_IS_CMDLINE(ClassUnloadingWithConcurrentMark) ||
+                  FLAG_IS_CMDLINE(ExplicitGCInvokesConcurrentAndUnloadsClasses);
+#endif
+              if (has_cmdline_class_unloading_flags) {
+                warning("Class unloading related options will be disabled in auto record mode");
+              }
+              // Record mode requires stable class metadata; disable all class unloading paths.
+              FLAG_SET_CMDLINE(bool, ClassUnloading, false);
+#if INCLUDE_ALL_GCS
+              FLAG_SET_CMDLINE(bool, CMSClassUnloadingEnabled, false);
+              FLAG_SET_CMDLINE(bool, ClassUnloadingWithConcurrentMark, false);
+              FLAG_SET_CMDLINE(bool, ExplicitGCInvokesConcurrentAndUnloadsClasses, false);
+#endif
+              ExitVMProfileCacheFlush = true;
+              if (NUMANodesRandom != 0) {
+                NUMANodesRandom = 0;
+              }
+            }
+          } else {
+            ::close(jpc_fd);
+          }
+        }
+      }
+    }
+  }
+
+  if (JProfilingCacheCompileAdvance && ProfileCacheAggressiveInit && JProfilingCacheDelayLoadTime < 50) {
+    warning("JProfilingCacheDelayLoadTime (%u) is too small in aggressive replay mode, adjusted to 50 ms",
+            (uint)JProfilingCacheDelayLoadTime);
+    JProfilingCacheDelayLoadTime = 50;
+  }
 #endif
 
   return status;

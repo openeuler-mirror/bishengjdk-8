@@ -24,4 +24,4 @@
 
 #include "jprofilecache/jitProfileCacheLog.hpp"
 
-int LogLevel::LogLevelNum = LogLevel::Info;
+int LogLevel::LogLevelNum = LogLevel::Off;

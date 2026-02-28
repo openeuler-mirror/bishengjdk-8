@@ -333,15 +333,6 @@ JNIEXPORT jclass JNICALL
 JVM_LoadClass0(JNIEnv *env, jobject obj, jclass currClass,
                jstring currClassName);
 
-JNIEXPORT void JNICALL
-JVM_TriggerPrecompilation(JNIEnv* env, jclass clz);
-
-JNIEXPORT jboolean JNICALL
-JVM_CheckJProfileCacheCompilationIsComplete(JNIEnv* env, jclass ignored);
-
-JNIEXPORT void JNICALL
-JVM_NotifyJVMDeoptProfileCacheMethods(JNIEnv* env, jclass clz);
-
 /*
  * java.lang.reflect.Array
  */

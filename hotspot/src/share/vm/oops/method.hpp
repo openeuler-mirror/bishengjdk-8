@@ -100,6 +100,9 @@ class ConstMethod;
 class InlineTableSizes;
 class KlassSizeStats;
 class MetaspaceClosure;
+#ifdef AARCH64
+class ProfileCacheMethodHold;
+#endif
 
 class Method : public Metadata {
  friend class VMStructs;
@@ -141,10 +144,13 @@ class Method : public Metadata {
   nmethod* volatile _code;                       // Points to the corresponding piece of native code
   volatile address           _from_interpreted_entry; // Cache of _code ? _adapter->i2c_entry() : _i2i_entry
 
+#ifdef AARCH64
   int _first_invoke_init_order;  // record class initialize order when this method first been invoked
   bool _compiled_by_jprofilecache;
+  ProfileCacheMethodHold* _jpc_method_holder;
 #ifndef PRODUCT
   bool _deopted_by_jprofilecache;
+#endif
 #endif
 
   // Constructor
@@ -213,11 +219,14 @@ class Method : public Metadata {
     return constMethod()->type_annotations();
   }
 
+#ifdef AARCH64
   int  first_invoke_init_order()                   { return _first_invoke_init_order; }
   void set_first_invoke_init_order(int value)      { _first_invoke_init_order = value; }
 
   bool compiled_by_jprofilecache()                      { return _compiled_by_jprofilecache; }
   void set_compiled_by_jprofilecache(bool value)        { _compiled_by_jprofilecache = value; }
+  ProfileCacheMethodHold* jpc_method_holder() const     { return _jpc_method_holder; }
+  void set_jpc_method_holder(ProfileCacheMethodHold* v) { _jpc_method_holder = v; }
 
 #ifndef PRODUCT
   bool deopted_by_jprofilecache()                        { return _deopted_by_jprofilecache; }
@@ -227,6 +236,7 @@ class Method : public Metadata {
   static ByteSize first_invoke_init_order_offset() {
     return byte_offset_of(Method, _first_invoke_init_order);
   }
+#endif
 
   // Helper routine: get klass name + "." + method name + signature as
   // C string, for the purpose of providing more useful NoSuchMethodErrors

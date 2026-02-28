@@ -34,7 +34,10 @@
 #include "compiler/compilerOracle.hpp"
 #include "compiler/disassembler.hpp"
 #include "interpreter/bytecode.hpp"
+#ifdef AARCH64
 #include "jprofilecache/jitProfileCache.hpp"
+#include "jprofilecache/jitProfileRecord.hpp"
+#endif
 #include "oops/methodData.hpp"
 #include "prims/jvmtiRedefineClassesTrace.hpp"
 #include "prims/jvmtiImpl.hpp"
@@ -655,10 +658,12 @@ nmethod* nmethod::new_nmethod(methodHandle method,
     DEBUG_ONLY(nm->verify();)
     nm->log_new_nmethod();
   }
-  if (JProfilingCacheRecording && nm != NULL && comp_level >= CompilationProfileCacheRecordMinLevel) {
+#ifdef AARCH64
+  if (JProfilingCacheRecording && nm != NULL) {
     int bci = nm->is_osr_method() ? nm->osr_entry_bci() : InvocationEntryBci;
     JitProfileCache::instance()->recorder()->add_method(nm->method(), bci);
   }
+#endif
   return nm;
 }
 

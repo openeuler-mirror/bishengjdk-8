@@ -105,6 +105,56 @@ define_pd_global(intx, InlineSmallCode,          1000);
           "Auto enable the AppCDS feature"                              \
           "the path save classlist and jsa file")                       \
   product(bool, PrintAutoAppCDS, false,                                 \
-          "Print some information about AutoSharedArchivePath")
+          "Print some information about AutoSharedArchivePath")          \
+                                                                         \
+  experimental(bool, ExitVMProfileCacheFlush, false,                    \
+          "Flush JProfileCache on VM exit")                             \
+                                                                         \
+  experimental(bool, JProfilingCacheRecording, false,                   \
+          "Collect profiling information for JProfilingCache")          \
+                                                                         \
+  experimental(bool, JProfilingCacheCompileAdvance, false,              \
+          "Enable JProfilingCacheCompileAdvance from a log file")       \
+                                                                        \
+  experimental(bool, ProfileCacheAggressiveInit, false,             \
+          "JProfileCache replay precompile strategy: "              \
+          "false=conservative (link-only verify+prepare, no proactive <clinit>); " \
+          "true=aggressive (proactively initialize replay classes)") \
+                                                                         \
+  experimental(ccstr, CompilationProfileCacheExclude, NULL,             \
+          "JProfilingCacheCompileAdvance excluding list ")              \
+                                                                         \
+  experimental(bool, UseJProfilingCacheSystemBlackList, true,           \
+          "Block Some System Classes loaded by jprofilecache")          \
+                                                                         \
+  experimental(uintx, JProfilingCacheDelayLoadTime, 1000,               \
+          "Sleep time (in milliseconds) before JProfileCache loads "    \
+          "classes and methods profile. In aggressive replay mode, "    \
+          "values smaller than 50 are adjusted to 50 automatically.")   \
+                                                                         \
+  develop(bool, CompilationProfileCacheResolveClassEagerly, true,       \
+          "resolve class from constant pool eagerly")                   \
+                                                                         \
+  experimental(ccstr, ProfilingCacheFile, NULL,                         \
+          "Log file name for JProfilingCache")                          \
+                                                                         \
+  experimental(ccstr, ProfilingCacheLogLevel, NULL,                     \
+          "JProfileCache log level: off, error, warning, "              \
+          "info, debug, trace")                                         \
+                                                                         \
+  experimental(uintx, CompilationProfileCacheAppID, 0,                  \
+          "Application ID written in log file for verification ")       \
+                                                                         \
+  experimental(ccstr, JProfilingCacheAutoArchiveDir, NULL,              \
+          "Specify JProfilingCache directory under which the "          \
+          "jprofilecache file will be auto generated and replayed")     \
+                                                                         \
+  experimental(intx, JProfilingCacheMaxTierLimit, 3,                    \
+          "If compile_level is higher than the option, method will "    \
+          "be precompiled by the option level")                         \
+                                                                         \
+  experimental(bool, JProfilingCacheReplayProfileData, false,           \
+          "Load method data with dumped ProfileData in the "            \
+          "jprofilecache file if exists")
 
 #endif // CPU_AARCH64_VM_GLOBALS_AARCH64_HPP
