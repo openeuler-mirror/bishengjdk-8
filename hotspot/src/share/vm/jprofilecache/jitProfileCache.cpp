@@ -101,7 +101,7 @@ JitProfileCache::JitProfileCacheState JitProfileCache::init_for_recording() {
 
 JitProfileCache::JitProfileCacheState JitProfileCache::init_for_profilecache() {
   if (!(!JProfilingCacheRecording && JProfilingCacheCompileAdvance)) {
-    jprofilecache_log_error(profilecache)("[JitProfileCache] ERROR : JitProfile option verify fail");
+    jprofilecache_log_error(profilecache)("[JitProfileCache] ERROR: JitProfileCache option verify failure");
     _jit_profile_cache_state = JitProfileCache::IS_ERR;
     return _jit_profile_cache_state;
   }
@@ -1232,7 +1232,7 @@ void JitProfileCacheInfo::check_param() {
 
   // check CompilationProfileCacheDeoptNumOfMethodsPerIter
   if (CompilationProfileCacheDeoptNumOfMethodsPerIter == 0 || CompilationProfileCacheDeoptNumOfMethodsPerIter > MAX_DEOPT_NUMBER) {
-    jprofilecache_log_error(profilecache)("[JitProfileCache] ERROR:CompilationProfileCacheDeoptNumOfMethodsPerIter is invalid must be large than 0 and less than or equal to 500.");
+    jprofilecache_log_error(profilecache)("[JitProfileCache] ERROR: CompilationProfileCacheDeoptNumOfMethodsPerIter is invalid must be large than 0 and less than or equal to 500.");
     _state = IS_ERR;
     return;
   }

@@ -16,7 +16,7 @@
 
 ## License
 
-毕昇JDK 使用 GPLv2 with Classpath Exception协议，请见 [License](https://gitee.com/openeuler/bishengjdk-8/blob/master/LICENSE)。
+毕昇JDK 使用 GPLv2 with Classpath Exception协议，请见 [License](https://gitcode.com/openeuler/bishengjdk-8/blob/master/LICENSE)。
 
 ## 安装指导
 
@@ -24,4 +24,4 @@
 
 ## 如何提交贡献
 
-我们非常欢迎开发者提交贡献, 如果您发现了一个bug或者有一些想法想要交流，欢迎[发邮件到dev列表](https://openeuler.org/zh/community/mailing-list) 或者 [提交一个issue](https://gitee.com/openeuler/bishengjdk-8/issues) 。
+我们非常欢迎开发者提交贡献, 如果您发现了一个bug或者有一些想法想要交流，欢迎[发邮件到dev列表](https://openeuler.org/zh/community/mailing-list) 或者 [提交一个issue](https://gitcode.com/openeuler/bishengjdk-8/issues) 。

@@ -3398,9 +3398,7 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
   os::init_before_ergo();
 
-  AARCH64_ONLY(JavaThread::handle_appcds_for_executor(args);)
-
-  jint ergo_result = Arguments::apply_ergo();
+  jint ergo_result = Arguments::apply_ergo(args);
   if (ergo_result != JNI_OK) return ergo_result;
 
   if (PauseAtStartup) {
