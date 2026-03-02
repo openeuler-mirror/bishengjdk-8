@@ -24,4 +24,33 @@
 
 #include "jprofilecache/jitProfileCacheLog.hpp"
 
-int LogLevel::LogLevelNum = LogLevel::Off;
+#include <stdarg.h>
+
+// Match unified logging defaults: warning/error are visible without explicit log configuration.
+int LogLevel::LogLevelNum = LogLevel::Warning;
+
+static const char* jprofilecache_level_name(LogLevelType level) {
+  switch (level) {
+    case LogLevel::Trace:
+      return "trace";
+    case LogLevel::Debug:
+      return "debug";
+    case LogLevel::Info:
+      return "info";
+    case LogLevel::Warning:
+      return "warning";
+    case LogLevel::Error:
+      return "error";
+    default:
+      return "off";
+  }
+}
+
+void JitProfileCacheLog::print(LogLevelType level, const char* format, ...) {
+  tty->print("[%.3fs][%s][jprofilecache] ", os::elapsedTime(), jprofilecache_level_name(level));
+
+  va_list ap;
+  va_start(ap, format);
+  tty->vprint_cr(format, ap);
+  va_end(ap);
+}

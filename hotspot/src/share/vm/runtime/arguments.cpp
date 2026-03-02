@@ -52,6 +52,7 @@
 #include "jfr/jfr.hpp"
 #endif
 #ifdef AARCH64
+#include "jprofilecache/jitProfileCache.hpp"
 #include "jprofilecache/jitProfileRecord.hpp"
 #include "jprofilecache/jitProfileCacheLog.hpp"
 #include <sys/file.h>
@@ -2831,6 +2832,13 @@ bool Arguments::check_vm_args_consistency() {
 
 #ifdef AARCH64
   if (JProfilingCacheAutoArchiveDir != NULL) {
+    if (!JitProfileCache::set_log_level()) {
+      jio_fprintf(defaultStream::error_stream(),
+                  "Improperly specified VM option 'ProfilingCacheLogLevel=%s'\n",
+                  ProfilingCacheLogLevel);
+      return false;
+    }
+
     if (FLAG_IS_CMDLINE(JProfilingCacheRecording) || FLAG_IS_CMDLINE(JProfilingCacheCompileAdvance)) {
       warning("Profile cache file will be dumped automatically. "
               "No need to set JProfilingCacheRecording/JProfilingCacheCompileAdvance");
@@ -2945,6 +2953,13 @@ bool Arguments::check_vm_args_consistency() {
     warning("JProfilingCacheDelayLoadTime (%u) is too small in aggressive replay mode, adjusted to 50 ms",
             (uint)JProfilingCacheDelayLoadTime);
     JProfilingCacheDelayLoadTime = 50;
+  }
+
+  if (CompilationProfileCacheAppID > (uintx)max_juint) {
+    jio_fprintf(defaultStream::error_stream(),
+                "Improperly specified VM option 'CompilationProfileCacheAppID=" UINTX_FORMAT "'\n",
+                CompilationProfileCacheAppID);
+    status = false;
   }
 #endif
 

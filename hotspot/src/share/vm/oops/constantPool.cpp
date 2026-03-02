@@ -2091,15 +2091,21 @@ void ConstantPool::preload_classes_for_jprofilecache(Stack<InstanceKlass*, mtCla
                                                   TRAPS) {
   JitProfileCache* jprofilecache = JitProfileCache::instance();
   while (!class_processing_stack.is_empty()) {
-    constantPoolHandle current_constant_pool(class_processing_stack.pop()->constants());
+    InstanceKlass* ik = class_processing_stack.pop();
+    constantPoolHandle current_constant_pool(THREAD, ik->constants());
     for (int i = 0; i< current_constant_pool->length();  i++) {
       bool is_unresolved = false;
       Symbol* name = NULL;
       {
-        if (current_constant_pool->tag_at(i).is_unresolved_klass() && !current_constant_pool->jprofilecache_traversed_at(i)) {
-          name = current_constant_pool->klass_name_at(i);
-          is_unresolved = true;
-          current_constant_pool->jprofilecache_has_traversed_at(i);
+        if (current_constant_pool->tag_at(i).is_unresolved_klass()) {
+          if (ik->is_shared()) {
+            name = current_constant_pool->klass_name_at(i);
+            is_unresolved = true;
+          } else if (!current_constant_pool->jprofilecache_traversed_at(i)) {
+            name = current_constant_pool->klass_name_at(i);
+            is_unresolved = true;
+            current_constant_pool->jprofilecache_has_traversed_at(i);
+          }
         }
       }
       if (is_unresolved) {

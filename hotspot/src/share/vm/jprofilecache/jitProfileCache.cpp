@@ -41,12 +41,15 @@
 #include "runtime/mutexLocker.hpp"
 #include "runtime/os.hpp"
 #include "runtime/thread.hpp"
+#include "utilities/defaultStream.hpp"
 #include "utilities/stack.hpp"
 #include "utilities/stack.inline.hpp"
 #include "runtime/atomic.hpp"
 #include "libadt/dict.hpp"
 
 JitProfileCache*                JitProfileCache::_jit_profile_cache_instance         = NULL;
+bool                            JitProfileCache::_log_level_initialized              = false;
+bool                            JitProfileCache::_log_level_valid                    = true;
 
 static inline char jprofilecache_to_lower(char c) {
   if (c >= 'A' && c <= 'Z') {
@@ -88,9 +91,15 @@ JitProfileCache* JitProfileCache::create_instance() {
   return _jit_profile_cache_instance;
 }
 
-void JitProfileCache::set_log_level() {
+bool JitProfileCache::set_log_level() {
+  if (_log_level_initialized) {
+    return _log_level_valid;
+  }
+  _log_level_initialized = true;
+
   if (ProfilingCacheLogLevel == NULL) {
-    return;
+    _log_level_valid = false;
+    return false;
   }
 
   if (jprofilecache_equals_ignore_case(ProfilingCacheLogLevel, "trace")) {
@@ -106,10 +115,11 @@ void JitProfileCache::set_log_level() {
   } else if (jprofilecache_equals_ignore_case(ProfilingCacheLogLevel, "off")) {
     LogLevel::LogLevelNum = LogLevel::Off;
   } else {
-    LogLevel::LogLevelNum = LogLevel::Off;
-    tty->print_cr("[JitProfileCache] WARNING: invalid ProfilingCacheLogLevel \"%s\", fallback to off",
-                  ProfilingCacheLogLevel);
+    _log_level_valid = false;
+    return false;
   }
+  _log_level_valid = true;
+  return true;
 }
 
 JitProfileCache::JitProfileCacheState JitProfileCache::init_for_recording() {
@@ -146,15 +156,35 @@ JitProfileCache::JitProfileCacheState JitProfileCache::init_for_profilecache() {
 void JitProfileCache::init() {
 
   // set log level
-  set_log_level();
+  if (!set_log_level()) {
+    jio_fprintf(defaultStream::error_stream(),
+                "Improperly specified VM option 'ProfilingCacheLogLevel=%s'\n",
+                ProfilingCacheLogLevel);
+    vm_exit(-1);
+    return;
+  }
 
-  if (JProfilingCacheCompileAdvance) {
+  if (TieredStopAtLevel < CompLevel_none || TieredStopAtLevel > CompLevel_full_optimization) {
+    jprofilecache_log_error(jprofilecache,
+                            "intx TieredStopAtLevel=" INTX_FORMAT " is outside the allowed range [ %d ... %d ]",
+                            TieredStopAtLevel,
+                            CompLevel_none,
+                            CompLevel_full_optimization);
+    jprofilecache_log_error(jprofilecache,
+                            "Improperly specified VM option 'TieredStopAtLevel=" INTX_FORMAT "'",
+                            TieredStopAtLevel);
+    _jit_profile_cache_state = IS_ERR;
+    vm_exit(-1);
+    return;
+  }
+
+  if (_jit_profile_cache_state != IS_ERR && JProfilingCacheCompileAdvance) {
     init_for_profilecache();
-  } else if(JProfilingCacheRecording) {
+  } else if (_jit_profile_cache_state != IS_ERR && JProfilingCacheRecording) {
     init_for_recording();
   }
   if ((JProfilingCacheRecording || JProfilingCacheCompileAdvance) && !JitProfileCache::is_valid()) {
-    jprofilecache_log_error(jprofilecache, "[JitProfileCache] ERROR: JProfileCache init error.");
+    jprofilecache_log_error(jprofilecache, "JProfileCache init error.");
     vm_exit(-1);
   }
 }
@@ -200,11 +230,11 @@ void JitProfileCacheInfo::notify_precompilation() {
   chain->try_transition_to_state(ProfileCacheClassChain::PRE_PROFILECACHE);
 
   // preload class
-  jprofilecache_log_info(jprofilecache, "JProfileCache [INFO]: start preload class from constant pool");
+  jprofilecache_log_info(jprofilecache, "start preload class from constant pool");
   chain->preload_class_in_constantpool();
 
   // precompile cache method
-  jprofilecache_log_info(jprofilecache, "JProfileCache [INFO]: start profilecache compilation");
+  jprofilecache_log_info(jprofilecache, "start profilecache compilation");
   chain->precompilation();
   Thread *THREAD = Thread::current();
   if (HAS_PENDING_EXCEPTION) {
@@ -212,9 +242,9 @@ void JitProfileCacheInfo::notify_precompilation() {
   }
 
   if (!chain->try_transition_to_state(ProfileCacheClassChain::PROFILECACHE_DONE)) {
-    jprofilecache_log_error(jprofilecache, "JProfileCache [ERROR]: can not change state to PROFILECACHE_DONE");
+    jprofilecache_log_error(jprofilecache, "can not change state to PROFILECACHE_DONE");
   } else {
-    jprofilecache_log_info(jprofilecache, "JProfileCache [INFO]: profilecache compilation is done");
+    jprofilecache_log_info(jprofilecache, "profilecache compilation is done");
   }
 }
 
@@ -276,7 +306,7 @@ private:
 
 void JitProfileCacheInfo::init() {
   if (JProfilingCacheRecording) {
-    jprofilecache_log_error(jprofilecache, "[JitProfileCache] ERROR: you can not set both JProfilingCacheCompileAdvance and JProfilingCacheRecording");
+    jprofilecache_log_error(jprofilecache, "you can not set both JProfilingCacheCompileAdvance and JProfilingCacheRecording");
     _state = IS_ERR;
     return;
   }
@@ -299,7 +329,7 @@ void JitProfileCacheInfo::init() {
     ProfilingCacheFile, "rb+"));
   JitProfileCacheFileParser parser(fsg(), this);
   if (!fsg->is_open()) {
-    jprofilecache_log_error(jprofilecache, "[JitProfileCache] ERROR : JitProfile doesn't exist");
+    jprofilecache_log_error(jprofilecache, "JitProfile doesn't exist");
     _state = IS_ERR;
     return;
   }
@@ -326,5 +356,5 @@ void JitProfileCacheInfo::init() {
     }
     parser.increment_parsed_number_count();
   }
-  jprofilecache_log_info(jprofilecache, "JProfileCache [INFO]: parsed method number %d successful loaded %" PRIu64, parser.parsed_methods(), _method_loaded_count);
+  jprofilecache_log_info(jprofilecache, "parsed method number %d successful loaded %" PRIu64, parser.parsed_methods(), _method_loaded_count);
 }

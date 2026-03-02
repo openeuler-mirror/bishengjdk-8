@@ -122,10 +122,10 @@ const char* JitProfileCacheFileParser::read_string() {
   _position += current_read_pos;
   int actual_string_length = current_read_pos - 1;
   if (actual_string_length == 0) {
-    jprofilecache_log_warning(jprofilecache, "[JitProfileCache] WARNING : Parsed empty symbol at position %d\n", _position);
+    jprofilecache_log_warning(jprofilecache, "Parsed empty symbol at position %d\n", _position);
     return "";
   } else if (actual_string_length > max_symbol_length()) {
-    jprofilecache_log_error(jprofilecache, "[JitProfileCache] ERROR : The parsed symbol length exceeds %d\n", max_symbol_length());
+    jprofilecache_log_error(jprofilecache, "The parsed symbol length exceeds %d\n", max_symbol_length());
     return NULL;
   } else {
     char* parsed_string = NEW_RESOURCE_ARRAY(char, actual_string_length + 1);
@@ -146,13 +146,13 @@ BytecodeProfileRecord* JitProfileCacheFileParser::read_data_layout() {
 
 bool JitProfileCacheFileParser::logparse_illegal_check(const char* s, bool ret_value, int end_position) {
   if (_position > end_position) {
-    jprofilecache_log_error(jprofilecache, "[JitProfileCache] ERROR : read out of bound, "
+    jprofilecache_log_error(jprofilecache, "read out of bound, "
                       "file format error");
     return ret_value;
   }
   if (s == NULL) {
     _position = end_position;
-    jprofilecache_log_error(jprofilecache, "[JitProfileCache] ERROR : illegal string in log file");
+    jprofilecache_log_error(jprofilecache, "illegal string in log file");
     return ret_value;
   }
   return true;
@@ -160,13 +160,13 @@ bool JitProfileCacheFileParser::logparse_illegal_check(const char* s, bool ret_v
 
 bool JitProfileCacheFileParser::logparse_illegal_count_check(int cnt, bool ret_value, int end_position) {
   if (_position > end_position) {
-    jprofilecache_log_error(jprofilecache, "[JitProfileCache] ERROR : read out of bound, "
+    jprofilecache_log_error(jprofilecache, "read out of bound, "
                       "file format error");
     return ret_value;
   }
   if ((u4)cnt > MAX_COUNT_VALUE) {
     _position = end_position;
-    jprofilecache_log_error(jprofilecache, "[JitProfileCache] ERROR : illegal count ("
+    jprofilecache_log_error(jprofilecache, "illegal count ("
                       UINT32_FORMAT ") too big", cnt);
     return ret_value;
   }
@@ -183,7 +183,7 @@ bool JitProfileCacheFileParser::should_ignore_this_class(Symbol* symbol) {
       ::strstr(name, ACCESSER_SUFFIX) != NULL ||
       (UseJProfilingCacheSystemBlackList &&
        JitProfileCacheUtils::is_in_unpreloadable_classes_black_list(name))) {
-    jprofilecache_log_debug(jprofilecache, "[JitProfileCache] DEBUG : Ignore class %s", name);
+    jprofilecache_log_debug(jprofilecache, "Ignore class %s", name);
     return true;
   }
   JitProfileCache* jprofilecache = info_holder()->holder();
@@ -192,7 +192,7 @@ bool JitProfileCacheFileParser::should_ignore_this_class(Symbol* symbol) {
     return false;
   }
   if (matcher->matches(symbol)) {
-    jprofilecache_log_debug(jprofilecache, "[JitProfileCache] DEBUG : Ignore class %s", name);
+    jprofilecache_log_debug(jprofilecache, "Ignore class %s", name);
     return true;
   } else {
     return false;
@@ -214,7 +214,7 @@ bool JitProfileCacheFileParser::parse_header() {
   if (parse_version < JITPROFILECACHE_VERSION_V1 || parse_version > version) {
     _is_valid = false;
     jprofilecache_log_error(jprofilecache,
-                            "[JitProfileCache] ERROR : unsupported profile version %d, supported range is [%d, %d]",
+                            "unsupported profile version %d, supported range is [%d, %d]",
                             parse_version, JITPROFILECACHE_VERSION_V1, version);
     return false;
   }
@@ -222,20 +222,20 @@ bool JitProfileCacheFileParser::parse_header() {
   if (parse_magic_number != JPROFILECACHE_MAGIC_NUMBER
       || (long)parse_file_size != this->file_size()) {
     _is_valid = false;
-    jprofilecache_log_error(jprofilecache, "[JitProfileCache] ERROR : illegal header");
+    jprofilecache_log_error(jprofilecache, "illegal header");
     return false;
   }
   // valid appid
   if (CompilationProfileCacheAppID != 0 && CompilationProfileCacheAppID != appid) {
     _is_valid = false;
-    jprofilecache_log_error(jprofilecache, "[JitProfileCache] ERROR : illegal CompilationProfileCacheAppID");
+    jprofilecache_log_error(jprofilecache, "illegal CompilationProfileCacheAppID");
     return false;
   }
   // valid crc32
   int crc32_actual = JitProfileRecorder::compute_crc32(_file_stream);
   if (parse_crc32_recorded != crc32_actual) {
     _is_valid = false;
-    jprofilecache_log_error(jprofilecache, "[JitProfileCache] ERROR : JitProfile crc32 check failure");
+    jprofilecache_log_error(jprofilecache, "JitProfile crc32 check failure");
     return false;
   }
 
@@ -282,7 +282,7 @@ bool JitProfileCacheFileParser::parse_class() {
       logparse_illegal_count_check(parse_clinit_status, false, end_position);
       if (parse_clinit_status != 0 && parse_clinit_status != 1) {
         jprofilecache_log_error(jprofilecache,
-                                "[JitProfileCache] ERROR : illegal class init status %u",
+                                "illegal class init status %u",
                                 parse_clinit_status);
         _position = end_position;
         return false;
@@ -304,7 +304,7 @@ bool JitProfileCacheFileParser::parse_class() {
 
   // check section size
   if (_position - begin_position != (int)section_size) {
-    jprofilecache_log_error(jprofilecache, "[JitProfileCache] ERROR : JitProfile class parse fail");
+    jprofilecache_log_error(jprofilecache, "JitProfile class parse fail");
     return false;
   }
   return true;
@@ -354,7 +354,7 @@ ProfileCacheMethodHold* JitProfileCacheFileParser::parse_method() {
   u4 comp_order = read_u4();
   u1 compilation_type = read_u1();
   if (compilation_type != 0 && compilation_type != 1) {
-    jprofilecache_log_error(jprofilecache, "[JitProfileCache] ERROR : illegal compilation type in JitProfile");
+    jprofilecache_log_error(jprofilecache, "illegal compilation type in JitProfile");
     _position = end_position;
     return NULL;
   }
@@ -398,7 +398,7 @@ ProfileCacheMethodHold* JitProfileCacheFileParser::parse_method() {
   unsigned int dict_hash = class_name->identity_hash();
   ProfileCacheClassEntry* entry = dict->find_head_entry(dict_hash, class_name);
   if (entry == NULL) {
-    jprofilecache_log_info(jprofilecache, "[JitProfileCache] WARNING : class %s is missed in method parse", parse_class_name_char);
+    jprofilecache_log_info(jprofilecache, "class %s is missed in method parse", parse_class_name_char);
     _position = end_position;
     return NULL;
   }
@@ -436,7 +436,7 @@ ProfileCacheMethodHold* JitProfileCacheFileParser::parse_method() {
   this->info_holder()->chain()->add_method_at_index(mh, method_chain_offset);
   holder->add_method(mh);
 
-  jprofilecache_log_debug(jprofilecache, "[JitProfileCache] method %s.%s is parsed successfully", parse_class_name_char, parse_method_name_char);
+  jprofilecache_log_debug(jprofilecache, "method %s.%s is parsed successfully", parse_class_name_char, parse_method_name_char);
 
   return mh;
 }
