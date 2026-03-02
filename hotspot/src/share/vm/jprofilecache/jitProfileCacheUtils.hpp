@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2025, Huawei Technologies Co., Ltd. All rights reserved.
+ * Copyright (c) 2025, Huawei Technologies Co., Ltd. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -21,20 +21,20 @@
  * questions.
  */
 
-#include "jni.h"
-#include "jvm.h"
-#include "com_huawei_jprofilecache_JProfileCache.h"
+#ifndef SHARE_VM_JPROFILECACHE_JITPROFILECACHEUTILS_HPP
+#define SHARE_VM_JPROFILECACHE_JITPROFILECACHEUTILS_HPP
 
-#define ARRAY_LENGTH(a) (sizeof(a)/sizeof(a[0]))
+#include "classfile/classLoaderData.hpp"
 
-static JNINativeMethod jprofilecache_methods[] = {
-  {"triggerPrecompilation0","()V", (void*)&JVM_TriggerPrecompilation},
-  {"checkIfCompilationIsComplete0","()Z", (void*)&JVM_CheckJProfileCacheCompilationIsComplete},
-  {"notifyJVMDeoptProfileCacheMethods0","()V", (void*)&JVM_NotifyJVMDeoptProfileCacheMethods}
+class JitProfileCacheUtils : public AllStatic {
+public:
+    static Symbol* get_class_loader_name(ClassLoaderData* cld);
+    static Symbol* remove_meaningless_suffix(Symbol* s);
+
+    static bool commit_compilation(methodHandle m, int comp_level, int bci, TRAPS);
+
+    static bool is_in_unpreloadable_classes_black_list(Symbol* s);
+    static bool is_in_unpreloadable_classes_black_list(const char* str);
 };
 
-JNIEXPORT void JNICALL
-Java_com_huawei_jprofilecache_JProfileCache_registerNatives(JNIEnv *env, jclass cls)
-{
-    (*env)->RegisterNatives(env, cls, jprofilecache_methods, ARRAY_LENGTH(jprofilecache_methods));
-}
+#endif //SHARE_VM_JPROFILECACHE_JITPROFILECACHEUTILS_HPP

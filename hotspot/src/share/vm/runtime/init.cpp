@@ -27,8 +27,6 @@
 #include "code/icBuffer.hpp"
 #include "gc_interface/collectedHeap.hpp"
 #include "interpreter/bytecodes.hpp"
-#include "jprofilecache/jitProfileCache.hpp"
-#include "jprofilecache/jitProfileRecord.hpp"
 #include "memory/universe.hpp"
 #include "prims/methodHandles.hpp"
 #include "runtime/handles.inline.hpp"
@@ -39,6 +37,11 @@
 #include "runtime/sharedRuntime.hpp"
 #include "services/memTracker.hpp"
 #include "utilities/macros.hpp"
+
+#ifdef AARCH64
+#include "jprofilecache/jitProfileCache.hpp"
+#include "jprofilecache/jitProfileRecord.hpp"
+#endif
 
 
 // Initialization done by VM thread in vm_init_globals()
@@ -110,6 +113,7 @@ jint init_globals() {
   if (status != JNI_OK)
     return status;
 
+#ifdef AARCH64
   if (JProfilingCacheRecording) {
     JitProfileCache* jpc = JitProfileCache::create_instance();
     jpc->init();
@@ -118,6 +122,7 @@ jint init_globals() {
       vm_exit(-1);
     }
   }
+#endif
 
   AsyncLogWriter::initialize();
   interpreter_init(); // before any methods loaded
@@ -127,6 +132,7 @@ jint init_globals() {
   templateTable_init();
   InterfaceSupport_init();
   SharedRuntime::generate_stubs();
+#ifdef AARCH64
   if (JProfilingCacheCompileAdvance) {
     JitProfileCache* jpc = JitProfileCache::create_instance();
     jpc->init();
@@ -135,6 +141,7 @@ jint init_globals() {
       vm_exit(-1);
     }
   }
+#endif
   universe2_init();  // dependent on codeCache_init and stubRoutines_init1
   referenceProcessor_init();
   jni_handles_init();

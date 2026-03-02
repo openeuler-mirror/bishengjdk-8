@@ -32,7 +32,6 @@
 #include "code/scopeDesc.hpp"
 #include "gc_interface/collectedHeap.hpp"
 #include "interpreter/interpreter.hpp"
-#include "jprofilecache/jitProfileCache.hpp"
 #include "jfr/jfrEvents.hpp"
 #include "memory/resourceArea.hpp"
 #include "memory/universe.inline.hpp"
@@ -657,15 +656,6 @@ void SafepointSynchronize::do_cleanup_tasks() {
     SymbolTable::rehash_table();
     if (event.should_commit()) {
       post_safepoint_cleanup_task_event(&event, name);
-    }
-  }
-
-  if (JProfilingCacheCompileAdvance) {
-    JitProfileCache* jprofilecache = JitProfileCache::instance();
-    assert(jprofilecache != NULL, "sanity check");
-    ProfileCacheClassChain* chain = jprofilecache->preloader()->chain();
-    if (chain->should_deoptimize_methods()) {
-      chain->deoptimize_methods();
     }
   }
 

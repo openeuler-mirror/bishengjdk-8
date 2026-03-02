@@ -32,7 +32,6 @@
 #include "classfile/systemDictionaryShared.hpp"
 #include "classfile/vmSymbols.hpp"
 #include "interpreter/linkResolver.hpp"
-#include "jprofilecache/jitProfileCache.hpp"
 #include "memory/heapInspection.hpp"
 #include "memory/metadataFactory.hpp"
 #include "memory/oopFactory.hpp"
@@ -47,7 +46,10 @@
 #include "runtime/vframe.hpp"
 #include "utilities/stack.hpp"
 #include "utilities/stack.inline.hpp"
+#ifdef AARCH64
+#include "jprofilecache/jitProfileCache.hpp"
 #include "jprofilecache/jitProfileCacheLog.hpp"
+#endif
 
 PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 
@@ -63,11 +65,13 @@ ConstantPool* ConstantPool::allocate(ClassLoaderData* loader_data, int length, T
   // the resolved_references array, which is recreated at startup time.
   // But that could be moved to InstanceKlass (although a pain to access from
   // assembly code).  Maybe it could be moved to the cpCache which is RW.
+#ifdef AARCH64
   if (JProfilingCacheCompileAdvance) {
-    Array<u1>* jpc_tags = NULL;
-    jpc_tags = MetadataFactory::new_array<u1>(loader_data, length, 0, CHECK_NULL);
+    Array<u1>* jpc_tags = MetadataFactory::new_array<u1>(loader_data, length, 0, CHECK_NULL);
     return new (loader_data, size, false, MetaspaceObj::ConstantPoolType, THREAD) ConstantPool(tags, jpc_tags);
-  } else {
+  } else
+#endif
+  {
     return new (loader_data, size, false, MetaspaceObj::ConstantPoolType, THREAD) ConstantPool(tags);
   }
 }
@@ -96,7 +100,9 @@ ConstantPool::ConstantPool(Array<u1>* tags) {
 }
 
 ConstantPool::ConstantPool(Array<u1>* raw_tags, Array<u1>* jpt_markers) {
+#ifdef AARCH64
   assert(JProfilingCacheCompileAdvance, "must in JProfilingCacheCompileAdvance");
+#endif
   assert(jpt_markers != NULL, "invariant");
   assert(jpt_markers->length() == raw_tags->length(), "invariant");
   set_length(raw_tags->length());
@@ -139,11 +145,13 @@ void ConstantPool::deallocate_contents(ClassLoaderData* loader_data) {
   MetadataFactory::free_array<u1>(loader_data, tags());
   set_tags(NULL);
 
+#ifdef AARCH64
   if (JProfilingCacheCompileAdvance) {
     assert(jwp_tags() != NULL, "should not be NULL");
     MetadataFactory::free_array<u1>(loader_data, jwp_tags());
     set_jpc_tags(NULL);
   }
+#endif
 }
 
 void ConstantPool::release_C_heap_structures() {
@@ -2038,6 +2046,7 @@ void ConstantPool::preload_and_initialize_all_classes(ConstantPool* obj, TRAPS) 
 
 #endif
 
+#ifdef AARCH64
 void ConstantPool::preload_jprofilecache_classes(TRAPS) {
   constantPoolHandle cp(THREAD, this);
   guarantee(cp->pool_holder() != NULL, "must be fully loaded");
@@ -2115,6 +2124,7 @@ void ConstantPool::preload_classes_for_jprofilecache(Stack<InstanceKlass*, mtCla
     }
   }
 }
+#endif // AARCH64
 
 // Printing
 void ConstantPool::print_on(outputStream* st) const {

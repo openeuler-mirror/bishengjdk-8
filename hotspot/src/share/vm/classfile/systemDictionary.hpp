@@ -27,7 +27,6 @@
 
 #include "classfile/classFileStream.hpp"
 #include "classfile/classLoader.hpp"
-#include "jprofilecache/jitProfileCache.hpp"
 #include "oops/objArrayOop.hpp"
 #include "oops/symbol.hpp"
 #include "runtime/java.hpp"

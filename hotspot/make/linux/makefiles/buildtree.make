@@ -116,6 +116,10 @@ ifneq ($(ENABLE_JFR),true)
 ALWAYS_EXCLUDE_DIRS += -o -name jfr
 endif
 
+ifneq ($(BUILDARCH),aarch64)
+ALWAYS_EXCLUDE_DIRS += -o -name jprofilecache
+endif
+
 # Get things from the platform file.
 COMPILER	= $(shell sed -n 's/^compiler[ 	]*=[ 	]*//p' $(PLATFORM_FILE))
 
@@ -211,6 +215,12 @@ else
   INCLUDE_JFR = 0
 endif
 
+ifeq ($(BUILDARCH),aarch64)
+  INCLUDE_JPROFILECACHE = 1
+else
+  INCLUDE_JPROFILECACHE = 0
+endif
+
 
 flags.make: $(BUILDTREE_MAKE) ../shared_dirs.lst
 	@echo Creating $@ ...
@@ -291,8 +301,9 @@ flags.make: $(BUILDTREE_MAKE) ../shared_dirs.lst
 	    echo && \
 	    echo "HOTSPOT_EXTRA_SYSDEFS\$$(HOTSPOT_EXTRA_SYSDEFS) = $(HOTSPOT_EXTRA_SYSDEFS)" && \
 	    echo "SYSDEFS += \$$(HOTSPOT_EXTRA_SYSDEFS)"; \
-	echo && echo "CFLAGS += -DINCLUDE_JFR=$(INCLUDE_JFR)"; \
-	echo; \
+		echo && echo "CFLAGS += -DINCLUDE_JFR=$(INCLUDE_JFR)"; \
+		echo && echo "CFLAGS += -DINCLUDE_JPROFILECACHE=$(INCLUDE_JPROFILECACHE)"; \
+		echo; \
 	[ -n "$(SPEC)" ] && \
 	    echo "include $(SPEC)"; \
 	echo "include \$$(GAMMADIR)/make/$(OS_FAMILY)/makefiles/$(VARIANT).make"; \

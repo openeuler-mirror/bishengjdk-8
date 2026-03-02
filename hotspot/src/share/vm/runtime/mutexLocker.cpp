@@ -233,7 +233,7 @@ void mutex_init() {
   def(JmethodIdCreation_lock       , Mutex  , leaf,        true ); // used for creating jmethodIDs.
 
   def(SystemDictionary_lock        , Monitor, leaf,        true ); // lookups done by VM thread
-  def(JitProfileRecorder_lock      , Mutex  , nonleaf+2,   true ); // used for JitProfileCache
+  def(JitProfileRecorder_lock      , Mutex  , nonleaf+2,   false); // used for JitProfileCache
   def(ProfileCacheClassChain_lock  , Mutex  , max_nonleaf, true ); // used for JitProfileCache
   def(JitProfileCachePrint_lock    , Mutex  , max_nonleaf, true ); // used for JitProfileCache
   def(SharedDictionary_lock        , Mutex  , leaf,        true );

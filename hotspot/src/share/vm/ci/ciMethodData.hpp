@@ -465,7 +465,7 @@ private:
     return (DataLayout*)((address)data_base() + _data_size);
   }
 
-  void load_extra_data();
+  void load_extra_data(AARCH64_ONLY(bool need_load_jprofile));
   ciProfileData* bci_to_extra_data(int bci, ciMethod* m, bool& two_free_slots);
 
 public:

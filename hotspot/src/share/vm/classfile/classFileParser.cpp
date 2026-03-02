@@ -4255,6 +4255,7 @@ instanceKlassHandle ClassFileParser::parseClassFile(Symbol* name,
     this_klass->set_has_default_methods(has_default_methods);
     this_klass->set_declares_default_methods(declares_default_methods);
 
+#ifdef AARCH64
     if (JProfilingCacheCompileAdvance || JProfilingCacheRecording) {
       if (_stream->source() == NULL) {
         this_klass->set_source_file_path(NULL);
@@ -4262,6 +4263,7 @@ instanceKlassHandle ClassFileParser::parseClassFile(Symbol* name,
         this_klass->set_source_file_path(SymbolTable::new_symbol(_stream->source(), THREAD));
       }
     }
+#endif
 
     if (!host_klass.is_null()) {
       assert (this_klass->is_anonymous(), "should be the same");
@@ -4459,12 +4461,14 @@ instanceKlassHandle ClassFileParser::parseClassFile(Symbol* name,
   }
 #endif // INCLUDE_CDS
 
+#ifdef AARCH64
   if (JProfilingCacheCompileAdvance || JProfilingCacheRecording) {
     unsigned int crc32 = ClassLoader::crc32(0, (char*)(_stream->buffer()), _stream->length());
     unsigned int class_bytes_size = _stream->length();
     this_klass->set_crc32(crc32);
     this_klass->set_bytes_size(class_bytes_size);
   }
+#endif
 
   // Clear class if no error has occurred so destructor doesn't deallocate it
   _klass = NULL;

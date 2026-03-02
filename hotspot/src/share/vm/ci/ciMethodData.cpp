@@ -31,6 +31,11 @@
 #include "memory/resourceArea.hpp"
 #include "runtime/deoptimization.hpp"
 #include "utilities/copy.hpp"
+#ifdef AARCH64
+#include "compiler/compileBroker.hpp"
+#include "jprofilecache/jitProfileCacheHolders.hpp"
+#include "jprofilecache/jitProfileRecord.hpp"
+#endif
 
 // ciMethodData
 
@@ -78,7 +83,7 @@ ciMethodData::ciMethodData() : ciMetadata(NULL) {
   _parameters = NULL;
 }
 
-void ciMethodData::load_extra_data() {
+void ciMethodData::load_extra_data(AARCH64_ONLY(bool need_load_jprofile)) {
   MethodData* mdo = get_MethodData();
 
   // speculative trap entries also hold a pointer to a Method so need to be translated
@@ -98,10 +103,27 @@ void ciMethodData::load_extra_data() {
     }
     case DataLayout::bit_data_tag:
       break;
-    case DataLayout::no_tag:
     case DataLayout::arg_info_data_tag:
       // An empty slot or ArgInfoData entry marks the end of the trap data
-      return;
+      {
+#ifdef AARCH64
+      if (need_load_jprofile) {
+        ProfileCacheMethodHold* mh = mdo->method()->jpc_method_holder();
+        if (mh->profile_list()->length() > 0 && mh->profile_list()->first()->is_ArgInfoData()) {
+          ArgInfoData record(mh->profile_list()->first()->data_in());
+          ArgInfoData dst(dp_dst);
+          for (int i = 0; i < record.number_of_args(); i++) {
+            dst.set_arg_modified(i, record.arg_modified(i));
+          }
+        }
+      }
+#endif
+      return; // Need a block to avoid SS compiler bug
+      }
+    case DataLayout::no_tag:
+      {
+        return;
+      }
     default:
       fatal(err_msg("bad tag = %d", dp_dst->tag()));
     }
@@ -137,10 +159,50 @@ void ciMethodData::load_data() {
   ResourceMark rm;
   ciProfileData* ci_data = first_data();
   ProfileData* data = mdo->first_data();
-  while (is_valid(ci_data)) {
-    ci_data->translate_from(data);
-    ci_data = next_data(ci_data);
-    data = mdo->next_data(data);
+#ifdef AARCH64
+  int jprofile_index = 0;
+  CompileTask* task = CURRENT_ENV->task();
+  bool need_load_jprofile = JProfilingCacheCompileAdvance &&
+                            JProfilingCacheReplayProfileData &&
+                            task != NULL &&
+                            task->is_jprofilecache_compilation() &&
+                            task->comp_level() == CompLevel_full_optimization &&
+                            mdo->method()->jpc_method_holder() != NULL;
+  if (need_load_jprofile) {
+    ProfileCacheMethodHold* mh = mdo->method()->jpc_method_holder();
+    if (mh->profile_list()->length() > 0 && mh->profile_list()->first()->is_ArgInfoData()) {
+      jprofile_index++;
+    }
+    while (is_valid(ci_data)) {
+      bool is_translated = false;
+      if (JitProfileRecorder::is_recordable_data(data)) {
+        while (jprofile_index < mh->profile_list()->length()) {
+          BytecodeProfileRecord* jprofile = mh->profile_list()->at(jprofile_index);
+          jprofile_index++;
+          if (data->bci() == jprofile->bci()) {
+            ci_data->translate_from(jprofile->data_in()->data_in());
+            is_translated = true;
+            break;
+          } else if (data->bci() > jprofile->bci()) {
+            jprofile_index = mh->profile_list()->length();
+            break;
+          }
+        }
+      }
+      if (!is_translated) {
+        ci_data->translate_from(data);
+      }
+      ci_data = next_data(ci_data);
+      data = mdo->next_data(data);
+    }
+  } else
+#endif
+  {
+    while (is_valid(ci_data)) {
+      ci_data->translate_from(data);
+      ci_data = next_data(ci_data);
+      data = mdo->next_data(data);
+    }
   }
   if (mdo->parameters_type_data() != NULL) {
     _parameters = data_layout_at(mdo->parameters_type_data_di());
@@ -148,7 +210,7 @@ void ciMethodData::load_data() {
     parameters->translate_from(mdo->parameters_type_data());
   }
 
-  load_extra_data();
+  load_extra_data(AARCH64_ONLY(need_load_jprofile));
 
   // Note:  Extra data are all BitData, and do not need translation.
   _current_mileage = MethodData::mileage_of(mdo->method());
