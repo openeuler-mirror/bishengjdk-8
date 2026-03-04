@@ -138,7 +138,7 @@ define_pd_global(intx, InlineSmallCode,          1000);
   experimental(ccstr, ProfilingCacheFile, NULL,                         \
           "Log file name for JProfilingCache")                          \
                                                                          \
-  experimental(ccstr, ProfilingCacheLogLevel, NULL,                     \
+  experimental(ccstr, ProfilingCacheLogLevel, "warning",                \
           "JProfileCache log level: off, error, warning, "              \
           "info, debug, trace")                                         \
                                                                          \

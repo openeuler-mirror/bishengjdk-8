@@ -27,6 +27,7 @@
 #include "classfile/systemDictionary.hpp"
 #include "code/codeCache.hpp"
 #include "jprofilecache/jitProfileCache.hpp"
+#include "jprofilecache/jitProfileCacheLog.hpp"
 #include "jprofilecache/jitProfileCacheThread.hpp"
 #include "oops/instanceKlass.hpp"
 #include "runtime/handles.inline.hpp"
@@ -45,7 +46,7 @@ volatile bool    JitProfileCacheThread::_is_active = false;
 
 bool has_error(TRAPS, const char* error) {
   if (HAS_PENDING_EXCEPTION) {
-    tty->print_cr("%s", error);
+    JitProfileCacheLog::print(LogLevel::Error, "%s", error);
     java_lang_Throwable::print(PENDING_EXCEPTION, tty);
     tty->cr();
     CLEAR_PENDING_EXCEPTION;

@@ -97,7 +97,7 @@ bool ProfileCacheClassChain::ProfileCacheClassChainEntry::contains_redefined_cla
     InstanceKlass* k = resolved_klasses()->at(i);
     if (k != NULL && k->has_been_redefined()) {
       ResourceMark rm;
-      jprofilecache_log_warning(jprofilecache, "[JitProfileCache] WARNING: ignore redefined class after API"
+      jprofilecache_log_warning(jprofilecache, "ignore redefined class after API"
                           " triggerPrecompilation : %s:%s@%s.", class_name()->as_C_string(),
                           class_loader_name()->as_C_string(), class_path()->as_C_string());
       return true;
@@ -170,7 +170,7 @@ const char* ProfileCacheClassChain::get_state(ClassChainState state) {
 bool ProfileCacheClassChain::try_transition_to_state(ClassChainState new_state) {
   ClassChainState old_state = current_state();
   if (old_state == new_state) {
-    jprofilecache_log_warning(jprofilecache, "JProfileCache [WARNING]: profilecache state has already been %s Doesn't need transferred to %s",
+    jprofilecache_log_warning(jprofilecache, "profilecache state has already been %s Doesn't need transferred to %s",
                                             get_state(old_state), get_state(new_state));
     return true;
   }
@@ -189,12 +189,12 @@ bool ProfileCacheClassChain::try_transition_to_state(ClassChainState new_state) 
     if (Atomic::cmpxchg((jint)new_state, (volatile jint*)&_state, (jint)old_state) == old_state) {
       return true;
     } else {
-      jprofilecache_log_warning(jprofilecache, "JProfileCache [WARNING]: failed to transfer profilecache state from %s to %s, conflict with other operation",
+      jprofilecache_log_warning(jprofilecache, "failed to transfer profilecache state from %s to %s, conflict with other operation",
                                               get_state(old_state), get_state(new_state));
       return false;
     }
   } else {
-    jprofilecache_log_warning(jprofilecache, "JProfileCache [WARNING]: can not transfer profilecache state from %s to %s",
+    jprofilecache_log_warning(jprofilecache, "can not transfer profilecache state from %s to %s",
                                             get_state(old_state), get_state(new_state));
     return false;
   }
@@ -223,7 +223,7 @@ void ProfileCacheClassChain::mark_loaded_class(InstanceKlass* k, ProfileCacheCla
     }
   } else {
     ResourceMark rm;
-    jprofilecache_log_debug(jprofilecache, "[JitProfileCache] DEBUG : class %s is not in profile",
+    jprofilecache_log_debug(jprofilecache, "class %s is not in profile",
                       k->name()->as_C_string());
   }
 
@@ -236,7 +236,7 @@ void ProfileCacheClassChain::handle_duplicate_class(InstanceKlass *k, int chain_
     assert(k->is_not_initialized(), "Invalid klass state");
     assert(t->is_Java_thread(), "Thread type mismatch");
     ResourceMark rm;
-    jprofilecache_log_warning(jprofilecache, "[JitProfileCache] WARNING : Duplicate load class %s at index %d",
+    jprofilecache_log_warning(jprofilecache, "Duplicate load class %s at index %d",
                         k->name()->as_C_string(), chain_index);
   }
 }
@@ -250,7 +250,7 @@ void ProfileCacheClassChain::resolve_class_methods(InstanceKlass* k, ProfileCach
   }
   {
     ResourceMark rm;
-    jprofilecache_log_debug(jprofilecache, "[JitProfileCache] DEBUG : class %s at index %d method_list has been recorded",
+    jprofilecache_log_debug(jprofilecache, "class %s at index %d method_list has been recorded",
                       k->name()->as_C_string(), chain_index);
   }
   holder->set_resolved();
@@ -321,7 +321,7 @@ void ProfileCacheClassChain::compile_methodholders_queue(Stack<ProfileCacheMetho
     Thread* THREAD = Thread::current();
     if (HAS_PENDING_EXCEPTION) {
       ResourceMark rm;
-      jprofilecache_log_warning(jprofilecache, "[JitProfileCache] WARNING: Exceptions happened in compiling %s",
+      jprofilecache_log_warning(jprofilecache, "Exceptions happened in compiling %s",
                           pmh->method_name()->as_C_string());
       CLEAR_PENDING_EXCEPTION;
       continue;
@@ -331,12 +331,12 @@ void ProfileCacheClassChain::compile_methodholders_queue(Stack<ProfileCacheMetho
 
 void ProfileCacheClassChain::precompilation() {
   if (!try_transition_to_state(PROFILECACHE_COMPILING)) {
-    jprofilecache_log_warning(jprofilecache, "JProfileCache [WARNING]: The compilation cannot be started in the current state");
+    jprofilecache_log_warning(jprofilecache, "The compilation cannot be started in the current state");
     return;
   }
 
   const bool aggressive_mode = ProfileCacheAggressiveInit;
-  jprofilecache_log_info(jprofilecache, "JProfileCache [INFO]: precompile mode=%s",
+  jprofilecache_log_info(jprofilecache, "precompile mode=%s",
                          aggressive_mode ? "aggressive" : "conservative");
   if (aggressive_mode) {
     precompile_aggressive();
@@ -380,7 +380,7 @@ void ProfileCacheClassChain::precompile_conservative() {
         default:
           {
             ResourceMark rm;
-            jprofilecache_log_error(jprofilecache, "[JitProfileCache] ERROR: class %s has an invalid state %d",
+            jprofilecache_log_error(jprofilecache, "class %s has an invalid state %d",
                               entry->class_name()->as_C_string(),
                               entry->class_state());
             return;
@@ -396,7 +396,7 @@ void ProfileCacheClassChain::precompile_conservative() {
         Symbol *loader = JitProfileCacheUtils::get_class_loader_name(klass->class_loader_data());
         ResourceMark rm;
         jprofilecache_log_warning(jprofilecache,
-                            "[JitProfileCache] WARNING: Exceptions happened in linking %s being loaded by %s",
+                            "Exceptions happened in linking %s being loaded by %s",
                             klass->name()->as_C_string(), loader->as_C_string());
         CLEAR_PENDING_EXCEPTION;
         MutexLocker mu(ProfileCacheClassChain_lock);
@@ -448,18 +448,18 @@ void ProfileCacheClassChain::precompile_aggressive() {
   }
   if (first_recorded_clinit_failure_index >= 0) {
     jprofilecache_log_info(jprofilecache,
-                           "JProfileCache [INFO]: aggressive replay stops before first recorded <clinit> failure at index=%d (upper_bound=%d)",
+                           "aggressive replay stops before first recorded <clinit> failure at index=%d (upper_bound=%d)",
                            first_recorded_clinit_failure_index, aggressive_upper_bound);
   } else {
     jprofilecache_log_info(jprofilecache,
-                           "JProfileCache [INFO]: aggressive replay has no recorded <clinit> failure (upper_bound=%d)",
+                           "aggressive replay has no recorded <clinit> failure (upper_bound=%d)",
                            aggressive_upper_bound);
   }
 
   for (int index = 0; index < length(); index++) {
     if (index > aggressive_upper_bound) {
       jprofilecache_log_info(jprofilecache,
-                             "JProfileCache [INFO]: aggressive replay reached configured stop index=%d",
+                             "aggressive replay reached configured stop index=%d",
                              aggressive_upper_bound);
       break;
     }
@@ -498,7 +498,7 @@ void ProfileCacheClassChain::precompile_aggressive() {
         default:
           {
             ResourceMark rm;
-            jprofilecache_log_error(jprofilecache, "[JitProfileCache] ERROR: class %s has an invalid state %d",
+            jprofilecache_log_error(jprofilecache, "class %s has an invalid state %d",
                               entry->class_name()->as_C_string(),
                               entry->class_state());
             return;
@@ -512,7 +512,7 @@ void ProfileCacheClassChain::precompile_aggressive() {
         Symbol *loader = JitProfileCacheUtils::get_class_loader_name(klass->class_loader_data());
         ResourceMark rm;
         jprofilecache_log_error(jprofilecache,
-                                "[JitProfileCache] ERROR: Exceptions happened in initializing %s being loaded by %s",
+                                "Exceptions happened in initializing %s being loaded by %s",
                                 klass->name()->as_C_string(), loader->as_C_string());
         return;
       }
@@ -540,7 +540,7 @@ bool ProfileCacheClassChain::compile_method(ProfileCacheMethodHold* mh) {
   InstanceKlass* klass = m->constants()->pool_holder();
   const int comp_level = mh->compile_level();
   if (!ProfileCacheAggressiveInit) {
-    // Conservative mode only requires verify+prepare (linked).
+    // Conservative replay keeps class handling at link-only.
     if (!klass->is_linked() || klass->is_in_error_state()) {
       return false;
     }
@@ -559,7 +559,7 @@ bool ProfileCacheClassChain::compile_method(ProfileCacheMethodHold* mh) {
     m->set_compiled_by_jprofilecache(true);
     m->set_jpc_method_holder(mh);
     ResourceMark rm;
-    jprofilecache_log_info(jprofilecache, "[JitProfileCache] method %s successfully compiled",
+    jprofilecache_log_info(jprofilecache, "method %s successfully compiled",
                      m->name_and_sig_as_C_string());
   }
   return ret;
@@ -668,7 +668,7 @@ ProfileCacheMethodHold* ProfileCacheClassChain::resolve_method_info(Method* meth
     method->set_jpc_method_holder(mh);
     return mh;
   } else {
-    jprofilecache_log_info(jprofilecache, "[JitProfileCache] method %s is resolved again",
+    jprofilecache_log_info(jprofilecache, "method %s is resolved again",
                             method->name_and_sig_as_C_string());
     return mh;
   }
@@ -696,8 +696,9 @@ void ProfileCacheClassChain::preload_class_in_constantpool() {
     }
 
     if (current_k != NULL) {
+      ResourceMark rm;
       current_k->constants()->preload_jprofilecache_classes(JavaThread::current());
-      jprofilecache_log_info(jprofilecache, "[JitProfileCache] class %s is preloaded",
+      jprofilecache_log_info(jprofilecache, "class %s is preloaded",
                                current_k->internal_name());
     }
     klass_index++;

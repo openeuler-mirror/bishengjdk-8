@@ -121,24 +121,26 @@ const char* JitProfileRecorder::auto_temp_jpcfile_name() {
 void JitProfileRecorder::init() {
   assert(_recorder_state == NOT_INIT, "JitProfileRecorder state error");
   if (JProfilingCacheCompileAdvance) {
-    jprofilecache_log_error(jprofilecache, "[JitProfileCache] ERROR: JProfilingCacheCompileAdvance and JProfilingCacheRecording cannot be enabled at the same time");
+    jprofilecache_log_error(jprofilecache, "JProfilingCacheCompileAdvance and JProfilingCacheRecording cannot be enabled at the same time");
     _recorder_state = IS_ERR;
     return;
   }
-  if (!ProfileInterpreter) {
-    jprofilecache_log_error(jprofilecache, "[JitProfileCache] ERROR: ProfileInterpreter must be enable");
+  if (Arguments::is_interpreter_only() || !ProfileInterpreter ||
+      (TieredCompilation && TieredStopAtLevel <= CompLevel_simple)) {
+    jprofilecache_log_error(jprofilecache,
+                            "ProfileInterpreter must be enabled, -Xint or TieredStopAtLevel<=1 is not supported");
     _recorder_state = IS_ERR;
     return;
   }
   // disable class unloading
   if (ClassUnloading) {
-    jprofilecache_log_error(jprofilecache, "[JitProfileCache] ERROR: ClassUnloading must be disabled");
+    jprofilecache_log_error(jprofilecache, "ClassUnloading must be disabled");
     _recorder_state = IS_ERR;
     return;
   }
 
   if (UseG1GC && ClassUnloadingWithConcurrentMark) {
-    jprofilecache_log_error(jprofilecache, "[JitProfileCache] ERROR: if use G1 gc, ClassUnloadingWithConcurrentMark must be disabled");
+    jprofilecache_log_error(jprofilecache, "if use G1 gc, ClassUnloadingWithConcurrentMark must be disabled");
     _recorder_state = IS_ERR;
     return;
   }
@@ -161,7 +163,7 @@ void JitProfileRecorder::init() {
   _profile_record_dict = new JitProfileRecordDictionary(PROFILE_RECORDER_HT_SIZE);
   _recorder_state = IS_OK;
 
-  jprofilecache_log_debug(jprofilecache, "[JitProfileCache] begin to collect, log file is %s", logfile_name());
+  jprofilecache_log_debug(jprofilecache, "begin to collect, log file is %s", logfile_name());
 }
 
 int JitProfileRecorder::assign_class_init_order(InstanceKlass* klass) {
@@ -261,7 +263,7 @@ JitProfileRecorderEntry* JitProfileRecordDictionary::add_method(unsigned int met
   add_entry(target_bucket, record_entry);
   _count++;
 
-  jprofilecache_log_debug(jprofilecache, "[JitProfileCache] Record method %s", method->name_and_sig_as_C_string());
+  jprofilecache_log_debug(jprofilecache, "Record method %s", method->name_and_sig_as_C_string());
 
   return record_entry;
 }
@@ -425,7 +427,7 @@ void JitProfileRecorder::write_inited_class() {
   }
   assert(cnt == class_init_count(), "error happened in profile info record");
   jprofilecache_log_info(jprofilecache,
-                         "[JitProfileCache] class init records total=%d success=%d failed=%d",
+                         "class init records total=%d success=%d failed=%d",
                          cnt, success_cnt, cnt - success_cnt);
   unsigned int end_position = _pos;
   unsigned int section_size = end_position - begin_position;
@@ -461,7 +463,7 @@ void JitProfileRecorder::write_profilecache_record(Method* method, int bci, int 
     write_u4((u4)method_counters->invocation_counter()->raw_counter());
     write_u4((u4)method_counters->backedge_counter()->raw_counter());
   } else {
-    jprofilecache_log_warning(jprofilecache, "[JitProfileCache] WARNING: the method counter is nullptr");
+    jprofilecache_log_warning(jprofilecache, "the method counter is nullptr");
     write_u4((u4)0);
     write_u4((u4)0);
     write_u4((u4)0);
@@ -580,7 +582,7 @@ void JitProfileRecorder::flush_record() {
   } else {
     int fd = open(logfile_name(), O_CREAT, S_IRUSR | S_IWUSR);
     if (fd < 0) {
-      jprofilecache_log_error(jprofilecache, "[JitProfileCache] ERROR : open log file fail! path is %s", logfile_name());
+      jprofilecache_log_error(jprofilecache, "open log file fail! path is %s", logfile_name());
       _recorder_state = IS_ERR;
       return;
     }
@@ -590,7 +592,7 @@ void JitProfileRecorder::flush_record() {
   }
 
   if (_profilelog == NULL || !_profilelog->is_open()) {
-    jprofilecache_log_error(jprofilecache, "[JitProfileCache] ERROR : open log file fail! path is %s", logfile_name());
+    jprofilecache_log_error(jprofilecache, "open log file fail! path is %s", logfile_name());
     _recorder_state = IS_ERR;
     return;
   }
@@ -626,7 +628,7 @@ void JitProfileRecorder::flush_record() {
       delete _profilelog;
       _profilelog = NULL;
       ::unlink(logfile_name());
-      jprofilecache_log_error(jprofilecache, "[JitProfileCache] Autogenerate jprofilecache file failed to rename!");
+      jprofilecache_log_error(jprofilecache, "Autogenerate jprofilecache file failed to rename!");
       _recorder_state = IS_ERR;
       return;
     }
@@ -638,5 +640,5 @@ void JitProfileRecorder::flush_record() {
   delete _profilelog;
   _profilelog = NULL;
 
-  jprofilecache_log_info(jprofilecache, "[JitProfileCache] Profile information output completed. File: %s", logfile_name());
+  jprofilecache_log_info(jprofilecache, "Profile information output completed. File: %s", logfile_name());
 }

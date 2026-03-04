@@ -68,7 +68,7 @@ public:
   // init in JVM start
   void init();
 
-  void set_log_level();
+  static bool set_log_level();
 
   static JitProfileCache* create_instance();
   static JitProfileCache* instance()  { return _jit_profile_cache_instance; }
@@ -95,6 +95,8 @@ private:
   JitProfileCacheState               _jit_profile_cache_state;
   unsigned int                       _jit_profile_cache_version;
   static JitProfileCache*            _jit_profile_cache_instance;
+  static bool                        _log_level_initialized;
+  static bool                        _log_level_valid;
   Method*                            _dummy_method;
   JitProfileRecorder*                _jit_profile_cache_recorder;
   JitProfileCacheInfo*               _jit_profile_cache_info;

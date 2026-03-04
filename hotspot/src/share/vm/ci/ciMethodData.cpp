@@ -33,6 +33,7 @@
 #include "utilities/copy.hpp"
 #ifdef AARCH64
 #include "compiler/compileBroker.hpp"
+#include "jprofilecache/jitProfileCacheLog.hpp"
 #include "jprofilecache/jitProfileCacheHolders.hpp"
 #include "jprofilecache/jitProfileRecord.hpp"
 #endif
@@ -182,9 +183,14 @@ void ciMethodData::load_data() {
           if (data->bci() == jprofile->bci()) {
             ci_data->translate_from(jprofile->data_in()->data_in());
             is_translated = true;
+            jprofilecache_log_debug(jprofilecache, "Apply ProfileData on bytecode(%d) of method: %s",
+                                    ci_data->bci(), mdo->method()->name_and_sig_as_C_string());
             break;
           } else if (data->bci() > jprofile->bci()) {
             jprofile_index = mh->profile_list()->length();
+            jprofilecache_log_warning(jprofilecache,
+                                      "Classfile is changed, method %s is not the same as dumping",
+                                      mdo->method()->name_and_sig_as_C_string());
             break;
           }
         }
