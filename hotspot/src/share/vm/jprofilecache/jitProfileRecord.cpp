@@ -75,7 +75,6 @@ JitProfileRecorder::JitProfileRecorder():
           _max_symbol_length(0),
           _pos(0),
           _class_init_order_num(-1),
-          _flushed(false),
           _record_file_name(NULL),
           _profilelog(NULL),
           _recorder_state(NOT_INIT),
@@ -214,10 +213,6 @@ void JitProfileRecorder::mark_class_init_result(int init_order, bool success) {
 
 void JitProfileRecorder::add_method(Method* method, int method_bci) {
   MutexLockerEx mu(JitProfileRecorder_lock, Mutex::_no_safepoint_check_flag);
-  // if is flushed, stop adding method
-  if (is_flushed()) {
-    return;
-  }
   // not deal with OSR Compilation
   if (method_bci != InvocationEntryBci) {
     return;
@@ -569,12 +564,13 @@ void JitProfileRecorder::record_method_info(Method *method, ConstMethod* const_m
 void JitProfileRecorder::write_profilecache_footer() {
 }
 
-void JitProfileRecorder::flush_record() {
+bool JitProfileRecorder::flush_record() {
   MutexLocker mu(JitProfileRecorder_lock);
-  if (!is_valid() || is_flushed()) {
-    return;
+  if (!is_valid()) {
+    return false;
   }
-  set_flushed(true);
+  _pos = 0;
+  _max_symbol_length = 0;
 
   // open randomAccessFileStream
   if (JProfilingCacheAutoArchiveDir != NULL) {
@@ -583,8 +579,7 @@ void JitProfileRecorder::flush_record() {
     int fd = open(logfile_name(), O_CREAT, S_IRUSR | S_IWUSR);
     if (fd < 0) {
       jprofilecache_log_error(jprofilecache, "open log file fail! path is %s", logfile_name());
-      _recorder_state = IS_ERR;
-      return;
+      return false;
     }
     close(fd);
 
@@ -593,8 +588,9 @@ void JitProfileRecorder::flush_record() {
 
   if (_profilelog == NULL || !_profilelog->is_open()) {
     jprofilecache_log_error(jprofilecache, "open log file fail! path is %s", logfile_name());
-    _recorder_state = IS_ERR;
-    return;
+    delete _profilelog;
+    _profilelog = NULL;
+    return false;
   }
 
   // head section
@@ -629,8 +625,7 @@ void JitProfileRecorder::flush_record() {
       _profilelog = NULL;
       ::unlink(logfile_name());
       jprofilecache_log_error(jprofilecache, "Autogenerate jprofilecache file failed to rename!");
-      _recorder_state = IS_ERR;
-      return;
+      return false;
     }
   }
 
@@ -641,4 +636,5 @@ void JitProfileRecorder::flush_record() {
   _profilelog = NULL;
 
   jprofilecache_log_info(jprofilecache, "Profile information output completed. File: %s", logfile_name());
+  return true;
 }

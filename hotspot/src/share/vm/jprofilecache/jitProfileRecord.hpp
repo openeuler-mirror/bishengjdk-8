@@ -195,9 +195,6 @@ public:
 
     address current_init_order_addr() { return (address)&_class_init_order_num;}
 
-    unsigned int is_flushed()                { return _flushed; }
-    void         set_flushed(bool value)  { _flushed = value; }
-
     const char*  logfile_name()                      { return _record_file_name; }
 
     unsigned int recorded_count() { return _profile_record_dict->count(); }
@@ -212,7 +209,7 @@ public:
 
     void add_method(Method* method, int method_bci);
 
-    void flush_record();
+    bool flush_record();
 
     int assign_class_init_order(InstanceKlass* klass);
     void mark_class_init_result(int init_order, bool success);
@@ -234,7 +231,6 @@ private:
     int                                          _max_symbol_length;
     unsigned int                                 _pos;
     volatile int                                 _class_init_order_num;
-    volatile bool                                _flushed;
     const char*                                  _record_file_name;
     static const char*                           _auto_jpcfile_name;
     static const char*                           _auto_temp_jpcfile_name;
