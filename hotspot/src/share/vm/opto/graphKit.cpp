@@ -2761,11 +2761,13 @@ bool GraphKit::seems_never_null(Node* obj, ciProfileData* data) {
       && obj != null()               // And not the -Xcomp stupid case?
       && !too_many_traps(Deoptimization::Reason_null_check)
       ) {
-    bool compiledByWarmUp = JProfilingCacheCompileAdvance && this->C->env()->task()->is_jprofilecache_compilation();
     if (data == NULL) {
-      if (compiledByWarmUp) {
+#ifdef AARCH64
+      // Compiled by JProfileCache
+      if (JProfilingCacheCompileAdvance && this->C->env()->task()->is_jprofilecache_compilation()) {
         return false;
       }
+#endif
       // Edge case:  no mature data.  Be optimistic here.
       return true;
     }
@@ -2838,11 +2840,13 @@ Node* GraphKit::maybe_cast_profiled_obj(Node* obj,
                                         bool not_null) {
   // type == NULL if profiling tells us this object is always null
   if (type != NULL) {
+#ifdef AARCH64
     if (JProfilingCacheCompileAdvance) {
       if (this->C->env()->task()->is_jprofilecache_compilation()) {
         return obj;
       }
     }
+#endif
 
     Deoptimization::DeoptReason class_reason = Deoptimization::Reason_speculate_class_check;
     Deoptimization::DeoptReason null_reason = Deoptimization::Reason_null_check;

@@ -74,6 +74,7 @@
 #endif
 #ifdef TARGET_ARCH_aarch64
 # include "vm_version_aarch64.hpp"
+# include "jprofilecache/jitProfileCache.hpp"
 #endif
 #ifdef TARGET_ARCH_sparc
 # include "vm_version_sparc.hpp"
@@ -504,6 +505,13 @@ void before_exit(JavaThread * thread) {
   if (ShowMessageBoxOnError && is_error_reported()) {
     os::infinite_sleep();
   }
+
+#ifdef AARCH64
+  // Flush jprofilecache on VM exit for auto-archive recording mode.
+  if (JProfilingCacheRecording && ExitVMProfileCacheFlush) {
+    JitProfileCache::instance()->flush_recorder();
+  }
+#endif
 
   // Terminate watcher thread - must before disenrolling any periodic task
   if (PeriodicTask::num_tasks() > 0)

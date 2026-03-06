@@ -35,9 +35,10 @@
 #include "interpreter/oopMapCache.hpp"
 #include "jfr/jfrEvents.hpp"
 #include "jvmtifiles/jvmtiEnv.hpp"
+#ifdef AARCH64
 #include "jprofilecache/jitProfileCache.hpp"
 #include "jprofilecache/jitProfileCacheThread.hpp"
-#include "jprofilecache/jitProfileCacheDcmds.hpp"
+#endif
 #include "memory/gcLocker.inline.hpp"
 #include "memory/metaspaceShared.hpp"
 #include "memory/oopFactory.hpp"
@@ -3739,11 +3740,14 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
   BiasedLocking::init();
 
+#ifdef AARCH64
   if (JProfilingCacheCompileAdvance) {
     JitProfileCache* jprofilecache = JitProfileCache::instance();
     assert(jprofilecache != NULL, "sanity check");
     jprofilecache->preloader()->jvm_booted_is_done();
+    JitProfileCacheThread::launch_with_delay(JProfilingCacheDelayLoadTime, THREAD);
   }
+#endif
 
 #if INCLUDE_RTM_OPT
   RTMLockingCounters::init();
@@ -4451,10 +4455,12 @@ void Threads::print_on(outputStream* st, bool print_stacks,
     st->cr();
   }
   CompileBroker::print_compiler_threads_on(st);
+#ifdef AARCH64
   if (JProfilingCacheRecording) {
     JitProfileCacheThread::print_jit_profile_cache_thread_info_on(st);
     st->cr();
   }
+#endif
   if (UseAsyncGCLog) {
     AsyncLogWriter* aio_writer = AsyncLogWriter::instance();
     if (aio_writer != NULL) {

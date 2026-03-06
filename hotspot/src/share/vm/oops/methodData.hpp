@@ -30,7 +30,6 @@
 #include "oops/method.hpp"
 #include "oops/oop.hpp"
 #include "runtime/orderAccess.hpp"
-#include "jprofilecache/jitProfileRecord.hpp"
 
 class BytecodeStream;
 class KlassSizeStats;

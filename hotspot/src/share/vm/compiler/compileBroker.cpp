@@ -1165,6 +1165,22 @@ void CompileBroker::mark_on_stack() {
 // CompileBroker::compile_method
 //
 // Request compilation of a method.
+#ifdef ASSERT
+static bool is_linked_jprofile_conservative_compilation(methodHandle method,
+                                                        const char* comment) {
+#ifdef AARCH64
+  return comment != NULL &&
+         strcmp(comment, "JitProfileCache") == 0 &&
+         JProfilingCacheCompileAdvance &&
+         !ProfileCacheAggressiveInit &&
+         method->method_holder()->oop_is_instance() &&
+         InstanceKlass::cast(method->method_holder())->is_linked();
+#else
+  return false;
+#endif
+}
+#endif
+
 void CompileBroker::compile_method_base(methodHandle method,
                                         int osr_bci,
                                         int comp_level,
@@ -1180,8 +1196,9 @@ void CompileBroker::compile_method_base(methodHandle method,
   guarantee(!method->is_abstract(), "cannot compile abstract methods");
   assert(method->method_holder()->oop_is_instance(),
          "sanity check");
-  assert(!method->method_holder()->is_not_initialized(),
-         "method holder must be initialized");
+  assert(!method->method_holder()->is_not_initialized() ||
+         is_linked_jprofile_conservative_compilation(method, comment),
+         "method holder must be initialized or be a linked JProfileCache conservative compile");
   assert(!method->is_method_handle_intrinsic(), "do not enqueue these guys");
 
   if (CIPrintRequests) {
@@ -1341,7 +1358,9 @@ nmethod* CompileBroker::compile_method(methodHandle method, int osr_bci,
   assert(method->method_holder()->oop_is_instance(), "not an instance method");
   assert(osr_bci == InvocationEntryBci || (0 <= osr_bci && osr_bci < method->code_size()), "bci out of range");
   assert(!method->is_abstract() && (osr_bci == InvocationEntryBci || !method->is_native()), "cannot compile abstract/native methods");
-  assert(!method->method_holder()->is_not_initialized(), "method holder must be initialized");
+  assert(!method->method_holder()->is_not_initialized() ||
+         is_linked_jprofile_conservative_compilation(method, comment),
+         "method holder must be initialized or be a linked JProfileCache conservative compile");
   // allow any levels for WhiteBox
   assert(WhiteBoxAPI || TieredCompilation || comp_level == CompLevel_highest_tier, "only CompLevel_highest_tier must be used in non-tiered");
   // return quickly if possible
