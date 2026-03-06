@@ -4193,50 +4193,6 @@ class CommandLineFlags {
   diagnostic(bool, PrintAsyncGCLog, false,                                  \
           "Print some information of Async GC Log")                         \
                                                                             \
-  experimental(bool, JProfilingCacheRecording, false,                       \
-          "Collect profiling information for JProfilingCache")              \
-                                                                            \
-  experimental(bool, JProfilingCacheCompileAdvance, false,                  \
-          "Enable JProfilingCacheCompileAdvance from a log file")           \
-                                                                            \
-  experimental(ccstr, ProfilingCacheLogLevel, "info",                       \
-          "Log level for JProfilingCache")                                  \
-                                                                            \
-  experimental(ccstr, ProfilingCacheFile, NULL,                             \
-          "Log file name for JProfilingCache")                              \
-                                                                            \
-  experimental(uintx, JProfilingCacheRecordTime, 0,                         \
-          "Sleep time (in seconds) before flushing profling "               \
-          "information to log file ")                                       \
-                                                                            \
-  experimental(uintx, CompilationProfileCacheAppID, 0,                      \
-          "Application ID written in log file for verification ")           \
-                                                                            \
-  experimental(ccstr, CompilationProfileCacheExclude, NULL,                 \
-          "JProfilingCacheCompileAdvance excluding list ")                  \
-                                                                            \
-  experimental(bool, CompilationProfileCacheExplicitDeopt, false,           \
-          "Deoptimize JProfileCache methods by explicit api")               \
-                                                                            \
-  experimental(uintx, JProfilingCacheDeoptTime, 1200,                       \
-          "Sleep time (in seconds) before deoptimizing methods "            \
-          "compiled by JProfileCache ")                                     \
-                                                                            \
-  diagnostic(uintx, CompilationProfileCacheDeoptMinInterval, 5,             \
-          "JProfileCache method deoptimization minimum interval (in seconds)")    \
-                                                                            \
-  diagnostic(uintx, CompilationProfileCacheDeoptNumOfMethodsPerIter, 10,    \
-          "The max number of methods marked for "                           \
-          "deoptimization per iteration")                                   \
-                                                                            \
-  diagnostic(bool, CompilationProfileCacheResolveClassEagerly, true,        \
-          "resolve class from constant pool eagerly")                       \
-                                                                            \
-  experimental(bool, DeoptimizeBeforeProfileCache, false,                   \
-          "Deoptimize recorded methods before JProfileCache compilation")   \
-                                                                            \
-  experimental(intx, CompilationProfileCacheRecordMinLevel, 3,              \
-          "Minimal compilation level recorded in JProfileCache recording phase")  \
 /*
  *  Macros for factoring of globals
  */

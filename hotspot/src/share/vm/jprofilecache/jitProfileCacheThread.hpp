@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2025, Huawei Technologies Co., Ltd. All rights reserved.
- * Copyright (c) 2019 Alibaba Group Holding Limited. All Rights Reserved.
+* Copyright (c) 2025, Huawei Technologies Co., Ltd. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -20,7 +19,6 @@
  * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
  * or visit www.oracle.com if you need additional information or have any
  * questions.
- *
  */
 
 #ifndef SHARE_VM_JPROFILECACHE_JITPROFILECACHETHREAD_HPP
@@ -28,30 +26,29 @@
 
 #include "runtime/thread.hpp"
 
-class JitProfileCacheThread : public NamedThread {
+// Thread to trigger the load of class data and profile info on delay
+class JitProfileCacheThread : public AllStatic {
 public:
-  virtual void run();
 
-  unsigned int interval_seconds()   { return _interval_seconds; }
+  static unsigned int interval_seconds()   { return _interval_seconds; }
 
-  void         set_interval_seconds(unsigned int sec) { _interval_seconds = sec; }
+  static void  set_interval_seconds(unsigned int sec) { _interval_seconds = sec; }
 
-  bool         is_active() { return _is_active; }
+  static bool  is_active() { return _is_active; }
 
-  static void  launch_with_delay(unsigned int sec);
+  static void  launch_with_delay(unsigned int sec, TRAPS);
+
+  static void  load_class_thread_entry(JavaThread* thread, TRAPS);
 
   static void  print_jit_profile_cache_thread_info_on(outputStream* st);
 
-protected:
-  JitProfileCacheThread(unsigned int sec);
-  virtual ~JitProfileCacheThread();
-
-
 private:
-  unsigned int    _interval_seconds;
-  volatile bool   _is_active;
+  static void run(TRAPS);
 
-  static JitProfileCacheThread* _jprofilecache_thread;
+  static unsigned int    _interval_seconds;
+  static volatile bool   _is_active;
+
+  static JavaThread* _jprofilecache_thread;
 };
 
 #endif //SHARE_VM_JPROFILECACHE_JITPROFILECACHETHREAD_HPP

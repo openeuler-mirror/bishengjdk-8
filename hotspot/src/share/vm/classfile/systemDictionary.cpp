@@ -35,6 +35,9 @@
 #include "classfile/sharedClassUtil.hpp"
 #include "classfile/systemDictionaryShared.hpp"
 #endif
+#ifdef AARCH64
+#include "jprofilecache/jitProfileCache.hpp"
+#endif
 #include "classfile/vmSymbols.hpp"
 #include "compiler/compileBroker.hpp"
 #include "interpreter/bytecodeStream.hpp"
@@ -296,6 +299,7 @@ Klass* SystemDictionary::resolve_array_class_or_null(Symbol* class_name,
   return k;
 }
 
+#ifdef AARCH64
 class SuperClassRecursionTracker : public StackObj {
 public:
   SuperClassRecursionTracker() {
@@ -319,6 +323,7 @@ protected:
 private:
   Thread* _thread;
 };
+#endif // AARCH64
 
 // Must be called for any super-class or super-interface resolution
 // during class definition to allow class circularity checking
@@ -421,6 +426,7 @@ Klass* SystemDictionary::resolve_super_or_fail(Symbol* child_name,
   assert(class_name != NULL, "null super class for resolving");
   // Resolve the super class or interface, check results on return
   Klass* superk = NULL;
+#ifdef AARCH64
   if (JProfilingCacheCompileAdvance) {
     SuperClassRecursionTracker superClassRecursionTracker;
     superk =
@@ -428,7 +434,9 @@ Klass* SystemDictionary::resolve_super_or_fail(Symbol* child_name,
                                         class_loader,
                                         protection_domain,
                                         THREAD);
-  } else {
+  } else
+#endif
+  {
     superk =
       SystemDictionary::resolve_or_null(class_name,
                                         class_loader,
@@ -942,6 +950,7 @@ Klass* SystemDictionary::resolve_instance_class_or_null(Symbol* name,
   }
 #endif
 
+#ifdef AARCH64
   if (JProfilingCacheCompileAdvance) {
     if (!class_has_been_loaded) {
       JitProfileCache* jprofilecache = JitProfileCache::instance();
@@ -949,6 +958,7 @@ Klass* SystemDictionary::resolve_instance_class_or_null(Symbol* name,
       jprofilecache->preloader()->resolve_loaded_klass(k());
     }
   }
+#endif
 
   // return if the protection domain in NULL
   if (protection_domain() == NULL) return k();
@@ -1310,11 +1320,13 @@ Klass* SystemDictionary::resolve_from_stream(Symbol* class_name,
     }
   } );
 
+#ifdef AARCH64
   if (JProfilingCacheCompileAdvance) {
     JitProfileCache* jprofilecache = JitProfileCache::instance();
     assert(jprofilecache != NULL, "sanity check");
     jprofilecache->preloader()->resolve_loaded_klass(k());
   }
+#endif
 
   return k();
 }

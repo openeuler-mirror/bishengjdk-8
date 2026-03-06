@@ -53,14 +53,14 @@
 #undef jprofilecache_log_enabled
 #endif
 
-#define jprofilecache_log_error(...)     (!log_is_enabled(Error, __VA_ARGS__))    ? (void)0 : tty->print_cr
-#define jprofilecache_log_warning(...)   (!log_is_enabled(Warning, __VA_ARGS__))  ? (void)0 : tty->print_cr
-#define jprofilecache_log_info(...)      (!log_is_enabled(Info, __VA_ARGS__))     ? (void)0 : tty->print_cr
-#define jprofilecache_log_debug(...)     (!log_is_enabled(Debug, __VA_ARGS__))    ? (void)0 : tty->print_cr
-#define jprofilecache_log_trace(...)     (!log_is_enabled(Trace, __VA_ARGS__))    ? (void)0 : tty->print_cr
+#define jprofilecache_log_error(tag, ...)     do { if (log_is_enabled(Error, tag)) JitProfileCacheLog::print(LogLevel::Error, __VA_ARGS__); } while (0)
+#define jprofilecache_log_warning(tag, ...)   do { if (log_is_enabled(Warning, tag)) JitProfileCacheLog::print(LogLevel::Warning, __VA_ARGS__); } while (0)
+#define jprofilecache_log_info(tag, ...)      do { if (log_is_enabled(Info, tag)) JitProfileCacheLog::print(LogLevel::Info, __VA_ARGS__); } while (0)
+#define jprofilecache_log_debug(tag, ...)     do { if (log_is_enabled(Debug, tag)) JitProfileCacheLog::print(LogLevel::Debug, __VA_ARGS__); } while (0)
+#define jprofilecache_log_trace(tag, ...)     do { if (log_is_enabled(Trace, tag)) JitProfileCacheLog::print(LogLevel::Trace, __VA_ARGS__); } while (0)
 
 
-#define log_is_enabled(level, ...) (JitProfileCacheLog::is_level(LogLevel::level))
+#define log_is_enabled(level, tag) (JitProfileCacheLog::is_level(LogLevel::level))
 
 class LogLevel : public AllStatic {
 public:
@@ -85,6 +85,8 @@ public:
 
         return false;
     }
+
+    static void print(LogLevelType level, const char* format, ...) ATTRIBUTE_PRINTF(2, 3);
 };
 
 #endif

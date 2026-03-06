@@ -729,13 +729,17 @@ Compile::Compile( ciEnv* ci_env, C2Compiler* compiler, ciMethod* target, int osr
 
   print_compile_messages();
 
+#ifdef AARCH64
   if (JProfilingCacheCompileAdvance) {
     bool fields_resolved = ci_env->are_method_fields_all_resolved(method());
     if (!fields_resolved) {
-      _failure_reason = "fields needed by method are not all resolved";
+      stringStream ss;
+      ss.print("Cannot parse method: fields needed by method are not all resolved");
+      record_method_not_compilable(ss.as_string());
       return;
     }
   }
+#endif
 
   _ilt = InlineTree::build_inline_tree_root();
 

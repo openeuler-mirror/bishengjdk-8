@@ -53,6 +53,9 @@
 #include "classfile/metadataOnStackMark.hpp"
 #include "classfile/systemDictionary.hpp"
 #include "code/codeCache.hpp"
+#ifdef AARCH64
+#include "jprofilecache/jitProfileCache.hpp"
+#endif
 #include "memory/gcLocker.hpp"
 #include "memory/metadataFactory.hpp"
 #include "memory/metaspaceShared.hpp"
@@ -759,12 +762,14 @@ bool ClassLoaderDataGraph::do_unloading(BoolObjectClosure* is_alive_closure, boo
   bool seen_dead_loader = false;
 
   // Unload ProfileCacheClassChain
+#ifdef AARCH64
   if (JProfilingCacheCompileAdvance) {
     JitProfileCache* jpc = JitProfileCache::instance();
     assert(jpc != NULL, "JitProfileCache object is null");
     ProfileCacheClassChain* chain = jpc->preloader()->chain();
     chain->unload_class(is_alive_closure);
   }
+#endif
 
   // Save previous _unloading pointer for CMS which may add to unloading list before
   // purging and we don't want to rewalk the previously unloaded class loader data.

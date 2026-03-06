@@ -35,7 +35,10 @@
 #include "interpreter/oopMapCache.hpp"
 #include "interpreter/rewriter.hpp"
 #include "jvmtifiles/jvmti.h"
+#ifdef AARCH64
 #include "jprofilecache/jitProfileCache.hpp"
+#include "jprofilecache/jitProfileRecord.hpp"
+#endif
 #include "memory/genOopClosures.inline.hpp"
 #include "memory/heapInspection.hpp"
 #include "memory/iterator.inline.hpp"
@@ -390,12 +393,14 @@ void InstanceKlass::deallocate_contents(ClassLoaderData* loader_data) {
   // Need to take this class off the class loader data list.
   loader_data->remove_class(this);
 
-  if (JProfilingCacheCompileAdvance || JProfilingCacheRecording) {
+#ifdef AARCH64
+  if (JProfilingCacheRecording) {
     if (source_file_path() != NULL) {
       source_file_path()->decrement_refcount();
       set_source_file_path(NULL);
     }
   }
+#endif
 
   // The array_klass for this class is created later, after error handling.
   // For class redefinition, we keep the original class so this scratch class
@@ -933,6 +938,9 @@ void InstanceKlass::initialize_impl(instanceKlassHandle this_oop, TRAPS) {
   DTRACE_CLASSINIT_PROBE(required, InstanceKlass::cast(this_oop()), -1);
 
   bool wait = false;
+#ifdef AARCH64
+  int jpc_init_order = -1;
+#endif
 
   assert(THREAD->is_Java_thread(), "non-JavaThread in initialize_impl");
   JavaThread* jt = (JavaThread*)THREAD;
@@ -987,9 +995,11 @@ void InstanceKlass::initialize_impl(instanceKlassHandle this_oop, TRAPS) {
     this_oop->set_init_state(being_initialized);
     this_oop->set_init_thread(jt);
   }
+#ifdef AARCH64
   if (JProfilingCacheRecording) {
-    JitProfileCache::instance()->recorder()->assign_class_init_order(this_oop());
+    jpc_init_order = JitProfileCache::instance()->recorder()->assign_class_init_order(this_oop());
   }
+#endif
 
   // Step 7
   // Next, if C is a class rather than an interface, initialize its super class and super
@@ -1011,6 +1021,11 @@ void InstanceKlass::initialize_impl(instanceKlassHandle this_oop, TRAPS) {
     if (HAS_PENDING_EXCEPTION) {
       Handle e(THREAD, PENDING_EXCEPTION);
       CLEAR_PENDING_EXCEPTION;
+#ifdef AARCH64
+      if (JProfilingCacheRecording) {
+        JitProfileCache::instance()->recorder()->mark_class_init_result(jpc_init_order, false);
+      }
+#endif
       {
         EXCEPTION_MARK;
         // Locks object, set state, and notify all waiting threads
@@ -1039,6 +1054,11 @@ void InstanceKlass::initialize_impl(instanceKlassHandle this_oop, TRAPS) {
   // Step 9
   if (!HAS_PENDING_EXCEPTION) {
     this_oop->set_initialization_state_and_notify(fully_initialized, CHECK);
+#ifdef AARCH64
+    if (JProfilingCacheRecording) {
+      JitProfileCache::instance()->recorder()->mark_class_init_result(jpc_init_order, true);
+    }
+#endif
     { ResourceMark rm(THREAD);
       debug_only(this_oop->vtable()->verify(tty, true);)
     }
@@ -1047,6 +1067,11 @@ void InstanceKlass::initialize_impl(instanceKlassHandle this_oop, TRAPS) {
     // Step 10 and 11
     Handle e(THREAD, PENDING_EXCEPTION);
     CLEAR_PENDING_EXCEPTION;
+#ifdef AARCH64
+    if (JProfilingCacheRecording) {
+      JitProfileCache::instance()->recorder()->mark_class_init_result(jpc_init_order, false);
+    }
+#endif
     // JVMTI has already reported the pending exception
     // JVMTI internal flag reset is needed in order to report ExceptionInInitializerError
     JvmtiExport::clear_detected_exception(jt);

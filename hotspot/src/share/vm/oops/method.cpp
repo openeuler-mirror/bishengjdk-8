@@ -32,7 +32,6 @@
 #include "interpreter/bytecodes.hpp"
 #include "interpreter/interpreter.hpp"
 #include "interpreter/oopMapCache.hpp"
-#include "jprofilecache/jitProfileCache.hpp"
 #include "memory/gcLocker.hpp"
 #include "memory/generation.hpp"
 #include "memory/heapInspection.hpp"
@@ -58,6 +57,10 @@
 #include "runtime/signature.hpp"
 #include "utilities/quickSort.hpp"
 #include "utilities/xmlstream.hpp"
+#ifdef AARCH64
+#include "jprofilecache/jitProfileCacheFileParser.hpp"
+#include "jprofilecache/jitProfileClassChain.hpp"
+#endif
 
 PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 
@@ -98,11 +101,14 @@ Method::Method(ConstMethod* xconst, AccessFlags access_flags, int size) {
   clear_method_counters();
   set_vtable_index(Method::garbage_vtable_index);
 
+#ifdef AARCH64
   set_first_invoke_init_order(INVALID_FIRST_INVOKE_INIT_ORDER);
   set_compiled_by_jprofilecache(false);
+  set_jpc_method_holder(NULL);
 
 #ifndef PRODUCT
   set_deopted_by_jprofilecache(false);
+#endif
 #endif
 
   // Fix and bury in Method*

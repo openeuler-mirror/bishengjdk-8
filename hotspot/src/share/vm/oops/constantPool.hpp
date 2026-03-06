@@ -930,12 +930,14 @@ class ConstantPool : public Metadata {
   static void preload_and_initialize_all_classes(ConstantPool* constant_pool, TRAPS);
 #endif
 
+#ifdef AARCH64
   void preload_jprofilecache_classes(TRAPS);
 
   Klass* resolve_class_at_index(int constant_pool_index, TRAPS);
 
 private:
   void preload_classes_for_jprofilecache(Stack<InstanceKlass*, mtClass>& class_processing_stack, TRAPS);
+#endif
 };
 
 class SymbolHashMapEntry : public CHeapObj<mtSymbol> {

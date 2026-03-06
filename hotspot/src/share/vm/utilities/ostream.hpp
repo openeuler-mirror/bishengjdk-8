@@ -218,6 +218,7 @@ class randomAccessFileStream : public fileStream {
 public:
     randomAccessFileStream();
     randomAccessFileStream(const char* file_name, const char* open_mode);
+    explicit randomAccessFileStream(FILE* file) : fileStream(file, true) { }
     virtual ~randomAccessFileStream() {  }
     virtual void write(const char* data, size_t length);
 
