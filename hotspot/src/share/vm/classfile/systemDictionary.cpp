@@ -952,7 +952,7 @@ Klass* SystemDictionary::resolve_instance_class_or_null(Symbol* name,
 
 #ifdef AARCH64
   if (JProfilingCacheCompileAdvance) {
-    if (!class_has_been_loaded) {
+    if (!k.is_null()) {
       JitProfileCache* jprofilecache = JitProfileCache::instance();
       assert(jprofilecache != NULL, "sanity check");
       jprofilecache->preloader()->resolve_loaded_klass(k());
