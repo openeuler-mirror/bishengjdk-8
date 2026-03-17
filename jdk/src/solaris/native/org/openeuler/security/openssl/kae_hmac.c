@@ -27,6 +27,7 @@
 #include "kae_exception.h"
 #include "kae_log.h"
 #include "kae_util.h"
+#include "ssl_utils.h"
 
 static const EVP_MD* EVPGetDigestByName(JNIEnv* env, const char* algo)
 {
@@ -38,17 +39,17 @@ static const EVP_MD* EVPGetDigestByName(JNIEnv* env, const char* algo)
     static const EVP_MD* sha512  = NULL;
 
     if (strcasecmp(algo, "md5") == 0) {
-        return md5 == NULL ? md5 = EVP_get_digestbyname(algo) : md5;
+        return md5 == NULL ? md5 = SSL_UTILS_EVP_get_digestbyname(algo) : md5;
     } else if (strcasecmp(algo, "sha1") == 0) {
-        return sha1 == NULL ? sha1 = EVP_get_digestbyname(algo) : sha1;
+        return sha1 == NULL ? sha1 = SSL_UTILS_EVP_get_digestbyname(algo) : sha1;
     } else if (strcasecmp(algo, "sha224") == 0) {
-        return sha224 == NULL ? sha224 = EVP_get_digestbyname(algo) : sha224;
+        return sha224 == NULL ? sha224 = SSL_UTILS_EVP_get_digestbyname(algo) : sha224;
     } else if (strcasecmp(algo, "sha256") == 0) {
-        return sha256 == NULL ? sha256 = EVP_get_digestbyname(algo) : sha256;
+        return sha256 == NULL ? sha256 = SSL_UTILS_EVP_get_digestbyname(algo) : sha256;
     } else if (strcasecmp(algo, "sha384") == 0) {
-        return sha384 == NULL ? sha384 = EVP_get_digestbyname(algo) : sha384;
+        return sha384 == NULL ? sha384 = SSL_UTILS_EVP_get_digestbyname(algo) : sha384;
     } else if (strcasecmp(algo, "sha512") == 0) {
-        return sha512 == NULL ? sha512 = EVP_get_digestbyname(algo) : sha512;
+        return sha512 == NULL ? sha512 = SSL_UTILS_EVP_get_digestbyname(algo) : sha512;
     } else {
         KAE_ThrowRuntimeException(env, "EVPGetDigestByName error");
         return 0;
@@ -96,14 +97,14 @@ JNIEXPORT jlong JNICALL Java_org_openeuler_security_openssl_KAEHMac_nativeInit
     (*env)->GetByteArrayRegion(env, key, 0, key_len, key_buffer);
 
     // create a hmac context
-    ctx = HMAC_CTX_new();
+    ctx = SSL_UTILS_HMAC_CTX_new();
     if (ctx == NULL) {
         KAE_ThrowRuntimeException(env, "Hmac_CTX_new invoked failed");
         goto cleanup;
     }
 
     // init hmac context with sc_key and evp_md
-    int result_code = HMAC_Init_ex(ctx, key_buffer, key_len, md, kaeEngine);
+    int result_code = SSL_UTILS_HMAC_Init_ex(ctx, key_buffer, key_len, md, kaeEngine);
     if (result_code == 0) {
         KAE_ThrowRuntimeException(env, "Hmac_Init_ex invoked failed");
         goto cleanup;
@@ -113,7 +114,7 @@ JNIEXPORT jlong JNICALL Java_org_openeuler_security_openssl_KAEHMac_nativeInit
 
 cleanup:
     free(key_buffer);
-    HMAC_CTX_free(ctx);
+    SSL_UTILS_HMAC_CTX_free(ctx);
     return 0;
 }
 
@@ -146,7 +147,7 @@ JNIEXPORT void JNICALL Java_org_openeuler_security_openssl_KAEHMac_nativeUpdate
         return;
     }
     (*env)->GetByteArrayRegion(env, input, in_offset, in_len, buffer);
-    if (!HMAC_Update(ctx, (unsigned char*) buffer, in_len)) {
+    if (!SSL_UTILS_HMAC_Update(ctx, (unsigned char*) buffer, in_len)) {
         KAE_ThrowRuntimeException(env, "Hmac_Update invoked failed");
     }
     free(buffer);
@@ -179,7 +180,7 @@ JNIEXPORT jint JNICALL Java_org_openeuler_security_openssl_KAEHMac_nativeFinal
     }
     // do final
     unsigned int bytesWritten = 0;
-    int result_code = HMAC_Final(ctx, (unsigned char*) temp_result, &bytesWritten);
+    int result_code = SSL_UTILS_HMAC_Final(ctx, (unsigned char*) temp_result, &bytesWritten);
     if (result_code == 0) {
         KAE_ThrowRuntimeException(env, "Hmac_Final invoked failed");
         goto cleanup;
@@ -203,6 +204,6 @@ JNIEXPORT void JNICALL Java_org_openeuler_security_openssl_KAEHMac_nativeFree
     (JNIEnv* env, jclass cls, jlong hmac_ctx) {
     HMAC_CTX* ctx = (HMAC_CTX*) hmac_ctx;
     if (ctx != NULL) {
-        HMAC_CTX_free(ctx);
+        SSL_UTILS_HMAC_CTX_free(ctx);
     }
 }

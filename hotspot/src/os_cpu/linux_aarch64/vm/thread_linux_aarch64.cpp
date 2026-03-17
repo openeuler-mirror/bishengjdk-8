@@ -245,7 +245,12 @@ static void construct_path(char *dest, size_t dest_size, const char *base, const
   jio_snprintf(dest, dest_size, "%s%s", base, suffix);
 }
 
-static void create_jsa(const char* class_list_path, const char* appcds_path, const JavaVMInitArgs* original_args) {
+static const char* get_compressed_oops_suffix() {
+  return UseCompressedOops ? "_coop" : "_nocoop";
+}
+
+static void create_jsa_with_coop_option(const char* class_list_path, const char* appcds_path,
+                                        const JavaVMInitArgs* original_args, bool use_compressed_oops) {
   pid_t pid = fork();
   if (pid == 0) {
     // child process running on background
@@ -259,7 +264,7 @@ static void create_jsa(const char* class_list_path, const char* appcds_path, con
     int arg_count   = Arguments::num_jvm_args();
     char** vm_args  = Arguments::jvm_args_array();
 
-    int total_args = arg_count + 8;
+    int total_args = arg_count + 11;
     char** args = NEW_C_HEAP_ARRAY(char*, total_args + 1, mtInternal);
     int idx = 0;
 
@@ -268,24 +273,39 @@ static void create_jsa(const char* class_list_path, const char* appcds_path, con
     args[idx++] = os::strdup("-XX:+UseAppCDS");
 
     char shared_class_list_file[PATH_MAX];
-    char shared_archive_file[PATH_MAX];
     construct_path(shared_class_list_file, sizeof(shared_class_list_file), "-XX:SharedClassListFile=", class_list_path);
-    construct_path(shared_archive_file, sizeof(shared_archive_file), "-XX:SharedArchiveFile=", appcds_path);
+    args[idx++] = os::strdup(shared_class_list_file);
 
-    args[idx++] = strdup(shared_class_list_file);
-    args[idx++] = strdup(shared_archive_file);
+    char shared_archive_file[PATH_MAX];
+    construct_path(shared_archive_file, sizeof(shared_archive_file), "-XX:SharedArchiveFile=", appcds_path);
+    args[idx++] = os::strdup(shared_archive_file);
 
     args[idx++] = os::strdup("-classpath");
     args[idx++] = os::strdup(classpath);
+
+    // copy the original parameters and filter out the conflicting ones
     for (int i = 0; i < arg_count; i++) {
-      if (vm_args[i] != NULL) {
+      if (vm_args[i] != NULL && strstr(vm_args[i], "AutoSharedArchivePath") == NULL
+                             && strstr(vm_args[i], "JProfilingCacheAutoArchiveDir") == NULL
+                             && strstr(vm_args[i], "UseCompressedOops") == NULL) {
         args[idx++] = os::strdup(vm_args[i]);
       }
     }
+
+    args[idx++] = os::strdup("-Xms128m");
+    args[idx++] = os::strdup("-Xmx256m");
+
+    if (use_compressed_oops) {
+      args[idx++] = os::strdup("-XX:+UseCompressedOops");
+    } else {
+      args[idx++] = os::strdup("-XX:-UseCompressedOops");
+    }
+
     args[idx++] = os::strdup("-version");
     args[idx] = NULL;
 
     if (PrintAutoAppCDS) {
+      tty->print_cr("Creating JSA with UseCompressedOops=%s", use_compressed_oops ? "true" : "false");
       int i = 0;
       while (args[i] != NULL) {
         tty->print_cr("args[%d] = %s", i, args[i]);
@@ -293,6 +313,34 @@ static void create_jsa(const char* class_list_path, const char* appcds_path, con
       }
     }
     execv(java_path, args);
+  }
+}
+
+// create missing JSA files (both coop and nocoop versions if needed)
+static void try_create_missing_jsa(const char* class_list_path, const char* base_path,
+                                   const JavaVMInitArgs* original_args) {
+  char appcds_coop_path[PATH_MAX];
+  char appcds_nocoop_path[PATH_MAX];
+
+  construct_path(appcds_coop_path, sizeof(appcds_coop_path), base_path, "/appcds_coop.jsa");
+  construct_path(appcds_nocoop_path, sizeof(appcds_nocoop_path), base_path, "/appcds_nocoop.jsa");
+
+  struct stat st;
+  bool coop_exists = (stat(appcds_coop_path, &st) == 0);
+  bool nocoop_exists = (stat(appcds_nocoop_path, &st) == 0);
+
+  if (!coop_exists) {
+    if (PrintAutoAppCDS) {
+      tty->print_cr("Creating missing JSA file with compressed oops: %s", appcds_coop_path);
+    }
+    create_jsa_with_coop_option(class_list_path, appcds_coop_path, original_args, true);
+  }
+
+  if (!nocoop_exists) {
+    if (PrintAutoAppCDS) {
+      tty->print_cr("Creating missing JSA file without compressed oops: %s", appcds_nocoop_path);
+    }
+    create_jsa_with_coop_option(class_list_path, appcds_nocoop_path, original_args, false);
   }
 }
 
@@ -312,54 +360,79 @@ void JavaThread::handle_appcds_for_executor(const JavaVMInitArgs* args) {
   struct stat st;
   if (stat(base_path, &st) != 0) {
     if (mkdir(base_path, 0755) != 0) {
-      vm_exit_during_initialization(err_msg("can't create dirs %s : %s", base_path, strerror(errno)));
+      vm_exit_during_initialization(err_msg("Can't create dirs %s : %s", base_path, strerror(errno)));
+    }
+  } else {
+    if (!S_ISDIR(st.st_mode)) {
+      vm_exit_during_initialization(err_msg("Path %s exists but is not a directory.", base_path));
+    }
+
+    if (access(base_path, R_OK | W_OK | X_OK) != 0) {
+      vm_exit_during_initialization(err_msg("Insufficient permissions for directory %s. Requires read,"
+                                    " write, and execute access. Error: %s", base_path, strerror(errno)));
     }
   }
 
   char class_list_path[PATH_MAX];
-  char appcds_path[PATH_MAX];
+  char current_appcds_path[PATH_MAX];
 
   construct_path(class_list_path, sizeof(class_list_path), base_path, "/appcds.lst");
-  construct_path(appcds_path, sizeof(appcds_path), base_path, "/appcds.jsa");
+
+  // build the current JSA file name based on UseCompressedOops
+  const char* suffix = get_compressed_oops_suffix();
+  char appcds_filename[64];
+  jio_snprintf(appcds_filename, sizeof(appcds_filename), "/appcds%s.jsa", suffix);
+
+  construct_path(current_appcds_path, sizeof(current_appcds_path), base_path, appcds_filename);
 
   if (PrintAutoAppCDS) {
     tty->print_cr("classlist file : %s", class_list_path);
-    tty->print_cr("jsa file : %s", appcds_path);
+    tty->print_cr("appcds jsa file : %s", current_appcds_path);
+    tty->print_cr("UseCompressedOops : %s", UseCompressedOops ? "true" : "false");
   }
 
   const char* class_list_ptr = class_list_path;
-  const char* appcds_ptr = appcds_path;
+  const char* appcds_ptr = current_appcds_path;
 
-  if (stat(appcds_path, &st) == 0) {
+  if (stat(current_appcds_path, &st) == 0) {
+    try_create_missing_jsa(class_list_path, base_path, args);
+
     FLAG_SET_CMDLINE(bool, UseAppCDS, true);
     FLAG_SET_CMDLINE(bool, UseSharedSpaces, true);
     FLAG_SET_CMDLINE(bool, RequireSharedSpaces, true);
     CommandLineFlags::ccstrAtPut("SharedArchiveFile", &appcds_ptr, Flag::COMMAND_LINE);
     if (PrintAutoAppCDS) {
-      tty->print_cr("Use AppCDS JSA.");
+      tty->print_cr("The process %d use AppCDS jsa.", os::current_process_id());
     }
     return;
   }
 
   if (stat(class_list_path, &st) == 0) {
     if (!can_read_classlist(class_list_path)) {
-      if(PrintAutoAppCDS) {
-        tty->print_cr("classlist is generating.");
+      if (PrintAutoAppCDS) {
+        tty->print_cr("classlist is generating, can't create jsa by %d now.", os::current_process_id());
       }
       return;
     }
-    if (stat(appcds_path, &st) != 0) {
+
+    // generate two versions of JSA
+    if (stat(current_appcds_path, &st) != 0) {
       if (PrintAutoAppCDS) {
-        tty->print_cr("Create JSA file.");
+        tty->print_cr("generate jsa files by %d.", os::current_process_id());
       }
-      create_jsa(class_list_path, appcds_path, args);
+      try_create_missing_jsa(class_list_path, base_path, args);
     }
   } else {
     can_read_classlist(class_list_path);
+    if (PrintAutoAppCDS) {
+      tty->print_cr("generate classlist file by %d.", os::current_process_id());
+    }
+    if (NUMANodesRandom != 0) {
+      NUMANodesRandom = 0;
+    }
     FLAG_SET_CMDLINE(bool, UseAppCDS, true);
     FLAG_SET_CMDLINE(bool, UseSharedSpaces, false);
     FLAG_SET_CMDLINE(bool, RequireSharedSpaces, false);
     CommandLineFlags::ccstrAtPut("DumpLoadedClassList", &class_list_ptr, Flag::COMMAND_LINE);
   }
 }
-

@@ -459,7 +459,7 @@ class Arguments : AllStatic {
   static bool parse_uintx(const char* value, uintx* uintx_arg,
                             uintx min_size);
   // Apply ergonomics
-  static jint apply_ergo();
+  static jint apply_ergo(JavaVMInitArgs* args);
   // Adjusts the arguments after the OS have adjusted the arguments
   static jint adjust_after_os();
 

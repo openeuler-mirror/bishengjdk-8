@@ -27,6 +27,7 @@
 #include "kae_util.h"
 #include "kae_exception.h"
 #include "org_openeuler_security_openssl_KAERSAKeyPairGenerator.h"
+#include "ssl_utils.h"
 #define KAE_RSA_PARAM_SIZE 8
 
 // rsa param index
@@ -46,14 +47,14 @@ static const char* rsaParamNames[] = {"n", "e", "d", "p", "q", "dmp1", "dmq1", "
 
 // rsa get rsa param function list
 static const BIGNUM* (* GetRSAParamFunctionList[])(const RSA*) = {
-    RSA_get0_n,
-    RSA_get0_e,
-    RSA_get0_d,
-    RSA_get0_p,
-    RSA_get0_q,
-    RSA_get0_dmp1,
-    RSA_get0_dmq1,
-    RSA_get0_iqmp
+    SSL_UTILS_RSA_get0_n,
+    SSL_UTILS_RSA_get0_e,
+    SSL_UTILS_RSA_get0_d,
+    SSL_UTILS_RSA_get0_p,
+    SSL_UTILS_RSA_get0_q,
+    SSL_UTILS_RSA_get0_dmp1,
+    SSL_UTILS_RSA_get0_dmq1,
+    SSL_UTILS_RSA_get0_iqmp
 };
 
 /*
@@ -67,7 +68,7 @@ static RSA* NewRSA(JNIEnv* env, jint keySize, jbyteArray publicExponent) {
     KAE_TRACE("NewRSA: kaeEngine => %p", kaeEngine);
 
     // new rsa
-    RSA* rsa = RSA_new_method(kaeEngine);
+    RSA* rsa = SSL_UTILS_RSA_new_method(kaeEngine);
     if (rsa == NULL) {
         KAE_ThrowFromOpenssl(env, "RSA_new_method", KAE_ThrowRuntimeException);
         return NULL;
@@ -80,10 +81,10 @@ static RSA* NewRSA(JNIEnv* env, jint keySize, jbyteArray publicExponent) {
     }
 
     // generate rsa key
-    int result_code = RSA_generate_key_ex(rsa, keySize, exponent, NULL);
+    int result_code = SSL_UTILS_RSA_generate_key_ex(rsa, keySize, exponent, NULL);
     KAE_ReleaseBigNumFromByteArray(exponent);
     if (result_code <= 0) {
-        RSA_free(rsa);
+        SSL_UTILS_RSA_free(rsa);
         KAE_ThrowFromOpenssl(env, "RSA_generate_key_ex", KAE_ThrowRuntimeException);
         return NULL;
     }
@@ -95,7 +96,7 @@ static RSA* NewRSA(JNIEnv* env, jint keySize, jbyteArray publicExponent) {
  */
 static void ReleaseRSA(RSA* rsa) {
     if (rsa != NULL) {
-        RSA_free(rsa);
+        SSL_UTILS_RSA_free(rsa);
     }
 }
 

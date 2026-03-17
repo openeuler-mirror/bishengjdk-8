@@ -4340,10 +4340,12 @@ jint Arguments::parse(const JavaVMInitArgs* args) {
   return JNI_OK;
 }
 
-jint Arguments::apply_ergo() {
+jint Arguments::apply_ergo(JavaVMInitArgs* args) {
 
   // Set flags based on ergonomics.
   set_ergonomics_flags();
+
+  AARCH64_ONLY(JavaThread::handle_appcds_for_executor(args);)
 
   jint result = set_shared_spaces_flags();
   if (result != JNI_OK) return result;
