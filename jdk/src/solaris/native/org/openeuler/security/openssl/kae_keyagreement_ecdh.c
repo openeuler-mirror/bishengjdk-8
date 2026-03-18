@@ -27,6 +27,7 @@
 #include "kae_log.h"
 #include "kae_exception.h"
 #include "kae_util.h"
+#include "ssl_utils.h"
 #include "org_openeuler_security_openssl_KAEECDHKeyAgreement.h"
 
 static void FreeGenerateSecretParam(BIGNUM* s, BIGNUM* wX, BIGNUM* wY,
@@ -36,13 +37,13 @@ static void FreeGenerateSecretParam(BIGNUM* s, BIGNUM* wX, BIGNUM* wY,
     KAE_ReleaseBigNumFromByteArray(wX);
     KAE_ReleaseBigNumFromByteArray(wY);
     if (pub != NULL) {
-        EC_POINT_free(pub);
+        SSL_UTILS_EC_POINT_free(pub);
     }
     if (eckey != NULL) {
-        EC_KEY_free(eckey);
+        SSL_UTILS_EC_KEY_free(eckey);
     }
     if (group != NULL) {
-        EC_GROUP_free(group);
+        SSL_UTILS_EC_GROUP_free(group);
     }
     if (shareKey != NULL) {
         memset(shareKey, 0, shareKeyLen);
@@ -67,9 +68,9 @@ JNIEXPORT jbyteArray JNICALL Java_org_openeuler_security_openssl_KAEECDHKeyAgree
     jbyteArray javaBytes = NULL;
     unsigned char* shareKey = NULL;
     const char *curve = (*env)->GetStringUTFChars(env, curveName, 0);
-    int nid = OBJ_sn2nid(curve);
+    int nid = SSL_UTILS_OBJ_sn2nid(curve);
     (*env)->ReleaseStringUTFChars(env, curveName, curve);
-    if ((nid == NID_undef) || (group = EC_GROUP_new_by_curve_name(nid)) == NULL) {
+    if ((nid == NID_undef) || (group = SSL_UTILS_EC_GROUP_new_by_curve_name(nid)) == NULL) {
         goto cleanup;
     }
     if ((s = KAE_GetBigNumFromByteArray(env, sArr)) == NULL || (wX = KAE_GetBigNumFromByteArray(env, wXArr)) == NULL
@@ -77,21 +78,21 @@ JNIEXPORT jbyteArray JNICALL Java_org_openeuler_security_openssl_KAEECDHKeyAgree
         KAE_ThrowOOMException(env, "failed to allocate BN_new");
         goto cleanup;
     }
-    if ((eckey = EC_KEY_new()) == NULL || !EC_KEY_set_group(eckey, group)) {
+    if ((eckey = SSL_UTILS_EC_KEY_new()) == NULL || !SSL_UTILS_EC_KEY_set_group(eckey, group)) {
         goto cleanup;
     }
-    if ((pub = EC_POINT_new(group)) == NULL) {
+    if ((pub = SSL_UTILS_EC_POINT_new(group)) == NULL) {
         goto cleanup;
     }
-    if (!EC_POINT_set_affine_coordinates_GFp(group, pub, wX, wY, NULL)) {
+    if (!SSL_UTILS_EC_POINT_set_affine_coordinates_GFp(group, pub, wX, wY, NULL)) {
         goto cleanup;
     }
-    if (!EC_KEY_set_public_key(eckey, pub) || !EC_KEY_set_private_key(eckey, s)) {
+    if (!SSL_UTILS_EC_KEY_set_public_key(eckey, pub) || !SSL_UTILS_EC_KEY_set_private_key(eckey, s)) {
         goto cleanup;
     }
 
     // Get the length of secret key, in bytes.
-    int expectSecretLen = (EC_GROUP_get_degree(group) + 7) / 8;
+    int expectSecretLen = (SSL_UTILS_EC_GROUP_get_degree(group) + 7) / 8;
     if ((shareKey = malloc(expectSecretLen)) == NULL) {
         KAE_ThrowOOMException(env, "malloc error");
         goto cleanup;
@@ -99,7 +100,7 @@ JNIEXPORT jbyteArray JNICALL Java_org_openeuler_security_openssl_KAEECDHKeyAgree
     memset(shareKey, 0, expectSecretLen);
 
     // Perform ecdh keyagreement.
-    if (ECDH_compute_key(shareKey, expectSecretLen, pub, eckey, NULL) != expectSecretLen) {
+    if (SSL_UTILS_ECDH_compute_key(shareKey, expectSecretLen, pub, eckey, NULL) != expectSecretLen) {
         goto cleanup;
     }
 

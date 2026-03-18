@@ -26,9 +26,6 @@
 
 package org.openeuler.security.openssl;
 
-import sun.security.ec.ECPrivateKeyImpl;
-import sun.security.ec.ECPublicKeyImpl;
-
 import java.math.BigInteger;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidParameterException;
@@ -44,8 +41,6 @@ import java.security.spec.ECGenParameterSpec;
 import java.security.spec.ECParameterSpec;
 import java.security.spec.ECPoint;
 import java.security.spec.EllipticCurve;
-import java.util.HashMap;
-import java.util.Map;
 
 public class KAEECKeyPairGenerator extends KeyPairGeneratorSpi {
     private ECParameterSpec param = null;
@@ -63,7 +58,7 @@ public class KAEECKeyPairGenerator extends KeyPairGeneratorSpi {
         this.param = getParamsByCurve(curveName);
     }
 
-    private ECParameterSpec getParamsByCurve(String curveName) {
+    protected ECParameterSpec getParamsByCurve(String curveName) {
         byte[][] params = nativeGenerateParam(curveName);
         // check params
         checkParams(params, curveName);
@@ -139,11 +134,11 @@ public class KAEECKeyPairGenerator extends KeyPairGeneratorSpi {
         BigInteger s = new BigInteger(keys[2]);
         ECPoint w = new ECPoint(wX, wY);
 
-        ECPrivateKeyImpl privateKey = null;
-        ECPublicKeyImpl publicKey = null;
+        KAEECPrivateKeyImpl privateKey;
+        KAEECPublicKeyImpl publicKey;
         try {
-            publicKey = new ECPublicKeyImpl(w, param);
-            privateKey = new ECPrivateKeyImpl(s, param);
+            publicKey = new KAEECPublicKeyImpl(w, param);
+            privateKey = new KAEECPrivateKeyImpl(s, param);
         } catch (InvalidKeyException e) {
             throw new ProviderException(e);
         }

@@ -30,6 +30,7 @@
 #include "kae_util.h"
 #include "kae_exception.h"
 #include "kae_log.h"
+#include "ssl_utils.h"
 #include "org_openeuler_security_openssl_KAEDHKeyAgreement.h"
 
 
@@ -63,7 +64,7 @@ JNIEXPORT jbyteArray JNICALL Java_org_openeuler_security_openssl_KAEDHKeyAgreeme
     }
     memset(secret, 0, pSizeInByte);
 
-    if ((dh = DH_new_method(kaeEngine)) == NULL) {
+    if ((dh = SSL_UTILS_DH_new_method(kaeEngine)) == NULL) {
         KAE_ThrowOOMException(env, "Allocate DH failed in nativeComputeKey.");
         goto cleanup;
     }
@@ -88,29 +89,29 @@ JNIEXPORT jbyteArray JNICALL Java_org_openeuler_security_openssl_KAEDHKeyAgreeme
         goto cleanup;
     }
 
-    if ((computeKeyRetBn = BN_new()) == NULL) {
+    if ((computeKeyRetBn = SSL_UTILS_BN_new()) == NULL) {
         KAE_ThrowOOMException(env, "Allocate BN failed.");
         goto cleanup;
     }
 
-    if (!DH_set0_pqg(dh, BN_dup(p_bn), NULL, BN_dup(g_bn))) {
+    if (!SSL_UTILS_DH_set0_pqg(dh, SSL_UTILS_BN_dup(p_bn), NULL, SSL_UTILS_BN_dup(g_bn))) {
         KAE_ThrowRuntimeException(env, "DH_set0_pqg failed.");
         goto cleanup;
     }
 
-    if (!DH_set0_key(dh,  NULL, BN_dup(x_bn))) {
+    if (!SSL_UTILS_DH_set0_key(dh,  NULL, SSL_UTILS_BN_dup(x_bn))) {
         KAE_ThrowRuntimeException(env, "DH_set0_key failed.");
         goto cleanup;
     }
 
-    computekeyLength = DH_compute_key(secret, y_bn, dh);
+    computekeyLength = SSL_UTILS_DH_compute_key(secret, y_bn, dh);
 
     if (computekeyLength  <= 0 ) {
         KAE_ThrowRuntimeException(env, "DH_compute_key failed.");
         goto cleanup;
     }
 
-    BN_bin2bn(secret, computekeyLength, computeKeyRetBn);
+    SSL_UTILS_BN_bin2bn(secret, computekeyLength, computeKeyRetBn);
 
     retByteArray = KAE_GetByteArrayFromBigNum(env, computeKeyRetBn);
     if (retByteArray == NULL) {
@@ -121,7 +122,7 @@ JNIEXPORT jbyteArray JNICALL Java_org_openeuler_security_openssl_KAEDHKeyAgreeme
 
 cleanup:
     if (dh != NULL)
-        DH_free(dh);
+        SSL_UTILS_DH_free(dh);
     if (y_bn != NULL)
         KAE_ReleaseBigNumFromByteArray(y_bn);
     if (x_bn != NULL)
@@ -135,7 +136,7 @@ cleanup:
         free(secret);
     }
     if (computeKeyRetBn != NULL)
-        BN_free(computeKeyRetBn);
+        SSL_UTILS_BN_free(computeKeyRetBn);
 
     return retByteArray;
-}
+} 
