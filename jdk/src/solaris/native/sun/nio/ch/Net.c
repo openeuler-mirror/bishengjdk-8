@@ -353,6 +353,12 @@ Java_sun_nio_ch_Net_connect0(JNIEnv *env, jclass clazz, jboolean preferIPv6,
         }
         return handleSocketError(env, errno);
     }
+
+    // UB Matrix
+    if ((*env)->UbCheckStack(env) == JNI_TRUE) {
+        (*env)->UbSocketRegister(env, fdval(env, fdo));
+    }
+    
     return 1;
 }
 

@@ -17,57 +17,59 @@
  * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef SHARE_VM_MATRIX_FILETABLE_HPP
-#define SHARE_VM_MATRIX_FILETABLE_HPP
+#ifndef SHARE_VM_MATRIX_UBFILEUTILS_HPP
+#define SHARE_VM_MATRIX_UBFILEUTILS_HPP
 
 #include "utilities/hashtable.hpp"
 
 #define MATRIX_TABLE_SIZE 1024
 
-template <
-    typename K, typename V, MEMFLAGS F,
-    unsigned (*HASH)  (K const&)           = primitive_hash<K>,
-    bool     (*EQUALS)(K const&, K const&) = primitive_equals<K>
-    >
-class MatrixHashtable : public BasicHashtable<F> {
-  class MatrixHashtableEntry : public BasicHashtableEntry<F> {
-  public:
+template <typename K, typename V, MEMFLAGS F,
+          unsigned (*HASH)(K const&) = primitive_hash<K>,
+          bool (*EQUALS)(K const&, K const&) = primitive_equals<K> >
+class UBFileHashTable : public BasicHashtable<F> {
+  class UBFileHashTableEntry : public BasicHashtableEntry<F> {
+   public:
     K _key;
     V _value;
-    MatrixHashtableEntry* next() {
-      return (MatrixHashtableEntry*)BasicHashtableEntry<F>::next();
+    UBFileHashTableEntry* next() {
+      return (UBFileHashTableEntry*)BasicHashtableEntry<F>::next();
     }
   };
 
-public:
-  explicit MatrixHashtable(int table_size = MATRIX_TABLE_SIZE) : BasicHashtable<F>(table_size, sizeof(MatrixHashtableEntry)) {}
+ public:
+  explicit UBFileHashTable(int table_size = MATRIX_TABLE_SIZE)
+      : BasicHashtable<F>(table_size, sizeof(UBFileHashTableEntry)) {}
+  ~UBFileHashTable() { this->free_buckets(); }
 
   V* add(K key, V value) {
     unsigned int hash = HASH(key);
-    MatrixHashtableEntry* entry = new_entry(hash, key, value);
-    BasicHashtable<F>::safe_add_entry(BasicHashtable<F>::hash_to_index(hash), entry);
+    UBFileHashTableEntry* entry = new_entry(hash, key, value);
+    BasicHashtable<F>::safe_add_entry(BasicHashtable<F>::hash_to_index(hash),
+                                      entry);
     return &(entry->_value);
   }
 
   V* add_if_absent(K key, V value) {
     unsigned int hash = HASH(key);
     int index = BasicHashtable<F>::hash_to_index(hash);
-    for (MatrixHashtableEntry* e = bucket(index); e != NULL; e = e->next()) {
+    for (UBFileHashTableEntry* e = bucket(index); e != NULL; e = e->next()) {
       if (e->hash() == hash && EQUALS(e->_key, key)) {
         // not safe
         e->_value = value;
         return &(e->_value);
       }
     }
-    MatrixHashtableEntry* entry = new_entry(hash, key, value);
-    BasicHashtable<F>::safe_add_entry(BasicHashtable<F>::hash_to_index(hash), entry);
+    UBFileHashTableEntry* entry = new_entry(hash, key, value);
+    BasicHashtable<F>::safe_add_entry(BasicHashtable<F>::hash_to_index(hash),
+                                      entry);
     return &(entry->_value);
   }
 
   V* lookup(K key) const {
     unsigned int hash = HASH(key);
     int index = BasicHashtable<F>::hash_to_index(hash);
-    for (MatrixHashtableEntry* e = bucket(index); e != NULL; e = e->next()) {
+    for (UBFileHashTableEntry* e = bucket(index); e != NULL; e = e->next()) {
       if (e->hash() == hash && EQUALS(e->_key, key)) {
         return &(e->_value);
       }
@@ -79,7 +81,7 @@ public:
     unsigned int hash = HASH(key);
     int index = BasicHashtable<F>::hash_to_index(hash);
     tty->print_cr("hash %d index %d bucket %p", hash, index, bucket(index));
-    for (MatrixHashtableEntry* e = bucket(index); e != NULL; e = e->next()) {
+    for (UBFileHashTableEntry* e = bucket(index); e != NULL; e = e->next()) {
       tty->print_cr("key %p hash %d ", (void*)key, hash);
     }
     return NULL;
@@ -88,8 +90,9 @@ public:
   bool remove(K key) {
     unsigned int hash = HASH(key);
     int index = BasicHashtable<F>::hash_to_index(hash);
-    MatrixHashtableEntry* previous = NULL;
-    for (MatrixHashtableEntry* e = bucket(index); e != NULL; previous = e, e = e->next()) {
+    UBFileHashTableEntry* previous = NULL;
+    for (UBFileHashTableEntry* e = bucket(index); e != NULL;
+         previous = e, e = e->next()) {
       if (e->hash() == hash && EQUALS(e->_key, key)) {
         if (previous == NULL) {
           BasicHashtable<F>::safe_set_entry(index, e->next());
@@ -103,17 +106,18 @@ public:
     return false;
   }
 
-protected:
-  MatrixHashtableEntry* bucket(int i) const {
-    return (MatrixHashtableEntry*)BasicHashtable<F>::bucket(i);
+ protected:
+  UBFileHashTableEntry* bucket(int i) const {
+    return (UBFileHashTableEntry*)BasicHashtable<F>::bucket(i);
   }
 
-  MatrixHashtableEntry* new_entry(unsigned int hashValue, K key, V value) {
-    MatrixHashtableEntry* entry = (MatrixHashtableEntry*)BasicHashtable<F>::new_entry(hashValue);
-    entry->_key   = key;
+  UBFileHashTableEntry* new_entry(unsigned int hashValue, K key, V value) {
+    UBFileHashTableEntry* entry =
+        (UBFileHashTableEntry*)BasicHashtable<F>::new_entry(hashValue);
+    entry->_key = key;
     entry->_value = value;
     return entry;
   }
 };
 
-#endif // SHARE_VM_MATRIX_FILETABLE_HPP
+#endif  // SHARE_VM_MATRIX_UBFILEUTILS_HPP

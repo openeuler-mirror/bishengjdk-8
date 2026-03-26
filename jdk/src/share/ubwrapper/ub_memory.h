@@ -17,41 +17,45 @@
  * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef UB_WRAPPER_MEMORY_FILE_H
-#define UB_WRAPPER_MEMORY_FILE_H
+#ifndef UB_MEMORY_WRAPPER_H
+#define UB_MEMORY_WRAPPER_H
 
-#include <cstdlib>
+#include <stddef.h>
+#include <stdbool.h>
+#include <sys/mman.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-extern int prepare_environments();
+extern int   prepare_environments(int log_level, const char* log_path);
 
-extern int malloc_remote_memory(const char* name, size_t size);
+extern int   finalize_environments(void);
 
-extern void* mmap_remote_memory(const char* name, size_t size);
+// Memory share
+extern int   malloc_remote_memory(const char* name, size_t size);
 
-extern int flush_shared_memory(void* start, size_t size);
+extern void* mmap_remote_memory(const char* name, size_t length, int* ret_code, void *addr, int prot);
 
-extern int munmap_shared_memory(void* start, size_t size);
+extern int   flush_shared_memory(void* start, size_t size);
 
-extern int free_remote_memory(const char* name);
+extern int   munmap_shared_memory(void* start, size_t size);
 
-extern void* seek_shared_memory(void* start, size_t off, size_t* size, size_t* offset);
+extern int   free_remote_memory(const char* name);
 
-extern int rename_remote_memory(const char* from, const char* to);
+extern int   rename_remote_memory(const char* from, const char* to);
 
-extern int remote_name_exist(const char* name, bool* exist);
+extern int   remote_name_exist(const char* name, bool* exist);
 
-extern int shared_addr_exist(void* addr, bool* exist);
+extern int   remote_addr_exist(void* addr, bool* exist);
 
-extern int get_used_size(void* start, size_t* size);
+// Memory borrow
+extern void* borrow_memory(size_t size, int* ret_code, void* start);
 
-extern int total_memory_info(size_t* used, size_t* alloc, size_t* total);
+extern int   return_memory(void* addr, size_t size);
 
 #ifdef __cplusplus
 };
 #endif
 
-#endif // UB_WRAPPER_MEMORY_FILE_H
+#endif // UB_MEMORY_WRAPPER_H

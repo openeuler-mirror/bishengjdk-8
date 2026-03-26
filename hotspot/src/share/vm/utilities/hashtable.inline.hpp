@@ -112,7 +112,7 @@ template <MEMFLAGS F> inline void BasicHashtable<F>::free_entry(BasicHashtableEn
   --_number_of_entries;
 }
 
-// LingQu
+// UB Matrix
 template <MEMFLAGS F> inline void BasicHashtable<F>::safe_add_entry(int index, BasicHashtableEntry<F>* entry) {
   BasicHashtableEntry<F>* e;
   do {

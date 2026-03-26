@@ -115,7 +115,7 @@ Java_java_io_UnixFileSystem_getBooleanAttributes0(JNIEnv *env, jobject this,
 
     WITH_FIELD_PLATFORM_STRING(env, file, ids.path, path) {
         int mode;
-        // LingQu
+        // UB Matrix
         if ((*env)->IsUbFile(env, path) != -1) {
             rv = (jint) (java_io_FileSystem_BA_EXISTS | java_io_FileSystem_BA_REGULAR);
         }
@@ -233,7 +233,7 @@ Java_java_io_UnixFileSystem_getLength(JNIEnv *env, jobject this,
 
     WITH_FIELD_PLATFORM_STRING(env, file, ids.path, path) {
         struct stat64 sb;
-        // LingQu
+        // UB Matrix
         jint fd = (*env)->IsUbFile(env, path);
         if (fd != -1) {
             rv = (*env)->UbSizeWithName(env, path);
@@ -281,7 +281,7 @@ Java_java_io_UnixFileSystem_delete0(JNIEnv *env, jobject this,
     jboolean rv = JNI_FALSE;
 
     WITH_FIELD_PLATFORM_STRING(env, file, ids.path, path) {
-        // LingQu
+        // UB Matrix
         if ((*env)->IsUbFile(env, path) != -1) {
             rv = (*env)->UbRemove(env, path);
         }
@@ -308,7 +308,7 @@ Java_java_io_UnixFileSystem_list(JNIEnv *env, jobject this,
     CHECK_NULL_RETURN(str_class, NULL);
 
     WITH_FIELD_PLATFORM_STRING(env, file, ids.path, path) {
-        // LingQu
+        // UB Matrix
         if ((*env)->UbCheckStack(env) == JNI_TRUE) {
             (*env)->UbRemoveDir(env, path);
         }
@@ -394,7 +394,7 @@ Java_java_io_UnixFileSystem_rename0(JNIEnv *env, jobject this,
 
     WITH_FIELD_PLATFORM_STRING(env, from, ids.path, fromPath) {
         WITH_FIELD_PLATFORM_STRING(env, to, ids.path, toPath) {
-            // LingQu
+            // UB Matrix
             if ((*env)->IsUbFile(env, fromPath) != -1) {
                 rv = (*env)->UbRename(env, fromPath, toPath);
             }

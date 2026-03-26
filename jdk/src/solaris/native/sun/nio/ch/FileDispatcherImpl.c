@@ -37,8 +37,12 @@
 #include <linux/fs.h>
 #include <sys/ioctl.h>
 #endif
-// LingQu
+// UB Matrix
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <sys/resource.h>
+#include <time.h>
 
 #if defined(_ALLBSD_SOURCE)
 #define lseek64 lseek
@@ -64,7 +68,7 @@
 #include "nio_util.h"
 #include "sun_nio_ch_FileDispatcherImpl.h"
 #include "java_lang_Long.h"
-// LingQu
+// UB Matrix
 #include "java_lang_Integer.h"
 
 #if defined(aarch64)
@@ -75,7 +79,7 @@
 static int preCloseFD = -1;     /* File descriptor to which we dup other fd's
                                    before closing them for real */
 
-// LingQu
+// UB Matrix
 int fd_limit;
 
 JNIEXPORT void JNICALL
@@ -88,7 +92,7 @@ Java_sun_nio_ch_FileDispatcherImpl_init(JNIEnv *env, jclass cl)
     }
     preCloseFD = sp[0];
     close(sp[1]);
-    // LingQu
+    // UB Matrix
     struct rlimit rlp;
     if (getrlimit(RLIMIT_NOFILE, &rlp) < 0) {
         JNU_ThrowIOExceptionWithLastError(env, "getrlimit failed");
@@ -108,16 +112,33 @@ Java_sun_nio_ch_FileDispatcherImpl_read0(JNIEnv *env, jclass clazz,
 {
     jint fd = fdval(env, fdo);
     void *buf = (void *)jlong_to_ptr(address);
-    // LingQu
+    // UB Matrix
     if (fd >= fd_limit) {
-        // printf("[UB] Java_sun_nio_ch_FileDispatcherImpl_read0\n");
         jlong nread;
         void* addr = (*env)->UbRead(env, fd, &nread, len);
         memcpy(buf, addr, nread);
         return (jint)nread;
     }
 
-    return convertReturnVal(env, read(fd, buf, len), JNI_TRUE);
+    jint nread = 0;
+    if ((*env)->IsUbSocket(env, fd) == JNI_TRUE) {
+        jlong nread = (*env)->UbSocketRead(env, buf, fd, len);
+        if (nread > 0) {
+            return (jint)nread;
+        }
+        char ub_msg[1024];
+        int bytes_read = read(fd, ub_msg, 1024);
+        if (bytes_read <= 0) {
+            return convertReturnVal(env, bytes_read, JNI_TRUE);
+        }
+        ub_msg[bytes_read] = '\0';
+        (*env)->UbSocketParse(env, fd, ub_msg);
+        nread = (*env)->UbSocketRead(env, buf, fd, len);
+        return (jint)nread;
+    }
+    nread = read(fd, buf, len);
+
+    return convertReturnVal(env, nread, JNI_TRUE);
 }
 
 JNIEXPORT jint JNICALL
@@ -146,16 +167,22 @@ Java_sun_nio_ch_FileDispatcherImpl_write0(JNIEnv *env, jclass clazz,
     jint fd = fdval(env, fdo);
     void *buf = (void *)jlong_to_ptr(address);
 
-    // LingQu
+    // UB Matrix
     if (fd >= fd_limit) {
-        // printf("[UB] Java_sun_nio_ch_FileDispatcherImpl_write0\n");
         jlong nwrite;
         void* addr = (*env)->UbWrite(env, fd, &nwrite, len);
         memcpy(addr, buf, len);
         return (jint)nwrite;
     }
 
-    return convertReturnVal(env, write(fd, buf, len), JNI_FALSE);
+    jint nwrite = 0;
+    if ((*env)->IsUbSocket(env, fd) == JNI_TRUE) {
+        nwrite = (*env)->UbSocketWrite(env, buf, fd, len);
+    } else {
+        nwrite = write(fd, buf, len);
+    }
+
+    return convertReturnVal(env, nwrite, JNI_FALSE);
 }
 
 JNIEXPORT jint JNICALL
@@ -193,9 +220,8 @@ Java_sun_nio_ch_FileDispatcherImpl_seek0(JNIEnv *env, jclass clazz,
                                          jobject fdo, jlong offset)
 {
     jint fd = fdval(env, fdo);
-    // LingQu
+    // UB Matrix
     if (fd >= fd_limit) {
-        // printf("[UB] Java_sun_nio_ch_FileDispatcherImpl_seek0\n");
         if (offset < 0) {
             return (*env)->UbSeek(env, fd, 0, (jint)SEEK_CUR);
         } else {
@@ -253,10 +279,8 @@ JNIEXPORT jlong JNICALL
 Java_sun_nio_ch_FileDispatcherImpl_size0(JNIEnv *env, jobject this, jobject fdo)
 {
     jint fd = fdval(env, fdo);
-
-    // LingQu
+    // UB Matrix
     if (fd >= fd_limit) {
-        // printf("[UB] Java_sun_nio_ch_FileDispatcherImpl_size0\n");
         return (*env)->UbSize(env, fd);
     }
 
@@ -351,11 +375,13 @@ JNIEXPORT void JNICALL
 Java_sun_nio_ch_FileDispatcherImpl_close0(JNIEnv *env, jclass clazz, jobject fdo)
 {
     jint fd = fdval(env, fdo);
-    // LingQu
+    // UB Matrix
     if (fd >= fd_limit) {
-        // printf("[UB] Java_sun_nio_ch_FileDispatcherImpl_close0\n");
         (*env)->UbClose(env, fd);
         return;
+    }
+    if ((*env)->IsUbSocket(env, fd) == JNI_TRUE) {
+        (*env)->UbSocketClose(env, fd);
     }
     closeFileDescriptor(env, fd);
 }

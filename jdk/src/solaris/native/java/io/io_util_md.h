@@ -133,7 +133,7 @@ jstring newStringPlatform(JNIEnv *env, const char* str);
 #endif
 
 /*
- * LingQu
+ * UB Matrix
  */
 int ubMemOpen(JNIEnv *env, jobject this, jstring path, jfieldID fid, int flags);
 void ubMemClose(JNIEnv *env, jobject this, jint fd);

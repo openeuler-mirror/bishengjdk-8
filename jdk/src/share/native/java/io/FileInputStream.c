@@ -60,7 +60,7 @@ Java_java_io_FileInputStream_initIDs(JNIEnv *env, jclass fdClass) {
 
 JNIEXPORT void JNICALL
 Java_java_io_FileInputStream_open0(JNIEnv *env, jobject this, jstring path) {
-    // LingQu
+    // UB Matrix
     if ((*env)->UbCheckStack(env) == JNI_TRUE) {
         int ub_fd = ubMemOpen(env, this, path, fis_fd, O_RDONLY);
         if (ub_fd != -1) return;
@@ -70,7 +70,7 @@ Java_java_io_FileInputStream_open0(JNIEnv *env, jobject this, jstring path) {
 
 JNIEXPORT jint JNICALL
 Java_java_io_FileInputStream_read0(JNIEnv *env, jobject this) {
-    // LingQu
+    // UB Matrix
     FD fd = GET_FD(this, fis_fd);
     if (fd >= fd_limit) {
         return ubReadSingle(env, this, fd);
@@ -81,12 +81,13 @@ Java_java_io_FileInputStream_read0(JNIEnv *env, jobject this) {
 JNIEXPORT jint JNICALL
 Java_java_io_FileInputStream_readBytes(JNIEnv *env, jobject this,
         jbyteArray bytes, jint off, jint len) {
-    // LingQu
+    // UB Matrix
     FD fd = GET_FD(this, fis_fd);
     if (fd >= fd_limit) {
         jint res = ubMemReadBytes(env, this, bytes, off, len, fd);
         return res;
     }
+
     return readBytes(env, this, bytes, off, len, fis_fd);
 }
 
@@ -99,7 +100,7 @@ Java_java_io_FileInputStream_skip0(JNIEnv *env, jobject this, jlong toSkip) {
         JNU_ThrowIOException (env, "Stream Closed");
         return 0;
     }
-    // LingQu
+    // UB Matrix
     if (fd >= fd_limit) {
         cur = (*env)->UbSeek(env, fd, 0, (jint)SEEK_CUR);
         end = (*env)->UbSeek(env, fd, toSkip, (jint)SEEK_CUR);
@@ -117,13 +118,11 @@ JNIEXPORT jint JNICALL
 Java_java_io_FileInputStream_available0(JNIEnv *env, jobject this) {
     jlong ret;
     FD fd = GET_FD(this, fis_fd);
-
-
     if (fd == -1) {
         JNU_ThrowIOException (env, "Stream Closed");
         return 0;
     }
-    // LingQu
+    // UB Matrix
     if (fd >= fd_limit) {
         jlong size = (*env)->UbSize(env, fd);
         jlong offset = (*env)->UbSeek(env, fd, 0, (jint)SEEK_CUR);

@@ -44,7 +44,7 @@ extern jfieldID fis_fd; /* id for jobject 'fd' in java.io.FileInputStream */
 
 JNIEXPORT void JNICALL
 Java_java_io_FileInputStream_close0(JNIEnv *env, jobject this) {
-    // LingQu
+    // UB Matrix
     FD fd = GET_FD(this, fis_fd);
     if (fd >= fd_limit) {
         ubMemClose(env, this, fd);

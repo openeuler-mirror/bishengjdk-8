@@ -20,23 +20,23 @@
 #ifndef SHARE_VM_MATRIX_UTILS_HPP
 #define SHARE_VM_MATRIX_UTILS_HPP
 
+#include "runtime/atomic.hpp"
+#include "utilities/ostream.hpp"
+
 #define MATRIX_TABLE_SIZE 1024
 
-template<typename V, MEMFLAGS f = mtInternal>
+template <typename V, MEMFLAGS f = mtInternal>
 class SimpleList : public CHeapObj<f> {
-
-private:
+ private:
   class SimpleListNode : public CHeapObj<f> {
-  public:
-    SimpleListNode(V v, SimpleList::SimpleListNode *n)
-      : value(v), next(n){}
+   public:
+    SimpleListNode(V v, SimpleList::SimpleListNode *n) : value(v), next(n) {}
 
     V value;
-    SimpleListNode* next;
+    SimpleListNode *next;
   };
 
-
-public:
+ public:
   explicit SimpleList(V empty_val) {
     _head = new SimpleListNode(empty_val, NULL);
     _tail = _head;
@@ -46,8 +46,7 @@ public:
   void insert(V value) {
     SimpleListNode *node = _head->next;
     _head->next = new SimpleListNode(value, node);
-    if (node == NULL)
-      _tail = _head->next;
+    if (node == NULL) _tail = _head->next;
   }
 
   int size() {
@@ -71,15 +70,12 @@ public:
     orig_tail->next = new_val;
   }
 
-  void begin_iteration() {
-    _iter = _head;
-  }
+  void begin_iteration() { _iter = _head; }
 
   bool contains(V v) {
     SimpleListNode *cur = _head->next;
     while (cur != NULL) {
-      if (cur->value == v)
-        return true;
+      if (cur->value == v) return true;
       cur = cur->next;
     }
     return false;
@@ -87,14 +83,11 @@ public:
 
   V next() {
     _iter = _iter->next;
-    if (_iter == NULL)
-      return _empty_val;
+    if (_iter == NULL) return _empty_val;
     return _iter->value;
   }
 
-  V* cur_value() {
-    return &(_iter->value);
-  }
+  V *cur_value() { return &(_iter->value); }
 
   bool update(V old_val, V new_val) {
     SimpleListNode *cur = _head->next;
@@ -112,38 +105,52 @@ public:
     SimpleListNode *current = _head->next;
     SimpleListNode *next;
     while (current != NULL) {
-        next = current->next;
-        cleanup(current->value);
-        free(current);
-        current = next;
+      next = current->next;
+      cleanup(current->value);
+      free(current);
+      current = next;
     }
     _head->next = NULL;
     _tail = _head;
   }
-private:
+
+ private:
   SimpleListNode *_head;
   SimpleListNode *_tail;
   SimpleListNode *_iter;
   V _empty_val;
 };
 
-template<typename V, MEMFLAGS f = mtInternal>
-class PtrList: public SimpleList<V, f> {
-public:
+template <typename V, MEMFLAGS f = mtInternal>
+class PtrList : public SimpleList<V, f> {
+ public:
   PtrList() : SimpleList<V, f>(NULL) {}
 };
 
-
-template<typename K, typename V, size_t bucket_cnt, MEMFLAGS f = mtInternal>
+template <typename K, typename V, size_t bucket_cnt, MEMFLAGS f = mtInternal>
 class SimpleHashTable : public CHeapObj<f> {
-public:
+ public:
   explicit SimpleHashTable(V empty_value) {
     memset(_buckets, 0, sizeof(_buckets));
     _iter = _buckets[0];
     _bucket_iter = 0;
+    _cur_iter = NULL;
     _empty_val = empty_value;
   }
+
   ~SimpleHashTable() {
+    for (size_t i = 0; i < bucket_cnt; ++i) {
+      SimpleHashEntry *entry = _buckets[i];
+      while (entry != NULL) {
+        SimpleHashEntry *next = entry->next;
+        delete entry;
+        entry = next;
+      }
+      _buckets[i] = NULL;
+    }
+    _iter = NULL;
+    _cur_iter = NULL;
+    _bucket_iter = 0;
   }
 
   // should be called before every full iteration
@@ -179,8 +186,7 @@ public:
   }
 
   K get_cur_iter_key() {
-    if (_cur_iter == NULL)
-      return NULL;
+    if (_cur_iter == NULL) return NULL;
     return _cur_iter->key;
   }
 
@@ -201,19 +207,13 @@ public:
     }
   }
 
-  void add(K key, V v) {
-    internal_put(hash(key), key, v);
-  }
+  void add(K key, V v) { internal_put(hash(key), key, v); }
 
-  V get(K key) {
-    return internal_get(hash(key), key);
-  }
+  V get(K key) { return internal_get(hash(key), key); }
 
-  void remove(K key) {
-    internal_remove(hash(key), key);
-  }
-  
-  V* lookup(K key) {
+  void remove(K key) { internal_remove(hash(key), key); }
+
+  V *lookup(K key) {
     size_t hash_val = hash(key);
     size_t bucket = hash_val % bucket_cnt;
     SimpleHashEntry *e = _buckets[bucket];
@@ -225,8 +225,7 @@ public:
 
   void merge_with(SimpleHashTable<K, V, bucket_cnt> *other) {
     for (int i = 0; i < bucket_cnt; i++) {
-      if (other->_buckets[i] == NULL)
-        continue;
+      if (other->_buckets[i] == NULL) continue;
       SimpleHashEntry *e = _buckets[i];
       _buckets[i] = other->_buckets[i];
 
@@ -240,20 +239,17 @@ public:
     }
   }
 
-protected:
+ protected:
   virtual size_t hash(K k) = 0;
-  virtual bool equals(K k1, K k2) {
-    return k1 == k2;
-  }
+  virtual bool equals(K k1, K k2) { return k1 == k2; }
 
   class SimpleHashEntry : public CHeapObj<f> {
-  public:
+   public:
     SimpleHashEntry *next;
     K key;
     V value;
 
-    SimpleHashEntry(SimpleHashEntry *n, K k, V v)
-      : next(n), key(k), value(v) {}
+    SimpleHashEntry(SimpleHashEntry *n, K k, V v) : next(n), key(k), value(v) {}
   };
 
   void internal_put(size_t hash, K key, V value) {
@@ -294,7 +290,9 @@ protected:
     if (prev != NULL)
       prev->next = cur->next;
     else
-      _buckets[bucket] = cur->next;   
+      _buckets[bucket] = cur->next;
+
+    delete cur;
   }
 
   V internal_get(size_t hash, K key) {
@@ -303,10 +301,10 @@ protected:
     while (e != NULL && !equals(e->key, key)) {
       e = e->next;
     }
-    return e == NULL ? _empty_val : e->value;    
+    return e == NULL ? _empty_val : e->value;
   }
 
-protected:
+ protected:
   SimpleHashEntry *_buckets[bucket_cnt];
 
   SimpleHashEntry *_iter;
@@ -326,33 +324,25 @@ inline uint64_t integer_hash(uint64_t h) {
   return h;
 }
 
-template<typename K, typename V, MEMFLAGS f = mtInternal>
+template <typename K, typename V, MEMFLAGS f = mtInternal>
 class PtrTable : public SimpleHashTable<K, V, MATRIX_TABLE_SIZE, f> {
-public:
-  explicit PtrTable(V empty_val): SimpleHashTable<K, V, MATRIX_TABLE_SIZE, f>(empty_val) {}
+ public:
+  explicit PtrTable(V empty_val)
+      : SimpleHashTable<K, V, MATRIX_TABLE_SIZE, f>(empty_val) {}
 
-protected:
-  size_t hash(K k) {
-    return integer_hash(uint64_t (k));
-  }
+ protected:
+  size_t hash(K k) { return integer_hash(uint64_t(k)); }
 };
 
-template<typename K, size_t bucket_cnt, MEMFLAGS f = mtInternal>
+template <typename K, size_t bucket_cnt, MEMFLAGS f = mtInternal>
 class SimpleHashSet : public CHeapObj<f> {
-public:
-  SimpleHashSet() {
-    memset(_buckets, 0, sizeof(_buckets));
-  }
-  ~SimpleHashSet() {
-  }
+ public:
+  SimpleHashSet() { memset(_buckets, 0, sizeof(_buckets)); }
+  ~SimpleHashSet() {}
 
-  void add(K key) {
-    internal_put(hash(key), key);
-  }
+  void add(K key) { internal_put(hash(key), key); }
 
-  void remove(K key) {
-    internal_remove(hash(key), key);
-  }
+  void remove(K key) { internal_remove(hash(key), key); }
 
   bool exist(K key) {
     size_t hash_val = hash(key);
@@ -364,19 +354,16 @@ public:
     return e == NULL ? false : true;
   }
 
-protected:
+ protected:
   virtual size_t hash(K k) = 0;
-  virtual bool equals(K k1, K k2) {
-    return k1 == k2;
-  }
+  virtual bool equals(K k1, K k2) { return k1 == k2; }
 
   class SimpleHashEntry : public CHeapObj<f> {
-  public:
+   public:
     SimpleHashEntry *next;
     K key;
 
-    SimpleHashEntry(SimpleHashEntry *n, K k)
-      : next(n), key(k) {}
+    SimpleHashEntry(SimpleHashEntry *n, K k) : next(n), key(k) {}
   };
 
   void internal_put(size_t hash, K key) {
@@ -418,19 +405,17 @@ protected:
       _buckets[bucket] = cur->next;
   }
 
-protected:
+ protected:
   SimpleHashEntry *_buckets[bucket_cnt];
 };
 
-template<typename K, MEMFLAGS f = mtInternal>
+template <typename K, MEMFLAGS f = mtInternal>
 class PtrHashSet : public SimpleHashSet<K, MATRIX_TABLE_SIZE, f> {
-public:
-  PtrHashSet(): SimpleHashSet<K, MATRIX_TABLE_SIZE, f>() {}
+ public:
+  PtrHashSet() : SimpleHashSet<K, MATRIX_TABLE_SIZE, f>() {}
 
-protected:
-  size_t hash(K k) {
-    return integer_hash(uint64_t (k));
-  }
+ protected:
+  size_t hash(K k) { return integer_hash(uint64_t(k)); }
 };
 
-#endif // SHARE_VM_MATRIX_UTILS_HPP
+#endif  // SHARE_VM_MATRIX_UTILS_HPP

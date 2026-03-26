@@ -17,15 +17,17 @@
  * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef SHARE_VM_MATRIX_ALLOWLIST_HPP
-#define SHARE_VM_MATRIX_ALLOWLIST_HPP
+#ifndef SHARE_VM_MATRIX_MATRIXALLOWLIST_HPP
+#define SHARE_VM_MATRIX_MATRIXALLOWLIST_HPP
 
-#include "utilities/hashtable.hpp"
 #include "classfile/symbolTable.hpp"
+#include "utilities/hashtable.hpp"
 
 class AllowListEntry : public HashtableEntry<Symbol*, mtClass> {
-public:
-  Symbol* class_name() const  { return literal(); } // 从基类继承 literal() 存储类名
+ public:
+  Symbol* class_name() const {
+    return literal();
+  }  // 从基类继承 literal() 存储类名
   Symbol* method_name() const { return _method_name; }
 
   void set_method_name(Symbol* method_name) { _method_name = method_name; }
@@ -33,18 +35,22 @@ public:
   AllowListEntry* next() {
     return (AllowListEntry*)HashtableEntry<Symbol*, mtClass>::next();
   }
-private:
+
+ private:
   Symbol* _method_name;
 };
 
 class AllowListTable : public Hashtable<Symbol*, mtClass> {
-public:
-  explicit AllowListTable(int table_size = 211) : Hashtable<Symbol*, mtClass>(table_size, sizeof(AllowListEntry)) {}
+ public:
+  explicit AllowListTable(int table_size = 211)
+      : Hashtable<Symbol*, mtClass>(table_size, sizeof(AllowListEntry)) {}
 
   void add(Symbol* class_name, Symbol* method_name) {
     unsigned int hash = class_name->identity_hash();
     int index = hash_to_index(hash);
-    AllowListEntry* entry = (AllowListEntry*)Hashtable<Symbol*, mtClass>::new_entry(hash, class_name);
+    AllowListEntry* entry =
+        (AllowListEntry*)Hashtable<Symbol*, mtClass>::new_entry(hash,
+                                                                class_name);
     entry->set_method_name(method_name);
     add_entry(index, entry);
   }
@@ -52,18 +58,20 @@ public:
   bool contains(Symbol* class_name, Symbol* method_name) {
     unsigned int hash = class_name->identity_hash();
     int index = hash_to_index(hash);
-    for (AllowListEntry* entry = bucket(index); entry != NULL; entry = entry->next()) {
-      if (entry->class_name()->fast_compare(class_name) == 0 && 
+    for (AllowListEntry* entry = bucket(index); entry != NULL;
+         entry = entry->next()) {
+      if (entry->class_name()->fast_compare(class_name) == 0 &&
           entry->method_name()->fast_compare(method_name) == 0) {
         return true;
       }
     }
     return false;
   }
-private:
+
+ private:
   AllowListEntry* bucket(int i) {
-      return (AllowListEntry*)Hashtable<Symbol*, mtClass>::bucket(i);
+    return (AllowListEntry*)Hashtable<Symbol*, mtClass>::bucket(i);
   }
 };
 
-#endif // SHARE_VM_MATRIX_ALLOWLIST_HPP
+#endif  // SHARE_VM_MATRIX_MATRIXALLOWLIST_HPP

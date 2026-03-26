@@ -239,7 +239,7 @@ public:
 
   void add_entry(int index, BasicHashtableEntry<F>* entry);
 
-  // LingQu
+  // UB Matrix
   void safe_set_entry(int index, BasicHashtableEntry<F>* entry);
   void safe_add_entry(int index, BasicHashtableEntry<F>* entry);
 

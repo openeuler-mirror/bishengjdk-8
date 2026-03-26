@@ -4,7 +4,7 @@ this project provides build for the following features:
 
 ## Usage
 ```
-// libmatrix_wrapper.so will be generated
+// libmatrix_wrapper.so will be generated 
 make
 sudo cp ./libmatrix_wrapper.so /usr/lib64/
 
