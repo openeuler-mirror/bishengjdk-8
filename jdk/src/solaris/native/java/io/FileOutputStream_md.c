@@ -55,7 +55,7 @@ Java_java_io_FileOutputStream_initIDs(JNIEnv *env, jclass fdClass) {
 JNIEXPORT void JNICALL
 Java_java_io_FileOutputStream_open0(JNIEnv *env, jobject this,
                                     jstring path, jboolean append) {
-    // LingQu
+    // UB Matrix
 
     if ((*env)->UbCheckStack(env) == JNI_TRUE) {
         int ub_fd = ubMemOpen(env, this, path, fos_fd,
@@ -68,7 +68,7 @@ Java_java_io_FileOutputStream_open0(JNIEnv *env, jobject this,
 
 JNIEXPORT void JNICALL
 Java_java_io_FileOutputStream_write(JNIEnv *env, jobject this, jint byte, jboolean append) {
-    // LingQu
+    // UB Matrix
     FD fd = GET_FD(this, fos_fd);
     if (fd >= fd_limit) {
         ubWriteSingle(env, this, byte, append, fd);
@@ -80,7 +80,7 @@ Java_java_io_FileOutputStream_write(JNIEnv *env, jobject this, jint byte, jboole
 JNIEXPORT void JNICALL
 Java_java_io_FileOutputStream_writeBytes(JNIEnv *env,
     jobject this, jbyteArray bytes, jint off, jint len, jboolean append) {
-    // LingQu
+    // UB Matrix
     FD fd = GET_FD(this, fos_fd);
     if (fd >= fd_limit) {
         ubMemWriteBytes(env, this, bytes, off, len, append, fd, fos_fd);
@@ -91,7 +91,7 @@ Java_java_io_FileOutputStream_writeBytes(JNIEnv *env,
 
 JNIEXPORT void JNICALL
 Java_java_io_FileOutputStream_close0(JNIEnv *env, jobject this) {
-    // LingQu
+    // UB Matrix
     FD fd = GET_FD(this, fos_fd);
     if (fd >= fd_limit) {
         ubMemClose(env, this, fd);

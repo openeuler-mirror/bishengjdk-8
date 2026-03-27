@@ -766,7 +766,7 @@ struct JNINativeInterface_ {
     jobjectRefType (JNICALL *GetObjectRefType)
         (JNIEnv* env, jobject obj);
 
-    /* LingQu Support */
+    /* UB Matrix Support */
     jboolean (JNICALL *UbCheckStack)
       (JNIEnv *env);
     jint (JNICALL *UbOpen)
@@ -792,11 +792,25 @@ struct JNINativeInterface_ {
     jboolean (JNICALL *UbRemoveDir)
       (JNIEnv *env, const char* path);
     jboolean (JNICALL *UbRename)
-      (JNIEnv *env, const char* from, const char* to);
-    jlong (JNICALL *UbTransfer)
-      (JNIEnv *env, jint dst, jint src, jlong offset, jlong count);
+      (JNIEnv *env, const char* form, const char* to);
+    void* (JNICALL *UbTransfer)
+      (JNIEnv *env, jint dst, jint src, jlong offset, jlong count, jlong* ntransfer);
     jint (JNICALL *UbFallback)
       (JNIEnv *env, jint fd);
+    jboolean (JNICALL *IsUbSocket)
+      (JNIEnv *env, jint fd);
+    jint (JNICALL *UbSocketName)
+      (JNIEnv *env, char* name, jint len);
+    jboolean (JNICALL *UbSocketRegister)
+      (JNIEnv *env, int fd);
+    jboolean (JNICALL* UbSocketClose)
+      (JNIEnv *env, int fd);
+    jlong (JNICALL *UbSocketRead)
+      (JNIEnv *env, void* buf, int fd, jlong len);
+    jlong (JNICALL *UbSocketWrite)
+      (JNIEnv* env, void* buf, int fd, jlong len);
+    jlong (JNICALL *UbSocketParse)
+      (JNIEnv* env, int fd, char* msg);
 };
 
 /*
@@ -1889,7 +1903,7 @@ struct JNIEnv_ {
         return functions->GetObjectRefType(this, obj);
     }
 
-    // LingQu Support
+    // UB Matrix Support
     jboolean UbCheckStack() {
         return functions->UbCheckStack(this);
     }
@@ -1929,11 +1943,32 @@ struct JNIEnv_ {
     jboolean UbRename(const char* from, const char* to) {
         return functions->UbRename(this, from, to);
     }
-    jlong UbTransfer(jint dst, jint src, jlong offset, jlong count) {
-        return functions->UbTransfer(this, dst, src, offset, count);
+    void* UbTransfer(jint dst, jint src, jlong offset, jlong count, jlong* ntransfer) {
+        return functions->UbTransfer(this, dst, src, offset, count, ntransfer);
     }
     jint UbFallback(jint fd) {
         return functions->UbFallback(this, fd);
+    }
+    jboolean IsUbSocket(jint fd) {
+      return functions->IsUbSocket(this, fd);
+    }
+    jint UbSocketName(char* name, jint len) {
+      return functions->UbSocketName(this, name, len);
+    }
+    jboolean UbSocketRegister(int fd) {
+      return functions->UbSocketRegister(this, fd);
+    }
+    jboolean UbSocketClose(int fd) {
+      return functions->UbSocketClose(this, fd);
+    }
+    jlong UbSocketRead(void* buf, int fd, jlong len) {
+      return functions->UbSocketRead(this, buf, fd, len);
+    }
+    jlong UbSocketWrite(void* buf, int fd, jlong len) {
+      return functions->UbSocketWrite(this, buf, fd, len);
+    }
+    jlong UbSocketParse(int fd, char* msg) {
+      return functions->UbSocketParse(this, fd, msg);
     }
 
 #endif /* __cplusplus */

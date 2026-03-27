@@ -38,7 +38,7 @@
 #include <sys/statvfs.h>
 #include <sys/time.h>
 
-// LingQu
+// UB Matrix
 #include "jvm.h"
 
 #ifdef __solaris__
@@ -390,7 +390,7 @@ Java_sun_nio_fs_UnixNativeDispatcher_open0(JNIEnv* env, jclass this,
 {
     jint fd;
     const char* path = (const char*)jlong_to_ptr(pathAddress);
-    // LingQu
+    // UB Matrix
     if ((*env)->UbCheckStack(env) == JNI_TRUE) {
         int ub_fd = (*env)->UbOpen(env, path, oflags);
         if (ub_fd != -1) return ub_fd;
@@ -424,7 +424,7 @@ Java_sun_nio_fs_UnixNativeDispatcher_openat0(JNIEnv* env, jclass this, jint dfd,
 
 JNIEXPORT void JNICALL
 Java_sun_nio_fs_UnixNativeDispatcher_close(JNIEnv* env, jclass this, jint fd) {
-    // LingQu
+    // UB Matrix
     jint fd_limit = Java_sun_nio_ch_IOUtil_fdLimit(env, this);
     if (fd >= fd_limit) {
         (*env)->UbClose(env, fd);
@@ -441,7 +441,7 @@ Java_sun_nio_fs_UnixNativeDispatcher_read(JNIEnv* env, jclass this, jint fd,
 {
     ssize_t n;
     void* bufp = jlong_to_ptr(address);
-    // LingQu
+    // UB Matrix
     jint fd_limit = Java_sun_nio_ch_IOUtil_fdLimit(env, this);
     if (fd >= fd_limit) {
         jlong nread;
@@ -463,7 +463,7 @@ Java_sun_nio_fs_UnixNativeDispatcher_write(JNIEnv* env, jclass this, jint fd,
 {
     ssize_t n;
     void* bufp = jlong_to_ptr(address);
-    // LingQu
+    // UB Matrix
     jint fd_limit = Java_sun_nio_ch_IOUtil_fdLimit(env, this);
     if (fd >= fd_limit) {
         jlong nwrite;
@@ -530,9 +530,8 @@ Java_sun_nio_fs_UnixNativeDispatcher_lstat0(JNIEnv* env, jclass this,
     struct stat64 buf;
     const char* path = (const char*)jlong_to_ptr(pathAddress);
 
-    // LingQu
+    // UB Matrix
     if ((*env)->IsUbFile(env, path) != -1) {
-        // need a specific interface to mock a stat64 struct
         buf.st_mode = S_IFREG;
         buf.st_size = (*env)->UbSizeWithName(env, path);
         prepAttributes(env, &buf, attrs);
@@ -847,7 +846,7 @@ Java_sun_nio_fs_UnixNativeDispatcher_rename0(JNIEnv* env, jclass this,
     const char* from = (const char*)jlong_to_ptr(fromAddress);
     const char* to = (const char*)jlong_to_ptr(toAddress);
 
-    // LingQu
+    // UB Matrix
     if ((*env)->IsUbFile(env, from) != -1) {
         (*env)->UbRename(env, from, to);
         return;

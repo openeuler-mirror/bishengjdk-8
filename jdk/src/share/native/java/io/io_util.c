@@ -26,7 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stddef.h>
-// LingQu
+// UB Matrix
 #include <time.h>
 
 #include "jni.h"
@@ -230,7 +230,7 @@ throwFileNotFoundException(JNIEnv *env, jstring path)
 }
 
 
-/* LingQu */
+/* UB Matrix */
 
 void
 ubMemWriteBytes(JNIEnv *env, jobject this, jbyteArray bytes,

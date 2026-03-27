@@ -111,7 +111,7 @@
 HS_DTRACE_PROBE_DECL(hotspot, vm__shutdown);
 #endif /* !USDT2 */
 
-// LingQu
+// UB Matrix
 #include "matrix/matrixManager.hpp"
 
 #ifndef PRODUCT
@@ -559,7 +559,7 @@ void before_exit(JavaThread * thread) {
 
   JFR_ONLY(Jfr::on_vm_shutdown();)
 
-  // LingQu
+  // UB Matrix
   MatrixGlobal::before_exit();
 
   // Always call even when there are not JVMTI environments yet, since environments

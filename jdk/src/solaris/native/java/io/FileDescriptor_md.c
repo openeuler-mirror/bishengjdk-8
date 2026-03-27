@@ -30,7 +30,7 @@
 #include "io_util_md.h"
 #include "java_io_FileDescriptor.h"
 
-// LingQu
+// UB Matrix
 #include "java_lang_Integer.h"
 #include <sys/resource.h>
 
@@ -41,7 +41,7 @@
 /* field id for jint 'fd' in java.io.FileDescriptor */
 jfieldID IO_fd_fdID;
 
-// LingQu
+// UB Matrix
 int fd_limit;
 
 /**************************************************************
@@ -51,7 +51,7 @@ int fd_limit;
 JNIEXPORT void JNICALL
 Java_java_io_FileDescriptor_initIDs(JNIEnv *env, jclass fdClass) {
     CHECK_NULL(IO_fd_fdID = (*env)->GetFieldID(env, fdClass, "fd", "I"));
-    // LingQu
+    // UB Matrix
     struct rlimit rlp;
     if (getrlimit(RLIMIT_NOFILE, &rlp) < 0) {
         JNU_ThrowIOExceptionWithLastError(env, "getrlimit failed");
@@ -72,8 +72,7 @@ Java_java_io_FileDescriptor_initIDs(JNIEnv *env, jclass fdClass) {
 JNIEXPORT void JNICALL
 Java_java_io_FileDescriptor_sync(JNIEnv *env, jobject this) {
     FD fd = THIS_FD(this);
-
-    // LingQu
+    // UB Matrix
     if (fd >= fd_limit) {
         return;
     }

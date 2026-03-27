@@ -92,10 +92,9 @@ Java_sun_nio_ch_FileChannelImpl_map0(JNIEnv *env, jobject this,
         flags = MAP_PRIVATE;
     }
 
-    // LingQu
+    // UB Matrix
     jint fd_limit = Java_sun_nio_ch_IOUtil_fdLimit(env, this);
     if (fd >= fd_limit) {
-        // printf("[UB] Java_sun_nio_ch_FileChannelImpl_map0 %d\n", fd);
         int origin_offset = (*env)->UbSeek(env, fd, 0, SEEK_CUR);
         (*env)->UbSeek(env, fd, off, SEEK_SET);
         jlong nread = 0;
@@ -148,7 +147,7 @@ JNIEXPORT void JNICALL
 Java_sun_nio_ch_FileChannelImpl_close0(JNIEnv *env, jobject this, jobject fdo)
 {
     jint fd = fdval(env, fdo);
-    // LingQu
+    // UB Matrix
     jint fd_limit = Java_sun_nio_ch_IOUtil_fdLimit(env, this);
     if (fd >= fd_limit) {
         (*env)->UbClose(env, fd);
@@ -172,11 +171,12 @@ Java_sun_nio_ch_FileChannelImpl_transferTo0(JNIEnv *env, jobject this,
     jint srcFD = fdval(env, srcFDO);
     jint dstFD = fdval(env, dstFDO);
 
-    // LingQu
+    // UB Matrix
     jint fd_limit = Java_sun_nio_ch_IOUtil_fdLimit(env, this);
-    if (srcFD >= fd_limit || dstFD >= fd_limit) {
-        jlong res = (*env)->UbTransfer(env, dstFD, srcFD, position, count);
-        return res;
+    if (srcFD > fd_limit || dstFD > fd_limit || (*env)->IsUbSocket(env, dstFD) == JNI_TRUE) {
+        jlong ntransfer = 0;
+        (*env)->UbTransfer(env, dstFD, srcFD, position, count, &ntransfer);
+        return ntransfer;
     }
 
 #if defined(__linux__)

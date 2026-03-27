@@ -17,34 +17,8 @@
  * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef SHARE_VM_MATRIX_MATRIXMANAGER_HPP
-#define SHARE_VM_MATRIX_MATRIXMANAGER_HPP
-
-#include <sys/resource.h>
-
-#include "matrix/matrixAllowList.hpp"
-#include "matrix/matrixUtils.hpp"
-
-#define UB_LOG(level, fmt, ...)                    \
-  if (strcmp(level, "ERROR") == 0 || PrintUBLog) { \
-    ResourceMark rm;                               \
-    MatrixGlobal::log(level, fmt, ##__VA_ARGS__);  \
-  }
-
-class MatrixGlobal : public AllStatic {
- public:
-  static bool initialized() { return _initialized; }
-  static void init();
-  static void before_exit();
-  static bool check_stack();
-  static bool print_stack();
-  static void log(const char* level, const char* format, ...);
-
- private:
-  static bool _enabled;
-  static bool _initialized;
-  static outputStream* _log_file;
-  static AllowListTable* _allow_list_table;
-};
-
-#endif  // SHARE_VM_MATRIX_MATRIXMANAGER_HPP
+public class Dummy {
+    public static void main(String[] args) {
+      return;
+    }
+}

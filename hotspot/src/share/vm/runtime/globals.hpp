@@ -4238,17 +4238,23 @@ class CommandLineFlags {
   experimental(intx, CompilationProfileCacheRecordMinLevel, 3,              \
           "Minimal compilation level recorded in JProfileCache recording phase")  \
                                                                             \
-  product(bool, UseUBMem, false,                                            \
-          "Use UB Memory")                                                  \
+  experimental(bool, UseUBFile, false,                                      \
+          "Use UB File Memory")                                             \
                                                                             \
-  product(ccstr, UBConfPath, "allowlist.txt",                               \
+  experimental(ccstr, UBConfPath, "",                                       \
           "UB conf path")                                                   \
                                                                             \
-  product(bool, PrintUBLog, false,                                          \
+  experimental(bool, PrintUBLog, false,                                     \
           "Print UB log")                                                   \
                                                                             \
-  product(ccstr, UBLogPath, NULL,                                           \
+  experimental(ccstr, UBLogPath, "",                                        \
           "UB log path")                                                    \
+                                                                            \
+  experimental(bool, UseUBSocket, false,                                    \
+          "Use UB Socket")                                                  \
+                                                                            \
+  experimental(uintx, UBSocketTimeout, 500,                                 \
+          "UB Socket package timeout(ms), 0 means no timeout")              \
 /*
  *  Macros for factoring of globals
  */

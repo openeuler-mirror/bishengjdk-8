@@ -47,7 +47,7 @@
 
 #include <CoreFoundation/CoreFoundation.h>
 
-// LingQu
+// UB Matrix
 extern int fd_limit;
 
 __private_extern__
@@ -227,7 +227,7 @@ getLastErrorString(char *buf, size_t len)
     return strlen(buf);
 }
 
-// LingQu
+// UB Matrix
 int
 ubMemOpen(JNIEnv *env, jobject this, jstring path, jfieldID fid, int flags)
 {

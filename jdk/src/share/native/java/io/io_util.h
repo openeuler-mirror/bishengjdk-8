@@ -29,7 +29,7 @@
 extern jfieldID IO_fd_fdID;
 extern jfieldID IO_handle_fdID;
 
-// LingQu
+// UB Matrix
 extern int fd_limit;
 
 #ifdef _ALLBSD_SOURCE
@@ -60,7 +60,7 @@ void throwFileNotFoundException(JNIEnv *env, jstring path);
 size_t getLastErrorString(char *buf, size_t len);
 
 /*
- * LingQu helper functions
+ * UB Matrix helper functions
  */
 void ubMemWriteBytes(JNIEnv *env, jobject this, jbyteArray bytes, jint off,
                 jint len, jboolean append, jint fd, jfieldID fid);
@@ -68,6 +68,7 @@ jint ubMemReadBytes(JNIEnv *env, jobject this, jbyteArray bytes, jint off,
                jint len, jint fd);
 jint ubReadSingle(JNIEnv *env, jobject this, jint fd);
 void ubWriteSingle(JNIEnv *env, jobject this, jint byte, jboolean append, jint fd);
+
 /*
  * Macros for managing platform strings.  The typical usage pattern is:
  *

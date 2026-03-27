@@ -38,7 +38,7 @@
 #include "jprofilecache/jitProfileCache.hpp"
 #include "jprofilecache/jitProfileCacheThread.hpp"
 #include "jprofilecache/jitProfileCacheDcmds.hpp"
-#include "matrix/matrixManager.hpp" // LingQu
+#include "matrix/matrixManager.hpp" // UB Matrix
 #include "memory/gcLocker.inline.hpp"
 #include "memory/metaspaceShared.hpp"
 #include "memory/oopFactory.hpp"
@@ -3701,10 +3701,12 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   // Notify JVMTI agents that VM initialization is complete - nop if no agents.
   JvmtiExport::post_vm_initialized();
 
-  JFR_ONLY(Jfr::on_vm_start();)
-
-  // LingQu
+  // UB Matrix
+#ifdef AARCH_64
   MatrixGlobal::init();
+#endif
+
+  JFR_ONLY(Jfr::on_vm_start();)
 
   if (CleanChunkPoolAsync) {
     Chunk::start_chunk_pool_cleaner_task();

@@ -5563,13 +5563,13 @@ os::Linux::ub_mmap_func_t os::Linux::_ub_mmap;
 os::Linux::ub_flush_func_t os::Linux::_ub_flush;
 os::Linux::ub_munmap_func_t os::Linux::_ub_munmap;
 os::Linux::ub_free_func_t os::Linux::_ub_free;
-os::Linux::ub_length_func_t os::Linux::_ub_length;
-os::Linux::ub_seek_func_t os::Linux::_ub_seek;
 os::Linux::ub_rename_func_t os::Linux::_ub_rename;
 os::Linux::ub_name_exist_func_t os::Linux::_ub_name_exist;
 os::Linux::ub_addr_exist_func_t os::Linux::_ub_addr_exist;
+os::Linux::ub_mem_borrow_func_t os::Linux::_ub_mem_borrow;
+os::Linux::ub_mem_return_func_t os::Linux::_ub_mem_return;
 os::Linux::ub_prepare_env_func_t os::Linux::_ub_prepare_env;
-os::Linux::ub_mem_info_func_t os::Linux::_ub_mem_info;
+os::Linux::ub_finalize_env_func_t os::Linux::_ub_finalize_env;
 
 void os::Linux::load_ACC_library_before_ergo() {
     _dmh_g1_can_shrink = CAST_TO_FN_PTR(dmh_g1_can_shrink_t, dlsym(RTLD_DEFAULT, "DynamicMaxHeap_G1CanShrink"));
@@ -5604,19 +5604,6 @@ void os::Linux::load_ACC_library() {
     _get_class_state= CAST_TO_FN_PTR(get_class_state_t, dlsym(RTLD_DEFAULT, "Get_Class_State"));
     _handle_skipped= CAST_TO_FN_PTR(handle_skipped_t, dlsym(RTLD_DEFAULT, "Handle_Skipped"));
     _handle_ignore_class= CAST_TO_FN_PTR(handle_ignore_class_t, dlsym(RTLD_DEFAULT, "Handle_Ignore_Class"));
-
-    _ub_malloc = CAST_TO_FN_PTR(ub_malloc_func_t, dlsym(RTLD_DEFAULT, "malloc_remote_memory"));
-    _ub_mmap = CAST_TO_FN_PTR(ub_mmap_func_t, dlsym(RTLD_DEFAULT, "mmap_remote_memory"));
-    _ub_flush = CAST_TO_FN_PTR(ub_flush_func_t, dlsym(RTLD_DEFAULT, "flush_shared_memory"));
-    _ub_munmap = CAST_TO_FN_PTR(ub_munmap_func_t, dlsym(RTLD_DEFAULT, "munmap_shared_memory"));
-    _ub_free = CAST_TO_FN_PTR(ub_free_func_t, dlsym(RTLD_DEFAULT, "free_remote_memory"));
-    _ub_length = CAST_TO_FN_PTR(ub_length_func_t, dlsym(RTLD_DEFAULT, "get_used_size"));
-    _ub_seek = CAST_TO_FN_PTR(ub_seek_func_t, dlsym(RTLD_DEFAULT, "seek_shared_memory"));
-    _ub_rename = CAST_TO_FN_PTR(ub_rename_func_t, dlsym(RTLD_DEFAULT, "rename_remote_memory"));
-    _ub_name_exist = CAST_TO_FN_PTR(ub_name_exist_func_t, dlsym(RTLD_DEFAULT, "remote_name_exist"));
-    _ub_addr_exist = CAST_TO_FN_PTR(ub_addr_exist_func_t, dlsym(RTLD_DEFAULT, "remote_addr_exist"));
-    _ub_prepare_env = CAST_TO_FN_PTR(ub_prepare_env_func_t, dlsym(RTLD_DEFAULT, "prepare_environments"));
-    _ub_mem_info = CAST_TO_FN_PTR(ub_mem_info_func_t, dlsym(RTLD_DEFAULT, "total_memory_info"));
 
     char path[JVM_MAXPATHLEN];
     char ebuf[1024];
@@ -5657,49 +5644,26 @@ void os::Linux::load_ACC_library() {
         }
     }
 
+    handle = NULL;
     if (os::dll_build_name(path, sizeof(path), Arguments::get_dll_dir(), "matrix_wrapper")) {
-        handle = dlopen(path, RTLD_LAZY);
+      handle = dlopen(path, RTLD_LAZY);
     }
     if(handle == NULL && os::dll_build_name(path, sizeof(path), "/usr/lib64", "matrix_wrapper")) {
-        handle = dlopen(path, RTLD_LAZY);
+      handle = dlopen(path, RTLD_LAZY);
     }
     if (handle != NULL) {
-        if(_ub_malloc == NULL) {
-            _ub_malloc = CAST_TO_FN_PTR(ub_malloc_func_t, dlsym(handle, "malloc_remote_memory"));
-        }
-        if(_ub_mmap == NULL) {
-            _ub_mmap = CAST_TO_FN_PTR(ub_mmap_func_t, dlsym(handle, "mmap_remote_memory"));
-        }
-        if(_ub_flush == NULL) {
-            _ub_flush = CAST_TO_FN_PTR(ub_flush_func_t, dlsym(handle, "flush_shared_memory"));
-        }
-        if(_ub_munmap == NULL) {
-            _ub_munmap = CAST_TO_FN_PTR(ub_munmap_func_t, dlsym(handle, "munmap_shared_memory"));
-        }
-        if(_ub_free == NULL) {
-            _ub_free = CAST_TO_FN_PTR(ub_free_func_t, dlsym(handle, "free_remote_memory"));
-        }
-        if(_ub_length == NULL) {
-            _ub_length = CAST_TO_FN_PTR(ub_length_func_t, dlsym(handle, "get_used_size"));
-        }
-        if(_ub_seek == NULL) {
-            _ub_seek = CAST_TO_FN_PTR(ub_seek_func_t, dlsym(handle, "seek_shared_memory"));
-        }
-        if(_ub_rename == NULL) {
-            _ub_rename = CAST_TO_FN_PTR(ub_rename_func_t, dlsym(handle, "rename_remote_memory"));
-        }
-        if(_ub_name_exist == NULL) {
-            _ub_name_exist = CAST_TO_FN_PTR(ub_name_exist_func_t, dlsym(handle, "remote_name_exist"));
-        }
-        if(_ub_addr_exist == NULL) {
-            _ub_addr_exist = CAST_TO_FN_PTR(ub_addr_exist_func_t, dlsym(handle, "shared_addr_exist"));
-        }
-        if(_ub_prepare_env == NULL) {
-            _ub_prepare_env = CAST_TO_FN_PTR(ub_prepare_env_func_t, dlsym(handle, "prepare_environments"));
-        }
-        if(_ub_mem_info == NULL) {
-            _ub_mem_info = CAST_TO_FN_PTR(ub_mem_info_func_t, dlsym(handle, "total_memory_info"));
-        }
+      _ub_malloc    = CAST_TO_FN_PTR(ub_malloc_func_t, dlsym(handle, "malloc_remote_memory"));
+      _ub_mmap      = CAST_TO_FN_PTR(ub_mmap_func_t, dlsym(handle, "mmap_remote_memory"));
+      _ub_flush     = CAST_TO_FN_PTR(ub_flush_func_t, dlsym(handle, "flush_shared_memory"));
+      _ub_munmap    = CAST_TO_FN_PTR(ub_munmap_func_t, dlsym(handle, "munmap_shared_memory"));
+      _ub_free      = CAST_TO_FN_PTR(ub_free_func_t, dlsym(handle, "free_remote_memory"));
+      _ub_rename    = CAST_TO_FN_PTR(ub_rename_func_t, dlsym(handle, "rename_remote_memory"));
+      _ub_name_exist = CAST_TO_FN_PTR(ub_name_exist_func_t, dlsym(handle, "remote_name_exist"));
+      _ub_addr_exist = CAST_TO_FN_PTR(ub_addr_exist_func_t, dlsym(handle, "remote_addr_exist"));
+      _ub_mem_borrow = CAST_TO_FN_PTR(ub_mem_borrow_func_t, dlsym(handle, "borrow_memory"));
+      _ub_mem_return = CAST_TO_FN_PTR(ub_mem_return_func_t, dlsym(handle, "return_memory"));
+      _ub_prepare_env = CAST_TO_FN_PTR(ub_prepare_env_func_t, dlsym(handle, "prepare_environments"));
+      _ub_finalize_env = CAST_TO_FN_PTR(ub_finalize_env_func_t, dlsym(handle, "finalize_environments"));
     }
 }
 

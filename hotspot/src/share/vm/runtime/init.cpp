@@ -40,8 +40,8 @@
 #include "services/memTracker.hpp"
 #include "utilities/macros.hpp"
 
-// LingQu
-#include "matrix/allowList.hpp"
+// UB Matrix
+#include "matrix/matrixAllowList.hpp"
 
 
 // Initialization done by VM thread in vm_init_globals()

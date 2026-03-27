@@ -44,7 +44,7 @@ extern jfieldID raf_fd; /* id for jobject 'fd' in java.io.RandomAccessFile */
 
 JNIEXPORT void JNICALL
 Java_java_io_RandomAccessFile_close0(JNIEnv *env, jobject this) {
-    // LingQu
+    // UB Matrix
     FD fd = GET_FD(this, raf_fd);
     if (fd >= fd_limit) {
         ubMemClose(env, this, fd);

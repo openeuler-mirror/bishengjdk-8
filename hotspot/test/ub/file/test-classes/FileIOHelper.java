@@ -17,34 +17,21 @@
  * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef SHARE_VM_MATRIX_MATRIXMANAGER_HPP
-#define SHARE_VM_MATRIX_MATRIXMANAGER_HPP
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
-#include <sys/resource.h>
+public class FileIOHelper {
+    private static final Charset UTF8 = StandardCharsets.UTF_8;
 
-#include "matrix/matrixAllowList.hpp"
-#include "matrix/matrixUtils.hpp"
+    public static void writeString(Path file, String content) throws IOException {
+        Files.write(file, content.getBytes(UTF8));
+    }
 
-#define UB_LOG(level, fmt, ...)                    \
-  if (strcmp(level, "ERROR") == 0 || PrintUBLog) { \
-    ResourceMark rm;                               \
-    MatrixGlobal::log(level, fmt, ##__VA_ARGS__);  \
-  }
-
-class MatrixGlobal : public AllStatic {
- public:
-  static bool initialized() { return _initialized; }
-  static void init();
-  static void before_exit();
-  static bool check_stack();
-  static bool print_stack();
-  static void log(const char* level, const char* format, ...);
-
- private:
-  static bool _enabled;
-  static bool _initialized;
-  static outputStream* _log_file;
-  static AllowListTable* _allow_list_table;
-};
-
-#endif  // SHARE_VM_MATRIX_MATRIXMANAGER_HPP
+    public static String readString(Path file) throws IOException {
+        byte[] bytes = Files.readAllBytes(file);
+        return new String(bytes, UTF8);
+    }
+}

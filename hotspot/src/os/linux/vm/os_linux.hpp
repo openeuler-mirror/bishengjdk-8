@@ -248,6 +248,7 @@ class Linux {
   static pthread_condattr_t _condattr[1];
 
   public:
+
   static pthread_condattr_t* condAttr() { return _condattr; }
 
   // Output structure for query_process_memory_info() (all values in KB)
@@ -312,17 +313,17 @@ private:
   typedef uint (*dmh_g1_get_region_limit_t)(size_t _new_max_heap, size_t region_size);
 
   typedef int   (*ub_malloc_func_t)(const char* name, size_t size);
-  typedef void* (*ub_mmap_func_t)(const char* name, size_t size);
+  typedef void* (*ub_mmap_func_t)(const char* name, size_t length, int* ret_code, void *addr, int prot);
   typedef int   (*ub_flush_func_t)(void* start, size_t size);
   typedef int   (*ub_munmap_func_t)(void* start, size_t size);
   typedef int   (*ub_free_func_t)(const char* name);
-  typedef int   (*ub_length_func_t)(void* start, size_t* size);
-  typedef void* (*ub_seek_func_t)(void* start, size_t off, size_t* size, size_t* offset);
   typedef int   (*ub_rename_func_t)(const char* from, const char* to);
   typedef int   (*ub_name_exist_func_t)(const char* name, bool* exist);
   typedef int   (*ub_addr_exist_func_t)(void* addr, bool* exist);
-  typedef int   (*ub_prepare_env_func_t)();
-  typedef int   (*ub_mem_info_func_t)(size_t* used, size_t* alloc, size_t* total);
+  typedef void* (*ub_mem_borrow_func_t)(size_t size, int* ret_code, void* start);
+  typedef int   (*ub_mem_return_func_t)(void* addr, size_t size);
+  typedef int   (*ub_prepare_env_func_t)(int log_level, const char* log_path);
+  typedef int   (*ub_finalize_env_func_t)();
 
   static heap_dict_add_t _heap_dict_add;
   static heap_dict_lookup_t _heap_dict_lookup;
@@ -355,18 +356,19 @@ private:
   static numa_bitmask_free_func_t _numa_bitmask_free;
   static dmh_g1_can_shrink_t _dmh_g1_can_shrink;
   static dmh_g1_get_region_limit_t _dmh_g1_get_region_limit;
+
   static ub_malloc_func_t  _ub_malloc;
   static ub_mmap_func_t    _ub_mmap;
   static ub_flush_func_t   _ub_flush;
   static ub_munmap_func_t  _ub_munmap;
   static ub_free_func_t    _ub_free;
-  static ub_length_func_t  _ub_length;
-  static ub_seek_func_t    _ub_seek;
   static ub_rename_func_t  _ub_rename;
   static ub_name_exist_func_t   _ub_name_exist;
   static ub_addr_exist_func_t   _ub_addr_exist;
   static ub_prepare_env_func_t  _ub_prepare_env;
-  static ub_mem_info_func_t     _ub_mem_info;
+  static ub_mem_borrow_func_t   _ub_mem_borrow;
+  static ub_mem_return_func_t   _ub_mem_return;
+  static ub_finalize_env_func_t  _ub_finalize_env;
 
   static unsigned long* _numa_all_nodes;
   static struct bitmask* _numa_all_nodes_ptr;
@@ -668,95 +670,96 @@ public:
     }
   }
 
-  static int ub_malloc(const char* name, size_t size = 0) {
+  static int ub_malloc(const char* name, size_t size) {
     if (_ub_malloc == NULL) {
-        return -1;
+      return -1;
     }
     return _ub_malloc(name, size);
   }
 
-  static void* ub_mmap(const char* name, size_t size = 0) {
-      if (_ub_mmap == NULL) {
-          return NULL;
-      }
-      return _ub_mmap(name, size);
+  static void* ub_mmap(const char* name, size_t length, int* ret_code = NULL,
+                        void *addr = NULL, int prot = MEM_PROT_RW) {
+    if (_ub_mmap == NULL) {
+      return NULL;
+    }
+    return _ub_mmap(name, length, ret_code, addr, prot);
   }
 
-  static int ub_flush(void* start, size_t size = 0) {
-      if (_ub_flush == NULL) {
-          return -1;
-      }
-      return _ub_flush(start, size);
+  static int ub_flush(void* start, size_t size) {
+    if (_ub_flush == NULL) {
+      return -1;
+    }
+    return _ub_flush(start, size);
   }
 
-  static int ub_munmap(void* start, size_t size = 0) {
-      if (_ub_munmap == NULL) {
-          return -1;
-      }
-      return _ub_munmap(start, size);
+  static int ub_munmap(void* start, size_t size) {
+    if (_ub_munmap == NULL) {
+      return -1;
+    }
+    return _ub_munmap(start, size);
   }
 
   static int ub_free(const char* name) {
-      if (_ub_free == NULL) {
-          return -1;
-      }
-      return _ub_free(name);
-  }
-
-  static int ub_length(void* start, size_t* size) {
-      if (_ub_length == NULL) {
-          return -1;
-      }
-      return _ub_length(start, size);
-  }
-
-  static void* ub_seek(void* start, size_t off, size_t* size, size_t* offset) {
-      if (_ub_seek == NULL) {
-          return NULL;
-      }
-      return _ub_seek(start, off, size, offset);
+    if (_ub_free == NULL) {
+      return -1;
+    }
+    return _ub_free(name);
   }
 
   static int ub_rename(const char* from, const char* to) {
-      if (_ub_rename == NULL) {
-          return -1;
-      }
-      return _ub_rename(from, to);
+    if (_ub_rename == NULL) {
+      return -1;
+    }
+    return _ub_rename(from, to);
   }
 
   static int ub_name_exist(const char* name, bool* exist) {
-      if (_ub_name_exist == NULL) {
-          return -1;
-      }
-      return _ub_name_exist(name, exist);
+    if (_ub_name_exist == NULL) {
+      return -1;
+    }
+    return _ub_name_exist(name, exist);
   }
 
   static int ub_addr_exist(void* addr, bool* exist) {
-      if (_ub_addr_exist == NULL) {
-          return -1;
-      }
-      return _ub_addr_exist(addr, exist);
+    if (_ub_addr_exist == NULL) {
+      return -1;
+    }
+    return _ub_addr_exist(addr, exist);
   }
 
-  static int ub_prepare_env() {
-      if (_ub_prepare_env == NULL) {
-          return -1;
-      }
-      return _ub_prepare_env();
+  static int ub_prepare_env(int log_level = 0, const char* log_path = NULL) {
+    if (_ub_prepare_env == NULL) {
+      return -1;
+    }
+    return _ub_prepare_env(log_level, log_path);
   }
 
-  static int ub_mem_info(size_t* used, size_t* alloc, size_t* total) {
-      if (_ub_mem_info == NULL) {
-          return -1;
-      }
-      return _ub_mem_info(used, alloc, total);
+  static int ub_finalize_env() {
+    if (_ub_finalize_env == NULL) {
+      return -1;
+    }
+    return _ub_finalize_env();
   }
 
   static bool ub_libs_ready() {
-      if (_ub_prepare_env == NULL) {
-          return false;
-      }
-      return true;
+    if (_ub_prepare_env == NULL) {
+      return false;
+    }
+    return true;
+  }
+
+  static void* ub_mem_borrow(size_t size, int* ret_code = NULL, void* start = NULL) {
+    if (_ub_mem_borrow == NULL) {
+      return NULL;
+    }
+    return _ub_mem_borrow(size, ret_code, start);
+  }
+
+  static int ub_mem_return(void* addr, size_t size) {
+    if (_ub_mem_return == NULL) {
+      return -1;
+    }
+    return _ub_mem_return(addr, size);
   }
 };
 

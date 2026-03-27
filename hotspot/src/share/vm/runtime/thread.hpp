@@ -57,8 +57,8 @@
 #include "jfr/support/jfrThreadExtension.hpp"
 #endif
 
-// LingQu
-#include "matrix/matrixManager.hpp"
+// UB Matrix
+#include "matrix/ubFile.hpp"
 
 class ThreadSafepointState;
 class ThreadProfiler;
@@ -933,7 +933,7 @@ class JavaThread: public Thread {
     stack_guard_enabled         // enabled
   };
 
-  // LingQu
+  // UB Matrix
   MatrixFileManager ub_file_manager;
   
  private:

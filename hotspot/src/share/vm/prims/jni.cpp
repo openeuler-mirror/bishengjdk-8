@@ -95,9 +95,9 @@
 # include "os_bsd.inline.hpp"
 #endif
 
-// LingQu
-#include "matrix/allowList.hpp"
+// UB Matrix
 #include "matrix/matrixManager.hpp"
+#include "matrix/ubSocket.hpp"
 
 static jint CurrentVersion = JNI_VERSION_1_8;
 
@@ -4131,7 +4131,7 @@ JNI_ENTRY(jint, jni_UnregisterNatives(JNIEnv *env, jclass clazz))
 JNI_END
 
 //
-// LingQu Support
+// UB Matrix Support
 //
 
 JNI_ENTRY(jboolean, jni_UbCheckStack(JNIEnv *env))
@@ -4337,7 +4337,7 @@ JNI_ENTRY(jboolean, jni_UbRemove(JNIEnv *env, const char* path))
   DTRACE_PROBE1(hotspot_jni, UbRemove__return, res);
 #else /* USDT2 */
  HOTSPOT_JNI_UBREMOVE_RETURN(
-                            res);
+                             res);
 #endif /* USDT2 */
   return res;
 JNI_END
@@ -4380,16 +4380,16 @@ JNI_ENTRY(jboolean, jni_UbRename(JNIEnv *env, const char* from, const char* to))
   return res;
 JNI_END
 
-JNI_ENTRY(jlong, jni_UbTransfer(JNIEnv *env, jint dst, jint src, jlong offset, jlong count))
+JNI_ENTRY(void*, jni_UbTransfer(JNIEnv *env, jint dst, jint src, jlong offset, jlong count, jlong* ntransfer))
   JNIWrapper("UbTransfer");
 #ifndef USDT2
-  DTRACE_PROBE5(hotspot_jni, UbTransfer__entry, env, dst, src, offset, count);
+  DTRACE_PROBE6(hotspot_jni, UbTransfer__entry, env, dst, src, offset, count, ntransfer);
 #else /* USDT2 */
  HOTSPOT_JNI_UBTRANSFER_ENTRY(
-                              env, dst, src, offset, count);
+                              env, dst, src, offset, count, ntransfer);
 #endif /* USDT2 */
   JavaThread* jt = JavaThread::thread_from_jni_environment(env);
-  jlong res = jt->ub_file_manager.transfer(dst, src, offset, count);
+  void* res = jt->ub_file_manager.transfer(dst, src, offset, count, ntransfer);
 #ifndef USDT2
   DTRACE_PROBE1(hotspot_jni, UbTransfer__return, res);
 #else /* USDT2 */
@@ -4413,6 +4413,138 @@ JNI_ENTRY(jint, jni_UbFallback(JNIEnv *env, jint fd))
   DTRACE_PROBE1(hotspot_jni, UbFallback__return, res);
 #else /* USDT2 */
  HOTSPOT_JNI_UBFALLBACK_RETURN(
+                               res);
+#endif /* USDT2 */
+  return res;
+JNI_END
+
+JNI_ENTRY(jboolean, jni_IsUbSocket(JNIEnv *env, int fd))
+  JNIWrapper("jni_IsUbSocket");
+#ifndef USDT2
+  DTRACE_PROBE2(hotspot_jni, IsUbSocket__entry, env, fd);
+#else /* USDT2 */
+ HOTSPOT_JNI_ISUBSOCKET_ENTRY(
+                              env, fd);
+#endif /* USDT2 */
+  bool res = UBSocketManager::has_registered(fd) ? JNI_TRUE : JNI_FALSE;
+#ifndef USDT2
+  DTRACE_PROBE1(hotspot_jni, IsUbSocket__return, res);
+#else /* USDT2 */
+ HOTSPOT_JNI_ISUBSOCKET_RETURN(
+                               res);
+#endif /* USDT2 */
+  return res;
+JNI_END
+
+JNI_ENTRY(jint, jni_UbSocketName(JNIEnv *env, char* name, int len))
+  JNIWrapper("jni_UbSocketName");
+#ifndef USDT2
+  DTRACE_PROBE3(hotspot_jni, UbSocketName__entry, env, name, len);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBSOCKETNAME_ENTRY(
+                              env, name);
+#endif /* USDT2 */
+  jint res = -1;
+  if (UBSocketManager::shared_memory_name != NULL) {
+    UBSocketManager::shared_memory_name->as_C_string(name, len);
+    res = 0;
+  } else {
+    *name = '\0';
+  }
+#ifndef USDT2
+  DTRACE_PROBE1(hotspot_jni, UbSocketName__return, res);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBSOCKETNAME_RETURN(
+                               res);
+#endif /* USDT2 */
+  return res;
+JNI_END
+
+JNI_ENTRY(jboolean, jni_UbSocketRegister(JNIEnv *env, int fd))
+  JNIWrapper("jni_UbSocketRegister");
+#ifndef USDT2
+  DTRACE_PROBE2(hotspot_jni, UbSocketRegister__entry, env, fd);
+#else /* USDT2 */
+ HOTSPOT_JNI_UbSOCKETREGISTER_ENTRY(
+                              env, fd);
+#endif /* USDT2 */
+  bool res = UBSocketManager::register_fd(fd) ? JNI_TRUE : JNI_FALSE;
+#ifndef USDT2
+  DTRACE_PROBE1(hotspot_jni, UbSocketRegister__return, res);
+#else /* USDT2 */
+ HOTSPOT_JNI_UbSOCKETREGISTER_RETURN(
+                               res);
+#endif /* USDT2 */
+  return res;
+JNI_END
+
+JNI_ENTRY(jboolean, jni_UbSocketClose(JNIEnv *env, int fd))
+  JNIWrapper("jni_UbSocketClose");
+#ifndef USDT2
+  DTRACE_PROBE2(hotspot_jni, UbSocketClose__entry, env, fd);
+#else /* USDT2 */
+ HOTSPOT_JNI_UbSOCKETCLOSE_ENTRY(
+                              env, fd);
+#endif /* USDT2 */
+  bool res = UBSocketManager::unregister_fd(fd) ? JNI_TRUE : JNI_FALSE;
+#ifndef USDT2
+  DTRACE_PROBE1(hotspot_jni, UbSocketClose__return, res);
+#else /* USDT2 */
+ HOTSPOT_JNI_UbSOCKETCLOSE_RETURN(
+                               res);
+#endif /* USDT2 */
+  return res;
+JNI_END
+
+JNI_ENTRY(jlong, jni_UbSocketRead(JNIEnv *env, void* buf, int fd, jlong len))
+  JNIWrapper("jni_UbSocketRead");
+#ifndef USDT2
+  DTRACE_PROBE4(hotspot_jni, UbSocketRead__entry, env, buf, fd, len);
+#else /* USDT2 */
+ HOTSPOT_JNI_UbSOCKETREAD_ENTRY(
+                              env, buf, fd, len);
+#endif /* USDT2 */
+  jlong res = UBSocketManager::read_data(buf, fd, len);
+#ifndef USDT2
+  DTRACE_PROBE1(hotspot_jni, UbSocketRead__return, res);
+#else /* USDT2 */
+ HOTSPOT_JNI_UbSOCKETREAD_RETURN(
+                               res);
+#endif /* USDT2 */
+  return res;
+JNI_END
+
+JNI_ENTRY(jlong, jni_UbSocketWrite(JNIEnv *env, void* buf, int fd, jlong len))
+  JNIWrapper("jni_UbSocketWrite");
+#ifndef USDT2
+  DTRACE_PROBE4(hotspot_jni, UbSocketWrite__entry, env, buf, fd, len);
+#else /* USDT2 */
+ HOTSPOT_JNI_UbSOCKETWRITE_ENTRY(
+                              env, buf, fd, len);
+#endif /* USDT2 */
+  jlong res = UBSocketManager::write_data(buf, fd, len);
+#ifndef USDT2
+  DTRACE_PROBE1(hotspot_jni, UbSocketWrite__return, res);
+#else /* USDT2 */
+ HOTSPOT_JNI_UbSOCKETWRITE_RETURN(
+                               res);
+#endif /* USDT2 */
+  return res;
+JNI_END
+
+JNI_ENTRY(jlong, jni_UbSocketParse(JNIEnv *env, int fd, char *msg))
+  JNIWrapper("jni_UbSocketParse");
+#ifndef USDT2
+  DTRACE_PROBE3(hotspot_jni, UbSocketParse__entry, env, fd, msg);
+#else /* USDT2 */
+ HOTSPOT_JNI_UbSOCKETPARSE_ENTRY(
+                              env, fd, msg);
+#endif /* USDT2 */
+  jlong res = UBSocketManager::parse_msg(fd, msg);
+#ifndef USDT2
+  DTRACE_PROBE1(hotspot_jni, UbSocketParse__return, res);
+#else /* USDT2 */
+ HOTSPOT_JNI_UbSOCKETPARSE_RETURN(
                                res);
 #endif /* USDT2 */
   return res;
@@ -5242,7 +5374,7 @@ struct JNINativeInterface_ jni_NativeInterface = {
 
     jni_GetObjectRefType,
 
-    // LingQu Support
+    // UB Matrix Support
     jni_UbCheckStack,
     jni_UbOpen,
     jni_UbWrite,
@@ -5257,7 +5389,14 @@ struct JNINativeInterface_ jni_NativeInterface = {
     jni_UbRemoveDir,
     jni_UbRename,
     jni_UbTransfer,
-    jni_UbFallback
+    jni_UbFallback,
+    jni_IsUbSocket,
+    jni_UbSocketName,
+    jni_UbSocketRegister,
+    jni_UbSocketClose,
+    jni_UbSocketRead,
+    jni_UbSocketWrite,
+    jni_UbSocketParse
 };
 
 
