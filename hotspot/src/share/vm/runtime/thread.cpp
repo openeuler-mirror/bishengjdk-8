@@ -3702,7 +3702,7 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   JvmtiExport::post_vm_initialized();
 
   // UB Matrix
-#ifdef AARCH_64
+#ifdef AARCH64
   MatrixGlobal::init();
 #endif
 
@@ -4150,6 +4150,13 @@ bool Threads::destroy_vm() {
   notify_vm_shutdown();
 
   delete thread;
+
+  if (UseBorrowedMemory && UBHeapFixedMemPool::_initialized) {
+    int ret = UBHeapMemory::fixed_mem_cleanup();
+    if (ret != 0) {
+      tty->print_cr("fixed_mem_cleanup failed with %d", ret);
+    }
+  }
 
   // exit_globals() will delete tty
   exit_globals();

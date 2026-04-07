@@ -811,6 +811,8 @@ struct JNINativeInterface_ {
       (JNIEnv* env, void* buf, int fd, jlong len);
     jlong (JNICALL *UbSocketParse)
       (JNIEnv* env, int fd, char* msg);
+    jlong (JNICALL *UbMaxOffheapSize)
+      (JNIEnv *env);
 };
 
 /*
@@ -1969,6 +1971,9 @@ struct JNIEnv_ {
     }
     jlong UbSocketParse(int fd, char* msg) {
       return functions->UbSocketParse(this, fd, msg);
+    }
+    jlong UbMaxOffheapSize() {
+      return functions->UbMaxOffheapSize(this);
     }
 
 #endif /* __cplusplus */

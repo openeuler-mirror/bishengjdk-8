@@ -1980,6 +1980,14 @@ JNI_ENTRY_CHECKED(jlong,
     return result;
 JNI_END
 
+JNI_ENTRY_CHECKED(jlong,
+  checked_jni_UbMaxOffheapSize(JNIEnv *env))
+    functionEnter(thr);
+    jlong result = UNCHECKED()->UbMaxOffheapSize(env);
+    functionExit(thr);
+    return result;
+JNI_END
+
 JNI_ENTRY_CHECKED(jint,
   checked_jni_MonitorEnter(JNIEnv *env,
                            jobject obj))
@@ -2488,7 +2496,8 @@ struct JNINativeInterface_  checked_jni_NativeInterface = {
     checked_jni_UbSocketClose,
     checked_jni_UbSocketRead,
     checked_jni_UbSocketWrite,
-    checked_jni_UbSocketParse
+    checked_jni_UbSocketParse,
+    checked_jni_UbMaxOffheapSize
 };
 
 

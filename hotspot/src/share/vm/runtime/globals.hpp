@@ -4250,6 +4250,24 @@ class CommandLineFlags {
   experimental(ccstr, UBLogPath, "",                                        \
           "UB log path")                                                    \
                                                                             \
+  experimental(uintx, UBMaxOffHeapSize, 0,                                  \
+          "UB Mem max offheap memory size")                                 \
+                                                                            \
+  experimental(bool, UseBorrowedMemory, false,                              \
+          "Use borrowed memory from UB Matrix when expand MaxHeapSize "     \
+          "or allocate offheap memory")                                     \
+                                                                            \
+  experimental(uintx, MaxOffheapLocalMemory, ScaleForWordSize(50*M),        \
+          "Maximum local off-heap memory size (in bytes) when"              \
+          "UseBorrowedMemory=true")                                         \
+                                                                            \
+  experimental(intx, MaxOffheapBorrowedMemory, -1,                          \
+          "Maximum offheap borrowed memory size (in bytes) when"            \
+          "UseBorrowedMemory=true, default -1 means no limit")              \
+                                                                            \
+  experimental(uintx, BorrowedMemoryAllocationThreshold, 80,                \
+          "Memory usage % threshold for new borrowed memory allocation")    \
+                                                                            \
   experimental(bool, UseUBSocket, false,                                    \
           "Use UB Socket")                                                  \
                                                                             \

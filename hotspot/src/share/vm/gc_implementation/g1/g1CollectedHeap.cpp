@@ -1887,7 +1887,13 @@ jint G1CollectedHeap::initialize() {
   // If this happens then we could end up using a non-optimal
   // compressed oops mode.
 
-  ReservedSpace heap_rs = Universe::reserve_heap(max_byte_size,
+  size_t reserved_size = max_byte_size;
+  uintx borrowed_heap_size = 0;
+  if (Universe::is_dynamic_max_heap_enable() && UseBorrowedMemory) {
+    borrowed_heap_size = collector_policy()->max_heap_byte_size_limit()
+                         - collector_policy()->max_heap_byte_size();
+  }
+  ReservedSpace heap_rs = Universe::reserve_heap(reserved_size,
                                                  heap_alignment);
 
   // It is important to do this in a way such that concurrent readers can't
@@ -1896,6 +1902,22 @@ jint G1CollectedHeap::initialize() {
   _reserved.set_word_size(0);
   _reserved.set_start((HeapWord*)heap_rs.base());
   _reserved.set_end((HeapWord*)(heap_rs.base() + heap_rs.size()));
+
+  // LINGQU
+  if (Universe::is_dynamic_max_heap_enable() && UseBorrowedMemory) {
+    UBHeapFixedMemPool::_base = reinterpret_cast<uintptr_t>(heap_rs.base()) + collector_policy()->max_heap_byte_size();
+    UBHeapFixedMemPool::_size = borrowed_heap_size;
+    UBHeapFixedMemPool::_end = UBHeapFixedMemPool::_base + UBHeapFixedMemPool::_size;
+
+    int ret = UBHeapMemory::fixed_mem_init(reinterpret_cast<void*>(UBHeapFixedMemPool::_base),
+                                           UBHeapFixedMemPool::_size);
+    if (ret != 0) {
+        vm_exit_during_initialization(err_msg("Could not initialize fixed mem pool for size " SIZE_FORMAT
+                                              "KB at base addr " PTR_FORMAT ": %d",
+                                              UBHeapFixedMemPool::_size / K, UBHeapFixedMemPool::_base, ret));
+    }
+    UBHeapFixedMemPool::_initialized = true;
+  }
 
   // Create the gen rem set (and barrier set) for the entire reserved region.
   _rem_set = collector_policy()->create_rem_set(_reserved, 2);

@@ -134,8 +134,13 @@ void* borrow_memory(size_t size, int* ret_code, void* start) {
                     flag, -1, 0);
   if (addr == MAP_FAILED) {
     std::cerr << "mmap failed: " << strerror(errno) << std::endl;
-    *ret_code = errno;
+    if (ret_code) {
+      *ret_code = errno;
+    }
     return nullptr;
+  }
+  if (ret_code) {
+    *ret_code = 0;
   }
   return addr;
 }
@@ -143,6 +148,22 @@ void* borrow_memory(size_t size, int* ret_code, void* start) {
 int return_memory(void* addr, size_t size) {
   int ret = munmap(addr, size);
   return ret;
+}
+
+bool  dynamic_max_heap_g1_can_shrink(double used_after_gc_d, size_t _new_max_heap,
+                                     double maximum_used_percentage, size_t max_heap_size) {
+  double minimum_desired_capacity_d = used_after_gc_d / maximum_used_percentage;
+  double desired_capacity_upper_bound = (double) max_heap_size;
+  minimum_desired_capacity_d = (minimum_desired_capacity_d < desired_capacity_upper_bound) ?
+                               minimum_desired_capacity_d : desired_capacity_upper_bound;
+  size_t minimum_desired_capacity = (size_t) minimum_desired_capacity_d;
+  minimum_desired_capacity = (minimum_desired_capacity < max_heap_size) ? minimum_desired_capacity : max_heap_size;
+  bool can_shrink = (_new_max_heap >= minimum_desired_capacity);
+  return can_shrink;
+}
+
+uint  dynamic_max_heap_g1_get_region_limit(size_t _new_max_heap, size_t region_size) {
+  return (uint) (_new_max_heap / region_size);
 }
 
 #ifdef __cplusplus

@@ -74,6 +74,8 @@ class CollectorPolicy : public CHeapObj<mtGC> {
 
   // Dynamic Max Heap
   size_t _max_heap_byte_size_limit;
+  // UB Matrix
+  size_t _fixed_mem_pool_size;
 
   size_t _space_alignment;
   size_t _heap_alignment;

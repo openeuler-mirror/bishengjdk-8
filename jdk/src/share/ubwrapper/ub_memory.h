@@ -54,6 +54,12 @@ extern void* borrow_memory(size_t size, int* ret_code, void* start);
 
 extern int   return_memory(void* addr, size_t size);
 
+// Dynamic Max Heap Size
+extern bool  dynamic_max_heap_g1_can_shrink(double used_after_gc_d, size_t _new_max_heap,
+                                            double maximum_used_percentage, size_t max_heap_size);
+
+extern uint  dynamic_max_heap_g1_get_region_limit(size_t _new_max_heap, size_t region_size);
+
 #ifdef __cplusplus
 };
 #endif

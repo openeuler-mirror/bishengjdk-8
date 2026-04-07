@@ -77,6 +77,7 @@ HS_DTRACE_PROBE_DECL1(hotspot, thread__unpark, uintptr_t);
 
 #define UnsafeWrapper(arg) /*nothing, for the present*/
 
+static volatile size_t total_local_unsafe_memory = 0;
 
 inline void* addr_from_java(jlong addr) {
   // This assert fails in a variety of ways on 32-bit systems.
@@ -620,11 +621,19 @@ UNSAFE_ENTRY(jlong, Unsafe_AllocateMemory(JNIEnv *env, jobject unsafe, jlong siz
     return 0;
   }
   sz = round_to(sz, HeapWordSize);
-  void* x = os::malloc(sz, mtInternal);
+  MEMFLAGS flag = mtInternal;
+  if (UBHeapMemory::ub_dynamic_mem_enabled() && sz >= UBHeapMemory::ub_unsafe_filter_threshold()) {
+    jlong size_count = MIN2(sz, (size_t)max_jlong);
+    size_t old_total = Atomic::add(size_count, &total_local_unsafe_memory);
+    if (total_local_unsafe_memory > MaxOffheapLocalMemory) {
+      Atomic::add(-size_count, &total_local_unsafe_memory);
+      flag = mtBorrow;
+    }
+  }
+  void* x = os::malloc(sz, flag);
   if (x == NULL) {
     THROW_0(vmSymbols::java_lang_OutOfMemoryError());
   }
-  //Copy::fill_to_words((HeapWord*)x, sz / HeapWordSize);
   return addr_to_java(x);
 UNSAFE_END
 
@@ -652,6 +661,14 @@ UNSAFE_ENTRY(void, Unsafe_FreeMemory(JNIEnv *env, jobject unsafe, jlong addr))
   void* p = addr_from_java(addr);
   if (p == NULL) {
     return;
+  }
+  if (UBHeapMemory::ub_dynamic_mem_enabled()) {
+    MEMFLAGS flag = MallocTracker::get_flags(p);
+    size_t sz = MallocTracker::get_size(p);
+    if (flag == mtInternal && sz >= UBHeapMemory::ub_unsafe_filter_threshold()) {
+      jlong size_count = MIN2(sz, (size_t)max_jlong);
+      Atomic::add(-size_count, &total_local_unsafe_memory);
+    }
   }
   os::free(p);
 UNSAFE_END

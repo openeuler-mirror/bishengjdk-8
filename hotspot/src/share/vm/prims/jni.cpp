@@ -4550,6 +4550,22 @@ JNI_ENTRY(jlong, jni_UbSocketParse(JNIEnv *env, int fd, char *msg))
   return res;
 JNI_END
 
+JNI_ENTRY(jlong, jni_UbMaxOffheapSize(JNIEnv *env))
+  JNIWrapper("UbMaxOffheapSize");
+#ifndef USDT2
+  DTRACE_PROBE1(hotspot_jni, UbMaxOffheapSize__entry, env);
+#else /* USDT2 */
+  HOTSPOT_JNI_UbMAXOFFHEAPSIZE_ENTRY(env);
+#endif /* USDT2 */
+  jlong res = UBMaxOffHeapSize;
+#ifndef USDT2
+  DTRACE_PROBE1(hotspot_jni, UbMaxOffheapSize__return, res);
+#else /* USDT2 */
+  HOTSPOT_JNI_UbMAXOFFHEAPSIZE_RETURN(res);
+#endif /* USDT2 */
+  return res;
+JNI_END
+
 //
 // Monitor functions
 //
@@ -5396,7 +5412,8 @@ struct JNINativeInterface_ jni_NativeInterface = {
     jni_UbSocketClose,
     jni_UbSocketRead,
     jni_UbSocketWrite,
-    jni_UbSocketParse
+    jni_UbSocketParse,
+    jni_UbMaxOffheapSize
 };
 
 

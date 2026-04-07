@@ -112,6 +112,17 @@ void CollectorPolicy::initialize_flags() {
   uintx aligned_initial_heap_size = align_size_up(InitialHeapSize, _heap_alignment);
   uintx aligned_max_heap_size = align_size_up(MaxHeapSize, _heap_alignment);
 
+  // UB borrowed heap size must be aligned to UB minimum block size.
+  if (Universe::is_dynamic_max_heap_enable() && UseBorrowedMemory) {
+    uintx borrowed_heap_size = DynamicMaxHeapSizeLimit - aligned_max_heap_size;
+    size_t fixed_borrow_align = MAX2(_heap_alignment, UBHeapMemory::ub_heap_alignment());
+    uintx aligned_borrowed_heap_size = align_size_up(borrowed_heap_size, fixed_borrow_align);
+    uintx aligned_max_heap_size_limit = aligned_max_heap_size + aligned_borrowed_heap_size;
+    if (aligned_max_heap_size_limit != DynamicMaxHeapSizeLimit) {
+      FLAG_SET_ERGO(uintx, DynamicMaxHeapSizeLimit, aligned_max_heap_size_limit);
+    }
+  }
+
   // Write back to flags if the values changed
   if (aligned_initial_heap_size != InitialHeapSize) {
     FLAG_SET_ERGO(uintx, InitialHeapSize, aligned_initial_heap_size);
@@ -135,6 +146,7 @@ void CollectorPolicy::initialize_flags() {
 
   _initial_heap_byte_size = InitialHeapSize;
   _max_heap_byte_size = MaxHeapSize;
+  _max_heap_byte_size_limit = DynamicMaxHeapSizeLimit;
 
   FLAG_SET_ERGO(uintx, MinHeapDeltaBytes, align_size_up(MinHeapDeltaBytes, _space_alignment));
 
