@@ -13,6 +13,7 @@ import java.util.Random;
  * @summary Check if the captcha can be successfully generated
  * @author XiaotaoNAN
  * I8ME2N(https://gitee.com/openeuler/bishengjdk-8/issues/I8ME2N?from=project-issue)
+ * #235(https://gitcode.com/openeuler/bishengjdk-8/issues/235)
  */
 
 public class CaptchaTest {
