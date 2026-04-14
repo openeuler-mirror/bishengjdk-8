@@ -32,6 +32,8 @@
 #include "compiler/disassembler.hpp"
 #include "interpreter/interpreter.hpp"
 #include "jvm_linux.h"
+#include "matrix/matrixManager.hpp"
+#include "matrix/ubHeapMemory.hpp"
 #include "memory/allocation.inline.hpp"
 #include "memory/filemap.hpp"
 #include "mutex_linux.inline.hpp"
@@ -3045,11 +3047,17 @@ static void warn_fail_commit_memory(char* addr, size_t size,
           alignment_hint, exec, strerror(err), err);
 }
 
-// NOTE: Linux kernel does not really reserve the pages for us.
-//       All it does is to check if there are enough free pages
-//       left at the time of mmap(). This could be a potential
-//       problem.
-int os::Linux::commit_memory_impl(char* addr, size_t size, bool exec) {
+static void warn_fail_acquire_borrow_memory(void* addr, size_t size, int retcode) {
+  warning("INFO: os::acquire_borrow_memory(" PTR_FORMAT ", " SIZE_FORMAT
+          ") failed; retcode is = %d", addr, size, retcode);
+}
+
+static void warn_fail_release_borrow_memory(void* addr, size_t size, int retcode) {
+  warning("INFO: os::release_borrow_memory(" PTR_FORMAT ", " SIZE_FORMAT
+          ") failed; retcode is = %d", addr, size, retcode);
+}
+
+int os::Linux::commit_memory_impl_default(char* addr, size_t size, bool exec) {
   int prot = exec ? PROT_READ|PROT_WRITE|PROT_EXEC : PROT_READ|PROT_WRITE;
   uintptr_t res = (uintptr_t) ::mmap(addr, size, prot,
                                    MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0);
@@ -3068,6 +3076,54 @@ int os::Linux::commit_memory_impl(char* addr, size_t size, bool exec) {
   }
 
   return err;
+}
+
+int os::Linux::commit_memory_impl_lingqu(char* addr, size_t size, bool exec) {
+  uintptr_t target_addr = reinterpret_cast<uintptr_t>(addr);
+  uintptr_t target_end = target_addr + size;
+
+  // fast path
+  if (target_addr >= UBHeapFixedMemPool::_end || target_end <= UBHeapFixedMemPool::_base) {
+    return os::Linux::commit_memory_impl_default(addr, size, exec);
+  }
+
+  const uintptr_t overlap_start = MAX2(target_addr, UBHeapFixedMemPool::_base);
+  const uintptr_t overlap_end = MIN2(target_end, UBHeapFixedMemPool::_end);
+  const size_t overlap_size = overlap_end - overlap_start;
+
+  int ret = 0;
+  if (target_addr < overlap_start) {
+    ret = os::Linux::commit_memory_impl_default(addr, overlap_start - target_addr, exec);
+    if (ret != 0) {
+      return ret;
+    }
+  }
+
+  void* overlap_addr = reinterpret_cast<void*>(overlap_start);
+  void* result_ptr = NULL;
+  ret = UBHeapMemory::fixed_mem_acquire(overlap_addr, overlap_size, &result_ptr);
+  if (ret != 0 || result_ptr != overlap_addr) {
+    warn_fail_acquire_borrow_memory(overlap_addr, overlap_size, ret);
+    vm_exit_out_of_memory(size, OOM_MMAP_ERROR, "committing reserved memory.");
+  }
+
+  if (target_end > overlap_end) {
+      const size_t suffix_size = target_end - overlap_end;
+      ret = os::Linux::commit_memory_impl_default(
+          reinterpret_cast<char*>(overlap_end), suffix_size, exec);
+  }
+  return ret;
+}
+
+// NOTE: Linux kernel does not really reserve the pages for us.
+//       All it does is to check if there are enough free pages
+//       left at the time of mmap(). This could be a potential
+//       problem.
+int os::Linux::commit_memory_impl(char* addr, size_t size, bool exec) {
+  if (UseBorrowedMemory && UBHeapFixedMemPool::_initialized) {
+    return os::Linux::commit_memory_impl_lingqu(addr, size, exec);
+  }
+  return os::Linux::commit_memory_impl_default(addr, size, exec);
 }
 
 bool os::pd_commit_memory(char* addr, size_t size, bool exec) {
@@ -3537,10 +3593,52 @@ struct bitmask* os::Linux::_numa_nodes_ptr;
 struct bitmask* os::Linux::_numa_interleave_bitmask;
 struct bitmask* os::Linux::_numa_membind_bitmask;
 
-bool os::pd_uncommit_memory(char* addr, size_t size) {
+bool pd_uncommit_memory_default(char* addr, size_t size) {
   uintptr_t res = (uintptr_t) ::mmap(addr, size, PROT_NONE,
                 MAP_PRIVATE|MAP_FIXED|MAP_NORESERVE|MAP_ANONYMOUS, -1, 0);
   return res  != (uintptr_t) MAP_FAILED;
+}
+
+bool pd_uncommit_memory_lingqu(char* addr, size_t size) {
+  uintptr_t target_addr = reinterpret_cast<uintptr_t>(addr);
+  uintptr_t target_end = target_addr + size;
+
+  // fast path
+  if (target_addr >= UBHeapFixedMemPool::_end || target_end <= UBHeapFixedMemPool::_base) {
+    return pd_uncommit_memory_default(addr, size);
+  }
+
+  const uintptr_t overlap_start = MAX2(target_addr, UBHeapFixedMemPool::_base);
+  const uintptr_t overlap_end = MIN2(target_end, UBHeapFixedMemPool::_end);
+  const size_t overlap_size = overlap_end - overlap_start;
+
+  bool success = true;
+  if (target_addr < overlap_start) {
+    success = pd_uncommit_memory_default(addr, overlap_start - target_addr);
+    if (!success) {
+      return success;
+    }
+  }
+
+  void* overlap_addr = reinterpret_cast<void*>(overlap_start);
+  int ret = UBHeapMemory::fixed_mem_release(overlap_addr, overlap_size);
+  if (ret != 0) {
+    warn_fail_release_borrow_memory(overlap_addr, overlap_size, ret);
+    return false;
+  }
+  if (target_end > overlap_end) {
+      const size_t suffix_size = target_end - overlap_end;
+      success = pd_uncommit_memory_default(
+          reinterpret_cast<char*>(overlap_end), suffix_size);
+  }
+  return success;
+}
+
+bool os::pd_uncommit_memory(char* addr, size_t size) {
+  if (UseBorrowedMemory && UBHeapFixedMemPool::_initialized) {
+    return pd_uncommit_memory_lingqu(addr, size);
+  }
+  return pd_uncommit_memory_default(addr, size);
 }
 
 static
@@ -5592,6 +5690,27 @@ void os::Linux::load_ACC_library_before_ergo() {
             _dmh_g1_get_region_limit = CAST_TO_FN_PTR(dmh_g1_get_region_limit_t, dlsym(handle, "DynamicMaxHeap_G1GetRegionLimit"));
         }
     }
+#ifdef AARCH64
+    handle = NULL;
+    if (!UseBorrowedMemory || !VM_Version::is_hisi_enabled()) {
+        return;
+    }
+    if (os::dll_build_name(path, sizeof(path), Arguments::get_dll_dir(), "matrix_wrapper")) {
+        handle = dlopen(path, RTLD_LAZY);
+    }
+    if (handle == NULL && os::dll_build_name(path, sizeof(path), "/usr/lib64", "matrix_wrapper")) {
+        handle = dlopen(path, RTLD_LAZY);
+    }
+    if (handle != NULL) {
+        if (_dmh_g1_can_shrink == NULL) {
+            _dmh_g1_can_shrink = CAST_TO_FN_PTR(dmh_g1_can_shrink_t, dlsym(handle, "dynamic_max_heap_g1_can_shrink"));
+        }
+        if (_dmh_g1_get_region_limit == NULL) {
+            _dmh_g1_get_region_limit = CAST_TO_FN_PTR(dmh_g1_get_region_limit_t,
+                                                      dlsym(handle, "dynamic_max_heap_g1_get_region_limit"));
+        }
+    }
+#endif
 }
 
 void os::Linux::load_ACC_library() {
@@ -5775,6 +5894,10 @@ jint os::init_2(void)
       UseNUMA = true;
     }
   }
+
+#ifdef AARCH64
+  MatrixGlobal::early_init();
+#endif
 
   if (MaxFDLimit) {
     // set the number of file descriptors to max. print out error

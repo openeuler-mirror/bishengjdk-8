@@ -306,6 +306,14 @@ void G1_ChangeMaxHeapOp::doit() {
       DMH_LOG("G1_ChangeMaxHeapOp fail for missing ACC");
       return;
     }
+    if (UseBorrowedMemory && UBHeapFixedMemPool::_initialized
+        && !is_shrink && _new_max_heap > policy->max_heap_byte_size()) {
+      int ret = UBHeapMemory::fixed_mem_expand_to(_new_max_heap - policy->max_heap_byte_size());
+      if (ret != 0) {
+        DMH_LOG("G1_ChangeMaxHeapOp fail for expand memory to " SIZE_FORMAT "K failed: %d", _new_max_heap / K, ret);
+        return;
+      }
+    }
     heap->set_current_max_heap_size(_new_max_heap);
     heap->hrm()->set_dynamic_max_heap_length(dynamic_max_heap_len);
     // G1 young/old share same max size

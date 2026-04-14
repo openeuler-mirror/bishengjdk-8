@@ -668,7 +668,18 @@ void* os::malloc(size_t size, MEMFLAGS memflags, const NativeCallStack& stack) {
   if (MallocMaxTestWords > 0) {
     ptr = testMalloc(alloc_size);
   } else {
-    ptr = (u_char*)::malloc(alloc_size);
+    if (memflags == mtBorrow && level != NMT_off) {
+      void* result_ptr = NULL;
+      int ret = UBHeapMemory::dynamic_mem_acquire(alloc_size, &result_ptr);
+      if (ret != 0 || result_ptr == NULL) {
+        if (tty != NULL) tty->print_cr("os::malloc acquire borrowed mem failed: %d for size %zu", ret, alloc_size);
+        return NULL;
+      } else {
+        ptr = (u_char*)result_ptr;
+      }
+    } else {
+      ptr = (u_char*)::malloc(alloc_size);
+    }
   }
 
 #ifdef ASSERT
@@ -759,15 +770,41 @@ void  os::free(void *memblock, MEMFLAGS memflags) {
 
   GuardedMemory guarded(membase);
   size_t size = guarded.get_user_size();
+  // Read flag before release_for_freeing clears the header.
+  MEMFLAGS flag = (UBHeapMemory::ub_dynamic_mem_enabled() && memblock != NULL) ?
+                  MallocTracker::get_flags(memblock) : mtNone;
   inc_stat_counter(&free_bytes, size);
   membase = guarded.release_for_freeing();
   if (PrintMalloc && tty != NULL) {
       fprintf(stderr, "os::free " SIZE_FORMAT " bytes --> " PTR_FORMAT "\n", size, (uintptr_t)membase);
   }
-  ::free(membase);
+  if (UBHeapMemory::ub_dynamic_mem_enabled() && memblock != NULL) {
+    if (flag == mtBorrow) {
+      int ret = UBHeapMemory::dynamic_mem_release(membase);
+      if (ret != 0) {
+        if (tty != NULL) tty->print_cr("os::free release borrowed mem failed: %d at %p", ret, membase);
+      }
+    } else {
+      ::free(membase);
+    }
+  } else {
+    ::free(membase);
+  }
 #else
   void* membase = MemTracker::record_free(memblock);
-  ::free(membase);
+  if (UBHeapMemory::ub_dynamic_mem_enabled() &&  memblock != NULL) {
+    MEMFLAGS flag = MallocTracker::get_flags(memblock);
+    if (flag == mtBorrow) {
+      int ret = UBHeapMemory::dynamic_mem_release(membase);
+      if (ret != 0) {
+        if (tty != NULL) tty->print_cr("os::free release borrowed mem failed: %d at %p", ret, membase);
+      }
+    } else {
+      ::free(membase);
+    }
+  } else {
+    ::free(membase);
+  }
 #endif
 }
 

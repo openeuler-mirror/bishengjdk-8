@@ -23,6 +23,7 @@
 
 #include "classfile/symbolTable.hpp"
 #include "matrix/matrixAllowList.hpp"
+#include "matrix/ubHeapMemory.hpp"
 #include "matrix/ubSocket.hpp"
 #include "memory/resourceArea.hpp"
 #include "runtime/thread.hpp"
@@ -32,15 +33,19 @@ const char* OPTION_BLANK_VALUE = "";
 
 AllowListTable* MatrixGlobal::_allow_list_table = NULL;
 outputStream* MatrixGlobal::_log_file = NULL;
+bool MatrixGlobal::_early_initialized = false;
 bool MatrixGlobal::_initialized = false;
 
 bool check_runtime_flags() {
   bool io_features_enable = false;
+  bool heap_features_enable = false;
+
+  heap_features_enable = UseBorrowedMemory;
 
   if (UseUBFile || UseUBSocket) {
     io_features_enable = true;
-    if (UBConfPath == NULL || UBConfPath == OPTION_BLANK_VALUE) {
-      tty->print_cr("UB conf path is NULL, UB-related features are disabled.");
+    if (UBConfPath == NULL || strcmp(UBConfPath, OPTION_BLANK_VALUE) == 0) {
+      tty->print_cr("UB conf path is NULL, UB-io-related features are disabled.");
       io_features_enable = false;
     }
     if (UBLogPath == NULL) {  // optional
@@ -51,42 +56,40 @@ bool check_runtime_flags() {
   if (io_features_enable == false) {
     if (PrintUBLog != false) {
       tty->print_cr(
-          "Invalid flag PrintUBLog, no UB-related features are enabled.");
+          "Invalid flag PrintUBLog, no UB-io-related features are enabled.");
     }
-    if (UBConfPath != OPTION_BLANK_VALUE) {
+    if (strcmp(UBConfPath, OPTION_BLANK_VALUE) != 0) {
       tty->print_cr(
-          "Invalid flag UBConfPath, no UB-related features are enabled.");
+          "Invalid flag UBConfPath, no UB-io-related features are enabled.");
     }
-    if (UBLogPath != OPTION_BLANK_VALUE) {
+    if (strcmp(UBLogPath, OPTION_BLANK_VALUE) != 0) {
       tty->print_cr(
-          "Invalid flag UBLogPath, no UB-related features are enabled.");
+          "Invalid flag UBLogPath, no UB-io-related features are enabled.");
     }
   }
 
-  return io_features_enable;
+  return (io_features_enable || heap_features_enable);
 }
 
-void MatrixGlobal::init() {
-  ResourceMark rm;
-
+void MatrixGlobal::early_init() {
   if (check_runtime_flags() == false) {
     return;
   }
 
   if (!os::Linux::ub_libs_ready()) {
-    tty->print_cr("Load UB libraries failed,check please.");
+    tty->print_cr("Load UB libraries failed, check please.");
     return;
   }
 
   // init ub env
   if (os::Linux::ub_prepare_env(PrintUBLog, UBLogPath) != 0) {
-    tty->print_cr("Init UB env failed,check please.");
+    tty->print_cr("Init UB env failed, check please.");
     return;
   }
 
   // init log file
   _log_file = tty;
-  if (UBLogPath != NULL && UBLogPath != OPTION_BLANK_VALUE) {
+  if (UBLogPath != NULL && strcmp(UBLogPath, OPTION_BLANK_VALUE) != 0) {
     fileStream* ub_log_file =
         new (ResourceObj::C_HEAP, mtInternal) fileStream(UBLogPath);
     if (ub_log_file != NULL) {
@@ -98,9 +101,25 @@ void MatrixGlobal::init() {
     }
   }
 
+  _early_initialized = true;
+
+  if (UseBorrowedMemory && MemTracker::tracking_level() != NMT_off) {
+    float busy_ratio = BorrowedMemoryAllocationThreshold / 100.0f;
+    size_t max_size = MaxOffheapBorrowedMemory >= 0 ? static_cast<size_t>(MaxOffheapBorrowedMemory) : SIZE_MAX;
+    UBHeapMemory::dynamic_mem_init(busy_ratio, max_size);
+  }
+}
+
+void MatrixGlobal::init() {
+  ResourceMark rm;
+
+  if (_early_initialized == false) {
+    return;
+  }
+
   // load conf file
   _allow_list_table = new AllowListTable();
-  if (UBConfPath != NULL && UBConfPath != OPTION_BLANK_VALUE) {
+  if (UBConfPath != NULL && strcmp(UBConfPath, OPTION_BLANK_VALUE) != 0) {
     FILE* ub_conf_file = fopen(UBConfPath, "r");
     int allow_method_count = 0;
     if (ub_conf_file != NULL) {
@@ -135,7 +154,7 @@ void MatrixGlobal::init() {
     UBSocketManager::init();
   }
 
-  // init ub men file
+  // init ub mem file
   if (UseUBFile) {
     UBFileGlobal::init();
   }
@@ -212,6 +231,11 @@ void MatrixGlobal::before_exit() {
   if (UseUBFile) {
     UBFileGlobal::before_exit();
   }
+
+  if (UBHeapMemory::ub_dynamic_mem_enabled()) {
+    UBHeapMemory::dynamic_mem_cleanup();
+  }
+
   os::Linux::ub_finalize_env();
   if (_log_file != tty && _log_file != NULL) {
     _log_file->flush();

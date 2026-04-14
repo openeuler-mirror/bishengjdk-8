@@ -4134,6 +4134,8 @@ jint Arguments::parse(const JavaVMInitArgs* args) {
   const char* hotspotrc = ".hotspotrc";
   bool settings_file_specified = false;
   bool needs_hotspotrc_warning = false;
+  bool settings_nmt_specified = false;
+  bool use_borrowed_memory = false;
 
   ArgumentsExt::process_options(args);
 
@@ -4170,6 +4172,7 @@ jint Arguments::parse(const JavaVMInitArgs* args) {
 
       // Verify if nmt option is valid.
       if (MemTracker::verify_nmt_option()) {
+        settings_nmt_specified = true;
         // Late initialization, still in single-threaded mode.
         if (MemTracker::tracking_level() >= NMT_summary) {
           MemTracker::init();
@@ -4205,11 +4208,21 @@ jint Arguments::parse(const JavaVMInitArgs* args) {
       }
     }
 
+    if (match_option(option, "-XX:+UseBorrowedMemory", &tail)) {
+      use_borrowed_memory = true;
+    }
+
 #ifndef PRODUCT
     if (match_option(option, "-XX:+PrintFlagsWithComments", &tail)) {
       CommandLineFlags::printFlags(tty, true);
       vm_exit(0);
     }
+#endif
+  }
+
+  if (use_borrowed_memory && !settings_nmt_specified) {
+#if INCLUDE_NMT
+    MemTracker::init();
 #endif
   }
 

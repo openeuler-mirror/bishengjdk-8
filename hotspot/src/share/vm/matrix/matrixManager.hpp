@@ -34,6 +34,7 @@
 class MatrixGlobal : public AllStatic {
  public:
   static bool initialized() { return _initialized; }
+  static void early_init();
   static void init();
   static void before_exit();
   static bool check_stack();
@@ -42,6 +43,7 @@ class MatrixGlobal : public AllStatic {
 
  private:
   static bool _enabled;
+  static bool _early_initialized;
   static bool _initialized;
   static outputStream* _log_file;
   static AllowListTable* _allow_list_table;
