@@ -2926,7 +2926,12 @@ bool LibraryCallKit::inline_unsafe_ordered_store(BasicType type) {
   const Type *value_type = Type::get_const_basic_type(type);
   Compile::AliasType* alias_type = C->alias_type(adr_type);
 
-  insert_mem_bar(Op_MemBarRelease);
+  Node* leading_membar = insert_mem_bar(Op_MemBarRelease);
+#ifdef AARCH64
+  if (UseStlrForRelease) {
+    leading_membar->as_MemBar()->set_standalone_release();
+  }
+#endif
   insert_mem_bar(Op_MemBarCPUOrder);
   // Ensure that the store is atomic for longs:
   const bool require_atomic_access = true;

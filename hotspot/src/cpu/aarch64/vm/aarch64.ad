@@ -1257,7 +1257,11 @@ bool unnecessary_release(const Node *n)
   MemBarNode *barrier = n->as_MemBar();
 
   if (!barrier->leading()) {
-    return false;
+    // Standalone MemBarRelease marked by C2AccessFence for release stores
+    // (e.g. Unsafe.putOrderedX / VarHandle.setRelease).
+    // When UseStlrForRelease is true, the store already uses stlr which
+    // provides the release ordering, so the dmb ish is unnecessary.
+    return UseStlrForRelease && barrier->standalone_release();
   } else {
     Node* trailing = barrier->trailing_membar();
     MemBarNode* trailing_mb = trailing->as_MemBar();
@@ -1315,7 +1319,7 @@ bool needs_releasing_store(const Node *n)
 
   StoreNode *st = n->as_Store();
 
-  return st->trailing_membar() != NULL;
+  return st->trailing_membar() != NULL || (UseStlrForRelease && st->is_release());
 }
 
 // predicate controlling translation of CAS
