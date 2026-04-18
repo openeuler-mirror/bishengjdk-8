@@ -201,6 +201,10 @@ class Linux {
 
   static void load_ACC_library();
   static void load_ACC_library_before_ergo();
+  // UB Matrix Support
+  static void load_UB_library();
+  static void load_UB_library_before_ergo();
+
   static void libpthread_init();
   static void parse_numa_nodes();
   static bool libnuma_init();

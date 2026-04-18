@@ -5690,27 +5690,6 @@ void os::Linux::load_ACC_library_before_ergo() {
             _dmh_g1_get_region_limit = CAST_TO_FN_PTR(dmh_g1_get_region_limit_t, dlsym(handle, "DynamicMaxHeap_G1GetRegionLimit"));
         }
     }
-#ifdef AARCH64
-    handle = NULL;
-    if (!UseBorrowedMemory || !VM_Version::is_hisi_enabled()) {
-        return;
-    }
-    if (os::dll_build_name(path, sizeof(path), Arguments::get_dll_dir(), "matrix_wrapper")) {
-        handle = dlopen(path, RTLD_LAZY);
-    }
-    if (handle == NULL && os::dll_build_name(path, sizeof(path), "/usr/lib64", "matrix_wrapper")) {
-        handle = dlopen(path, RTLD_LAZY);
-    }
-    if (handle != NULL) {
-        if (_dmh_g1_can_shrink == NULL) {
-            _dmh_g1_can_shrink = CAST_TO_FN_PTR(dmh_g1_can_shrink_t, dlsym(handle, "dynamic_max_heap_g1_can_shrink"));
-        }
-        if (_dmh_g1_get_region_limit == NULL) {
-            _dmh_g1_get_region_limit = CAST_TO_FN_PTR(dmh_g1_get_region_limit_t,
-                                                      dlsym(handle, "dynamic_max_heap_g1_get_region_limit"));
-        }
-    }
-#endif
 }
 
 void os::Linux::load_ACC_library() {
@@ -5762,12 +5741,37 @@ void os::Linux::load_ACC_library() {
           _handle_ignore_class = CAST_TO_FN_PTR(handle_ignore_class_t, dlsym(handle, "Handle_Ignore_Class"));
         }
     }
+}
 
-    handle = NULL;
+// UB Matrix Support
+void os::Linux::load_UB_library_before_ergo() {
+    void* handle = NULL;
+    char path[JVM_MAXPATHLEN];
+    if (!UseBorrowedMemory) { return; }
+    if (os::dll_build_name(path, sizeof(path), Arguments::get_dll_dir(), "matrix_wrapper")) {
+        handle = dlopen(path, RTLD_LAZY);
+    }
+    if (handle == NULL && os::dll_build_name(path, sizeof(path), "/usr/lib64", "matrix_wrapper")) {
+        handle = dlopen(path, RTLD_LAZY);
+    }
+    if (handle != NULL) {
+        if (_dmh_g1_can_shrink == NULL) {
+            _dmh_g1_can_shrink = CAST_TO_FN_PTR(dmh_g1_can_shrink_t, dlsym(handle, "dynamic_max_heap_g1_can_shrink"));
+        }
+        if (_dmh_g1_get_region_limit == NULL) {
+            _dmh_g1_get_region_limit = CAST_TO_FN_PTR(dmh_g1_get_region_limit_t,
+                                                      dlsym(handle, "dynamic_max_heap_g1_get_region_limit"));
+        }
+    }
+}
+
+void os::Linux::load_UB_library() {
+    void* handle = NULL;
+    char path[JVM_MAXPATHLEN];
     if (os::dll_build_name(path, sizeof(path), Arguments::get_dll_dir(), "matrix_wrapper")) {
       handle = dlopen(path, RTLD_LAZY);
     }
-    if(handle == NULL && os::dll_build_name(path, sizeof(path), "/usr/lib64", "matrix_wrapper")) {
+    if (handle == NULL && os::dll_build_name(path, sizeof(path), "/usr/lib64", "matrix_wrapper")) {
       handle = dlopen(path, RTLD_LAZY);
     }
     if (handle != NULL) {
@@ -5783,6 +5787,8 @@ void os::Linux::load_ACC_library() {
       _ub_mem_return = CAST_TO_FN_PTR(ub_mem_return_func_t, dlsym(handle, "return_memory"));
       _ub_prepare_env = CAST_TO_FN_PTR(ub_prepare_env_func_t, dlsym(handle, "prepare_environments"));
       _ub_finalize_env = CAST_TO_FN_PTR(ub_finalize_env_func_t, dlsym(handle, "finalize_environments"));
+    } else {
+      tty->print_cr("UB Matrix: failed to load libmatrix_wrapper.so from all search paths");
     }
 }
 
@@ -5859,6 +5865,8 @@ jint os::init_2(void)
   }
 
   Linux::load_ACC_library();
+  // UB Matrix
+  Linux::load_UB_library();
 
   if (UseNUMA) {
     if (!Linux::libnuma_init()) {
@@ -5895,9 +5903,7 @@ jint os::init_2(void)
     }
   }
 
-#ifdef AARCH64
-  MatrixGlobal::early_init();
-#endif
+  MatrixGlobal::init();
 
   if (MaxFDLimit) {
     // set the number of file descriptors to max. print out error

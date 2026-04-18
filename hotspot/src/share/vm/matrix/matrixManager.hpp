@@ -22,31 +22,26 @@
 
 #include <sys/resource.h>
 
-#include "matrix/matrixAllowList.hpp"
 #include "matrix/matrixUtils.hpp"
 
-#define UB_LOG(level, fmt, ...)                    \
-  if (strcmp(level, "ERROR") == 0 || PrintUBLog) { \
-    ResourceMark rm;                               \
-    MatrixGlobal::log(level, fmt, ##__VA_ARGS__);  \
-  }
+enum UBFeature {
+  UB_FILE,
+  UB_SOCKET,
+  UB_HEAP,
+  UB_FEATURE_COUNT
+};
 
 class MatrixGlobal : public AllStatic {
  public:
   static bool initialized() { return _initialized; }
-  static void early_init();
   static void init();
+  static void init_features();
   static void before_exit();
-  static bool check_stack();
+  static bool check_stack(UBFeature feature);
   static bool print_stack();
-  static void log(const char* level, const char* format, ...);
 
  private:
-  static bool _enabled;
-  static bool _early_initialized;
   static bool _initialized;
-  static outputStream* _log_file;
-  static AllowListTable* _allow_list_table;
 };
 
 #endif  // SHARE_VM_MATRIX_MATRIXMANAGER_HPP

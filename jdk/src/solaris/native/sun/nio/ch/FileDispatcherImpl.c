@@ -31,6 +31,7 @@
 #include <sys/socket.h>
 #include <fcntl.h>
 #include <sys/uio.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #if defined(__linux__)
@@ -79,7 +80,8 @@
 static int preCloseFD = -1;     /* File descriptor to which we dup other fd's
                                    before closing them for real */
 
-// UB Matrix
+// UB Matrix file-descriptor limit. Descriptors above RLIMIT_NOFILE are used by
+// the UB file path rather than the UB socket path.
 int fd_limit;
 
 JNIEXPORT void JNICALL
@@ -92,7 +94,8 @@ Java_sun_nio_ch_FileDispatcherImpl_init(JNIEnv *env, jclass cl)
     }
     preCloseFD = sp[0];
     close(sp[1]);
-    // UB Matrix
+    // UB Matrix bootstrap: cache the process fd limit so the JNI bridge can
+    // distinguish UB file descriptors from ordinary socket/file descriptors.
     struct rlimit rlp;
     if (getrlimit(RLIMIT_NOFILE, &rlp) < 0) {
         JNU_ThrowIOExceptionWithLastError(env, "getrlimit failed");
@@ -112,7 +115,7 @@ Java_sun_nio_ch_FileDispatcherImpl_read0(JNIEnv *env, jclass clazz,
 {
     jint fd = fdval(env, fdo);
     void *buf = (void *)jlong_to_ptr(address);
-    // UB Matrix
+    // UB file path uses synthetic fds above RLIMIT_NOFILE.
     if (fd >= fd_limit) {
         jlong nread;
         void* addr = (*env)->UbRead(env, fd, &nread, len);
@@ -121,7 +124,10 @@ Java_sun_nio_ch_FileDispatcherImpl_read0(JNIEnv *env, jclass clazz,
     }
 
     jint nread = 0;
-    if ((*env)->IsUbSocket(env, fd) == JNI_TRUE) {
+    // The first read after accept() may need to wait briefly until the pending
+    // side-channel attach resolves to either "use UB" or "fallback to TCP".
+    jboolean ub_ready = (*env)->IsUbSocketReady(env, fd);
+    if (ub_ready == JNI_TRUE) {
         jlong nread = (*env)->UbSocketRead(env, buf, fd, len);
         if (nread > 0) {
             return (jint)nread;
@@ -131,8 +137,10 @@ Java_sun_nio_ch_FileDispatcherImpl_read0(JNIEnv *env, jclass clazz,
         if (bytes_read <= 0) {
             return convertReturnVal(env, bytes_read, JNI_TRUE);
         }
-        ub_msg[bytes_read] = '\0';
-        (*env)->UbSocketParse(env, fd, ub_msg);
+        // TCP carries compact descriptors, not payload bytes. One read may
+        // contain descriptor fragments or many descriptors together; the VM
+        // side keeps per-fd residual bytes until a full descriptor is formed.
+        (*env)->UbSocketParse(env, fd, ub_msg, bytes_read);
         nread = (*env)->UbSocketRead(env, buf, fd, len);
         return (jint)nread;
     }
@@ -167,7 +175,7 @@ Java_sun_nio_ch_FileDispatcherImpl_write0(JNIEnv *env, jclass clazz,
     jint fd = fdval(env, fdo);
     void *buf = (void *)jlong_to_ptr(address);
 
-    // UB Matrix
+    // UB file path uses synthetic fds above RLIMIT_NOFILE.
     if (fd >= fd_limit) {
         jlong nwrite;
         void* addr = (*env)->UbWrite(env, fd, &nwrite, len);
@@ -176,7 +184,9 @@ Java_sun_nio_ch_FileDispatcherImpl_write0(JNIEnv *env, jclass clazz,
     }
 
     jint nwrite = 0;
-    if ((*env)->IsUbSocket(env, fd) == JNI_TRUE) {
+    // For sockets, the first write may still need to resolve a pending attach.
+    jboolean ub_ready_write = (*env)->IsUbSocketReady(env, fd);
+    if (ub_ready_write == JNI_TRUE) {
         nwrite = (*env)->UbSocketWrite(env, buf, fd, len);
     } else {
         nwrite = write(fd, buf, len);
@@ -371,6 +381,12 @@ static void closeFileDescriptor(JNIEnv *env, int fd) {
     }
 }
 
+static jboolean isSocketFD(int fd) {
+    int sotype = 0;
+    socklen_t arglen = sizeof(sotype);
+    return getsockopt(fd, SOL_SOCKET, SO_TYPE, (void *)&sotype, &arglen) == 0;
+}
+
 JNIEXPORT void JNICALL
 Java_sun_nio_ch_FileDispatcherImpl_close0(JNIEnv *env, jclass clazz, jobject fdo)
 {
@@ -380,7 +396,7 @@ Java_sun_nio_ch_FileDispatcherImpl_close0(JNIEnv *env, jclass clazz, jobject fdo
         (*env)->UbClose(env, fd);
         return;
     }
-    if ((*env)->IsUbSocket(env, fd) == JNI_TRUE) {
+    if (isSocketFD(fd)) {
         (*env)->UbSocketClose(env, fd);
     }
     closeFileDescriptor(env, fd);

@@ -26,6 +26,7 @@
  */
 
 import com.oracle.java.testlibrary.OutputAnalyzer;
+import com.oracle.java.testlibrary.Platform;
 import com.oracle.java.testlibrary.ProcessTools;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
@@ -36,32 +37,29 @@ import java.util.ArrayList;
 public class ElasticHeapTest extends TestBase {
 
     public static void main(String[] args) throws Exception {
+        String[] notContains;
+
         // Case 1: Borrow enabled, -Xmx 1G, alloc 512M.
         String[] contains = new String[] {
                 "Allocation Success!",
-                "Verification Success!",
-                "[UB HEAP][INFO] Initializing pool"
+                "Verification Success!"
         };
-        String[] notContains = new String[] {
-                "[UB HEAP][INFO] Acquiring"
-        };
-        runTest("Case1_Base", true, "1g", "2g", null, "512",
-                contains, notContains, 0);
+        runTest("Case1_Base", true, "1g", "2g", null, "512", contains, null, 0);
 
-        // Case 2: Borrow enabled, -Xmx 100M, expand to 10G, alloc 5G.
-        contains = new String[] {
-                "Allocation Success!",
-                "Verification Success!",
-                "[UB HEAP][INFO] Initializing pool",
-                "[UB HEAP][INFO] Acquiring"
-        };
-        notContains = null;
-        runTest("Case2_expand", true, "100M", "15g", "10g", "5120",
-                contains, notContains, 0);
+        // Case 2 depends on DynamicMaxHeap, which is only supported on Linux aarch64.
+        if (Platform.isLinux() && Platform.isAArch64()) {
+            contains = new String[] {
+                    "Allocation Success!",
+                    "Verification Success!"
+            };
+            runTest("Case2_expand", true, "100M", "15g", "10g", "5120", contains, null, 0);
+        } else {
+            System.out.println(">>> Skipping Case2_expand: DynamicMaxHeap is only supported on Linux aarch64");
+        }
 
         // Case 3: Borrow enabled, -Xmx 100M, alloc over max heap(200M).
         contains = new String[] {
-                "[UB HEAP][INFO] Initializing pool"
+                "Allocation Failed: OutOfMemoryError"
         };
         notContains = new String[] {
                 "Allocation Success!",

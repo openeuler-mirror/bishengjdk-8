@@ -3702,9 +3702,7 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   JvmtiExport::post_vm_initialized();
 
   // UB Matrix
-#ifdef AARCH64
-  MatrixGlobal::init();
-#endif
+  MatrixGlobal::init_features();
 
   JFR_ONLY(Jfr::on_vm_start();)
 

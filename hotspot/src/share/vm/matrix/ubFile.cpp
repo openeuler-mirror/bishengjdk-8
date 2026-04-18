@@ -22,13 +22,14 @@
 #include <unistd.h>
 
 #include "classfile/symbolTable.hpp"
-#include "matrix/matrixManager.hpp"
+#include "matrix/matrixLog.hpp"
 #include "matrix/ubFileMemPool.hpp"
-#include "matrix/ubSocket.hpp"
+#include "matrix/ubSocket/ubSocket.hpp"
 #include "memory/resourceArea.hpp"
 #include "runtime/thread.hpp"
 #include "runtime/vframe.hpp"
 
+AllowListTable* UBFileGlobal::_allow_list_table = NULL;
 MappedFilePathTable* UBFileGlobal::file_path_table = NULL;
 MappedFileAddrTable* UBFileGlobal::file_addr_table = NULL;
 MappedFileSizeTable* UBFileGlobal::file_size_table = NULL;
@@ -55,23 +56,23 @@ int UBFileInfoTable::open(const char* name, int oflags) {
     UBFileMemPool::get_used_size(head_blk_addr, &(info.length));
   } else if (oflags & O_CREAT) {
     if (UBFileGlobal::file_fallback_set->exist(key)) {
-      UB_LOG("DEBUG", "UB open rejected, %s has fallbacked to IO\n", name);
+      UB_LOG(UB_FILE, UB_LOG_DEBUG, "UB open rejected, %s has fallbacked to IO\n", name);
       return -1;
     }
     int malloc_res = UBFileMemPool::malloc_remote_memory(name);
     if (malloc_res != 0) {
-      UB_LOG("WARNING", "UB malloc failed %s, code %d, fallback to IO\n", name, malloc_res);
+      UB_LOG(UB_FILE, UB_LOG_WARNING, "UB malloc failed %s, code %d, fallback to IO\n", name, malloc_res);
       return -1;
     }
     UBFileGlobal::app_file_table->record_file(name);
     head_blk_addr = UBFileMemPool::mmap_remote_memory(name);
     if (head_blk_addr == NULL) {
-      UB_LOG("WARNING", "UB mmap failed %s, fallback to IO\n", name);
+      UB_LOG(UB_FILE, UB_LOG_WARNING, "UB mmap failed %s, fallback to IO\n", name);
       return -1;
     }
     UBFileGlobal::file_addr_table->add(key, head_blk_addr);
   } else {
-    UB_LOG("ERROR", "UB mmap cache miss %s(%p)\n", name, key);
+    UB_LOG(UB_FILE, UB_LOG_ERROR, "UB mmap cache miss %s(%p)\n", name, key);
     guarantee(false, name);
   }
   if (oflags & O_APPEND) {
@@ -82,7 +83,7 @@ int UBFileInfoTable::open(const char* name, int oflags) {
   info.cur_blk = UBFileMemPool::seek_shared_memory(
       head_blk_addr, info.offset, &(info.cur_blk_size), &(info.cur_blk_off));
   add(fd, info);
-  UB_LOG("DEBUG", "open %s(%p:%d) addr at %p len %ld cur blk %p %ld\n", name,
+  UB_LOG(UB_FILE, UB_LOG_DEBUG, "open %s(%p:%d) addr at %p len %ld cur blk %p %ld\n", name,
          key, fd, head_blk_addr, info.length, info.cur_blk, info.cur_blk_off);
   return fd;
 }
@@ -94,7 +95,7 @@ void* UBFileInfoTable::pre_write(int fake_fd, long* nwrite, size_t len) {
                fake_fd);
   guarantee(info != NULL, msg);
   uintptr_t write_start = uintptr_t(info->cur_blk) + info->cur_blk_off;
-  UB_LOG("DEBUG", "%s(%d): cur blk %p(%ld/%ld) write at %p size %ld\n",
+  UB_LOG(UB_FILE, UB_LOG_DEBUG, "%s(%d): cur blk %p(%ld/%ld) write at %p size %ld\n",
          info->name->as_C_string(), fake_fd, info->cur_blk, info->cur_blk_off,
          info->cur_blk_size, (void*)write_start, len);
   // Current block is overflowed
@@ -104,13 +105,13 @@ void* UBFileInfoTable::pre_write(int fake_fd, long* nwrite, size_t len) {
         info->cur_blk, info->cur_blk_size, &(info->cur_blk_size),
         &(info->cur_blk_off));
     if (info->cur_blk == NULL) {
-      UB_LOG("WARNING", "%s(%d) write at %lx size %ld, expand failed, try to fallback\n",
+      UB_LOG(UB_FILE, UB_LOG_WARNING, "%s(%d) write at %lx size %ld, expand failed, try to fallback\n",
              info->name->as_C_string(), fake_fd, write_start, *nwrite);
       return NULL;
     }
     info->offset += *nwrite;
     info->length = info->offset > info->length ? info->offset : info->length;
-    UB_LOG("DEBUG", "%s(%d) write len %ld at %lx, expand %p size %ld off %ld\n",
+    UB_LOG(UB_FILE, UB_LOG_DEBUG, "%s(%d) write len %ld at %lx, expand %p size %ld off %ld\n",
            info->name->as_C_string(), fake_fd, *nwrite, write_start,
            info->cur_blk, info->cur_blk_size, info->cur_blk_off);
     return (void*)write_start;
@@ -129,7 +130,7 @@ void* UBFileInfoTable::pre_read(int fake_fd, long* nread, size_t len) {
                fake_fd);
   guarantee(info != NULL, msg);
   uintptr_t read_start = uintptr_t(info->cur_blk) + info->cur_blk_off;
-  UB_LOG("DEBUG", "%s(%d):%p read at %p size %ld\n", info->name->as_C_string(),
+  UB_LOG(UB_FILE, UB_LOG_DEBUG, "%s(%d):%p read at %p size %ld\n", info->name->as_C_string(),
          fake_fd, info->cur_blk, (void*)read_start, len);
   // Current block is overflowed
   // if return nread 0 (off + len = size), it will make a confusion with EOF
@@ -139,7 +140,7 @@ void* UBFileInfoTable::pre_read(int fake_fd, long* nread, size_t len) {
     info->cur_blk = UBFileMemPool::seek_shared_memory(
         info->cur_blk, info->cur_blk_size, &(info->cur_blk_size),
         &(info->cur_blk_off));
-    UB_LOG("DEBUG", "%s(%d)read len %ld at %lx, expand %p size %ld off %ld\n",
+    UB_LOG(UB_FILE, UB_LOG_DEBUG, "%s(%d)read len %ld at %lx, expand %p size %ld off %ld\n",
            info->name->as_C_string(), fake_fd, *nread, read_start,
            info->cur_blk, info->cur_blk_size, info->cur_blk_off);
     return (void*)read_start;
@@ -158,18 +159,18 @@ int UBFileInfoTable::close(int fake_fd) {
   if (info == NULL) {
     JavaThread* jt = JavaThread::current();
     if (!jt->has_last_Java_frame()) {
-      UB_LOG("ERROR", "ub file %d miss in close\n", fake_fd);
+      UB_LOG(UB_FILE, UB_LOG_ERROR, "ub file %d miss in close\n", fake_fd);
       return 0;
     }
     ResourceMark rm;
     RegisterMap reg_map(jt);
     javaVFrame* jvf = jt->last_java_vframe(&reg_map);
     Method* method = jvf->method();
-    UB_LOG("ERROR", "ub file %d miss in %s.%s\n", fake_fd,
+    UB_LOG(UB_FILE, UB_LOG_ERROR, "ub file %d miss in %s.%s\n", fake_fd,
            method->klass_name()->as_C_string(), method->name()->as_C_string());
     return 0;
   }
-  UB_LOG("DEBUG", "close %s(%d) len %ld\n", info->name->as_C_string(), fake_fd,
+  UB_LOG(UB_FILE, UB_LOG_DEBUG, "close %s(%d) len %ld\n", info->name->as_C_string(), fake_fd,
          info->length);
   // Flush OP will update used length in block header
   UBFileMemPool::flush_shared_memory(info->head_blk, info->length);
@@ -203,7 +204,7 @@ size_t UBFileInfoTable::seek(int fake_fd, long offset, int mode) {
   info->cur_blk = UBFileMemPool::seek_shared_memory(
       info->head_blk, info->offset, &(info->cur_blk_size),
       &(info->cur_blk_off));
-  UB_LOG("DEBUG", "seek %s(%d) offset %ld mode %d cur_blk %p\n",
+  UB_LOG(UB_FILE, UB_LOG_DEBUG, "seek %s(%d) offset %ld mode %d cur_blk %p\n",
          info->name->as_C_string(), fake_fd, offset, mode, info->cur_blk);
   return info->offset;
 }
@@ -216,7 +217,7 @@ Symbol* UBFileInfoTable::shadow_file(int fake_fd, int& new_fd) {
   guarantee(info != NULL, msg);
   ResourceMark rm;
   new_fd = open64(info->name->as_C_string(), info->flags, S_IRWXU);
-  UB_LOG("DEBUG", "create shadow file %d(%s) -> %d\n", fake_fd,
+  UB_LOG(UB_FILE, UB_LOG_DEBUG, "create shadow file %d(%s) -> %d\n", fake_fd,
          info->name->as_C_string(), new_fd);
   return info->name;
 }
@@ -224,7 +225,7 @@ Symbol* UBFileInfoTable::shadow_file(int fake_fd, int& new_fd) {
 static Symbol* get_app_id(const char* filepath) {
   const char* start = strstr(filepath, UB_FILE_PREFIX);
   if (start == NULL) {
-    UB_LOG("ERROR", "filepath invalid %s\n", filepath);
+    UB_LOG(UB_FILE, UB_LOG_ERROR, "filepath invalid %s\n", filepath);
     guarantee(false, filepath);
   }
   const char* end = strchr(start, '/');
@@ -255,9 +256,9 @@ int MatrixFileManager::open(const char* name, int oflags) {
   if (strstr(name, "index") != NULL) return -1;
 
   Symbol* key = SymbolTable::new_symbol(name, JavaThread::current());
-  UB_LOG("DEBUG", "open file %s(%p) oflags:%d\n", name, key, oflags);
+  UB_LOG(UB_FILE, UB_LOG_DEBUG, "open file %s(%p) oflags:%d\n", name, key, oflags);
   if (!(oflags & O_CREAT) && is_ub_file(name) == -1) {
-    UB_LOG("WARNING", "%s is not exist in ub\n", name);
+    UB_LOG(UB_FILE, UB_LOG_WARNING, "%s is not exist in ub\n", name);
     return -1;
   }
   int fd = _file_info_table.open(name, oflags);
@@ -289,7 +290,7 @@ size_t MatrixFileManager::size(const char* path) {
   Symbol* key = SymbolTable::new_symbol(path, JavaThread::current());
   size_t* size_addr = UBFileGlobal::file_size_table->lookup(key);
   size_t size = size_addr != NULL ? *size_addr : 0;
-  UB_LOG("DEBUG", "get %s(%p) file size %ld\n", path, key, size);
+  UB_LOG(UB_FILE, UB_LOG_DEBUG, "get %s(%p) file size %ld\n", path, key, size);
   return size;
 }
 
@@ -303,13 +304,13 @@ int MatrixFileManager::is_ub_file(const char* path) {
   bool remote_exist = false;
   int err_code = UBFileMemPool::remote_name_exist(path, &remote_exist);
   if (err_code != 0) {
-    UB_LOG("ERROR", "ub_name_exist %s error code %d\n", path, err_code);
+    UB_LOG(UB_FILE, UB_LOG_ERROR, "ub_name_exist %s error code %d\n", path, err_code);
     return -1;
   }
   if (!remote_exist) return -1;
   // Load remote ub file
   void* head_blk_addr = UBFileMemPool::mmap_remote_memory(path);
-  UB_LOG("DEBUG", "load remote file %s(%p) at %p\n", path, key, head_blk_addr);
+  UB_LOG(UB_FILE, UB_LOG_DEBUG, "load remote file %s(%p) at %p\n", path, key, head_blk_addr);
   UBFileGlobal::file_addr_table->add(key, head_blk_addr);
   UBFileGlobal::file_path_table->add(key, 0);
   return 0;
@@ -320,10 +321,10 @@ bool MatrixFileManager::is_ub_addr(void* addr) {
   if (!UBFileGlobal::initialized()) return res;
   int err_code = UBFileMemPool::shared_addr_exist(addr, &res);
   if (err_code != 0) {
-    UB_LOG("ERROR", "ub_addr_exist %p error code %d\n", addr, err_code);
+    UB_LOG(UB_FILE, UB_LOG_ERROR, "ub_addr_exist %p error code %d\n", addr, err_code);
     return res;
   }
-  UB_LOG("DEBUG", "ub addr %p exist %d\n", addr, res);
+  UB_LOG(UB_FILE, UB_LOG_DEBUG, "ub addr %p exist %d\n", addr, res);
   return res;
 }
 
@@ -332,11 +333,11 @@ bool MatrixFileManager::remove(const char* path) {
   Symbol* key = SymbolTable::new_symbol(path, JavaThread::current());
   void** find_addr = UBFileGlobal::file_addr_table->lookup(key);
   if (find_addr == NULL) {
-    UB_LOG("WARNING", "file %s(%p) not exist", path, key);
+    UB_LOG(UB_FILE, UB_LOG_WARNING, "file %s(%p) not exist", path, key);
     return true;
   }
   void* mapping_addr = *find_addr;
-  UB_LOG("DEBUG", "remove file %s(%p)\n", path, mapping_addr);
+  UB_LOG(UB_FILE, UB_LOG_DEBUG, "remove file %s(%p)\n", path, mapping_addr);
   UBFileMemPool::munmap_shared_memory(mapping_addr);
   UBFileMemPool::free_remote_memory(path);
   UBFileGlobal::file_path_table->remove(key);
@@ -350,20 +351,20 @@ bool MatrixFileManager::remove_dir(const char* path) {
   Symbol* key = get_app_id(path);
   SymbolList** list_addr = UBFileGlobal::app_file_table->lookup(key);
   if (list_addr == NULL) {
-    UB_LOG("WARNING", "dir %s key %p(%s) not exist\n", path, key,
+    UB_LOG(UB_FILE, UB_LOG_WARNING, "dir %s key %p(%s) not exist\n", path, key,
            key->as_C_string());
     return false;
   }
-  if (PrintUBLog) {
+  if (MatrixLog::enabled(UB_FILE)) {
     size_t mem_used;
     size_t mem_alloc;
     size_t mem_total;
     UBFileMemPool::total_memory_info(&mem_used, &mem_alloc, &mem_total);
-    UB_LOG("DEBUG", "current mem info: used %ld alloc %ld total %ld\n",
+    UB_LOG(UB_FILE, UB_LOG_DEBUG, "current mem info: used %ld alloc %ld total %ld\n",
            mem_used, mem_alloc, mem_total);
   }
   SymbolList* list = *list_addr;
-  UB_LOG("DEBUG", "remove dir %s: key %p(%s) size %d\n", path, key,
+  UB_LOG(UB_FILE, UB_LOG_DEBUG, "remove dir %s: key %p(%s) size %d\n", path, key,
          key->as_C_string(), list->size());
   list->begin_iteration();
   Symbol* filename = list->next();
@@ -396,7 +397,7 @@ bool MatrixFileManager::rename(const char* from, const char* to) {
   UBFileGlobal::file_addr_table->add(new_key, *mapping_addr);
   UBFileGlobal::file_size_table->add(new_key, *size_addr);
 
-  UB_LOG("DEBUG", "rename %s -> %s(%d) at %p size %ld\n", from, to, *fd_addr,
+  UB_LOG(UB_FILE, UB_LOG_DEBUG, "rename %s -> %s(%d) at %p size %ld\n", from, to, *fd_addr,
          *mapping_addr, *size_addr);
 
   Symbol* app_id = get_app_id(from);
@@ -405,7 +406,7 @@ bool MatrixFileManager::rename(const char* from, const char* to) {
   SymbolList* list = *list_addr;
   bool update_success = list->update(old_key, new_key);
   if (!update_success) {
-    UB_LOG("WARNING", "update file list %p failed, %s -> %s\n", list, from, to);
+    UB_LOG(UB_FILE, UB_LOG_WARNING, "update file list %p failed, %s -> %s\n", list, from, to);
   }
 
   return true;
@@ -429,7 +430,7 @@ void* MatrixFileManager::transfer(int dst, int src, long offset, long count, jlo
     copy_size = src_info->length - offset;
     copy_size = copy_size > count ? count : copy_size;
     if (copy_size != count) {
-      UB_LOG("WARNING", "transfer %d -> %d, offset %ld count %ld, but copysize %ld\n", src,
+      UB_LOG(UB_FILE, UB_LOG_WARNING, "transfer %d -> %d, offset %ld count %ld, but copysize %ld\n", src,
              dst, offset, count, copy_size);
     }
     _file_info_table.seek(src, offset, SEEK_SET);
@@ -455,7 +456,7 @@ void* MatrixFileManager::transfer(int dst, int src, long offset, long count, jlo
       guarantee(nwrite == copy_size, "must be");
       UBFileInfo* dst_info = _file_info_table.lookup(dst);
       guarantee(dst_info != NULL, "must be");
-      UB_LOG("DEBUG",
+      UB_LOG(UB_FILE, UB_LOG_DEBUG,
              "transfer %d(%s) -> %d(%s), offset %ld count %ld, success %ld\n",
              src, src_info->name->as_C_string(), dst,
              dst_info->name->as_C_string(), offset, count, nwrite);
@@ -465,7 +466,7 @@ void* MatrixFileManager::transfer(int dst, int src, long offset, long count, jlo
       if (UseUBSocket && success != -1 && S_ISSOCK(stat_buf.st_mode)) {
         long socket_nwrite = UBSocketManager::write_data(buffer, dst, copy_size);
         guarantee(socket_nwrite == copy_size, "must be");
-        UB_LOG("DEBUG", "transfer %d(%s) -> %d, offset %ld count %ld\n", src,
+        UB_LOG(UB_FILE, UB_LOG_DEBUG, "transfer %d(%s) -> %d, offset %ld count %ld\n", src,
                src_info->name->as_C_string(), dst, offset, count);
       } else {
         while (nwrite < copy_size) {
@@ -476,7 +477,7 @@ void* MatrixFileManager::transfer(int dst, int src, long offset, long count, jlo
           }
           nwrite += write_size;
         }
-        UB_LOG("DEBUG", "transfer %d(%s) -> %d, offset %ld count %ld, success %d\n", src,
+        UB_LOG(UB_FILE, UB_LOG_DEBUG, "transfer %d(%s) -> %d, offset %ld count %ld, success %d\n", src,
                src_info->name->as_C_string(), dst, offset, count, nwrite);
         char err_msg[100];
         jio_snprintf(err_msg, sizeof(err_msg), "[%p] fd %d->%d, nwrite(%ld) != copy_size(%ld)",
@@ -497,7 +498,7 @@ void* MatrixFileManager::transfer(int dst, int src, long offset, long count, jlo
       nread += pread64(src, dst_start, copy_size - nread, offset + nwrite);
       nwrite += write_size;
     }
-    UB_LOG("DEBUG",
+    UB_LOG(UB_FILE, UB_LOG_DEBUG,
            "transfer %d -> %d, offset %ld count %ld, success %ld %ld\n", src,
            dst, offset, count, nwrite, nread);
     guarantee(nread == copy_size, "must be");
@@ -529,7 +530,7 @@ void* MatrixFileManager::transfer(int dst, int src, long offset, long count, jlo
         nread += pread64(src, (void*)dst_start, copy_size - nread, offset + nread);
       }
     }
-    UB_LOG("DEBUG", "transfer %d -> %d, offset %ld count %ld, success %ld\n",
+    UB_LOG(UB_FILE, UB_LOG_DEBUG, "transfer %d -> %d, offset %ld count %ld, success %ld\n",
            src, dst, offset, count, nread);
     guarantee(nread == copy_size, "must be");
   }
@@ -543,7 +544,7 @@ int MatrixFileManager::fallback(int fake_fd) {
   Symbol* filename = _file_info_table.shadow_file(fake_fd, new_fd);
   long* copy_size;
   transfer(new_fd, fake_fd, 0, size, copy_size);
-  UB_LOG("DEBUG", "fallback %d -> %d, size %ld\n", fake_fd, new_fd, size);
+  UB_LOG(UB_FILE, UB_LOG_DEBUG, "fallback %d -> %d, size %ld\n", fake_fd, new_fd, size);
   close(fake_fd);
   ResourceMark rm;
   remove(filename->as_C_string());
@@ -553,6 +554,18 @@ int MatrixFileManager::fallback(int fake_fd) {
 
 void UBFileGlobal::init() {
   if (!UseUBFile) return;
+
+  if (ub_option_blank(UBFileConfPath)) {
+    tty->print_cr("UB file conf path is NULL, UB file is disabled.");
+    return;
+  }
+  
+  _allow_list_table = new AllowListTable(UB_FILE);
+  if (_allow_list_table->load_from_file(UBFileConfPath) == 0) {
+    UB_LOG(UB_FILE, UB_LOG_WARNING, "Load allow-list failed or empty: %s\n", UBFileConfPath);
+    return;
+  }
+
   bool is_success = UBFileMemPool::init();
   if (!is_success) return;
 
@@ -567,13 +580,19 @@ void UBFileGlobal::init() {
 
 void UBFileGlobal::before_exit() {
   if (!UseUBFile || !_initialized) return;
-  if (PrintUBLog) {
+  if (MatrixLog::enabled(UB_FILE)) {
     size_t mem_used;
     size_t mem_alloc;
     size_t mem_total;
     UBFileMemPool::total_memory_info(&mem_used, &mem_alloc, &mem_total);
-    UB_LOG("DEBUG", "current mem info: used %ld alloc %ld total %ld\n",
+    UB_LOG(UB_FILE, UB_LOG_DEBUG, "current mem info: used %ld alloc %ld total %ld\n",
            mem_used, mem_alloc, mem_total);
   }
   UBFileMemPool::release();
+}
+
+bool UBFileGlobal::check_stack() {
+  if (!_initialized) return false;
+  if (_allow_list_table == NULL) return false;
+  return _allow_list_table->check_stack();
 }

@@ -170,6 +170,7 @@ public:
   static int            fixed_mem_acquire(void* req_addr, size_t size_bytes, void** result_ptr);
   static int            fixed_mem_release(void* addr, size_t size_bytes);
   // Dynamic address memory management
+  static bool           check_runtime_flags();
   static int            dynamic_mem_init(float busy_ratio, size_t size_bytes);
   static int            dynamic_mem_cleanup(void);
   static int            dynamic_mem_acquire(size_t size_bytes, void** result_ptr);

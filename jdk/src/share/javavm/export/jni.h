@@ -767,7 +767,9 @@ struct JNINativeInterface_ {
         (JNIEnv* env, jobject obj);
 
     /* UB Matrix Support */
-    jboolean (JNICALL *UbCheckStack)
+    jboolean (JNICALL *UbFileCheckStack)
+      (JNIEnv *env);
+    jboolean (JNICALL *UbSocketCheckStack)
       (JNIEnv *env);
     jint (JNICALL *UbOpen)
       (JNIEnv *env, const jchar* name, jint oflags);
@@ -799,18 +801,20 @@ struct JNINativeInterface_ {
       (JNIEnv *env, jint fd);
     jboolean (JNICALL *IsUbSocket)
       (JNIEnv *env, jint fd);
+    jboolean (JNICALL *IsUbSocketReady)
+      (JNIEnv *env, jint fd);
     jint (JNICALL *UbSocketName)
       (JNIEnv *env, char* name, jint len);
     jboolean (JNICALL *UbSocketRegister)
-      (JNIEnv *env, int fd);
+      (JNIEnv *env, jint fd, jboolean isServer);
     jboolean (JNICALL* UbSocketClose)
-      (JNIEnv *env, int fd);
+      (JNIEnv *env, jint fd);
     jlong (JNICALL *UbSocketRead)
-      (JNIEnv *env, void* buf, int fd, jlong len);
+      (JNIEnv *env, void* buf, jint fd, jlong len);
     jlong (JNICALL *UbSocketWrite)
-      (JNIEnv* env, void* buf, int fd, jlong len);
+      (JNIEnv* env, void* buf, jint fd, jlong len);
     jlong (JNICALL *UbSocketParse)
-      (JNIEnv* env, int fd, char* msg);
+      (JNIEnv* env, jint fd, char* msg, jint msg_len);
     jlong (JNICALL *UbMaxOffheapSize)
       (JNIEnv *env);
 };
@@ -1906,8 +1910,11 @@ struct JNIEnv_ {
     }
 
     // UB Matrix Support
-    jboolean UbCheckStack() {
-        return functions->UbCheckStack(this);
+    jboolean UbFileCheckStack() {
+        return functions->UbFileCheckStack(this);
+    }
+    jboolean UbSocketCheckStack() {
+        return functions->UbSocketCheckStack(this);
     }
     jint UbOpen(const jchar* name, jint oflags) {
         return functions->UbOpen(this, name, oflags);
@@ -1949,28 +1956,31 @@ struct JNIEnv_ {
         return functions->UbTransfer(this, dst, src, offset, count, ntransfer);
     }
     jint UbFallback(jint fd) {
-        return functions->UbFallback(this, fd);
+      return functions->UbFallback(this, fd);
     }
     jboolean IsUbSocket(jint fd) {
       return functions->IsUbSocket(this, fd);
     }
+    jboolean IsUbSocketReady(jint fd) {
+      return functions->IsUbSocketReady(this, fd);
+    }
     jint UbSocketName(char* name, jint len) {
       return functions->UbSocketName(this, name, len);
     }
-    jboolean UbSocketRegister(int fd) {
-      return functions->UbSocketRegister(this, fd);
+    jboolean UbSocketRegister(jint fd, jboolean isServer) {
+      return functions->UbSocketRegister(this, fd, isServer);
     }
-    jboolean UbSocketClose(int fd) {
+    jboolean UbSocketClose(jint fd) {
       return functions->UbSocketClose(this, fd);
     }
-    jlong UbSocketRead(void* buf, int fd, jlong len) {
+    jlong UbSocketRead(void* buf, jint fd, jlong len) {
       return functions->UbSocketRead(this, buf, fd, len);
     }
-    jlong UbSocketWrite(void* buf, int fd, jlong len) {
+    jlong UbSocketWrite(void* buf, jint fd, jlong len) {
       return functions->UbSocketWrite(this, buf, fd, len);
     }
-    jlong UbSocketParse(int fd, char* msg) {
-      return functions->UbSocketParse(this, fd, msg);
+    jlong UbSocketParse(jint fd, char* msg, jint msg_len) {
+      return functions->UbSocketParse(this, fd, msg, msg_len);
     }
     jlong UbMaxOffheapSize() {
       return functions->UbMaxOffheapSize(this);

@@ -23,6 +23,8 @@
 #include <chrono>
 #include <cstring>
 #include <fcntl.h>
+#include <limits.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <cerrno>
 
@@ -32,30 +34,60 @@
 extern "C" {
 #endif
 
+static const char* UB_BACKING_DIR = "/tmp/ubwrapper";
+static const mode_t UB_DIR_MODE = 0700;
+static const mode_t UB_FILE_MODE = 0600;
+
+static bool ensure_backing_dir() {
+  if (mkdir(UB_BACKING_DIR, UB_DIR_MODE) == 0 || errno == EEXIST) {
+    return true;
+  }
+  std::cerr << "mkdir failed: " << strerror(errno) << std::endl;
+  return false;
+}
+
+static bool build_backing_path(const char* name, char* path, size_t path_len) {
+  if (name == NULL || path == NULL || path_len == 0) {
+    return false;
+  }
+  int n = snprintf(path, path_len, "%s/%s", UB_BACKING_DIR, name);
+  return n > 0 && static_cast<size_t>(n) < path_len;
+}
+
 int prepare_environments(int log_level, const char* log_path) {
+  if (!ensure_backing_dir()) {
+    return -1;
+  }
   return 0;
 }
 
 int finalize_environments(void) {
+  // Nothing to do for debug purposes
   return 0;
 }
 
 int malloc_remote_memory(const char* name, size_t size) {
   if (name == NULL) {
-    std::cout << "ub malloc NULL name, skip shm_open" << std::endl;
+    std::cout << "ub malloc NULL name, skip open" << std::endl;
     return 0;
   }
 
-  int fd = shm_open(name, O_CREAT | O_RDWR | O_TRUNC, 0666);
+  char path[PATH_MAX];
+  if (!build_backing_path(name, path, sizeof(path))) {
+    std::cerr << "invalid UB backing path" << std::endl;
+    return -1;
+  }
+
+  int fd = open(path, O_CREAT | O_RDWR | O_TRUNC, UB_FILE_MODE);
   if (fd == -1) {
-    std::cerr << "shm_open failed: " << strerror(errno) << std::endl;
+    std::cerr << "open failed: " << strerror(errno) << std::endl;
     return -1;
   }
 
   if (ftruncate(fd, size) == -1) {
     std::cerr << "ftruncate failed: " << strerror(errno) << std::endl;
     close(fd);
-    shm_unlink(name);
+    unlink(path);
     return -1;
   }
 
@@ -65,13 +97,22 @@ int malloc_remote_memory(const char* name, size_t size) {
 
 void* mmap_remote_memory(const char* name, size_t length, int* ret_code, void *start, int prot) {
   if (name == NULL) {
-    std::cout << "ub mmap NULL name, skip shm_open" << std::endl;
+    std::cout << "ub mmap NULL name, skip open" << std::endl;
     return 0;
   }
-  int fd = shm_open(name, O_RDWR, 0666);
+
+  char path[PATH_MAX];
+  if (!build_backing_path(name, path, sizeof(path))) {
+    if (ret_code != NULL) {
+      *ret_code = EINVAL;
+    }
+    return nullptr;
+  }
+
+  int fd = open(path, O_RDWR, UB_FILE_MODE);
   if (fd == -1) {
-    std::cerr << "shm_open failed: " << strerror(errno) << std::endl;
-    *ret_code = errno;
+    std::cerr << "open failed: " << strerror(errno) << std::endl;
+    if (ret_code != NULL) { *ret_code = errno; }
     return nullptr;
   }
 
@@ -79,7 +120,7 @@ void* mmap_remote_memory(const char* name, size_t length, int* ret_code, void *s
   if (addr == MAP_FAILED) {
     std::cerr << "mmap failed: " << strerror(errno) << std::endl;
     close(fd);
-    *ret_code = errno;
+    if (ret_code != NULL) { *ret_code = errno; }
     return nullptr;
   }
 
@@ -97,11 +138,17 @@ int munmap_shared_memory(void* start, size_t size) {
 
 int free_remote_memory(const char* name) {
   if (name == NULL) {
-    std::cout << "ub free NULL name, skip shm_open" << std::endl;
+    std::cout << "ub free NULL name, skip unlink" << std::endl;
     return 0;
   }
-  if (shm_unlink(name) == -1) {
-    std::cerr << "shm_unlink failed: " << strerror(errno) << std::endl;
+
+  char path[PATH_MAX];
+  if (!build_backing_path(name, path, sizeof(path))) {
+    return -1;
+  }
+
+  if (unlink(path) == -1) {
+    std::cerr << "unlink failed: " << strerror(errno) << std::endl;
     return -1;
   }
   return 0;

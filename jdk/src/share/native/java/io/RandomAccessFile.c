@@ -61,7 +61,7 @@ Java_java_io_RandomAccessFile_open0(JNIEnv *env,
             flags |= O_DSYNC;
     }
     // UB Matrix
-    if ((*env)->UbCheckStack(env) == JNI_TRUE) {
+    if ((*env)->UbFileCheckStack(env) == JNI_TRUE) {
         int ub_fd = ubMemOpen(env, this, path, raf_fd, flags);
         if (ub_fd != -1) return;
     }

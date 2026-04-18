@@ -97,7 +97,7 @@
 
 // UB Matrix
 #include "matrix/matrixManager.hpp"
-#include "matrix/ubSocket.hpp"
+#include "matrix/ubSocket/ubSocket.hpp"
 
 static jint CurrentVersion = JNI_VERSION_1_8;
 
@@ -4134,19 +4134,37 @@ JNI_END
 // UB Matrix Support
 //
 
-JNI_ENTRY(jboolean, jni_UbCheckStack(JNIEnv *env))
-  JNIWrapper("UbCheckStack");
+JNI_ENTRY(jboolean, jni_UbFileCheckStack(JNIEnv *env))
+  JNIWrapper("UbFileCheckStack");
 #ifndef USDT2
-  DTRACE_PROBE1(hotspot_jni, UbCheckStack__entry, env);
+  DTRACE_PROBE1(hotspot_jni, UbFileCheckStack__entry, env);
 #else /* USDT2 */
- HOTSPOT_JNI_UBCHECKSTACK_ENTRY(
+ HOTSPOT_JNI_UBFILECHECKSTACK_ENTRY(
                                 env);
 #endif /* USDT2 */
-  bool res = MatrixGlobal::check_stack() ? JNI_TRUE : JNI_FALSE;
+  bool res = MatrixGlobal::check_stack(UB_FILE) ? JNI_TRUE : JNI_FALSE;
 #ifndef USDT2
-  DTRACE_PROBE1(hotspot_jni, UbCheckStack__return, res);
+  DTRACE_PROBE1(hotspot_jni, UbFileCheckStack__return, res);
 #else /* USDT2 */
- HOTSPOT_JNI_UBCHECKSTACK_RETURN(
+ HOTSPOT_JNI_UBFILECHECKSTACK_RETURN(
+                                 res);
+#endif /* USDT2 */
+  return res;
+JNI_END
+
+JNI_ENTRY(jboolean, jni_UbSocketCheckStack(JNIEnv *env))
+  JNIWrapper("UbSocketCheckStack");
+#ifndef USDT2
+  DTRACE_PROBE1(hotspot_jni, UbSocketCheckStack__entry, env);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBSOCKETCHECKSTACK_ENTRY(
+                                env);
+#endif /* USDT2 */
+  bool res = MatrixGlobal::check_stack(UB_SOCKET) ? JNI_TRUE : JNI_FALSE;
+#ifndef USDT2
+  DTRACE_PROBE1(hotspot_jni, UbSocketCheckStack__return, res);
+#else /* USDT2 */
+ HOTSPOT_JNI_UBSOCKETCHECKSTACK_RETURN(
                                  res);
 #endif /* USDT2 */
   return res;
@@ -4418,25 +4436,24 @@ JNI_ENTRY(jint, jni_UbFallback(JNIEnv *env, jint fd))
   return res;
 JNI_END
 
-JNI_ENTRY(jboolean, jni_IsUbSocket(JNIEnv *env, int fd))
+JNI_ENTRY(jboolean, jni_IsUbSocket(JNIEnv *env, jint fd))
   JNIWrapper("jni_IsUbSocket");
-#ifndef USDT2
-  DTRACE_PROBE2(hotspot_jni, IsUbSocket__entry, env, fd);
-#else /* USDT2 */
- HOTSPOT_JNI_ISUBSOCKET_ENTRY(
-                              env, fd);
-#endif /* USDT2 */
+  // Pure query: tells the JDK whether this fd has already entered the UB data
+  // path. It must not block.
   bool res = UBSocketManager::has_registered(fd) ? JNI_TRUE : JNI_FALSE;
-#ifndef USDT2
-  DTRACE_PROBE1(hotspot_jni, IsUbSocket__return, res);
-#else /* USDT2 */
- HOTSPOT_JNI_ISUBSOCKET_RETURN(
-                               res);
-#endif /* USDT2 */
   return res;
 JNI_END
 
-JNI_ENTRY(jint, jni_UbSocketName(JNIEnv *env, char* name, int len))
+JNI_ENTRY(jboolean, jni_IsUbSocketReady(JNIEnv *env, jint fd))
+  JNIWrapper("jni_IsUbSocketReady");
+  // First read/write after accept() may still need to resolve a pending
+  // server-side attach. This is the explicit "wait until attach decision is
+  // final" entry used by the NIO read/write bridge.
+  bool res = UBSocketManager::wait_fd_ready(fd);
+  return res;
+JNI_END
+
+JNI_ENTRY(jint, jni_UbSocketName(JNIEnv *env, char* name, jint len))
   JNIWrapper("jni_UbSocketName");
 #ifndef USDT2
   DTRACE_PROBE3(hotspot_jni, UbSocketName__entry, env, name, len);
@@ -4460,15 +4477,15 @@ JNI_ENTRY(jint, jni_UbSocketName(JNIEnv *env, char* name, int len))
   return res;
 JNI_END
 
-JNI_ENTRY(jboolean, jni_UbSocketRegister(JNIEnv *env, int fd))
+JNI_ENTRY(jboolean, jni_UbSocketRegister(JNIEnv *env, jint fd, jboolean is_server))
   JNIWrapper("jni_UbSocketRegister");
 #ifndef USDT2
-  DTRACE_PROBE2(hotspot_jni, UbSocketRegister__entry, env, fd);
+  DTRACE_PROBE3(hotspot_jni, UbSocketRegister__entry, env, fd, is_server);
 #else /* USDT2 */
  HOTSPOT_JNI_UbSOCKETREGISTER_ENTRY(
-                              env, fd);
+                              env, fd, is_server);
 #endif /* USDT2 */
-  bool res = UBSocketManager::register_fd(fd) ? JNI_TRUE : JNI_FALSE;
+  jboolean res = UBSocketManager::register_fd(fd, is_server) ? JNI_TRUE : JNI_FALSE;
 #ifndef USDT2
   DTRACE_PROBE1(hotspot_jni, UbSocketRegister__return, res);
 #else /* USDT2 */
@@ -4478,7 +4495,7 @@ JNI_ENTRY(jboolean, jni_UbSocketRegister(JNIEnv *env, int fd))
   return res;
 JNI_END
 
-JNI_ENTRY(jboolean, jni_UbSocketClose(JNIEnv *env, int fd))
+JNI_ENTRY(jboolean, jni_UbSocketClose(JNIEnv *env, jint fd))
   JNIWrapper("jni_UbSocketClose");
 #ifndef USDT2
   DTRACE_PROBE2(hotspot_jni, UbSocketClose__entry, env, fd);
@@ -4496,7 +4513,7 @@ JNI_ENTRY(jboolean, jni_UbSocketClose(JNIEnv *env, int fd))
   return res;
 JNI_END
 
-JNI_ENTRY(jlong, jni_UbSocketRead(JNIEnv *env, void* buf, int fd, jlong len))
+JNI_ENTRY(jlong, jni_UbSocketRead(JNIEnv *env, void* buf, jint fd, jlong len))
   JNIWrapper("jni_UbSocketRead");
 #ifndef USDT2
   DTRACE_PROBE4(hotspot_jni, UbSocketRead__entry, env, buf, fd, len);
@@ -4514,7 +4531,7 @@ JNI_ENTRY(jlong, jni_UbSocketRead(JNIEnv *env, void* buf, int fd, jlong len))
   return res;
 JNI_END
 
-JNI_ENTRY(jlong, jni_UbSocketWrite(JNIEnv *env, void* buf, int fd, jlong len))
+JNI_ENTRY(jlong, jni_UbSocketWrite(JNIEnv *env, void* buf, jint fd, jlong len))
   JNIWrapper("jni_UbSocketWrite");
 #ifndef USDT2
   DTRACE_PROBE4(hotspot_jni, UbSocketWrite__entry, env, buf, fd, len);
@@ -4532,7 +4549,7 @@ JNI_ENTRY(jlong, jni_UbSocketWrite(JNIEnv *env, void* buf, int fd, jlong len))
   return res;
 JNI_END
 
-JNI_ENTRY(jlong, jni_UbSocketParse(JNIEnv *env, int fd, char *msg))
+JNI_ENTRY(jlong, jni_UbSocketParse(JNIEnv *env, jint fd, char *msg, jint msg_len))
   JNIWrapper("jni_UbSocketParse");
 #ifndef USDT2
   DTRACE_PROBE3(hotspot_jni, UbSocketParse__entry, env, fd, msg);
@@ -4540,7 +4557,7 @@ JNI_ENTRY(jlong, jni_UbSocketParse(JNIEnv *env, int fd, char *msg))
  HOTSPOT_JNI_UbSOCKETPARSE_ENTRY(
                               env, fd, msg);
 #endif /* USDT2 */
-  jlong res = UBSocketManager::parse_msg(fd, msg);
+  jlong res = UBSocketManager::parse_msg(fd, msg, msg_len);
 #ifndef USDT2
   DTRACE_PROBE1(hotspot_jni, UbSocketParse__return, res);
 #else /* USDT2 */
@@ -5391,7 +5408,8 @@ struct JNINativeInterface_ jni_NativeInterface = {
     jni_GetObjectRefType,
 
     // UB Matrix Support
-    jni_UbCheckStack,
+    jni_UbFileCheckStack,
+    jni_UbSocketCheckStack,
     jni_UbOpen,
     jni_UbWrite,
     jni_UbRead,
@@ -5407,6 +5425,7 @@ struct JNINativeInterface_ jni_NativeInterface = {
     jni_UbTransfer,
     jni_UbFallback,
     jni_IsUbSocket,
+    jni_IsUbSocketReady,
     jni_UbSocketName,
     jni_UbSocketRegister,
     jni_UbSocketClose,
