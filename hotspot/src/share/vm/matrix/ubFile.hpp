@@ -22,6 +22,7 @@
 
 #include <sys/resource.h>
 
+#include "matrix/matrixAllowList.hpp"
 #include "matrix/matrixUtils.hpp"
 #include "matrix/ubFileUtils.hpp"
 
@@ -138,10 +139,12 @@ class UBFileGlobal : public AllStatic {
   static AppFileTable* app_file_table;
 
   static bool initialized() { return _initialized; }
+  static bool check_stack();
   static void init();
   static void before_exit();
 
  private:
+  static AllowListTable* _allow_list_table;
   static bool _initialized;
 };
 

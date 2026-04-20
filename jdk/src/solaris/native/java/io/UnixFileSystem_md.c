@@ -309,7 +309,7 @@ Java_java_io_UnixFileSystem_list(JNIEnv *env, jobject this,
 
     WITH_FIELD_PLATFORM_STRING(env, file, ids.path, path) {
         // UB Matrix
-        if ((*env)->UbCheckStack(env) == JNI_TRUE) {
+        if ((*env)->UbFileCheckStack(env) == JNI_TRUE) {
             (*env)->UbRemoveDir(env, path);
         }
         dir = opendir(path);

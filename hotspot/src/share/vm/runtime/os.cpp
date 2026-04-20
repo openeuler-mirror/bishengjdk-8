@@ -372,6 +372,7 @@ void os::init_before_ergo() {
   JavaThread::os_linux_aarch64_options(active_processor_count(), argv_for_execvp);
   os::Linux::load_ACC_library_before_ergo();
 #endif
+  os::Linux::load_UB_library_before_ergo(); // UB Matrix
   initialize_initial_active_processor_count();
   // We need to initialize large page support here because ergonomics takes some
   // decisions depending on large page support and the calculated large page size.

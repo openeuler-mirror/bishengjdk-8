@@ -105,7 +105,8 @@ SUNWprivate_1.1 {
 		Java_sun_nio_ch_Net_localInetAddress;
 		Java_sun_nio_ch_Net_getIntOption0;
 		Java_sun_nio_ch_Net_setIntOption0;
-                Java_sun_nio_ch_Net_initIDs;
+		Java_sun_nio_ch_Net_initIDs;
+		Java_sun_nio_ch_Net_isUbSocketBuffered0;
 		Java_sun_nio_ch_Net_isIPv6Available0;
 		Java_sun_nio_ch_Net_joinOrDrop4;
 		Java_sun_nio_ch_Net_blockOrUnblock4;

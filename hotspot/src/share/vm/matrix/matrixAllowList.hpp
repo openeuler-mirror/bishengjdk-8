@@ -21,20 +21,15 @@
 #define SHARE_VM_MATRIX_MATRIXALLOWLIST_HPP
 
 #include "classfile/symbolTable.hpp"
+#include "matrix/matrixManager.hpp"
 #include "utilities/hashtable.hpp"
 
 class AllowListEntry : public HashtableEntry<Symbol*, mtClass> {
  public:
-  Symbol* class_name() const {
-    return literal();
-  }  // 从基类继承 literal() 存储类名
+  Symbol* class_name() const { return literal(); }
   Symbol* method_name() const { return _method_name; }
-
   void set_method_name(Symbol* method_name) { _method_name = method_name; }
-
-  AllowListEntry* next() {
-    return (AllowListEntry*)HashtableEntry<Symbol*, mtClass>::next();
-  }
+  AllowListEntry* next() { return (AllowListEntry*)HashtableEntry<Symbol*, mtClass>::next(); }
 
  private:
   Symbol* _method_name;
@@ -42,36 +37,21 @@ class AllowListEntry : public HashtableEntry<Symbol*, mtClass> {
 
 class AllowListTable : public Hashtable<Symbol*, mtClass> {
  public:
-  explicit AllowListTable(int table_size = 211)
-      : Hashtable<Symbol*, mtClass>(table_size, sizeof(AllowListEntry)) {}
+  explicit AllowListTable(UBFeature feature, int table_size = 211)
+      : Hashtable<Symbol*, mtClass>(table_size, sizeof(AllowListEntry)),
+        _feature(feature) {}
 
-  void add(Symbol* class_name, Symbol* method_name) {
-    unsigned int hash = class_name->identity_hash();
-    int index = hash_to_index(hash);
-    AllowListEntry* entry =
-        (AllowListEntry*)Hashtable<Symbol*, mtClass>::new_entry(hash,
-                                                                class_name);
-    entry->set_method_name(method_name);
-    add_entry(index, entry);
-  }
+  // Load one "pkg/Class.method" entry per non-comment line. Invalid lines are
+  // ignored with a warning so one bad entry does not disable the whole file.
+  int load_from_file(const char* conf_path);
+  void add(Symbol* class_name, Symbol* method_name);
+  bool contains(Symbol* class_name, Symbol* method_name);
 
-  bool contains(Symbol* class_name, Symbol* method_name) {
-    unsigned int hash = class_name->identity_hash();
-    int index = hash_to_index(hash);
-    for (AllowListEntry* entry = bucket(index); entry != NULL;
-         entry = entry->next()) {
-      if (entry->class_name()->fast_compare(class_name) == 0 &&
-          entry->method_name()->fast_compare(method_name) == 0) {
-        return true;
-      }
-    }
-    return false;
-  }
+  bool check_stack();
 
  private:
-  AllowListEntry* bucket(int i) {
-    return (AllowListEntry*)Hashtable<Symbol*, mtClass>::bucket(i);
-  }
+  UBFeature _feature;
+  AllowListEntry* bucket_at(int index);
 };
 
 #endif  // SHARE_VM_MATRIX_MATRIXALLOWLIST_HPP

@@ -57,7 +57,7 @@ Java_java_io_FileOutputStream_open0(JNIEnv *env, jobject this,
                                     jstring path, jboolean append) {
     // UB Matrix
 
-    if ((*env)->UbCheckStack(env) == JNI_TRUE) {
+    if ((*env)->UbFileCheckStack(env) == JNI_TRUE) {
         int ub_fd = ubMemOpen(env, this, path, fos_fd,
              O_WRONLY | O_CREAT | (append ? O_APPEND : O_TRUNC));
         if (ub_fd != -1) return;

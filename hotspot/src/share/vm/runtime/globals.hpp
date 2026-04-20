@@ -4241,14 +4241,11 @@ class CommandLineFlags {
   experimental(bool, UseUBFile, false,                                      \
           "Use UB File Memory")                                             \
                                                                             \
-  experimental(ccstr, UBConfPath, "",                                       \
-          "UB conf path")                                                   \
+  experimental(ccstr, UBFileConfPath, "",                                   \
+          "UB file allow-list path")                                        \
                                                                             \
-  experimental(bool, PrintUBLog, false,                                     \
-          "Print UB log")                                                   \
-                                                                            \
-  experimental(ccstr, UBLogPath, "",                                        \
-          "UB log path")                                                    \
+  experimental(ccstr, UBLog, "",                                            \
+          "UB log config, e.g. socket_path=socket.log,socket=debug")        \
                                                                             \
   experimental(uintx, UBMaxOffHeapSize, 0,                                  \
           "UB Mem max offheap memory size")                                 \
@@ -4270,6 +4267,12 @@ class CommandLineFlags {
                                                                             \
   experimental(bool, UseUBSocket, false,                                    \
           "Use UB Socket")                                                  \
+                                                                            \
+  experimental(ccstr, UBSocketConfPath, "",                                 \
+          "UB socket allow-list path")                                      \
+                                                                            \
+  experimental(uintx, UBSocketControlPort, 0,                               \
+          "UB Socket attach control port")                                  \
                                                                             \
   experimental(uintx, UBSocketTimeout, 500,                                 \
           "UB Socket package timeout(ms), 0 means no timeout")              \

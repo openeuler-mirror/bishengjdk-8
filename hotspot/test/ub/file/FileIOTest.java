@@ -36,9 +36,10 @@ public class FileIOTest {
 
         String content = "Hello File IO Test!";
         Path file = Files.createTempFile("application_fileio-", ".txt");
+        Path ubLog = Files.createTempFile("ubfile-", ".log");
 
         String testDir = System.getProperty("test.classes", ".");
-        File allowlistFile = new File(testDir, "UBSocket.conf");
+        File allowlistFile = new File(testDir, "UBFile.conf");
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(allowlistFile))) {
             writer.write("FileIOHelper.writeString");
             writer.newLine();
@@ -51,8 +52,8 @@ public class FileIOTest {
                 "-cp", testDir,
                 "-XX:+UnlockExperimentalVMOptions",
                 "-XX:+UseUBFile",
-                "-XX:+PrintUBLog",
-                "-XX:UBConfPath=" + allowlistPath,
+                "-XX:UBFileConfPath=" + allowlistPath,
+                "-XX:UBLog=path=" + ubLog.toString() + ",file=debug",
                 "FileIOChild",
                 file.toString(),
                 content
@@ -60,13 +61,17 @@ public class FileIOTest {
 
         OutputAnalyzer out = new OutputAnalyzer(pb.start());
         out.shouldHaveExitValue(0);
-        // APP log
         out.shouldContain("File IO Test PASSED");
-        // UB debug log
-        out.shouldContain("open file");
-        out.shouldContain("cur blk");
+        String combinedLog = out.getOutput()
+            + new String(Files.readAllBytes(ubLog), java.nio.charset.StandardCharsets.UTF_8);
+        if (!combinedLog.contains("open file")) {
+            throw new RuntimeException("UB file path should emit open trace\n" + combinedLog);
+        }
+        if (!combinedLog.contains("cur blk")) {
+            throw new RuntimeException("UB file path should emit block trace\n" + combinedLog);
+        }
 
-        System.out.println(out.getOutput());
+        System.out.println(combinedLog);
 
         // normal case
         pb = ProcessTools.createJavaProcessBuilder(
@@ -77,14 +82,13 @@ public class FileIOTest {
         );
         out = new OutputAnalyzer(pb.start());
         out.shouldHaveExitValue(0);
-        // APP log
         out.shouldContain("File IO Test PASSED");
-        // UB debug log
         out.shouldNotContain("open file");
         out.shouldNotContain("cur blk");
 
         System.out.println(out.getOutput());
 
         allowlistFile.delete();
+        Files.deleteIfExists(ubLog);
     }
 }

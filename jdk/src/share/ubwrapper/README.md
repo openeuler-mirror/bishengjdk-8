@@ -1,6 +1,6 @@
 ## UB Wrapper
 this project provides build for the following features:
-- ub memory file
+- ub memory wrapper
 
 ## Usage
 ```

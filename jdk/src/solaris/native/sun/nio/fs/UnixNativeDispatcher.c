@@ -391,7 +391,7 @@ Java_sun_nio_fs_UnixNativeDispatcher_open0(JNIEnv* env, jclass this,
     jint fd;
     const char* path = (const char*)jlong_to_ptr(pathAddress);
     // UB Matrix
-    if ((*env)->UbCheckStack(env) == JNI_TRUE) {
+    if ((*env)->UbFileCheckStack(env) == JNI_TRUE) {
         int ub_fd = (*env)->UbOpen(env, path, oflags);
         if (ub_fd != -1) return ub_fd;
     }

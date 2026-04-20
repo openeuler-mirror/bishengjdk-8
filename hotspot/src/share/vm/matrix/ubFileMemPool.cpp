@@ -21,7 +21,7 @@
 
 #include <sys/mman.h>
 
-#include "matrix/matrixManager.hpp"
+#include "matrix/matrixLog.hpp"
 #include "precompiled.hpp"
 #include "runtime/atomic.inline.hpp"
 #include "runtime/orderAccess.inline.hpp"
@@ -55,7 +55,7 @@ bool UBFileMemPool::allocate_memory(int kind, size_t blk_num) {
     int ret = 0;
     char* addr = (char*)os::Linux::ub_mem_borrow(ALLOC_SIZE, &ret);
     if (addr == NULL) {
-      UB_LOG("ERROR", "ub_mem_borrow failed, code %d\n", ret);
+      UB_LOG(UB_FILE, UB_LOG_ERROR, "ub_mem_borrow failed, code %d\n", ret);
       _block_list->append(blk_record_list);  // easy to release later
       release_memory(kind);
       return false;
@@ -95,7 +95,7 @@ bool UBFileMemPool::init() {
       return false;
     }
   }
-  UB_LOG("DEBUG", "UBFileMemPool init success.\n");
+  UB_LOG(UB_FILE, UB_LOG_DEBUG, "UBFileMemPool init success.\n");
   return true;
 }
 
@@ -119,14 +119,14 @@ bool UBFileMemPool::release_memory(int kind) {
       released_count++;
     } else {
       is_success = false;
-      UB_LOG("ERROR", "ub_mem_return %p size %ld failed, code %d\n", block_addr,
+      UB_LOG(UB_FILE, UB_LOG_ERROR, "ub_mem_return %p size %ld failed, code %d\n", block_addr,
              ALLOC_SIZE, error_code);
     }
   }
   delete blk_list;
   _block_list->at_put(kind, NULL);
   OrderAccess::release_store(&_free_idx_list[kind], (jint)0);
-  UB_LOG("DEBUG", "UB File Mem Released kind=%d, blocks=%d, size=%zu\n", kind,
+  UB_LOG(UB_FILE, UB_LOG_DEBUG, "UB File Mem Released kind=%d, blocks=%d, size=%zu\n", kind,
          released_count, total_released);
   return is_success;
 }
@@ -186,7 +186,7 @@ void* UBFileMemPool::alloc_new_block(int kind) {
     scanned++;
   }
 
-  UB_LOG("INFO", "UBFileMemPool Error: Memory pool exhausted for kind %d\n",
+  UB_LOG(UB_FILE, UB_LOG_INFO, "UBFileMemPool Error: Memory pool exhausted for kind %d\n",
          kind);
   return NULL;
 }
@@ -324,7 +324,7 @@ int UBFileMemPool::total_memory_info(size_t* used, size_t* alloc,
       sum_total += blk_size;
     }
     if (_is_initialized) {
-      UB_LOG("INFO", "UBFileMemPool Mem info: kind %d : %d / %d / %d\n", kind,
+      UB_LOG(UB_FILE, UB_LOG_INFO, "UBFileMemPool Mem info: kind %d : %d / %d / %d\n", kind,
              full_blk_count, used_blk_count, list->length());
     }
   }

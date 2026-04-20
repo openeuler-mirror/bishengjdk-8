@@ -61,7 +61,7 @@ Java_java_io_FileInputStream_initIDs(JNIEnv *env, jclass fdClass) {
 JNIEXPORT void JNICALL
 Java_java_io_FileInputStream_open0(JNIEnv *env, jobject this, jstring path) {
     // UB Matrix
-    if ((*env)->UbCheckStack(env) == JNI_TRUE) {
+    if ((*env)->UbFileCheckStack(env) == JNI_TRUE) {
         int ub_fd = ubMemOpen(env, this, path, fis_fd, O_RDONLY);
         if (ub_fd != -1) return;
     }

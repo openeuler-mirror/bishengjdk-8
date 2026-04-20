@@ -326,8 +326,10 @@ Java_sun_nio_ch_Net_bind0(JNIEnv *env, jclass clazz, jobject fdo, jboolean prefe
 JNIEXPORT void JNICALL
 Java_sun_nio_ch_Net_listen(JNIEnv *env, jclass cl, jobject fdo, jint backlog)
 {
-    if (listen(fdval(env, fdo), backlog) < 0)
+    if (listen(fdval(env, fdo), backlog) < 0) {
         handleSocketError(env, errno);
+        return;
+    }
 }
 
 JNIEXPORT jint JNICALL
@@ -355,8 +357,8 @@ Java_sun_nio_ch_Net_connect0(JNIEnv *env, jclass clazz, jboolean preferIPv6,
     }
 
     // UB Matrix
-    if ((*env)->UbCheckStack(env) == JNI_TRUE) {
-        (*env)->UbSocketRegister(env, fdval(env, fdo));
+    if ((*env)->UbSocketCheckStack(env) == JNI_TRUE) {
+        (*env)->UbSocketRegister(env, fdval(env, fdo), JNI_FALSE);
     }
     
     return 1;

@@ -30,6 +30,7 @@ import com.oracle.java.testlibrary.ProcessTools;
 
 public class OffHeapBorrowTest {
     public static void main(String[] args) throws Exception {
+        String[] notContains;
 
         // Case 1: Memory borrow disabled test.
         String[] contains = new String[] {
@@ -37,35 +38,24 @@ public class OffHeapBorrowTest {
                 "Allocation Success!",
                 "Verification Success!"
         };
-        String[] notContains = new String[] {
-                "[UB HEAP][INFO] Initializing memory pool with busy ratio"
-        };
-        runTest(false, "128M", "256", contains, notContains, 0);
+        runTest(false, "128M", "256", contains, null, 0);
 
         // Case 2: Borrow enabled, size < MaxOffheapLocalMemory
         contains = new String[] {
                 "UB offheap allocator Test PASSED!",
                 "Allocation Success!",
-                "Verification Success!",
-                "[UB HEAP][INFO] Memory pool initialized successfully"
+                "Verification Success!"
         };
-        notContains = new String[] {
-                "[UB HEAP][INFO] Dynamic memory acquire",
-                "[UB HEAP][ERROR]"
-        };
+        notContains = null;
         runTest(true, "256M", "128", contains, notContains, 0);
 
         // Case 3: Borrow enabled, size > MaxOffheapLocalMemory
         contains = new String[] {
                 "UB offheap allocator Test PASSED!",
                 "Allocation Success!",
-                "Verification Success!",
-                "[UB HEAP][INFO] Dynamic memory acquire success",
-                "[UB HEAP][INFO] Memory pool initialized successfully"
+                "Verification Success!"
         };
-        notContains = new String[] {
-                "[UB HEAP][ERROR]"
-        };
+        notContains = null;
         runTest(true, "128M", "256", contains, notContains, 0);
     }
 

@@ -81,8 +81,8 @@ Java_sun_nio_ch_SocketChannelImpl_checkConnect(JNIEnv *env, jobject this,
             return JNI_FALSE;
         }
         // UB Matrix
-        if ((*env)->UbCheckStack(env) == JNI_TRUE) {
-            (*env)->UbSocketRegister(env, fd);
+        if ((*env)->UbSocketCheckStack(env) == JNI_TRUE) {
+            (*env)->UbSocketRegister(env, fd, JNI_FALSE);
         }
         return 1;
     }

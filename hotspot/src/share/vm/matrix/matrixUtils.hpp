@@ -315,6 +315,10 @@ class SimpleHashTable : public CHeapObj<f> {
   V _empty_val;
 };
 
+inline bool ub_option_blank(const char* value) {
+  return value == NULL || value[0] == '\0';
+}
+
 inline uint64_t integer_hash(uint64_t h) {
   h ^= h >> 33;
   h *= 0xff51afd7ed558ccd;

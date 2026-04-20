@@ -128,8 +128,8 @@ Java_sun_nio_ch_ServerSocketChannelImpl_accept0(JNIEnv *env, jobject this,
     (*env)->SetObjectArrayElement(env, isaa, 0, isa);
 
     // UB Matrix
-    if ((*env)->UbCheckStack(env) == JNI_TRUE) {
-        (*env)->UbSocketRegister(env, newfd);
+    if ((*env)->UbSocketCheckStack(env) == JNI_TRUE) {
+        (*env)->UbSocketRegister(env, newfd, JNI_TRUE);
     }
     return 1;
 }
