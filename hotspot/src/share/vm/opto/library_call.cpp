@@ -2926,7 +2926,11 @@ bool LibraryCallKit::inline_unsafe_ordered_store(BasicType type) {
   const Type *value_type = Type::get_const_basic_type(type);
   Compile::AliasType* alias_type = C->alias_type(adr_type);
 
+#ifdef AARCH64
+  Node* leading_membar = insert_mem_bar(Op_MemBarRelease);
+#else // AARCH64
   insert_mem_bar(Op_MemBarRelease);
+#endif // AARCH64
   insert_mem_bar(Op_MemBarCPUOrder);
   // Ensure that the store is atomic for longs:
   const bool require_atomic_access = true;
@@ -2936,6 +2940,15 @@ bool LibraryCallKit::inline_unsafe_ordered_store(BasicType type) {
   else {
     store = store_to_memory(control(), adr, val, type, adr_type, MemNode::release, require_atomic_access);
   }
+#ifdef AARCH64
+  // On AArch64, pair leading/trailing membars so that the store can find
+  // the trailing membar via StoreNode::trailing_membar(). This allows
+  // needs_releasing_store to return true, using stlr instead of dmb+str.
+  if (UseStlrForRelease) {
+    Node* trailing = insert_mem_bar(Op_MemBarVolatile, store);
+    MemBarNode::set_store_pair(leading_membar->as_MemBar(), trailing->as_MemBar());
+  } else
+#endif // AARCH64
   insert_mem_bar(Op_MemBarCPUOrder);
   return true;
 }

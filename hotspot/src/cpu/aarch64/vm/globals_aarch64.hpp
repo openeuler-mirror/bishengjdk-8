@@ -155,6 +155,8 @@ define_pd_global(intx, InlineSmallCode,          1000);
                                                                          \
   experimental(bool, JProfilingCacheReplayProfileData, false,           \
           "Load method data with dumped ProfileData in the "            \
-          "jprofilecache file if exists")
+          "jprofilecache file if exists")                               \
+  product(bool, UseStlrForRelease, false,                               \
+          "Use stlr instead of dmb ish + str for release stores")       \
 
 #endif // CPU_AARCH64_VM_GLOBALS_AARCH64_HPP
