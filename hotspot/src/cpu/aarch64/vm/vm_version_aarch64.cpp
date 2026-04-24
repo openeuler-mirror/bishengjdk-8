@@ -196,8 +196,13 @@ void VM_Version::get_processor_features() {
   }
 
   if (auxv & HWCAP_ATOMICS) {
-    if (FLAG_IS_DEFAULT(UseLSE))
-      FLAG_SET_DEFAULT(UseLSE, false);
+    if (FLAG_IS_DEFAULT(UseLSE)) {
+      if (_cpu == CPU_HISILICON && (_model == 0xd01 || _model == 0xd02)) {
+        FLAG_SET_DEFAULT(UseLSE, false);
+      } else {
+        FLAG_SET_DEFAULT(UseLSE, true);
+      }
+    }
   } else {
     if (UseLSE) {
       warning("UseLSE specified, but not supported on this CPU");
