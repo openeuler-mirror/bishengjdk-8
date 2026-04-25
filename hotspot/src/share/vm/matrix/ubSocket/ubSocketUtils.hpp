@@ -22,6 +22,7 @@
 
 #include <stdlib.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 
 #include "classfile/symbolTable.hpp"
@@ -33,135 +34,39 @@
 
 class Monitor;
 class UBSocketAttachSession;
-class UBSocketMemMapping;
 struct UBSocketEndpoint;
-struct UBSocketControlFrame;
+struct UBSocketAttachFrame;
+template <typename E> class GrowableArray;
 
-class UBSocketThreadUtils : public AllStatic {
- public:
-  static JavaThread* start_daemon(ThreadFunction entry, const char* name,
-                                  ThreadPriority priority = NoPriority);
+struct UBSocketBlkItem {
+  uintptr_t meta_addr;
+  uint32_t start_blk;
+  uint32_t blk_count;
 };
 
-class UBSocketInfoList : public CHeapObj<mtInternal> {
- public:
-  void append(size_t offset, size_t size);  // cache <off,len> for socket data
-  size_t read_data(void* dst, size_t len);  // read len data of this fd to dst
-
-  int get_socket_fd() { return _socket_fd; }
-  void* get_mem_addr() { return _mem_addr; }
-  void set_mem_addr(void* addr) { _mem_addr = addr; }
-  Symbol* get_mem_name() { return _mem_name; }
-  void set_mem_name(Symbol* name) { _mem_name = name; }
-  UBSocketMemMapping* get_mem_mapping() { return _mem_mapping; }
-  void set_mem_mapping(UBSocketMemMapping* mapping) { _mem_mapping = mapping; }
-
-  explicit UBSocketInfoList(int fd)
-      : _head(NULL), _tail(NULL), _cursor(NULL),
-        _cur_loc(0), _socket_fd(fd),
-        _mem_addr(NULL), _mem_name(NULL), _mem_mapping(NULL) {}
-  ~UBSocketInfoList() {
-    while (_head) {
-      SocketListNode* next = _head->next;
-      delete _head;
-      _head = next;
-    }
-  }
-
- private:
-  class SocketListNode : public CHeapObj<mtInternal> {
-   public:
-    SocketListNode(size_t off, size_t size, UBSocketInfoList::SocketListNode* n)
-        : offset(off), size(size), next(n) {}
-
-    size_t offset;
-    size_t size;
-    SocketListNode* next;
-  };
-  SocketListNode* _head;
-  SocketListNode* _tail;
-  SocketListNode* _cursor;  // current node
-  size_t _cur_loc;          // current node location
-
-  int _socket_fd;     // one instance pre socket
-  void* _mem_addr;    // remote mem addr
-  Symbol* _mem_name;  // remote mem name
-  UBSocketMemMapping* _mem_mapping;  // lifecycle owner for the remote mapping
-
-  int delete_nodes(SocketListNode* start, SocketListNode* end);
-};
-
-class SocketDataInfoTable : public CHeapObj<mtInternal> {
- public:
-  static void init();
-  static SocketDataInfoTable* instance() { return _instance; }
-
-  void publish(int fd, UBSocketInfoList* info);
-  bool contains(int fd);
-  bool append_range(int fd, size_t offset, size_t size);
-  size_t read_data(int fd, void* dst, size_t len);
-  UBSocketInfoList* detach(int fd);
-  int unregister_abnormal_fds();  // unregister fds abnormal exit
-
- private:
-  static Monitor* _table_lock;
-  static SocketDataInfoTable* _instance;
-  PtrTable<int, UBSocketInfoList*, mtInternal> _table;
-  SocketDataInfoTable() : _table(NULL) {}
-};
-
-class SocketDescriptorBuffer : public CHeapObj<mtInternal> {
- public:
-  SocketDescriptorBuffer() : _data(NULL), _len(0), _cap(0) {}
-  ~SocketDescriptorBuffer() {
-    if (_data != NULL) {
-      free(_data);
-    }
-  }
-
-  bool append(const char* msg, size_t len);
-  void consume(size_t len);
-
-  char* data() const { return _data; }
-  size_t len() const { return _len; }
-
- private:
-  char* _data;
-  size_t _len;
-  size_t _cap;
-};
-
-class SocketBufferTable : public PtrTable<int, SocketDescriptorBuffer*, mtInternal> {
- public:
-  static void init() {
-    guarantee(_instance == NULL, "must be");
-    _instance = new SocketBufferTable();
-    _table_lock = new Monitor(Mutex::leaf, "SocketBufferTable_lock");
-  }
-  static SocketBufferTable* instance() { return _instance; }
-
-  // Return only complete descriptor records and keep the trailing partial one
-  // in the internal fd buffer.
-  bool extract_complete_descriptors(int fd, const char* msg, size_t len,
-                                    char** descriptors, size_t* descriptors_len);
-  void free_buffer(int fd) {
-    MutexLocker locker(_table_lock);
-    SocketDescriptorBuffer* buffer = PtrTable<int, SocketDescriptorBuffer*, mtInternal>::get(fd);
-    if (buffer != NULL) {
-      PtrTable<int, SocketDescriptorBuffer*, mtInternal>::remove(fd);
-      delete buffer;
-    }
-  }
-
- private:
-  static SocketBufferTable* _instance;
-  static Monitor* _table_lock;
-  SocketBufferTable() : PtrTable(NULL) {}
-};
-
+// Per-fd list of descriptors sent to the peer but not yet observed as read.
+// UnreadMsgTable reclaims read entries and checks timeout state periodically
+// or when block allocation needs a reclaim pass.
 class UnreadMsgList : public CHeapObj<mtInternal> {
  public:
-  explicit UnreadMsgList(int fd) : _socket_fd(fd) { _head = _tail = new UnreadMsgNode(); }
+  class UnreadMsgNode : public CHeapObj<mtInternal> {
+   public:
+    explicit UnreadMsgNode(uintptr_t meta_addr = 0, uint32_t start_blk = 0,
+                           uint32_t blk_count = 0, UnreadMsgNode* n = NULL)
+        : meta_addr(meta_addr), start_blk(start_blk), blk_count(blk_count), next(n) {}
+
+    uintptr_t meta_addr;
+    uint32_t start_blk;
+    uint32_t blk_count;
+    UnreadMsgNode* next;
+  };
+
+  explicit UnreadMsgList(int fd)
+      : _head(NULL), _tail(NULL), _socket_fd(fd),
+        _lock(new Monitor(Mutex::leaf, "UnreadMsgList_lock")),
+        _closing(false), _active_count(0) {
+    _head = _tail = new UnreadMsgNode();
+  }
   ~UnreadMsgList() {
     UnreadMsgNode* cur = _head;
     while (cur != NULL) {
@@ -169,87 +74,115 @@ class UnreadMsgList : public CHeapObj<mtInternal> {
       cur = cur->next;
       delete tmp;
     }
+    delete _lock;
   }
-  void append(void* addr);
+  void append(uintptr_t meta_addr, uint32_t start_blk, uint32_t blk_count);
   int socket_fd() const { return _socket_fd; }
-  int check_timeout();
+  bool is_empty() const { return _head->next == NULL; }
+  Monitor* lock() const { return _lock; }
+  bool closing() const { return _closing; }
+  void set_closing() { _closing = true; }
+  void acquire_pin() { _active_count++; }
+  bool release_pin();
+  bool has_active() const { return _active_count > 0; }
+  bool has_pending_locked() const { return _head->next != NULL; }
+  void reclaim_read_blocks_locked(GrowableArray<UBSocketBlkItem>* reclaim_items);
+  void process_unread_msgs(uint64_t now_nanos,
+                           GrowableArray<UBSocketBlkItem>* reclaim_items,
+                           bool* recv_timeout, bool* read_timeout);
 
  private:
-  class UnreadMsgNode : public CHeapObj<mtInternal> {
-   public:
-    explicit UnreadMsgNode(void* addr = NULL, UnreadMsgNode* n = NULL)
-        : addr(addr), next(n) {}
-    void* addr;
-    UnreadMsgNode* next;
-  };
   UnreadMsgNode* _head;
   UnreadMsgNode* _tail;
   int _socket_fd;
+  Monitor* _lock;
+  bool _closing;
+  int _active_count;
 };
 
-class UnreadMsgTable : public PtrTable<int, UnreadMsgList*, mtInternal> {
+class UnreadMsgTable : public AllStatic {
  public:
-  static void init() {
-    guarantee(_instance == NULL, "must be");
-    _instance = new UnreadMsgTable();
-    _table_lock = new Monitor(Mutex::leaf, "UnreadMsgTable_lock");
-  }
-  static UnreadMsgTable* instance() { return _instance; }
-
-  void register_fd(int fd) {
-    UnreadMsgList* list = new UnreadMsgList(fd);
-    MutexLocker locker(_table_lock);
-    PtrTable<int, UnreadMsgList*, mtInternal>::add(fd, list);
-  }
-
-  void unregister_fd(int fd) {
-    MutexLocker locker(_table_lock);
-    UnreadMsgList* list = PtrTable<int, UnreadMsgList*, mtInternal>::get(fd);
-    if (list != NULL) {
-      delete list;
-      PtrTable<int, UnreadMsgList*, mtInternal>::remove(fd);
-    }
-  }
-
-  void add_msg(int fd, void* data_addr) {
-    MutexLocker locker(_table_lock);
-    UnreadMsgList* list = PtrTable<int, UnreadMsgList*, mtInternal>::get(fd);
-    if (list != NULL) {
-      list->append(data_addr);
-    }
-  }
-
-  int check_timeout();
-  void start_timer();
-  void stop_timer();
-  void cleanup();
+  static void init();
+  static void register_fd(int fd);
+  static void unregister_fd(int fd);
+  static bool add_msg(int fd, uintptr_t meta_addr, uint32_t start_blk, uint32_t blk_count);
+  static UnreadMsgList* pin_list(int fd);
+  static void unpin_list(UnreadMsgList* list);
+  static void add_pinned_msgs(UnreadMsgList* list,
+                              const GrowableArray<UBSocketBlkItem>* blk_items,
+                              int count);
+  static bool has_pending_msg(int fd);
+  static void start_timer();
+  static void stop_timer();
+  static void cleanup();
   static void check_unread_entry(JavaThread* thread, TRAPS);
+  // Reclaim read descriptors and advance timeout/fallback maintenance.
+  static int process_unread_msgs();
 
  private:
-  JavaThread* _thread;
+  static JavaThread* _thread;
+  static bool _timer_starting;
   static volatile bool _should_terminate;
+  static volatile bool _exited;
   static Monitor* _wait_monitor;
-  static Monitor* _table_lock;
-  static UnreadMsgTable* _instance;
-  UnreadMsgTable() : PtrTable(NULL), _thread(NULL) {}
+  static Monitor* _unread_table_lock;
+  static PtrTable<int, UnreadMsgList*, mtInternal> _table;
+
+  static UnreadMsgList* pin_list_locked(int fd);
 };
 
-class UBSocketAttachSessionTable : public AllStatic {
+class UBSocketSessionCaches : public AllStatic {
  public:
-  static bool add(UBSocketAttachSession* session);
+  static void init();
+  static void add(UBSocketAttachSession* session);
   static UBSocketAttachSession* find(const UBSocketEndpoint* local_ep,
                                      const UBSocketEndpoint* remote_ep);
+  static void release(UBSocketAttachSession* session);
   static void remove(const UBSocketEndpoint* local_ep, const UBSocketEndpoint* remote_ep);
   static void cleanup();
+
+ private:
+  static Mutex* _cache_lock;
+  static UBSocketAttachSession* _cache_head;
 };
 
-class UBSocketEarlyRequestQueue : public AllStatic {
+class UBSocketEarlyReqQueue : public AllStatic {
  public:
-  static bool cache(int control_fd, const UBSocketControlFrame* request, uint64_t ddl_ns);
+  static void init() {_head = _tail = NULL; }
+  static bool has_requests() { return _head != NULL; }
+  static bool cache(int control_fd, const UBSocketAttachFrame* request, uint64_t ddl_ns);
   static int count();
-  static bool has_requests();
-  static bool take_one(int* control_fd, UBSocketControlFrame* request, uint64_t* ddl_ns);
+  static bool take_one(int* control_fd, UBSocketAttachFrame* request, uint64_t* ddl_ns);
   static void cleanup();
+
+ private:
+  struct EarlyRequest;
+  static EarlyRequest* _head;
+  static EarlyRequest* _tail;
+};
+
+class UBSocketBlkBitmap : public AllStatic {
+ public:
+  static void init(uint32_t blk_count);
+  static void cleanup();
+  static bool alloc(uint32_t blk_need, uint32_t* start_blk);
+  static void release(uint32_t start_blk, uint32_t blk_count);
+
+ private:
+  static volatile uint32_t* _words;
+  static size_t _word_count;
+  static uint32_t _blk_count;
+  static volatile uint32_t _next_hint;
+
+  static uint32_t mask_for_word(uint32_t word_idx, uint32_t start_blk, uint32_t blk_count);
+  static bool try_set_range(uint32_t start_blk, uint32_t blk_count);
+  static void clear_range(uint32_t start_blk, uint32_t blk_count);
+};
+
+class UBSocketThreadUtils : public AllStatic {
+ public:
+  static JavaThread* start_daemon(ThreadFunction entry, const char* name,
+                                  ThreadPriority priority = NoPriority);
 };
 
 #endif  // SHARE_VM_MATRIX_UBSOCKETUTILS_HPP

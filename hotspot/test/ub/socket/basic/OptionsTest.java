@@ -22,7 +22,7 @@
  * @summary Test UB socket VM options and dedicated socket allow-list flags
  * @library /testlibrary
  * @compile ../SocketTestConfig.java
- * @run main/othervm SocketOptionsTest
+ * @run main/othervm OptionsTest
  */
 
 import com.oracle.java.testlibrary.OutputAnalyzer;
@@ -31,7 +31,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-public class SocketOptionsTest {
+public class OptionsTest {
     public static void main(String[] args) throws Exception {
         String[] appClass = new String[] { NoOpApp.class.getName() };
 
@@ -44,6 +44,7 @@ public class SocketOptionsTest {
         output.shouldContain("must be enabled via -XX:+UnlockExperimentalVMOptions");
         output.shouldHaveExitValue(1);
 
+        // UBSocket Conf
         pb = ProcessTools.createJavaProcessBuilder(
             true,
             "-XX:+UnlockExperimentalVMOptions",
@@ -51,6 +52,18 @@ public class SocketOptionsTest {
             appClass[0]
         );
         output = new OutputAnalyzer(pb.start());
+        output.shouldContain("UBSocketConf path is NULL, UBSocket is disabled.");
+        output.shouldHaveExitValue(0);
+
+        pb = ProcessTools.createJavaProcessBuilder(
+            true,
+            "-XX:+UnlockExperimentalVMOptions",
+            "-XX:+UseUBSocket",
+            "-XX:UBSocketConf=",
+            appClass[0]
+        );
+        output = new OutputAnalyzer(pb.start());
+        output.shouldContain("UBSocketConf path is NULL, UBSocket is disabled.");
         output.shouldHaveExitValue(0);
 
         Path missingConfLog = Files.createTempFile("ubsocket-options-missing-", ".log");
@@ -58,43 +71,15 @@ public class SocketOptionsTest {
             true,
             "-XX:+UnlockExperimentalVMOptions",
             "-XX:+UseUBSocket",
-            "-XX:UBSocketConfPath=no_exist_file",
+            "-XX:UBSocketConf=no_exist_file",
             "-XX:UBLog=path=" + missingConfLog + ",socket=warning",
             appClass[0]
         );
         output = new OutputAnalyzer(pb.start());
         String missingConfOutput = output.getOutput() + readText(missingConfLog);
-        if (!missingConfOutput.contains("[socket][WARNING] Load allow-list failed or empty")) {
+        if (!missingConfOutput.contains("UBSocket load allow-list failed or empty: no_exist_file")) {
             throw new RuntimeException("Expected missing socket config warning\n" + missingConfOutput);
         }
-        output.shouldHaveExitValue(0);
-
-        pb = ProcessTools.createJavaProcessBuilder(
-            true,
-            "-XX:+UnlockExperimentalVMOptions",
-            "-XX:UBLog=all=debug",
-            appClass[0]
-        );
-        output = new OutputAnalyzer(pb.start());
-        output.shouldHaveExitValue(0);
-
-        pb = ProcessTools.createJavaProcessBuilder(
-            true,
-            "-XX:+UnlockExperimentalVMOptions",
-            "-XX:UBLog=path=ub.log",
-            appClass[0]
-        );
-        output = new OutputAnalyzer(pb.start());
-        output.shouldHaveExitValue(0);
-
-        pb = ProcessTools.createJavaProcessBuilder(
-            true,
-            "-XX:+UnlockExperimentalVMOptions",
-            "-XX:+UseUBSocket",
-            "-XX:UBSocketControlPort=28772",
-            appClass[0]
-        );
-        output = new OutputAnalyzer(pb.start());
         output.shouldHaveExitValue(0);
 
         String configPath = SocketTestConfig.ensureSharedConfig();
@@ -103,13 +88,13 @@ public class SocketOptionsTest {
             true,
             "-XX:+UnlockExperimentalVMOptions",
             "-XX:+UseUBSocket",
-            "-XX:UBSocketConfPath=" + configPath,
+            "-XX:UBSocketConf=" + configPath,
             "-XX:UBLog=path=" + validConfLog + ",socket=debug",
             appClass[0]
         );
         output = new OutputAnalyzer(pb.start());
         String validConfOutput = output.getOutput() + readText(validConfLog);
-        mustContain(validConfOutput, "[socket][DEBUG] Load conf file");
+        mustContain(validConfOutput, "[socket][INFO] Load conf file");
         mustContain(validConfOutput, "Load allow method: sun/nio/ch/SocketChannelImpl.connect");
         mustContain(validConfOutput, "Load allow method: sun/nio/ch/SocketChannelImpl.checkConnect");
         mustContain(validConfOutput, "Load allow method: sun/nio/ch/ServerSocketChannelImpl.accept");
@@ -125,33 +110,109 @@ public class SocketOptionsTest {
             true,
             "-XX:+UnlockExperimentalVMOptions",
             "-XX:+UseUBSocket",
-            "-XX:UBSocketConfPath=" + invalidConfig,
+            "-XX:UBSocketConf=" + invalidConfig,
             "-XX:UBLog=path=" + invalidConfLog + ",socket=debug",
             appClass[0]
         );
         output = new OutputAnalyzer(pb.start());
         String invalidConfOutput = output.getOutput() + readText(invalidConfLog);
-        mustContain(invalidConfOutput, "[socket][DEBUG] Load conf file");
+        mustContain(invalidConfOutput, "[socket][INFO] Load conf file");
         mustContain(invalidConfOutput, "Load allow method: sun/nio/ch/SocketChannelImpl.connect");
         mustContain(invalidConfOutput, "Ignore invalid allow-list entry");
         mustContain(invalidConfOutput, "sun/nio/ch/SocketChannelImpl.invalid-method!");
         output.shouldHaveExitValue(0);
 
+        // UBSocket Port
+        pb = ProcessTools.createJavaProcessBuilder(
+            true,
+            "-XX:+UnlockExperimentalVMOptions",
+            "-XX:+UseUBSocket",
+            "-XX:UBSocketConf=" + configPath,
+            appClass[0]
+        );
+        output = new OutputAnalyzer(pb.start());
+        mustContain(output.getOutput(), "UBSocket port(0) invalid, UBSocket is disabled.");
+        output.shouldHaveExitValue(0);
+
+        pb = ProcessTools.createJavaProcessBuilder(
+            true,
+            "-XX:+UnlockExperimentalVMOptions",
+            "-XX:+UseUBSocket",
+            "-XX:UBSocketConf=" + configPath,
+            "-XX:UBSocketPort=-1",
+            appClass[0]
+        );
+        output = new OutputAnalyzer(pb.start());
+        mustContain(output.getOutput(), "Improperly specified VM option 'UBSocketPort=-1'");
+        output.shouldHaveExitValue(1);
+
+        pb = ProcessTools.createJavaProcessBuilder(
+            true,
+            "-XX:+UnlockExperimentalVMOptions",
+            "-XX:+UseUBSocket",
+            "-XX:UBSocketConf=" + configPath,
+            "-XX:UBSocketPort=65536",
+            appClass[0]
+        );
+        output = new OutputAnalyzer(pb.start());
+        mustContain(output.getOutput(), "UBSocket port(65536) invalid, UBSocket is disabled.");
+        output.shouldHaveExitValue(0);
+
+        // UBSocket Log
         Path socketOnlyLog = Files.createTempFile("ubsocket-options-socketonly-", ".log");
         pb = ProcessTools.createJavaProcessBuilder(
             true,
             "-XX:+UnlockExperimentalVMOptions",
             "-XX:+UseUBSocket",
             "-XX:UBLog=socket_path=" + socketOnlyLog + ",socket=debug",
-            "-XX:UBSocketConfPath=" + configPath,
+            "-XX:UBSocketConf=" + configPath,
             appClass[0]
         );
         output = new OutputAnalyzer(pb.start());
         String socketOnlyOutput = output.getOutput() + readText(socketOnlyLog);
-        mustContain(socketOnlyOutput, "[socket][DEBUG]");
+        mustContain(socketOnlyOutput, "[socket][INFO]");
         mustContain(socketOnlyOutput, "Load conf file");
         mustContain(socketOnlyOutput, "Load allow method: sun/nio/ch/SocketChannelImpl.connect");
         output.shouldHaveExitValue(0);
+
+        Path pidLogDir = Files.createTempDirectory("ubsocket-options-pidlog-");
+        Path pidLogPattern = pidLogDir.resolve("ubsocket-options-%p.log");
+        pb = ProcessTools.createJavaProcessBuilder(
+            true,
+            "-XX:+UnlockExperimentalVMOptions",
+            "-XX:+UseUBSocket",
+            "-XX:UBLog=path=" + pidLogPattern + ",socket=debug",
+            "-XX:UBSocketConf=" + configPath,
+            appClass[0]
+        );
+        output = new OutputAnalyzer(pb.start());
+        output.shouldHaveExitValue(0);
+        if (Files.exists(pidLogPattern)) {
+            throw new RuntimeException("UBLog should expand %p instead of creating literal path: "
+                + pidLogPattern);
+        }
+        Path expandedPidLog = null;
+        try (java.nio.file.DirectoryStream<Path> paths =
+                Files.newDirectoryStream(pidLogDir, "ubsocket-options-*.log")) {
+            for (Path path : paths) {
+                if (expandedPidLog != null) {
+                    throw new RuntimeException("Expected one expanded pid log, found at least two: "
+                        + expandedPidLog + " and " + path);
+                }
+                expandedPidLog = path;
+            }
+        }
+        if (expandedPidLog == null) {
+            throw new RuntimeException("UBLog %p expansion did not create a log file in "
+                + pidLogDir);
+        }
+        String pidLogName = expandedPidLog.getFileName().toString();
+        if (!pidLogName.matches("ubsocket-options-[0-9]+\\.log")) {
+            throw new RuntimeException("UBLog %p expansion produced unexpected file name: "
+                + pidLogName);
+        }
+        String pidLogOutput = output.getOutput() + readText(expandedPidLog);
+        mustContain(pidLogOutput, "[socket][INFO]");
 
         Path fileOnlyLog = Files.createTempFile("ubsocket-options-fileonly-", ".log");
         pb = ProcessTools.createJavaProcessBuilder(
@@ -159,7 +220,7 @@ public class SocketOptionsTest {
             "-XX:+UnlockExperimentalVMOptions",
             "-XX:+UseUBSocket",
             "-XX:UBLog=file_path=" + fileOnlyLog + ",file=error",
-            "-XX:UBSocketConfPath=" + configPath,
+            "-XX:UBSocketConf=" + configPath,
             appClass[0]
         );
         output = new OutputAnalyzer(pb.start());
@@ -176,14 +237,28 @@ public class SocketOptionsTest {
             "-XX:+UseUBSocket",
             "-XX:UBLog=socket_path=" + splitSocketLog + ",file_path=" + splitFileLog +
                 ",socket=debug,file=debug",
-            "-XX:UBSocketConfPath=" + configPath,
+            "-XX:UBSocketConf=" + configPath,
             appClass[0]
         );
         output = new OutputAnalyzer(pb.start());
         String splitSocketOutput = output.getOutput() + readText(splitSocketLog);
         String splitFileOutput = readText(splitFileLog);
-        mustContain(splitSocketOutput, "[socket][DEBUG]");
+        mustContain(splitSocketOutput, "[socket][INFO]");
         mustNotContain(splitFileOutput, "[socket]");
+        output.shouldHaveExitValue(0);
+
+        // UBSocket timeout
+        pb = ProcessTools.createJavaProcessBuilder(
+            true,
+            "-XX:+UnlockExperimentalVMOptions",
+            "-XX:+UseUBSocket",
+            "-XX:UBSocketConf=" + configPath,
+            "-XX:UBSocketPort=28772",
+            "-XX:UBSocketTimeout=1",
+            appClass[0]
+        );
+        output = new OutputAnalyzer(pb.start());
+        mustContain(output.getOutput(), "UBSocket timeout(1) invalid, set to");
         output.shouldHaveExitValue(0);
     }
 

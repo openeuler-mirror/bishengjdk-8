@@ -31,17 +31,20 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
 public final class SocketTestSupport {
     private static final AtomicInteger UB_LOG_FILE_ID = new AtomicInteger();
+    private static final int FREE_PORT_ATTEMPTS = 100;
+    private static final Set<Integer> RESERVED_PORTS = new HashSet<Integer>();
 
     public static final class ScenarioLogs {
         public final String clientLog;
         public final String serverLog;
 
-        private ScenarioLogs(String clientLog, String serverLog) {
+        ScenarioLogs(String clientLog, String serverLog) {
             this.clientLog = clientLog;
             this.serverLog = serverLog;
         }
@@ -50,10 +53,17 @@ public final class SocketTestSupport {
     private SocketTestSupport() {
     }
 
-    public static int findFreePort() throws IOException {
-        try (ServerSocket socket = new ServerSocket(0)) {
-            return socket.getLocalPort();
+    public static synchronized int findFreePort() throws IOException {
+        for (int i = 0; i < FREE_PORT_ATTEMPTS; i++) {
+            try (ServerSocket socket = new ServerSocket(0)) {
+                int port = socket.getLocalPort();
+                if (!RESERVED_PORTS.contains(port)) {
+                    RESERVED_PORTS.add(port);
+                    return port;
+                }
+            }
         }
+        throw new IOException("Could not find an unused unique port");
     }
 
     public static ProcessBuilder createPlainProcessBuilder(String mainClass, String ... args)
@@ -73,9 +83,24 @@ public final class SocketTestSupport {
                                                                    String mainClass,
                                                                    String ... args)
         throws Exception {
+        return createUbProcessBuilderWithTimeoutAndVmOptions(
+            configPath, controlPort, timeoutMs, new String[0], mainClass, args);
+    }
+
+    public static ProcessBuilder createUbProcessBuilderWithTimeoutAndVmOptions(
+                                                                   String configPath,
+                                                                   int controlPort,
+                                                                   long timeoutMs,
+                                                                   String[] vmOptions,
+                                                                   String mainClass,
+                                                                   String ... args)
+        throws Exception {
         List<String> command = createUbOptions(configPath, controlPort, mainClass);
         if (timeoutMs >= 0L) {
             command.add("-XX:UBSocketTimeout=" + timeoutMs);
+        }
+        for (String vmOption : vmOptions) {
+            command.add(vmOption);
         }
         command.add(mainClass);
         for (String arg : args) {
@@ -171,7 +196,10 @@ public final class SocketTestSupport {
     public static void destroyIfAlive(Process process) throws InterruptedException {
         if (process != null && process.isAlive()) {
             process.destroy();
-            process.waitFor();
+            if (!process.waitFor(5, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                process.waitFor();
+            }
         }
     }
 
@@ -286,8 +314,20 @@ public final class SocketTestSupport {
         }
     }
 
+    public static boolean containsDataFallback(String text) {
+        return text.contains("send DATA_FALLBACK frame")
+            || text.contains("recv DATA_FALLBACK frame");
+    }
+
     public static boolean containsHeartbeat(String text) {
-        return text.contains("Heartbeat:0:0;");
+        return text.contains("send HEARTBEAT frame")
+            || text.contains("recv HEARTBEAT frame");
+    }
+
+    public static void assertDataFallback(String text, String message) {
+        if (!containsDataFallback(text)) {
+            throw new RuntimeException(message + "\n" + text);
+        }
     }
 
     public static void assertHeartbeat(String text, String message) {
@@ -298,6 +338,22 @@ public final class SocketTestSupport {
 
     public static void assertNoHeartbeat(String text, String message) {
         if (containsHeartbeat(text)) {
+            throw new RuntimeException(message + "\n" + text);
+        }
+    }
+
+    public static void assertTransferInfoLogs(String text, String message) {
+        if (!text.contains("write_data success")) {
+            throw new RuntimeException(message + ": missing write_data info log\n" + text);
+        }
+        if (!text.contains("read_data requested=")) {
+            throw new RuntimeException(message + ": missing read_data info log\n" + text);
+        }
+    }
+
+    public static void assertNoPayloadPrefixLog(String text, String message) {
+        String token = "payload_prefix=";
+        if (text.contains(token)) {
             throw new RuntimeException(message + "\n" + text);
         }
     }
@@ -383,8 +439,8 @@ public final class SocketTestSupport {
         List<String> command = new ArrayList<String>();
         command.add("-XX:+UnlockExperimentalVMOptions");
         command.add("-XX:+UseUBSocket");
-        command.add("-XX:UBSocketConfPath=" + configPath);
-        command.add("-XX:UBSocketControlPort=" + controlPort);
+        command.add("-XX:UBSocketConf=" + configPath);
+        command.add("-XX:UBSocketPort=" + controlPort);
         command.add("-XX:UBLog=path=" + ubLogPath + ",socket=debug");
         return command;
     }
@@ -424,7 +480,9 @@ public final class SocketTestSupport {
 
     public static String nextUbLogPath(String mainClass) {
         return Paths.get(System.getProperty("test.classes", "."),
-                         "ublog-" + mainClass + "-" + UB_LOG_FILE_ID.incrementAndGet() + ".log")
+                         "ublog-" + mainClass + "-" + System.currentTimeMillis()
+                         + "-" + System.nanoTime() + "-"
+                         + UB_LOG_FILE_ID.incrementAndGet() + ".log")
                     .toString();
     }
 }

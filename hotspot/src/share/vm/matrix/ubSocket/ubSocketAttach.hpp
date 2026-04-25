@@ -24,8 +24,6 @@
 
 struct UBSocketEndpoint;
 
-static const int UB_SOCKET_ATTACH_TIMEOUT_MS = 500;
-
 //   client side                               server side
 //     attach_client()                           attach_server()
 //     -> ATTACH_REQ ------------------------->  create and publish session
@@ -49,17 +47,27 @@ class UBSocketAttach : public CHeapObj<mtInternal> {
  private:
   bool attach_client();
   bool attach_server();
+  bool publish_server_mapping(const char* client_mem_name);
   bool attach_client_once(int control_fd, const UBSocketEndpoint& request_local_ep,
                           const UBSocketEndpoint& request_remote_ep,
-                          uint64_t ddl_ns, char* remote_mem_name, bool* retry);
+                          uint32_t request_id, uint64_t ddl_ns,
+                          char* remote_mem_name, bool* retry);
 };
 
 class UBSocketAttachAgent : public AllStatic {
  private:
+  static Monitor* _agent_lock;
+  static bool _started;
+  static bool _exited;
+  static int _listen_fd;
+  static bool _dual_stack;
+  static volatile bool _should_stop;
+
   static void listener_entry(JavaThread* thread, TRAPS);
   static bool handle_control_connection(int control_fd, bool* keep_open);
 
  public:
+  static void init();
   static bool start();
   static void shutdown();
 };

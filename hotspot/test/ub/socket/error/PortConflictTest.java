@@ -28,13 +28,13 @@
  *          by the first client connection, not at JVM startup.
  * @library /testlibrary
  * @compile ../SocketTestSupport.java ../SocketTestConfig.java ../test-classes/SocketTestData.java ../test-classes/NIOScenarioServer.java ../test-classes/NIOScenarioClient.java
- * @run main/othervm SocketControlPortConflictTest
+ * @run main/othervm PortConflictTest
  */
 
 import com.oracle.java.testlibrary.OutputAnalyzer;
 import java.net.ServerSocket;
 
-public class SocketControlPortConflictTest {
+public class PortConflictTest {
     private static final int DATA_SIZE = 64 * 1024;
 
     public static void main(String[] args) throws Exception {

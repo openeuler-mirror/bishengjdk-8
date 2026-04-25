@@ -25,6 +25,7 @@
 #include "matrix/matrixLog.hpp"
 #include "matrix/ubFileMemPool.hpp"
 #include "matrix/ubSocket/ubSocket.hpp"
+#include "matrix/ubSocket/ubSocketUtils.hpp"
 #include "memory/resourceArea.hpp"
 #include "runtime/thread.hpp"
 #include "runtime/vframe.hpp"
@@ -418,7 +419,8 @@ void* MatrixFileManager::transfer(int dst, int src, long offset, long count, jlo
     *ntransfer = 0;
     return NULL;
   }
-  long copy_size;
+  long copy_size = 0;
+  long transferred = 0;
   void* socket_addr = NULL;
   if (src >= fd_limit) {
     UBFileInfo* src_info = _file_info_table.lookup(src);
@@ -443,9 +445,9 @@ void* MatrixFileManager::transfer(int dst, int src, long offset, long count, jlo
       memcpy((void*)write_start, read_start, read_size);
       nread += read_size;
     }
-    guarantee(nread == copy_size, "must be");
     long nwrite = 0;
     if (dst >= fd_limit) {
+      guarantee(nread == copy_size, "must be");
       while (nwrite < copy_size) {
         long write_size = 0;
         void* write_start = _file_info_table.pre_write(dst, &write_size, copy_size - nwrite);
@@ -460,15 +462,18 @@ void* MatrixFileManager::transfer(int dst, int src, long offset, long count, jlo
              "transfer %d(%s) -> %d(%s), offset %ld count %ld, success %ld\n",
              src, src_info->name->as_C_string(), dst,
              dst_info->name->as_C_string(), offset, count, nwrite);
+      transferred = nwrite;
     } else {
       struct stat stat_buf;
       int success = fstat(dst, &stat_buf);
       if (UseUBSocket && success != -1 && S_ISSOCK(stat_buf.st_mode)) {
-        long socket_nwrite = UBSocketManager::write_data(buffer, dst, copy_size);
-        guarantee(socket_nwrite == copy_size, "must be");
-        UB_LOG(UB_FILE, UB_LOG_DEBUG, "transfer %d(%s) -> %d, offset %ld count %ld\n", src,
-               src_info->name->as_C_string(), dst, offset, count);
+        long socket_nwrite = UBSocketManager::write_data(buffer, dst, nread);
+        transferred = socket_nwrite > 0 ? socket_nwrite : 0;
+        UB_LOG(UB_FILE, UB_LOG_DEBUG,
+               "transfer %d(%s) -> %d, offset %ld count %ld, success %ld\n",
+               src, src_info->name->as_C_string(), dst, offset, count, transferred);
       } else {
+        guarantee(nread == copy_size, "must be");
         while (nwrite < copy_size) {
           uintptr_t write_start = (uintptr_t)buffer + nwrite;
           long write_size = write(dst, (void*)write_start, copy_size - nwrite);
@@ -483,6 +488,7 @@ void* MatrixFileManager::transfer(int dst, int src, long offset, long count, jlo
         jio_snprintf(err_msg, sizeof(err_msg), "[%p] fd %d->%d, nwrite(%ld) != copy_size(%ld)",
                      JavaThread::current(), src, dst, nwrite, copy_size);
         guarantee(nwrite == copy_size, err_msg);
+        transferred = nwrite;
       }
     }
     free(buffer);
@@ -502,6 +508,7 @@ void* MatrixFileManager::transfer(int dst, int src, long offset, long count, jlo
            "transfer %d -> %d, offset %ld count %ld, success %ld %ld\n", src,
            dst, offset, count, nwrite, nread);
     guarantee(nread == copy_size, "must be");
+    transferred = nread;
   } else if (UseUBSocket) {
     struct stat stat_buf;
     int success = fstat(dst, &stat_buf);
@@ -512,29 +519,53 @@ void* MatrixFileManager::transfer(int dst, int src, long offset, long count, jlo
     struct stat fileStat;
     fstat(src, &fileStat);
     copy_size = fileStat.st_size < count ? fileStat.st_size : count;
-    long nread = 0;
-    long socket_offset, socket_size;
-    socket_addr = UBSocketManager::get_free_memory(copy_size, &socket_offset, &socket_size);
-    long write_size = socket_size > copy_size ? copy_size : socket_size;
-    while (nread < write_size) {
-      uintptr_t dst_start = (uintptr_t)socket_addr + nread;
-      nread += pread64(src, (void*)dst_start, write_size - nread, offset + nread);
+    const long transfer_buffer_size = copy_size < (64 * 1024) ? copy_size : (64 * 1024);
+    char* buffer = transfer_buffer_size > 0 ? (char*)malloc(transfer_buffer_size) : NULL;
+    long nwrite = 0;
+    if (transfer_buffer_size > 0 && buffer == NULL) {
+      UB_LOG(UB_FILE, UB_LOG_ERROR, "transfer %d -> %d buffer alloc failed size %ld\n",
+             src, dst, transfer_buffer_size);
     }
-    UBSocketManager::send_msg(dst, socket_addr, socket_offset, write_size);
-    if (copy_size > write_size) {
-      socket_addr = UBSocketManager::get_free_memory(
-          copy_size - write_size, &socket_offset, &socket_size);
-      guarantee(socket_size >= (copy_size - write_size), "must be");
-      while (nread < copy_size) {
-        uintptr_t dst_start = (uintptr_t)socket_addr + nread;
-        nread += pread64(src, (void*)dst_start, copy_size - nread, offset + nread);
+    while (nwrite < copy_size && buffer != NULL) {
+      long read_target = copy_size - nwrite;
+      if (read_target > transfer_buffer_size) {
+        read_target = transfer_buffer_size;
+      }
+      long nread = 0;
+      while (nread < read_target) {
+        ssize_t read_res = pread64(src, buffer + nread, read_target - nread,
+                                   offset + nwrite + nread);
+        if (read_res <= 0) {
+          UB_LOG(UB_FILE, UB_LOG_WARNING,
+                 "transfer %d -> %d read stopped offset %ld target %ld rc %ld\n",
+                 src, dst, offset + nwrite + nread, read_target, (long)read_res);
+          break;
+        }
+        nread += read_res;
+      }
+      if (nread == 0) {
+        break;
+      }
+      long socket_nwrite = UBSocketManager::write_data(buffer, dst, nread);
+      if (socket_nwrite <= 0) {
+        UB_LOG(UB_FILE, UB_LOG_WARNING,
+               "transfer %d -> %d socket write stopped offset %ld size %ld rc %ld\n",
+               src, dst, offset + nwrite, nread, socket_nwrite);
+        break;
+      }
+      nwrite += socket_nwrite;
+      if (socket_nwrite < nread) {
+        break;
       }
     }
+    if (buffer != NULL) {
+      free(buffer);
+    }
     UB_LOG(UB_FILE, UB_LOG_DEBUG, "transfer %d -> %d, offset %ld count %ld, success %ld\n",
-           src, dst, offset, count, nread);
-    guarantee(nread == copy_size, "must be");
+           src, dst, offset, count, nwrite);
+    transferred = nwrite;
   }
-  *ntransfer = copy_size;
+  *ntransfer = transferred;
   return socket_addr;
 }
 
@@ -555,14 +586,14 @@ int MatrixFileManager::fallback(int fake_fd) {
 void UBFileGlobal::init() {
   if (!UseUBFile) return;
 
-  if (ub_option_blank(UBFileConfPath)) {
+  if (ub_option_blank(UBFileConf)) {
     tty->print_cr("UB file conf path is NULL, UB file is disabled.");
     return;
   }
   
   _allow_list_table = new AllowListTable(UB_FILE);
-  if (_allow_list_table->load_from_file(UBFileConfPath) == 0) {
-    UB_LOG(UB_FILE, UB_LOG_WARNING, "Load allow-list failed or empty: %s\n", UBFileConfPath);
+  if (_allow_list_table->load_from_file(UBFileConf) == 0) {
+    UB_LOG(UB_FILE, UB_LOG_WARNING, "Load allow-list failed or empty: %s\n", UBFileConf);
     return;
   }
 

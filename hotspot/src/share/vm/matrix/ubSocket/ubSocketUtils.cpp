@@ -24,7 +24,10 @@
 #include "classfile/symbolTable.hpp"
 #include "matrix/matrixLog.hpp"
 #include "matrix/ubSocket/ubSocketAttachSession.hpp"
+#include "matrix/ubSocket/ubSocketDataInfo.hpp"
 #include "matrix/ubSocket/ubSocketFrame.hpp"
+#include "matrix/ubSocket/ubSocketIO.hpp"
+#include "matrix/ubSocket/ubSocketMemMapping.hpp"
 #include "matrix/ubSocket/ubSocket.hpp"
 #include "runtime/interfaceSupport.hpp"
 #include "runtime/javaCalls.hpp"
@@ -33,20 +36,483 @@
 
 #include "matrix/ubSocket/ubSocketUtils.hpp"
 
-static const size_t SOCKET_DESCRIPTOR_BUFFER_INITIAL_CAPACITY = 256;
-static const size_t SOCKET_DESCRIPTOR_BUFFER_GROWTH_FACTOR = 2;
-
 /***************************static fields****************************/
 
-SocketDataInfoTable* SocketDataInfoTable::_instance = NULL;
-Monitor* SocketDataInfoTable::_table_lock = NULL;
-SocketBufferTable* SocketBufferTable::_instance = NULL;
-Monitor* SocketBufferTable::_table_lock = NULL;
-UnreadMsgTable* UnreadMsgTable::_instance = NULL;
-
+PtrTable<int, UnreadMsgList*, mtInternal> UnreadMsgTable::_table(NULL);
+JavaThread* UnreadMsgTable::_thread = NULL;
+bool UnreadMsgTable::_timer_starting = false;
 volatile bool UnreadMsgTable::_should_terminate = false;
+volatile bool UnreadMsgTable::_exited = true;
 Monitor* UnreadMsgTable::_wait_monitor = NULL;
-Monitor* UnreadMsgTable::_table_lock = NULL;
+Monitor* UnreadMsgTable::_unread_table_lock = NULL;
+
+volatile uint32_t* UBSocketBlkBitmap::_words = NULL;
+volatile uint32_t UBSocketBlkBitmap::_next_hint = 0;
+size_t UBSocketBlkBitmap::_word_count = 0;
+uint32_t UBSocketBlkBitmap::_blk_count = 0;
+
+UBSocketEarlyReqQueue::EarlyRequest* UBSocketEarlyReqQueue::_head = NULL;
+UBSocketEarlyReqQueue::EarlyRequest* UBSocketEarlyReqQueue::_tail = NULL;
+
+Mutex* UBSocketSessionCaches::_cache_lock = NULL;
+UBSocketAttachSession* UBSocketSessionCaches::_cache_head = NULL;
+
+static const int UB_SOCKET_EARLY_REQUEST_MAX = 128;
+static const size_t BITS_PER_WORD = sizeof(uint32_t) * BitsPerByte;
+
+/***************************UnreadMsgList***************************/
+
+void UnreadMsgList::append(uintptr_t meta_addr, uint32_t start_blk, uint32_t blk_count) {
+  UnreadMsgNode* newNode = new UnreadMsgNode(meta_addr, start_blk, blk_count, NULL);
+  _tail->next = newNode;
+  _tail = newNode;
+}
+
+bool UnreadMsgList::release_pin() {
+  if (_active_count <= 0) {
+    UB_LOG(UB_SOCKET, UB_LOG_ERROR, "fd=%d unread msg release without active pin\n",
+           _socket_fd);
+    return false;
+  }
+  _active_count--;
+  return _closing && _active_count == 0;
+}
+
+static void read_unread_msg_meta(int fd, uintptr_t meta_addr, UBSocketBlkMeta* meta) {
+  memset(meta, 0, sizeof(UBSocketBlkMeta));
+  if (meta_addr != 0) {
+    memcpy(meta, (void*)meta_addr, sizeof(UBSocketBlkMeta));
+  }
+  if (meta->fd != 0 && (int)meta->fd != fd) {
+    UB_LOG(UB_SOCKET, UB_LOG_WARNING,
+           "fd=%d meta fd mismatch meta_fd=%u state=%u\n",
+           fd, meta->fd, meta->state);
+  }
+}
+
+void UnreadMsgList::reclaim_read_blocks_locked(
+    GrowableArray<UBSocketBlkItem>* reclaim_items) {
+  UnreadMsgNode* prev = _head;
+  UnreadMsgNode* cur = _head->next;
+  while (cur != NULL) {
+    UnreadMsgNode* next = cur->next;
+    UBSocketBlkMeta meta;
+    read_unread_msg_meta(_socket_fd, cur->meta_addr, &meta);
+    if (meta.state == UB_SOCKET_BLK_READ) {
+      UnreadMsgNode* need_del = cur;
+      prev->next = cur->next;
+      if (_tail == need_del) {
+        _tail = prev;
+      }
+      UBSocketBlkItem item = {need_del->meta_addr, need_del->start_blk, need_del->blk_count};
+      reclaim_items->append(item);
+      delete need_del;
+    } else {
+      prev = cur;
+    }
+    cur = next;
+  }
+}
+
+void UnreadMsgList::process_unread_msgs(uint64_t now_nanos,
+                                        GrowableArray<UBSocketBlkItem>* reclaim_items,
+                                        bool* recv_timeout, bool* read_timeout) {
+  *recv_timeout = false;
+  *read_timeout = false;
+  reclaim_read_blocks_locked(reclaim_items);
+  UnreadMsgNode* cur = _head->next;
+  while (cur != NULL) {
+    UnreadMsgNode* next = cur->next;
+    UBSocketBlkMeta meta;
+    read_unread_msg_meta(_socket_fd, cur->meta_addr, &meta);
+    if (meta.send_nanos != 0) {
+      if (meta.state == UB_SOCKET_BLK_SEND &&
+          now_nanos - meta.send_nanos >
+              (uint64_t)UB_SOCKET_RECV_TIMEOUT_MS * NANOSECS_PER_MILLISEC) {
+        *recv_timeout = true;
+      } else if (meta.state == UB_SOCKET_BLK_RECV &&
+                 UBSocketManager::package_timeout > 0 &&
+                 now_nanos - meta.send_nanos > UBSocketManager::package_timeout) {
+        *read_timeout = true;
+      }
+    }
+    cur = next;
+  }
+}
+
+void UnreadMsgTable::init() {
+  _unread_table_lock = new Monitor(Mutex::leaf + 1, "UnreadMsgTable_lock");
+  _wait_monitor = new Monitor(Mutex::safepoint - 1, "UBSocketCheckMonitor");
+  _thread = NULL;
+  _timer_starting = false;
+  _should_terminate = false;
+  _exited = true;
+}
+
+void UnreadMsgTable::register_fd(int fd) {
+  UnreadMsgList* list = new UnreadMsgList(fd);
+  bool inserted = false;
+  {
+    MutexLocker locker(_unread_table_lock);
+    if (_table.get(fd) == NULL) {
+      _table.add(fd, list);
+      inserted = true;
+    }
+  }
+  if (inserted) {
+    UB_LOG(UB_SOCKET, UB_LOG_INFO, "fd=%d register unread tracking\n", fd);
+    start_timer();
+  } else {
+    delete list;
+  }
+}
+
+UnreadMsgList* UnreadMsgTable::pin_list_locked(int fd) {
+  UnreadMsgList* list = _table.get(fd);
+  if (list == NULL || list->closing()) { return NULL; }
+  list->acquire_pin();
+  return list;
+}
+
+void UnreadMsgTable::unpin_list(UnreadMsgList* list) {
+  MonitorLockerEx locker(_unread_table_lock, Mutex::_no_safepoint_check_flag);
+  if (list->release_pin()) { locker.notify_all(); }
+}
+
+UnreadMsgList* UnreadMsgTable::pin_list(int fd) {
+  MonitorLockerEx locker(_unread_table_lock, Mutex::_no_safepoint_check_flag);
+  return pin_list_locked(fd);
+}
+
+void UnreadMsgTable::unregister_fd(int fd) {
+  UnreadMsgList* list = NULL;
+  GrowableArray<UBSocketBlkItem> reclaim_items(UB_INIT_ARRAY_CAP, true, mtInternal);
+  bool has_pending = false;
+  {
+    MonitorLockerEx table_locker(_unread_table_lock, Mutex::_no_safepoint_check_flag);
+    list = _table.get(fd);
+    if (list == NULL) { return; }
+    list->set_closing();
+    while (list->has_active()) {
+      table_locker.wait(Mutex::_no_safepoint_check_flag);
+    }
+    {
+      MutexLocker list_locker(list->lock());
+      list->reclaim_read_blocks_locked(&reclaim_items);
+      has_pending = list->has_pending_locked();
+    }
+    _table.remove(fd);
+  }
+  if (has_pending) {
+    UB_LOG(UB_SOCKET, UB_LOG_WARNING,
+           "fd=%d unregister pending unread msg; unread blocks are kept until process exit\n",
+           fd);
+  }
+  UB_LOG(UB_SOCKET, UB_LOG_INFO, "fd=%d unregister unread tracking\n", fd);
+  delete list;
+  for (int i = 0; i < reclaim_items.length(); i++) {
+    UBSocketBlkItem item = reclaim_items.at(i);
+    UBSocketManager::free_blocks(item.start_blk, item.blk_count);
+  }
+}
+
+bool UnreadMsgTable::add_msg(int fd, uintptr_t meta_addr, uint32_t start_blk, uint32_t blk_count) {
+  UnreadMsgList* list = pin_list(fd);
+  if (list == NULL) { return false; }
+  {
+    MutexLocker list_locker(list->lock());
+    list->append(meta_addr, start_blk, blk_count);
+  }
+  unpin_list(list);
+  return true;
+}
+
+void UnreadMsgTable::add_pinned_msgs(UnreadMsgList* list,
+                                     const GrowableArray<UBSocketBlkItem>* blk_items,
+                                     int count) {
+  MutexLocker list_locker(list->lock());
+  for (int i = 0; i < count; i++) {
+    UBSocketBlkItem item = blk_items->at(i);
+    list->append(item.meta_addr, item.start_blk, item.blk_count);
+  }
+}
+
+bool UnreadMsgTable::has_pending_msg(int fd) {
+  UnreadMsgList* list = NULL;
+  {
+    MonitorLockerEx table_locker(_unread_table_lock, Mutex::_no_safepoint_check_flag);
+    list = pin_list_locked(fd);
+    if (list == NULL) { return false; }
+  }
+  bool has_pending = false;
+  {
+    MutexLocker list_locker(list->lock());
+    has_pending = !list->is_empty();
+  }
+  unpin_list(list);
+  return has_pending;
+}
+
+int UnreadMsgTable::process_unread_msgs() {
+  GrowableArray<UnreadMsgList*> lists(UB_INIT_ARRAY_CAP, true, mtInternal);
+  GrowableArray<UBSocketBlkItem> reclaim_items(UB_INIT_ARRAY_CAP, true, mtInternal);
+  GrowableArray<int> drained_fds(UB_INIT_ARRAY_CAP, true, mtInternal);
+  GrowableArray<int> fallback_fds(UB_INIT_ARRAY_CAP, true, mtInternal);
+  GrowableArray<int> heartbeat_fds(UB_INIT_ARRAY_CAP, true, mtInternal);
+  {
+    MonitorLockerEx locker(_unread_table_lock, Mutex::_no_safepoint_check_flag);
+    _table.begin_iteration();
+    UnreadMsgList* list = _table.next();
+    while (list != NULL) {
+      if (!list->closing()) {
+        list->acquire_pin();
+        lists.append(list);
+      }
+      list = _table.next();
+    }
+  }
+
+  uint64_t now_nanos = os::javaTimeNanos();
+  for (int i = 0; i < lists.length(); i++) {
+    UnreadMsgList* list = lists.at(i);
+    int fd = list->socket_fd();
+    {
+      MutexLocker list_locker(list->lock());
+      bool recv_timeout = false;
+      bool read_timeout = false;
+      list->process_unread_msgs(now_nanos, &reclaim_items,
+                                &recv_timeout, &read_timeout);
+      if (list->is_empty()) {
+        drained_fds.append(fd);
+      } else if (recv_timeout) {
+        fallback_fds.append(fd);
+      } else if (read_timeout) {
+        heartbeat_fds.append(fd);
+      }
+    }
+    unpin_list(list);
+  }
+
+  for (int i = 0; i < drained_fds.length(); i++) {
+    UBSocketManager::unregister_if_fallback_drained(drained_fds.at(i));
+  }
+  for (int i = 0; i < reclaim_items.length(); i++) {
+    UBSocketBlkItem item = reclaim_items.at(i);
+    UBSocketManager::free_blocks(item.start_blk, item.blk_count);
+  }
+  for (int i = 0; i < fallback_fds.length(); i++) {
+    SocketDataInfoTable::request_fallback(fallback_fds.at(i), "recv_timeout");
+  }
+  for (int i = 0; i < heartbeat_fds.length(); i++) {
+    int fd = heartbeat_fds.at(i);
+    // After fallback starts, all following bytes belong to the TCP data stream.
+    if (SocketDataInfoTable::can_send_frame(fd)) {
+      UBSocketManager::send_heartbeat(fd);
+    }
+  }
+  return 0;
+}
+
+void UnreadMsgTable::start_timer() {
+  {
+    MonitorLockerEx locker(_wait_monitor, Mutex::_no_safepoint_check_flag);
+    if (_thread != NULL || _timer_starting || !_exited) { return; }
+    _timer_starting = true;
+    _should_terminate = false;
+    _exited = false;
+  }
+
+  JavaThread* thread =
+      UBSocketThreadUtils::start_daemon(&check_unread_entry, "Check Timer",
+                                        NearMaxPriority);
+
+  {
+    MonitorLockerEx locker(_wait_monitor, Mutex::_no_safepoint_check_flag);
+    _timer_starting = false;
+    if (thread == NULL) {
+      _exited = true;
+      locker.notify_all();
+      vm_exit_during_initialization("java.lang.OutOfMemoryError",
+                                    "unable to create ub timer thread");
+    }
+    if (!_exited) { _thread = thread; }
+    locker.notify_all();
+  }
+}
+
+void UnreadMsgTable::check_unread_entry(JavaThread* thread, TRAPS) {
+  while (true) {
+    {
+      // Need state transition ThreadBlockInVM so that this thread
+      // will be handled by safepoint correctly when this thread is
+      // notified at a safepoint.
+      ThreadBlockInVM tbivm(thread);
+      MonitorLockerEx locker(_wait_monitor, Mutex::_no_safepoint_check_flag);
+      if (!_should_terminate) {
+        locker.wait(Mutex::_no_safepoint_check_flag, UB_RECLAIM_POLL_MS);
+      }
+      if (_should_terminate) { break; }
+    }
+    process_unread_msgs();
+  }
+  {
+    MonitorLockerEx locker(_wait_monitor, Mutex::_no_safepoint_check_flag);
+    _exited = true;
+    locker.notify_all();
+  }
+}
+
+void UnreadMsgTable::stop_timer() {
+  if (_wait_monitor == NULL) { return; }
+
+  MonitorLockerEx locker(_wait_monitor, Mutex::_no_safepoint_check_flag);
+  if (_thread == NULL && !_timer_starting && _exited) { return; }
+
+  _should_terminate = true;
+  locker.notify_all();
+  while (_timer_starting || !_exited) {
+    locker.wait(Mutex::_no_safepoint_check_flag);
+  }
+  _thread = NULL;
+}
+
+void UnreadMsgTable::cleanup() {
+  GrowableArray<int> fds(UB_INIT_ARRAY_CAP, true, mtInternal);
+  GrowableArray<UnreadMsgList*> lists(UB_INIT_ARRAY_CAP, true, mtInternal);
+  GrowableArray<UBSocketBlkItem> reclaim_items(UB_INIT_ARRAY_CAP, true, mtInternal);
+  {
+    MonitorLockerEx locker(_unread_table_lock, Mutex::_no_safepoint_check_flag);
+    _table.begin_iteration();
+    UnreadMsgList* list = _table.next();
+    while (list != NULL) {
+      fds.append(_table.get_cur_iter_key());
+      list->set_closing();
+      lists.append(list);
+      list = _table.next();
+    }
+    for (int i = 0; i < lists.length(); i++) {
+      while (lists.at(i)->has_active()) {
+        locker.wait(Mutex::_no_safepoint_check_flag);
+      }
+    }
+    for (int i = 0; i < lists.length(); i++) {
+      MutexLocker list_locker(lists.at(i)->lock());
+      lists.at(i)->reclaim_read_blocks_locked(&reclaim_items);
+    }
+    for (int i = 0; i < fds.length(); i++) {
+      _table.remove(fds.at(i));
+    }
+  }
+  for (int i = 0; i < lists.length(); i++) {
+    delete lists.at(i);
+  }
+  for (int i = 0; i < reclaim_items.length(); i++) {
+    UBSocketBlkItem item = reclaim_items.at(i);
+    UBSocketManager::free_blocks(item.start_blk, item.blk_count);
+  }
+}
+
+/*************************UBSocketBlkBitmap**************************/
+
+void UBSocketBlkBitmap::init(uint32_t blk_count) {
+  _word_count = (blk_count + BITS_PER_WORD - 1) / BITS_PER_WORD;
+  _blk_count = blk_count;
+  _words = NEW_C_HEAP_ARRAY(uint32_t, _word_count, mtInternal);
+  memset((void*)_words, 0, _word_count * sizeof(uint32_t));
+  _next_hint = 0;
+}
+
+void UBSocketBlkBitmap::cleanup() {
+  if (_words != NULL) {
+    FREE_C_HEAP_ARRAY(uint32_t, (uint32_t*)_words, mtInternal);
+    _words = NULL;
+  }
+  _word_count = 0;
+  _blk_count = 0;
+  _next_hint = 0;
+}
+
+uint32_t UBSocketBlkBitmap::mask_for_word(uint32_t word_idx, uint32_t start_blk,
+                                          uint32_t blk_count) {
+  uint32_t word_start = word_idx * BITS_PER_WORD;
+  uint32_t word_end = word_start + BITS_PER_WORD;
+  uint32_t range_end = start_blk + blk_count;
+  uint32_t begin = MAX2(start_blk, word_start);
+  uint32_t end = MIN2(range_end, word_end);
+  if (begin >= end) return 0;
+  uint32_t width = end - begin;
+  uint32_t shift = begin - word_start;
+  return width == BITS_PER_WORD ? 0xffffffffu : (((1u << width) - 1u) << shift);
+}
+
+void UBSocketBlkBitmap::clear_range(uint32_t start_blk, uint32_t blk_count) {
+  uint32_t first_word = start_blk / BITS_PER_WORD;
+  uint32_t last_word = (start_blk + blk_count - 1) / BITS_PER_WORD;
+  for (uint32_t word = first_word; word <= last_word; word++) {
+    uint32_t mask = mask_for_word(word, start_blk, blk_count);
+    while (mask != 0) {
+      uint32_t old_value = _words[word];
+      uint32_t new_value = old_value & ~mask;
+      if (Atomic::cmpxchg(new_value, &_words[word], old_value) == old_value) {
+        break;
+      }
+    }
+  }
+}
+
+bool UBSocketBlkBitmap::try_set_range(uint32_t start_blk, uint32_t blk_count) {
+  uint32_t first_word = start_blk / BITS_PER_WORD;
+  uint32_t last_word = (start_blk + blk_count - 1) / BITS_PER_WORD;
+
+  for (uint32_t word = first_word; word <= last_word; word++) {
+    uint32_t mask = mask_for_word(word, start_blk, blk_count);
+    while (mask != 0) {
+      uint32_t old_value = _words[word];
+      if ((old_value & mask) != 0) {
+        if (word > first_word) {
+          uint32_t rollback_count = word * BITS_PER_WORD - start_blk;
+          clear_range(start_blk, rollback_count);
+        }
+        return false;
+      }
+      uint32_t new_value = old_value | mask;
+      if (Atomic::cmpxchg(new_value, &_words[word], old_value) == old_value) {
+        break;
+      }
+    }
+  }
+  return true;
+}
+
+bool UBSocketBlkBitmap::alloc(uint32_t blk_need, uint32_t* start_blk) {
+  if (_words == NULL || blk_need == 0 || blk_need > _blk_count) {
+    errno = ENOMEM;
+    return false;
+  }
+  uint32_t limit = _blk_count - blk_need + 1;
+  uint32_t hint = MIN2(_next_hint, limit - 1);
+  // Circular first-fit scan: try from the last hint to the end
+  for (uint32_t blk = hint; blk < limit; blk++) {
+    if (!try_set_range(blk, blk_need)) continue;
+    Atomic::xchg((blk + blk_need) % _blk_count, &_next_hint);
+    if (start_blk != NULL) *start_blk = blk;
+    return true;
+  }
+  for (uint32_t blk = 0; blk < hint; blk++) {
+    if (!try_set_range(blk, blk_need)) continue;
+    Atomic::xchg((blk + blk_need) % _blk_count, &_next_hint);
+    if (start_blk != NULL) *start_blk = blk;
+    return true;
+  }
+  errno = ENOMEM;
+  return false;
+}
+
+void UBSocketBlkBitmap::release(uint32_t start_blk, uint32_t blk_count) {
+  if (_words == NULL || blk_count == 0) return;
+  clear_range(start_blk, blk_count);
+  Atomic::xchg(start_blk, &_next_hint);
+}
 
 /************************UBSocketThreadUtils************************/
 
@@ -99,532 +565,166 @@ JavaThread* UBSocketThreadUtils::start_daemon(ThreadFunction entry, const char* 
   return thread;
 }
 
-/**************************UBSocketInfoList*************************/
+/************************UBSocketSessionCaches**********************/
 
-void UBSocketInfoList::append(size_t offset, size_t size) {
-  SocketListNode* newNode = new SocketListNode(offset, size, NULL);
-  if (_head == NULL) {
-    _head = _tail = _cursor = newNode;
-  } else {
-    _tail->next = newNode;
-    _tail = newNode;
-  }
+void UBSocketSessionCaches::init() {
+  _cache_lock = new Mutex(Mutex::leaf, "UBSocketSessionCaches_lock");
+  _cache_head = NULL;
 }
 
-size_t UBSocketInfoList::read_data(void* dst, size_t len) {
-  if (len == 0) return 0;
-  if (_cursor == NULL) { return 0; }
-
-  uintptr_t read_addr = (uintptr_t)_mem_addr + _cursor->offset + _cur_loc;
-  if (len + _cur_loc <= _cursor->size) {
-    memcpy(dst, (void*)read_addr, len);
-    _cur_loc += len;
-    if (_cur_loc ==
-        _cursor->size) {  // in case the last blk and no more read op
-      uintptr_t block_need_clean = (uintptr_t)_mem_addr + _cursor->offset;
-      UBSocketManager::clean_mark(block_need_clean);
-    }
-    return len;
-  } else {
-    size_t cur_cursor_remain = _cursor->size - _cur_loc;
-    if (cur_cursor_remain > 0) {
-      memcpy(dst, (void*)read_addr, cur_cursor_remain);
-      _cur_loc += cur_cursor_remain;
-      uintptr_t block_need_clean = (uintptr_t)_mem_addr + _cursor->offset;
-      UBSocketManager::clean_mark(block_need_clean);
-    }
-    if (_cursor->next == NULL) {
-      return cur_cursor_remain;
-    }
-    uintptr_t next_dst = (uintptr_t)dst + cur_cursor_remain;
-    _cursor = _cursor->next;
-    delete_nodes(_head, _cursor);  // delete nodes before new cursor
-    _head = _cursor;
-    _cur_loc = 0;
-    return cur_cursor_remain +
-           read_data((void*)next_dst, len - cur_cursor_remain);
-  }
+void UBSocketSessionCaches::add(UBSocketAttachSession* session) {
+  MutexLockerEx locker(_cache_lock, Mutex::_no_safepoint_check_flag);
+  session->set_next(_cache_head);
+  _cache_head = session;
 }
 
-int UBSocketInfoList::delete_nodes(SocketListNode* start, SocketListNode* end) {
-  int delete_count = 0;
-  while (start != end && start != NULL) {
-    SocketListNode* next = start->next;
-    delete start;
-    start = next;
-    delete_count++;
-  }
-  return delete_count;
-}
-
-/*************************SocketDataInfoTable***********************/
-
-void SocketDataInfoTable::init() {
-  guarantee(_instance == NULL, "must be");
-  _instance = new SocketDataInfoTable();
-  _table_lock = new Monitor(Mutex::leaf, "SocketDataInfoTable_lock");
-}
-
-void SocketDataInfoTable::publish(int fd, UBSocketInfoList* info) {
-  MutexLocker locker(_table_lock);
-  guarantee(_table.get(fd) == NULL, "must be");
-  _table.add(fd, info);
-}
-
-bool SocketDataInfoTable::contains(int fd) {
-  MutexLocker locker(_table_lock);
-  return _table.get(fd) != NULL;
-}
-
-bool SocketDataInfoTable::append_range(int fd, size_t offset, size_t size) {
-  MutexLocker locker(_table_lock);
-  UBSocketInfoList* info = _table.get(fd);
-  if (info == NULL) {
-    return false;
-  }
-  info->append(offset, size);
-  return true;
-}
-
-size_t SocketDataInfoTable::read_data(int fd, void* dst, size_t len) {
-  MutexLocker locker(_table_lock);
-  UBSocketInfoList* info = _table.get(fd);
-  if (info == NULL) {
-    return 0;
-  }
-  return info->read_data(dst, len);
-}
-
-UBSocketInfoList* SocketDataInfoTable::detach(int fd) {
-  MutexLocker locker(_table_lock);
-  UBSocketInfoList* info = _table.get(fd);
-  if (info != NULL) {
-    _table.remove(fd);
-  }
-  return info;
-}
-
-int SocketDataInfoTable::unregister_abnormal_fds() {
-  int count = 0;
-  SimpleList<int, mtInternal> fds(-1);
-  {
-    MutexLocker locker(_table_lock);
-    _table.begin_iteration();
-    UBSocketInfoList* info = _table.next();
-    while (info != NULL) {
-      fds.append(info->get_socket_fd());
-      info = _table.next();
-    }
-  }
-
-  fds.begin_iteration();
-  int fd = fds.next();
-  while (fd != -1) {
-    UBSocketManager::unregister_fd(fd);
-    count++;
-    fd = fds.next();
-  }
-  return count;
-}
-
-/************************SocketDescriptorBuffer**********************/
-
-bool SocketDescriptorBuffer::append(const char* msg, size_t len) {
-  if (len == 0) {
-    return true;
-  }
-  size_t required = _len + len;
-  if (required > _cap) {
-    size_t new_cap = _cap == 0 ? SOCKET_DESCRIPTOR_BUFFER_INITIAL_CAPACITY : _cap;
-    while (new_cap < required) {
-      new_cap *= SOCKET_DESCRIPTOR_BUFFER_GROWTH_FACTOR;
-    }
-    char* new_data = (char*)malloc(new_cap);
-    if (new_data == NULL) { return false; }
-    if (_data != NULL && _len > 0) {
-      memcpy(new_data, _data, _len);
-    }
-    free(_data);
-    _data = new_data;
-    _cap = new_cap;
-  }
-  memcpy(_data + _len, msg, len);
-  _len += len;
-  return true;
-}
-
-void SocketDescriptorBuffer::consume(size_t len) {
-  if (len >= _len) {
-    _len = 0;
-    return;
-  }
-  memmove(_data, _data + len, _len - len);
-  _len -= len;
-}
-
-/*************************SocketBufferTable**************************/
-
-bool SocketBufferTable::extract_complete_descriptors(int fd, const char* msg, size_t len,
-                                                     char** descriptors,
-                                                     size_t* descriptors_len) {
-  *descriptors = NULL;
-  *descriptors_len = 0;
-
-  MutexLocker locker(_table_lock);
-  SocketDescriptorBuffer* buffer = PtrTable<int, SocketDescriptorBuffer*, mtInternal>::get(fd);
-  if (buffer == NULL) {
-    buffer = new SocketDescriptorBuffer();
-    PtrTable<int, SocketDescriptorBuffer*, mtInternal>::add(fd, buffer);
-  }
-  if (!buffer->append(msg, len)) {
-    return false;
-  }
-
-  char* data = buffer->data();
-  size_t available = buffer->len();
-  size_t ready_len = 0;
-  size_t consumed = 0;
-  while (consumed < available) {
-    const char* end_pos = (const char*)memchr(data + consumed, ';', available - consumed);
-    if (end_pos == NULL) {
-      break;
-    }
-    ready_len = (size_t)(end_pos - data) + 1;
-    consumed = ready_len;
-  }
-
-  if (ready_len == 0) {
-    return true;
-  }
-
-  char* out = (char*)malloc(ready_len);
-  if (out == NULL) {
-    return false;
-  }
-  memcpy(out, data, ready_len);
-  buffer->consume(ready_len);
-  if (buffer->len() == 0) {
-    PtrTable<int, SocketDescriptorBuffer*, mtInternal>::remove(fd);
-    delete buffer;
-  }
-
-  *descriptors = out;
-  *descriptors_len = ready_len;
-  return true;
-}
-
-/***************************UnreadMsgList***************************/
-
-void UnreadMsgList::append(void* addr) {
-  UnreadMsgNode* newNode = new UnreadMsgNode(addr, NULL);
-  _tail->next = newNode;
-  _tail = newNode;
-}
-
-int UnreadMsgList::check_timeout() {
-  UnreadMsgNode* end = _tail;  // ending of this turn
-  if (_head == end) return 0;
-  int timeout_cnt = 0;
-  uint64_t now_nanos = os::javaTimeNanos();
-  UnreadMsgNode* prev = _head;
-  UnreadMsgNode* cur = _head->next;
-
-  while (cur != NULL) {
-    bool is_ending = (cur == end);
-    uint64_t send_time = 0;
-    if (cur->addr != NULL) {
-      memcpy(&send_time, cur->addr, sizeof(uint64_t));
-    }
-    if (send_time == 0) {
-      UnreadMsgNode* need_del = cur;
-      prev->next = cur->next;
-      if (need_del == _tail) {
-        // update tail if deleting last node
-        _tail = prev;
-      }
-      cur = cur->next;
-      delete need_del;
-    } else {
-      uint64_t expired_ns = now_nanos - send_time;
-      if (expired_ns > UBSocketManager::package_timeout) {
-        ++timeout_cnt;
-        UB_LOG(UB_SOCKET, UB_LOG_WARNING, "fd=%d timeout msg=%p expired_ns=%ld count=%d\n",
-               _socket_fd, cur->addr, expired_ns, timeout_cnt);
-      }
-      prev = cur;
-      cur = cur->next;
-    }
-    if (is_ending) break;  // stop this loop
-  }
-  return timeout_cnt;
-}
-
-int UnreadMsgTable::check_timeout() {
-  int timeout_count = 0;
-  SimpleList<int, mtInternal> heartbeat_fds(-1);
-  {
-    MutexLocker locker(_table_lock);
-    begin_iteration();
-    UnreadMsgList* list = next();
-    while (list != NULL) {
-      int list_timeout = list->check_timeout();
-      timeout_count += list_timeout;
-      if (list_timeout > 0) {
-        heartbeat_fds.append(list->socket_fd());
-      }
-      list = next();
-    }
-  }
-
-  heartbeat_fds.begin_iteration();
-  int fd = heartbeat_fds.next();
-  while (fd != -1) {
-    UBSocketManager::send_heartbeat(fd);
-    fd = heartbeat_fds.next();
-  }
-  return timeout_count;
-}
-
-void UnreadMsgTable::start_timer() {
-  if (_thread != NULL)  // timer has been running
-    return;
-  _wait_monitor = new Monitor(Mutex::safepoint - 1, "UBSocketCheckMonitor");
-
-  JavaThread* thread =
-      UBSocketThreadUtils::start_daemon(&check_unread_entry, "Check Timer",
-                                        NearMaxPriority);
-  if (thread == NULL) {
-    vm_exit_during_initialization("java.lang.OutOfMemoryError",
-                                  "unable to create ub timer thread");
-  }
-  _thread = thread;
-}
-
-void UnreadMsgTable::check_unread_entry(JavaThread* thread, TRAPS) {
-  while (!_should_terminate) {
-    {
-      // Need state transition ThreadBlockInVM so that this thread
-      // will be handled by safepoint correctly when this thread is
-      // notified at a safepoint.
-      ThreadBlockInVM tbivm(thread);
-      MonitorLockerEx locker(_wait_monitor, Mutex::_no_safepoint_check_flag);
-      locker.wait(Mutex::_no_safepoint_check_flag, UBSocketTimeout);
-    }
-    instance()->check_timeout();
-  }
-}
-
-void UnreadMsgTable::stop_timer() {
-  if (_thread == NULL) return;
-  _should_terminate = true;
-  if (_wait_monitor != NULL) {
-    MonitorLockerEx locker(_wait_monitor, Mutex::_no_safepoint_check_flag);
-    _wait_monitor->notify();
-  }
-}
-
-void UnreadMsgTable::cleanup() {
-  MutexLocker locker(_table_lock);
-  for (int fd = 0; fd < MATRIX_TABLE_SIZE; fd++) {
-    UnreadMsgList* list = get(fd);
-    if (list != NULL) {
-      remove(fd);
-      delete list;
-    }
-  }
-}
-
-/************************UBSocketAttachSessionTable**********************/
-
-class UBSocketAttachSessionTableState : public CHeapObj<mtInternal> {
- public:
-  Monitor* lock;
-  UBSocketAttachSession* head;
-
-  UBSocketAttachSessionTableState()
-    : lock(new Monitor(Mutex::leaf, "UBSocketAttachSessionTable_lock")), head(NULL) {}
-};
-
-static UBSocketAttachSessionTableState* g_attach_session_table = NULL;
-
-static UBSocketAttachSessionTableState* attach_session_table() {
-  if (g_attach_session_table == NULL) {
-    g_attach_session_table = new UBSocketAttachSessionTableState();
-  }
-  return g_attach_session_table;
-}
-
-static UBSocketAttachSession* find_locked(UBSocketAttachSessionTableState* state,
-                                          const UBSocketEndpoint* local_ep,
-                                          const UBSocketEndpoint* remote_ep) {
-  UBSocketAttachSession* cur = state->head;
+UBSocketAttachSession* UBSocketSessionCaches::find(const UBSocketEndpoint* local_ep,
+                                                   const UBSocketEndpoint* remote_ep) {
+  MutexLockerEx locker(_cache_lock, Mutex::_no_safepoint_check_flag);
+  UBSocketAttachSession* cur = _cache_head;
   while (cur != NULL) {
     if (cur->matches(local_ep, remote_ep)) {
-      return cur;
+      return cur->try_pin() ? cur : NULL;
     }
     cur = cur->next();
   }
   return NULL;
 }
 
-bool UBSocketAttachSessionTable::add(UBSocketAttachSession* session) {
-  UBSocketAttachSessionTableState* state = attach_session_table();
-  MonitorLockerEx locker(state->lock, Mutex::_no_safepoint_check_flag);
-  session->set_next(state->head);
-  state->head = session;
-  return true;
+void UBSocketSessionCaches::release(UBSocketAttachSession* session) {
+  if (session != NULL) { session->unpin(); }
 }
 
-UBSocketAttachSession* UBSocketAttachSessionTable::find(const UBSocketEndpoint* local_ep,
-                                                        const UBSocketEndpoint* remote_ep) {
-  UBSocketAttachSessionTableState* state = attach_session_table();
-  MonitorLockerEx locker(state->lock, Mutex::_no_safepoint_check_flag);
-  return find_locked(state, local_ep, remote_ep);
-}
-
-void UBSocketAttachSessionTable::remove(const UBSocketEndpoint* local_ep,
-                                        const UBSocketEndpoint* remote_ep) {
-  UBSocketAttachSessionTableState* state = attach_session_table();
-  MonitorLockerEx locker(state->lock, Mutex::_no_safepoint_check_flag);
-  UBSocketAttachSession* prev = NULL;
-  UBSocketAttachSession* cur = state->head;
-  while (cur != NULL) {
-    if (cur->matches(local_ep, remote_ep)) {
-      if (prev == NULL) {
-        state->head = cur->next();
-      } else {
-        prev->set_next(cur->next());
+void UBSocketSessionCaches::remove(const UBSocketEndpoint* local_ep,
+                                   const UBSocketEndpoint* remote_ep) {
+  UBSocketAttachSession* removed = NULL;
+  {
+    MutexLockerEx locker(_cache_lock, Mutex::_no_safepoint_check_flag);
+    UBSocketAttachSession* prev = NULL;
+    UBSocketAttachSession* cur = _cache_head;
+    while (cur != NULL) {
+      if (cur->matches(local_ep, remote_ep)) {
+        if (prev == NULL) {
+          _cache_head = cur->next();
+        } else {
+          prev->set_next(cur->next());
+        }
+        removed = cur;
+        break;
       }
-      delete cur;
-      return;
+      prev = cur;
+      cur = cur->next();
     }
-    prev = cur;
-    cur = cur->next();
+  }
+  if (removed != NULL) {
+    removed->close_and_wait();
+    delete removed;
   }
 }
 
-void UBSocketAttachSessionTable::cleanup() {
-  UBSocketAttachSessionTableState* state = attach_session_table();
-  MonitorLockerEx locker(state->lock, Mutex::_no_safepoint_check_flag);
-  while (state->head != NULL) {
-    UBSocketAttachSession* next = state->head->next();
-    delete state->head;
-    state->head = next;
+void UBSocketSessionCaches::cleanup() {
+  GrowableArray<UBSocketAttachSession*> sessions(UB_INIT_ARRAY_CAP,
+                                                 true, mtInternal);
+  {
+    MutexLockerEx locker(_cache_lock, Mutex::_no_safepoint_check_flag);
+    UBSocketAttachSession* cur = _cache_head;
+    while (cur != NULL) {
+      sessions.append(cur);
+      cur = cur->next();
+    }
+    _cache_head = NULL;
+  }
+  for (int i = 0; i < sessions.length(); i++) {
+    UBSocketAttachSession* session = sessions.at(i);
+    session->close_and_wait();
+    delete session;
   }
 }
 
-/************************UBSocketEarlyRequestQueue**********************/
+/************************UBSocketEarlyReqQueue**********************/
 
-struct UBSocketEarlyRequest : public CHeapObj<mtInternal> {
+struct UBSocketEarlyReqQueue::EarlyRequest : public CHeapObj<mtInternal> {
   int control_fd;
   uint64_t ddl_ns;
-  UBSocketControlFrame request;
-  UBSocketEarlyRequest* next;
+  UBSocketAttachFrame request;
+  EarlyRequest* next;
+
+  EarlyRequest(int control_fd, const UBSocketAttachFrame* request, uint64_t ddl_ns)
+      : control_fd(control_fd), ddl_ns(ddl_ns), request(*request), next(NULL) {}
 };
 
-class UBSocketEarlyRequestQueueState : public CHeapObj<mtInternal> {
- public:
-  Monitor* lock;
-  UBSocketEarlyRequest* head;
-  UBSocketEarlyRequest* tail;
-
-  UBSocketEarlyRequestQueueState()
-    : lock(new Monitor(Mutex::leaf, "UBSocketEarlyRequestQueue_lock")), head(NULL), tail(NULL) {}
-};
-
-static UBSocketEarlyRequestQueueState* g_early_request_queue = NULL;
-
-static UBSocketEarlyRequestQueueState* early_request_queue() {
-  if (g_early_request_queue == NULL) {
-    g_early_request_queue = new UBSocketEarlyRequestQueueState();
-  }
-  return g_early_request_queue;
+static bool ub_socket_attach_request_equals(const UBSocketAttachFrame* lhs,
+                                            const UBSocketAttachFrame* rhs) {
+  return lhs->kind == rhs->kind &&
+         lhs->request_id == rhs->request_id &&
+         strncmp(lhs->mem_name, rhs->mem_name, UB_SOCKET_MEM_NAME_BUF_LEN) == 0 &&
+         ub_socket_endpoint_equals(&lhs->local_endpoint, &rhs->local_endpoint) &&
+         ub_socket_endpoint_equals(&lhs->remote_endpoint, &rhs->remote_endpoint);
 }
 
-bool UBSocketEarlyRequestQueue::cache(int control_fd, const UBSocketControlFrame* request,
-                                      uint64_t ddl_ns) {
-  UBSocketEarlyRequestQueueState* state = early_request_queue();
-  UBSocketEarlyRequest* new_entry = (UBSocketEarlyRequest*)calloc(1, sizeof(*new_entry));
+bool UBSocketEarlyReqQueue::cache(int control_fd, const UBSocketAttachFrame* request,
+                                  uint64_t ddl_ns) {
+  EarlyRequest* new_entry = new EarlyRequest(control_fd, request, ddl_ns);
   int old_fd = -1;
-  if (new_entry == NULL) {
-    errno = ENOMEM;
+  if (new_entry == NULL) { return false; }
+
+  int entry_count = 0;
+  for (EarlyRequest* entry = _head; entry != NULL; entry = entry->next) {
+    entry_count++;
+    if (!ub_socket_attach_request_equals(&entry->request, request)) { continue; }
+    old_fd = entry->control_fd;
+    entry->control_fd = control_fd;
+    entry->ddl_ns = ddl_ns;
+    entry->request = *request;
+    delete new_entry;
+    if (old_fd >= 0) {
+      close(old_fd);
+    }
+    return true;
+  }
+  if (entry_count >= UB_SOCKET_EARLY_REQUEST_MAX) {
+    delete new_entry;
+    UB_LOG(UB_SOCKET, UB_LOG_WARNING,
+           "early request queue full limit=%d control_fd=%d\n",
+           UB_SOCKET_EARLY_REQUEST_MAX, control_fd);
     return false;
   }
-
-  new_entry->control_fd = control_fd;
-  new_entry->ddl_ns = ddl_ns;
-  new_entry->request = *request;
-
-  {
-    MonitorLockerEx locker(state->lock, Mutex::_no_safepoint_check_flag);
-    for (UBSocketEarlyRequest* entry = state->head; entry != NULL; entry = entry->next) {
-      if (!ub_frame_request_equals(&entry->request, request)) {
-        continue;
-      }
-      old_fd = entry->control_fd;
-      entry->control_fd = control_fd;
-      entry->ddl_ns = ddl_ns;
-      entry->request = *request;
-      free(new_entry);
-      if (old_fd >= 0) {
-        close(old_fd);
-      }
-      return true;
-    }
-    new_entry->next = NULL;
-    if (state->tail == NULL) {
-      state->head = state->tail = new_entry;
-    } else {
-      state->tail->next = new_entry;
-      state->tail = new_entry;
-    }
+  if (_tail == NULL) {
+    _head = _tail = new_entry;
+  } else {
+    _tail->next = new_entry;
+    _tail = new_entry;
   }
   return true;
 }
 
-bool UBSocketEarlyRequestQueue::has_requests() {
-  UBSocketEarlyRequestQueueState* state = early_request_queue();
-  MonitorLockerEx locker(state->lock, Mutex::_no_safepoint_check_flag);
-  return state->head != NULL;
-}
-
-int UBSocketEarlyRequestQueue::count() {
-  UBSocketEarlyRequestQueueState* state = early_request_queue();
-  MonitorLockerEx locker(state->lock, Mutex::_no_safepoint_check_flag);
+int UBSocketEarlyReqQueue::count() {
   int count = 0;
-  for (UBSocketEarlyRequest* entry = state->head; entry != NULL; entry = entry->next) {
+  for (EarlyRequest* entry = _head; entry != NULL; entry = entry->next) {
     count++;
   }
   return count;
 }
 
-bool UBSocketEarlyRequestQueue::take_one(int* control_fd, UBSocketControlFrame* request,
-                                         uint64_t* ddl_ns) {
-  UBSocketEarlyRequestQueueState* state = early_request_queue();
-  MonitorLockerEx locker(state->lock, Mutex::_no_safepoint_check_flag);
-  if (state->head == NULL) {
-    return false;
-  }
-  UBSocketEarlyRequest* entry = state->head;
-  state->head = entry->next;
-  if (state->head == NULL) {
-    state->tail = NULL;
-  }
+bool UBSocketEarlyReqQueue::take_one(int* control_fd, UBSocketAttachFrame* request,
+                                     uint64_t* ddl_ns) {
+  if (_head == NULL) { return false; }
+  EarlyRequest* entry = _head;
+  _head = entry->next;
+  if (_head == NULL) { _tail = NULL; }
   *control_fd = entry->control_fd;
   *request = entry->request;
   *ddl_ns = entry->ddl_ns;
-  free(entry);
+  delete entry;
   return true;
 }
 
-void UBSocketEarlyRequestQueue::cleanup() {
-  UBSocketEarlyRequestQueueState* state = early_request_queue();
-  MonitorLockerEx locker(state->lock, Mutex::_no_safepoint_check_flag);
-  while (state->head != NULL) {
-    UBSocketEarlyRequest* next = state->head->next;
-    close(state->head->control_fd);
-    free(state->head);
-    state->head = next;
+void UBSocketEarlyReqQueue::cleanup() {
+  while (_head != NULL) {
+    EarlyRequest* next = _head->next;
+    close(_head->control_fd);
+    delete _head;
+    _head = next;
   }
-  state->tail = NULL;
+  _tail = NULL;
 }

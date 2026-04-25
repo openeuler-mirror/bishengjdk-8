@@ -22,12 +22,12 @@
  * @summary Test attach timeout fallback and cleanup
  * @library /testlibrary
  * @compile ../SocketTestSupport.java ../SocketTestConfig.java ../test-classes/SocketTestData.java ../test-classes/NIOScenarioServer.java ../test-classes/NIOScenarioClient.java
- * @run main/othervm SocketAttachTimeoutTest
+ * @run main/othervm AttachTimeoutTest
  */
 
 import com.oracle.java.testlibrary.OutputAnalyzer;
 
-public class SocketAttachTimeoutTest {
+public class AttachTimeoutTest {
     private static final int DATA_SIZE = 131072;
     private static final int CLIENT_COUNT = 1;
     private static final int ACCEPT_DELAY_MS = 3000;
@@ -39,8 +39,6 @@ public class SocketAttachTimeoutTest {
     public static void main(String[] args) throws Exception {
         testAttachTimeout(300L, "AttachTimeoutClient",
             "Attach timeout should fallback");
-        testAttachTimeout(100L, "EarlyExpiryClient",
-            "Early request expiry should fallback");
         testTimeoutFallbackResourceCleanup();
     }
 

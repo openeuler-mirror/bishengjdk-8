@@ -5787,8 +5787,6 @@ void os::Linux::load_UB_library() {
       _ub_mem_return = CAST_TO_FN_PTR(ub_mem_return_func_t, dlsym(handle, "return_memory"));
       _ub_prepare_env = CAST_TO_FN_PTR(ub_prepare_env_func_t, dlsym(handle, "prepare_environments"));
       _ub_finalize_env = CAST_TO_FN_PTR(ub_finalize_env_func_t, dlsym(handle, "finalize_environments"));
-    } else {
-      tty->print_cr("UB Matrix: failed to load libmatrix_wrapper.so from all search paths");
     }
 }
 

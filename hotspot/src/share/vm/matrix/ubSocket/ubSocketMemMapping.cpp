@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
- * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES FROM THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -23,60 +23,41 @@
 
 #include "classfile/symbolTable.hpp"
 #include "matrix/matrixLog.hpp"
+#include "matrix/ubSocket/ubSocketDataInfo.hpp"
 #include "matrix/ubSocket/ubSocket.hpp"
 #include "matrix/ubSocket/ubSocketUtils.hpp"
 #include "runtime/mutex.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "runtime/thread.hpp"
 
-class UBSocketMemMappingRegistry : public CHeapObj<mtInternal> {
- public:
-  Monitor* lock;
-  UBSocketMemMapping* head;
-
-  UBSocketMemMappingRegistry()
-    : lock(new Monitor(Mutex::leaf, "UBSocketMemMappingRegistry_lock")),
-      head(NULL) {}
-};
-
-static UBSocketMemMappingRegistry* g_mem_mapping_registry = NULL;
-
-static UBSocketMemMappingRegistry* mem_mapping_registry() {
-  if (g_mem_mapping_registry == NULL) {
-    g_mem_mapping_registry = new UBSocketMemMappingRegistry();
-  }
-  return g_mem_mapping_registry;
-}
+Monitor* UBSocketMemMapping::_registry_lock = NULL;
+UBSocketMemMapping* UBSocketMemMapping::_registry_head = NULL;
 
 UBSocketMemMapping::UBSocketMemMapping(Symbol* name, size_t size, void* addr)
   : _name(name), _size(size), _addr(addr), _ref_count(1), _next(NULL) {}
 
-int UBSocketMemMapping::decrement_ref() {
-  guarantee(_ref_count > 0, "must be");
-  return --_ref_count;
+void UBSocketMemMapping::init() {
+  _registry_lock = new Monitor(Mutex::leaf, "UBSocketMemMapping_lock");
+  _registry_head = NULL;
 }
 
-static UBSocketMemMapping* find_mapping_locked(UBSocketMemMappingRegistry* registry,
-                                               Symbol* remote_name) {
-  UBSocketMemMapping* cur = registry->head;
+UBSocketMemMapping* UBSocketMemMapping::find_locked(Symbol* remote_name) {
+  UBSocketMemMapping* cur = _registry_head;
   while (cur != NULL) {
-    if (cur->name() == remote_name) {
-      return cur;
-    }
+    if (cur->name() == remote_name) { return cur; }
     cur = cur->next();
   }
   return NULL;
 }
 
-static void remove_mapping_locked(UBSocketMemMappingRegistry* registry,
-                                  UBSocketMemMapping* mapping) {
+void UBSocketMemMapping::remove_locked(UBSocketMemMapping* mapping) {
   UBSocketMemMapping* prev = NULL;
-  UBSocketMemMapping* cur = registry->head;
+  UBSocketMemMapping* cur = _registry_head;
   while (cur != NULL) {
     UBSocketMemMapping* next = cur->next();
     if (cur == mapping) {
       if (prev == NULL) {
-        registry->head = next;
+        _registry_head = next;
       } else {
         prev->set_next(next);
       }
@@ -87,31 +68,39 @@ static void remove_mapping_locked(UBSocketMemMappingRegistry* registry,
   }
 }
 
-UBSocketMemMapping* UBSocketMemMapping::acquire(Symbol* remote_name, size_t remote_size) {
-  UBSocketMemMappingRegistry* registry = mem_mapping_registry();
+UBSocketMemMapping* UBSocketMemMapping::acquire(const char* remote_name_str, size_t remote_size) {
+  Symbol* remote_name = SymbolTable::new_symbol(remote_name_str, JavaThread::current());
   {
-    MutexLocker locker(registry->lock);
-    UBSocketMemMapping* existing = find_mapping_locked(registry, remote_name);
+    MutexLocker locker(_registry_lock);
+    UBSocketMemMapping* existing = find_locked(remote_name);
     if (existing != NULL) {
-      guarantee(existing->size() == remote_size, "UBSocketMemMapping size mismatch");
+      if (existing->size() != remote_size) {
+        UB_LOG(UB_SOCKET, UB_LOG_ERROR,
+               "remote=%s mapping size mismatch existing=" SIZE_FORMAT
+               " requested=" SIZE_FORMAT "\n",
+               remote_name_str, existing->size(), remote_size);
+        return NULL;
+      }
       existing->increment_ref();
-      ResourceMark rm;
-      UB_LOG(UB_SOCKET, UB_LOG_DEBUG, "remote=%s reuse addr=%p size=%lu ref=%d\n",
-             remote_name->as_C_string(), existing->addr(),
-             (unsigned long)remote_size, existing->ref_count());
+      UB_LOG(UB_SOCKET, UB_LOG_INFO,
+             "remote=%s reuse addr=%p size=" SIZE_FORMAT " ref=%d\n",
+             remote_name_str, existing->addr(), remote_size, existing->ref_count());
       return existing;
     }
   }
 
   int error_code = 0;
-  void* mapped_addr = os::Linux::ub_mmap(remote_name->as_C_string(), remote_size, &error_code);
+  // ub_mmap is costly, so call it after checking the registry for existing mapping without lock
+  void* mapped_addr = os::Linux::ub_mmap(remote_name_str, remote_size, &error_code);
   if (mapped_addr == NULL) {
-    UB_LOG(UB_SOCKET, UB_LOG_WARNING, "remote=%s mmap failed size=%lu err=%d\n",
-           remote_name->as_C_string(), (unsigned long)remote_size, error_code);
+    UB_LOG(UB_SOCKET, UB_LOG_WARNING,
+           "remote=%s mmap failed size=" SIZE_FORMAT " err=%d\n",
+           remote_name_str, remote_size, error_code);
     return NULL;
   }
 
-  UBSocketMemMapping* created = new (std::nothrow) UBSocketMemMapping(remote_name, remote_size, mapped_addr);
+  UBSocketMemMapping* created =
+      new (std::nothrow) UBSocketMemMapping(remote_name, remote_size, mapped_addr);
   if (created == NULL) {
     os::Linux::ub_munmap(mapped_addr, remote_size);
     errno = ENOMEM;
@@ -119,82 +108,75 @@ UBSocketMemMapping* UBSocketMemMapping::acquire(Symbol* remote_name, size_t remo
   }
 
   {
-    MutexLocker locker(registry->lock);
-    UBSocketMemMapping* existing = find_mapping_locked(registry, remote_name);
+    MutexLocker locker(_registry_lock);
+    UBSocketMemMapping* existing = find_locked(remote_name);
     if (existing != NULL) {
-      guarantee(existing->size() == remote_size, "UBSocketMemMapping size mismatch");
+      if (existing->size() != remote_size) {
+        UB_LOG(UB_SOCKET, UB_LOG_ERROR,
+               "remote=%s mapping size mismatch existing=" SIZE_FORMAT
+               " requested=" SIZE_FORMAT "\n",
+               remote_name_str, existing->size(), remote_size);
+        os::Linux::ub_munmap(mapped_addr, remote_size);
+        delete created;
+        return NULL;
+      }
       existing->increment_ref();
       os::Linux::ub_munmap(mapped_addr, remote_size);
-      ResourceMark rm;
-      UB_LOG(UB_SOCKET, UB_LOG_DEBUG, "remote=%s reuse addr=%p size=%lu ref=%d\n",
-             remote_name->as_C_string(), existing->addr(),
-             (unsigned long)remote_size, existing->ref_count());
+      UB_LOG(UB_SOCKET, UB_LOG_INFO,
+             "remote=%s reuse addr=%p size=" SIZE_FORMAT " ref=%d\n",
+             remote_name_str, existing->addr(), remote_size, existing->ref_count());
       delete created;
       return existing;
     }
-    created->set_next(registry->head);
-    registry->head = created;
+    created->set_next(_registry_head);
+    _registry_head = created;
   }
 
-  ResourceMark rm;
-  UB_LOG(UB_SOCKET, UB_LOG_DEBUG, "remote=%s mmap addr=%p size=%lu ref=1\n",
-         remote_name->as_C_string(), mapped_addr, (unsigned long)remote_size);
+  UB_LOG(UB_SOCKET, UB_LOG_INFO,
+         "remote=%s mmap addr=%p size=" SIZE_FORMAT " ref=1\n",
+         remote_name_str, mapped_addr, remote_size);
   return created;
 }
 
-bool UBSocketMemMapping::release(int* ref_count_ptr) {
-  UBSocketMemMappingRegistry* registry = mem_mapping_registry();
-  int ref_count = 0;
+bool UBSocketMemMapping::release() {
   bool last_ref = false;
 
   {
-    MutexLocker locker(registry->lock);
-    ref_count = decrement_ref();
+    MutexLocker locker(_registry_lock);
+    int ref_count = decrement_ref();
     last_ref = ref_count == 0;
-    if (last_ref) {
-      remove_mapping_locked(registry, this);
-    }
+    if (last_ref) { remove_locked(this); }
   }
-
-  if (ref_count_ptr != NULL) {
-    *ref_count_ptr = ref_count;
-  }
-  if (!last_ref) {
-    return false;
-  }
+  if (!last_ref) { return false; }
 
   int error_code = os::Linux::ub_munmap(_addr, _size);
   if (error_code != 0) {
-    UB_LOG(UB_SOCKET, UB_LOG_WARNING, "remote=%s munmap addr=%p size=%lu failed err=%d\n",
-           _name->as_C_string(), _addr, (unsigned long)_size, error_code);
+    UB_LOG(UB_SOCKET, UB_LOG_WARNING,
+           "remote=%s munmap addr=%p size=" SIZE_FORMAT " failed err=%d\n",
+           _name->as_C_string(), _addr, _size, error_code);
   } else {
-    ResourceMark rm;
-    UB_LOG(UB_SOCKET, UB_LOG_DEBUG, "remote=%s unmapped addr=%p size=%lu ref=0\n",
-           _name->as_C_string(), _addr, (unsigned long)_size);
+    UB_LOG(UB_SOCKET, UB_LOG_INFO,
+           "remote=%s unmapped addr=%p size=" SIZE_FORMAT " ref=0\n",
+           _name->as_C_string(), _addr, _size);
   }
-  delete this;
-  return true;
+  return true;  // caller should delete this mapping
 }
 
-bool ub_socket_unbind_remote_mapping(int socket_fd, char* remote_mem_name,
-                                     size_t remote_mem_name_len, int* ref_count_ptr) {
-  UBSocketInfoList* info_list = SocketDataInfoTable::instance()->detach(socket_fd);
-  if (info_list == NULL) {
-    return false;
-  }
+void UBSocketMemMapping::release_mapping(UBSocketMemMapping* mapping) {
+  bool last_ref = mapping->release();
+  if (last_ref) { delete mapping; }
+}
 
-  UBSocketMemMapping* mapping = info_list->get_mem_mapping();
-  guarantee(mapping != NULL, "must be");
-  ResourceMark rm;
-  const char* mapping_name = mapping->name()->as_C_string();
-  if (remote_mem_name != NULL && remote_mem_name_len > 0) {
-    strncpy(remote_mem_name, mapping_name, remote_mem_name_len - 1);
-    remote_mem_name[remote_mem_name_len - 1] = '\0';
-  }
-  if (UBSocketManager::package_timeout > 0) {
-    UnreadMsgTable::instance()->unregister_fd(info_list->get_socket_fd());
-  }
+bool UBSocketMemMapping::unbind(int fd) {
+  UBSocketInfoList* info_list = SocketDataInfoTable::detach(fd);
+  if (info_list == NULL) { return false; }
+
+  UBSocketMemMapping* mapping = info_list->mapping();
+  UnreadMsgTable::unregister_fd(fd);
+
   delete info_list;
-  mapping->release(ref_count_ptr);
+
+  release_mapping(mapping);
+
   return true;
 }

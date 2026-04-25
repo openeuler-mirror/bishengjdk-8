@@ -23,8 +23,6 @@
 #include "matrix/ubSocket/ubSocketFrame.hpp"
 #include "memory/allocation.hpp"
 
-// If ATTACH_REQ arrives before the session is published, the control socket is
-// cached in UBSocketEarlyRequestQueue and retried later.
 enum UBSocketAttachPhase {
   ATTACH_REQUESTED,       // Waiting for the control side to deliver ATTACH_REQ.
   ATTACH_PREPARED,        // ATTACH_REQ accepted; the data side is preparing the response.
@@ -38,7 +36,18 @@ enum UBSocketAttachPhase {
   ATTACH_ABORTED          // The session is aborted due to any failure in the handshake.
 };
 
-// Server-side rendezvous on one attach session:
+// Server-side attach rendezvous for one accepted data socket.
+//
+// A server-side UBSocket attach is driven by two independent paths:
+//   - the data path creates and publishes this session from attach_server();
+//   - the control path receives ATTACH_REQ on the attach agent thread and
+//     finds the session from UBSocketSessionCaches.
+//
+// The two paths can arrive in either order. If the control request arrives
+// first it is kept in UBSocketEarlyReqQueue until the data path publishes the
+// matching session. Once matched, this object is the per-fd state machine and
+// monitor used to exchange memory names, publish the remote mapping result,
+// and decide whether the fd is bound to UBSocket or falls back to TCP.
 //
 //   control side                         data side
 //   ------------                         ---------
@@ -51,19 +60,27 @@ enum UBSocketAttachPhase {
 //   wait_for_final_result()              bind/finalize attach result
 //   send ATTACH_ACK         <──────────   finish_pending()
 //   finish_control()
+//
+// UBSocketSessionCaches::find() pins a session before returning it to the
+// attach agent thread. remove()/cleanup() mark the session closing and wait for
+// active pins to drain before deleting it, so a control thread cannot use a
+// session after the data path removes it from the cache.
 class UBSocketAttachSession : public CHeapObj<mtInternal> {
  private:
   Monitor* _monitor;  // wait/notify between threads during handshake
   UBSocketEndpoint _local_endpoint;
   UBSocketEndpoint _remote_endpoint;
+  uint32_t _request_id;
   char _local_mem_name[UB_SOCKET_MEM_NAME_BUF_LEN];
   char _client_mem_name[UB_SOCKET_MEM_NAME_BUF_LEN];
   UBSocketAttachPhase _phase;
   UBSocketAttachSession* _next;
+  bool _closing;
+  int _active_count;
 
   bool wait_until(uint64_t ddl_ns);
 
-  void accept_request(const char* client_mem_name);
+  void accept_request(const char* client_mem_name, uint32_t request_id);
   bool wait_for_response(uint64_t ddl_ns);
   void accept_commit(bool success);
   bool wait_for_final_result(uint64_t ddl_ns);
@@ -80,6 +97,7 @@ class UBSocketAttachSession : public CHeapObj<mtInternal> {
 
   const UBSocketEndpoint& local_endpoint() const { return _local_endpoint; }
   const UBSocketEndpoint& remote_endpoint() const { return _remote_endpoint; }
+  uint32_t request_id() const { return _request_id; }
   const char* local_mem_name() const { return _local_mem_name; }
 
   bool is_prepared() const { return _phase == ATTACH_COMMITTED; }
@@ -89,14 +107,19 @@ class UBSocketAttachSession : public CHeapObj<mtInternal> {
 
   UBSocketAttachSession* next() const { return _next; }
   void set_next(UBSocketAttachSession* next) { _next = next; }
+  // Prevent cache remove/cleanup from deleting a session in use by agent thread.
+  bool try_pin();
+  void unpin();
+  void close_and_wait();
 
   bool matches(const UBSocketEndpoint* local_ep, const UBSocketEndpoint* remote_ep) const;
 
   bool wait_for_request(uint64_t ddl_ns, char* client_mem_name);
+  // Control side entry: drive ATTACH_REQ/RSP/COMMIT/ACK on control_fd.
   bool drive_server_handshake(int control_fd,
-                              const UBSocketControlFrame* request,
+                              const UBSocketAttachFrame* request,
                               uint64_t ddl_ns);
-  bool drive_client_handshake(bool prepare_success, uint64_t ddl_ns);
+  bool finish_server_attach(bool prepare_success, uint64_t ddl_ns);
 };
 
 #endif  // SHARE_VM_MATRIX_UBSOCKETATTACHSSESSION_HPP

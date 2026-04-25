@@ -22,14 +22,14 @@
  * @summary Test complex successful socket topologies and isolation
  * @library /testlibrary
  * @compile ../SocketTestSupport.java ../SocketTestConfig.java ../test-classes/SocketTestData.java ../test-classes/SocketMultiServerMain.java ../test-classes/NIOScenarioServer.java ../test-classes/NIOScenarioClient.java
- * @run main/othervm SocketMultiServerTest
+ * @run main/othervm MultiServerTopologyTest
  */
 
 import com.oracle.java.testlibrary.OutputAnalyzer;
 import java.util.ArrayList;
 import java.util.List;
 
-public class SocketMultiServerTest {
+public class MultiServerTopologyTest {
     private static final int SAME_PROCESS_SERVER_COUNT = 2;
     private static final int SAME_PROCESS_CONNECTIONS_PER_SERVER = 2;
     private static final int SAME_PROCESS_TOTAL_CONNECTIONS =

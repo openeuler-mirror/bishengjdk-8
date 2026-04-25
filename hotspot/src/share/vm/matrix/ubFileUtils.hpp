@@ -20,9 +20,8 @@
 #ifndef SHARE_VM_MATRIX_UBFILEUTILS_HPP
 #define SHARE_VM_MATRIX_UBFILEUTILS_HPP
 
+#include "matrix/matrixUtils.hpp"
 #include "utilities/hashtable.hpp"
-
-#define MATRIX_TABLE_SIZE 1024
 
 template <typename K, typename V, MEMFLAGS F,
           unsigned (*HASH)(K const&) = primitive_hash<K>,
@@ -38,7 +37,7 @@ class UBFileHashTable : public BasicHashtable<F> {
   };
 
  public:
-  explicit UBFileHashTable(int table_size = MATRIX_TABLE_SIZE)
+  explicit UBFileHashTable(int table_size = MatrixTableSize)
       : BasicHashtable<F>(table_size, sizeof(UBFileHashTableEntry)) {}
   ~UBFileHashTable() { this->free_buckets(); }
 
