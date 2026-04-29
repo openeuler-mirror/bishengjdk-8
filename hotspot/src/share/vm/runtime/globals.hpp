@@ -4241,7 +4241,7 @@ class CommandLineFlags {
   experimental(bool, UseUBFile, false,                                      \
           "Use UB File Memory")                                             \
                                                                             \
-  experimental(ccstr, UBFileConfPath, "",                                   \
+  experimental(ccstr, UBFileConf, "",                                       \
           "UB file allow-list path")                                        \
                                                                             \
   experimental(ccstr, UBLog, "",                                            \
@@ -4268,14 +4268,17 @@ class CommandLineFlags {
   experimental(bool, UseUBSocket, false,                                    \
           "Use UB Socket")                                                  \
                                                                             \
-  experimental(ccstr, UBSocketConfPath, "",                                 \
+  experimental(ccstr, UBSocketConf, "",                                     \
           "UB socket allow-list path")                                      \
                                                                             \
-  experimental(uintx, UBSocketControlPort, 0,                               \
+  experimental(uintx, UBSocketPort, 0,                                      \
           "UB Socket attach control port")                                  \
                                                                             \
-  experimental(uintx, UBSocketTimeout, 500,                                 \
-          "UB Socket package timeout(ms), 0 means no timeout")              \
+  experimental(uintx, UBSocketMemorySize, 256*M,                            \
+          "UB Socket shared memory size in bytes")                          \
+                                                                            \
+  experimental(uintx, UBSocketTimeout, 200,                                 \
+          "UB Socket blk read timeout(ms), 0 means no timeout")             \
 /*
  *  Macros for factoring of globals
  */

@@ -20,298 +20,250 @@
 #ifndef SHARE_VM_MATRIX_UTILS_HPP
 #define SHARE_VM_MATRIX_UTILS_HPP
 
-#include "runtime/atomic.hpp"
+#include "utilities/growableArray.hpp"
+#include "utilities/hashtable.hpp"
 #include "utilities/ostream.hpp"
 
-#define MATRIX_TABLE_SIZE 1024
+static const size_t MatrixTableSize = 1024;
+static const int MatrixTableMaxSize = 65536;
+static const int UB_INIT_ARRAY_CAP = 8;
 
-template <typename V, MEMFLAGS f = mtInternal>
-class SimpleList : public CHeapObj<f> {
- private:
-  class SimpleListNode : public CHeapObj<f> {
-   public:
-    SimpleListNode(V v, SimpleList::SimpleListNode *n) : value(v), next(n) {}
-
-    V value;
-    SimpleListNode *next;
-  };
-
+template <typename V, MEMFLAGS F = mtInternal>
+class MatrixList : public CHeapObj<F> {
  public:
-  explicit SimpleList(V empty_val) {
-    _head = new SimpleListNode(empty_val, NULL);
-    _tail = _head;
-    _empty_val = empty_val;
+  // MatrixList is not thread-safe. Callers must serialize concurrent access.
+  explicit MatrixList(V empty_val)
+      : _elements(new (ResourceObj::C_HEAP, F) GrowableArray<V>(UB_INIT_ARRAY_CAP, true, F)),
+        _iteration_index(-1),
+        _empty_val(empty_val) {}
+
+  ~MatrixList() {
+    delete _elements;
   }
 
   void insert(V value) {
-    SimpleListNode *node = _head->next;
-    _head->next = new SimpleListNode(value, node);
-    if (node == NULL) _tail = _head->next;
+    _elements->insert_before(0, value);
   }
 
-  int size() {
-    SimpleListNode *tmp = _head->next;
-    int length = 0;
-    while (tmp != NULL) {
-      length += 1;
-      tmp = tmp->next;
-    }
-    return length;
-  }
+  int size() const { return _elements->length(); }
 
-  // thread safe
   void append(V value) {
-    SimpleListNode *new_val = new SimpleListNode(value, NULL);
-
-    SimpleListNode *orig_tail = _tail;
-    while (Atomic::cmpxchg_ptr(new_val, &_tail, orig_tail) != orig_tail) {
-      orig_tail = _tail;
-    }
-    orig_tail->next = new_val;
+    _elements->append(value);
   }
 
-  void begin_iteration() { _iter = _head; }
+  void begin_iteration() { _iteration_index = -1; }
 
-  bool contains(V v) {
-    SimpleListNode *cur = _head->next;
-    while (cur != NULL) {
-      if (cur->value == v) return true;
-      cur = cur->next;
-    }
-    return false;
-  }
+  bool contains(V value) const { return _elements->contains(value); }
 
   V next() {
-    _iter = _iter->next;
-    if (_iter == NULL) return _empty_val;
-    return _iter->value;
+    if (_iteration_index + 1 >= _elements->length()) {
+      _iteration_index = _elements->length();
+      return _empty_val;
+    }
+    _iteration_index++;
+    return _elements->at(_iteration_index);
   }
 
-  V *cur_value() { return &(_iter->value); }
+  V* cur_value() {
+    guarantee(_iteration_index >= 0 && _iteration_index < _elements->length(),
+              "iteration not started");
+    return _elements->adr_at(_iteration_index);
+  }
 
   bool update(V old_val, V new_val) {
-    SimpleListNode *cur = _head->next;
-    while (cur != NULL) {
-      if (cur->value == old_val) {
-        cur->value = new_val;
+    for (int i = 0; i < _elements->length(); i++) {
+      if (_elements->at(i) == old_val) {
+        _elements->at_put(i, new_val);
         return true;
       }
-      cur = cur->next;
     }
     return false;
   }
 
   void clear(void (*cleanup)(V)) {
-    SimpleListNode *current = _head->next;
-    SimpleListNode *next;
-    while (current != NULL) {
-      next = current->next;
-      cleanup(current->value);
-      free(current);
-      current = next;
+    for (int i = 0; i < _elements->length(); i++) {
+      cleanup(_elements->at(i));
     }
-    _head->next = NULL;
-    _tail = _head;
+    _elements->clear();
+    _iteration_index = -1;
   }
 
  private:
-  SimpleListNode *_head;
-  SimpleListNode *_tail;
-  SimpleListNode *_iter;
+  GrowableArray<V>* _elements;
+  int _iteration_index;
   V _empty_val;
 };
 
-template <typename V, MEMFLAGS f = mtInternal>
-class PtrList : public SimpleList<V, f> {
+template <typename K, typename V, size_t bucket_cnt, MEMFLAGS F = mtInternal>
+class MatrixHashTable : public BasicHashtable<F> {
  public:
-  PtrList() : SimpleList<V, f>(NULL) {}
-};
+  // MatrixHashTable is not thread-safe. Callers must serialize concurrent access.
+  explicit MatrixHashTable(V empty_value)
+      : BasicHashtable<F>(bucket_cnt, sizeof(MatrixHashEntry)),
+        _bucket_iter(0),
+        _iter(NULL),
+        _cur_iter(NULL),
+        _empty_val(empty_value) {}
 
-template <typename K, typename V, size_t bucket_cnt, MEMFLAGS f = mtInternal>
-class SimpleHashTable : public CHeapObj<f> {
- public:
-  explicit SimpleHashTable(V empty_value) {
-    memset(_buckets, 0, sizeof(_buckets));
-    _iter = _buckets[0];
-    _bucket_iter = 0;
-    _cur_iter = NULL;
-    _empty_val = empty_value;
-  }
-
-  ~SimpleHashTable() {
-    for (size_t i = 0; i < bucket_cnt; ++i) {
-      SimpleHashEntry *entry = _buckets[i];
-      while (entry != NULL) {
-        SimpleHashEntry *next = entry->next;
-        delete entry;
-        entry = next;
-      }
-      _buckets[i] = NULL;
-    }
-    _iter = NULL;
-    _cur_iter = NULL;
-    _bucket_iter = 0;
-  }
+  ~MatrixHashTable() { this->free_buckets(); }
 
   // should be called before every full iteration
   void begin_iteration() {
     _bucket_iter = 0;
     _iter = NULL;
     _cur_iter = NULL;
-    while (_bucket_iter < bucket_cnt) {
-      if (_buckets[_bucket_iter] != NULL) {
-        _iter = _buckets[_bucket_iter];
-        _bucket_iter += 1;
-        break;
-      }
-      _bucket_iter += 1;
-    }
+    advance_bucket();
   }
 
   V next() {
     _cur_iter = _iter;
     if (_cur_iter == NULL) return _empty_val;
-    _iter = _iter->next;
-    if (_iter == NULL) {
-      while (_buckets[_bucket_iter] == NULL && _bucket_iter < bucket_cnt)
-        _bucket_iter += 1;
-      if (_bucket_iter == bucket_cnt)
-        _iter = NULL;
-      else {
-        _iter = _buckets[_bucket_iter];
-        _bucket_iter += 1;
-      }
-    }
+    _iter = _iter->next();
+    if (_iter == NULL) advance_bucket();
     return _cur_iter->value;
   }
 
   K get_cur_iter_key() {
-    if (_cur_iter == NULL) return NULL;
-    return _cur_iter->key;
+    return _cur_iter == NULL ? K() : _cur_iter->key;
   }
 
-  void update_iter_value(V v) {
+  void update_iter_value(V value) {
     guarantee(_cur_iter != NULL, "must be");
-    _cur_iter->value = v;
+    _cur_iter->value = value;
   }
 
   void dump() {
-    for (int i = 0; i < bucket_cnt; i++) {
-      tty->print("bucket %d: ", i);
-      SimpleHashEntry *entry = _buckets[i];
+    for (int i = 0; i < this->table_size(); i++) {
+      tty->print("bucket %d: ", (int)i);
+      MatrixHashEntry* entry = bucket(i);
       while (entry != NULL) {
         tty->print("%p -> ", entry);
-        entry = entry->next;
+        entry = entry->next();
       }
       tty->print_cr("NULL");
     }
   }
 
-  void add(K key, V v) { internal_put(hash(key), key, v); }
+  void add(K key, V value) { internal_put(hash(key), key, value); }
 
   V get(K key) { return internal_get(hash(key), key); }
 
   void remove(K key) { internal_remove(hash(key), key); }
 
-  V *lookup(K key) {
-    size_t hash_val = hash(key);
-    size_t bucket = hash_val % bucket_cnt;
-    SimpleHashEntry *e = _buckets[bucket];
-    while (e != NULL && !equals(e->key, key)) {
-      e = e->next;
-    }
-    return e == NULL ? NULL : &e->value;
+  V* lookup(K key) {
+    MatrixHashEntry* entry = find_entry(hash(key), key);
+    return entry == NULL ? NULL : &entry->value;
   }
 
-  void merge_with(SimpleHashTable<K, V, bucket_cnt> *other) {
-    for (int i = 0; i < bucket_cnt; i++) {
-      if (other->_buckets[i] == NULL) continue;
-      SimpleHashEntry *e = _buckets[i];
-      _buckets[i] = other->_buckets[i];
-
-      SimpleHashEntry *cur = _buckets[i];
-      while (cur->next != NULL) {
-        cur = cur->next;
+  void merge_with(MatrixHashTable<K, V, bucket_cnt, F>* other) {
+    for (int i = 0; i < other->table_size(); i++) {
+      MatrixHashEntry* entry = other->bucket((int)i);
+      if (entry == NULL) continue;
+      other->set_entry(i, NULL);
+      while (entry != NULL) {
+        MatrixHashEntry* next = entry->next();
+        other->unlink_entry(entry);
+        int new_bucket_index = this->hash_to_index(entry->hash());
+        this->add_entry(new_bucket_index, entry);
+        entry = next;
       }
-      cur->next = e;
-      // in case double free problem
-      other->_buckets[i] = NULL;
     }
   }
 
  protected:
-  virtual size_t hash(K k) = 0;
-  virtual bool equals(K k1, K k2) { return k1 == k2; }
+  virtual size_t hash(K key) = 0;
+  virtual bool equals(K key1, K key2) const { return key1 == key2; }
 
-  class SimpleHashEntry : public CHeapObj<f> {
+  class MatrixHashEntry : public BasicHashtableEntry<F> {
    public:
-    SimpleHashEntry *next;
     K key;
     V value;
 
-    SimpleHashEntry(SimpleHashEntry *n, K k, V v) : next(n), key(k), value(v) {}
+    MatrixHashEntry* next() const {
+      return reinterpret_cast<MatrixHashEntry*>(BasicHashtableEntry<F>::next());
+    }
   };
 
-  void internal_put(size_t hash, K key, V value) {
-    size_t bucket = hash % bucket_cnt;
-    SimpleHashEntry *e = _buckets[bucket];
-    if (e == NULL) {
-      _buckets[bucket] = new SimpleHashEntry(NULL, key, value);
+  void internal_put(size_t hash_value, K key, V value) {
+    maybe_grow();
+    int bucket_index = this->hash_to_index((unsigned int)hash_value);
+    MatrixHashEntry* entry = find_entry(hash_value, key);
+    if (entry != NULL) {
+      entry->value = value;
       return;
     }
-    if (equals(e->key, key)) {
-      e->value = value;
-      return;
-    }
-    SimpleHashEntry *pre = e, *cur = e->next;
-    while (cur != NULL && !equals(cur->key, key)) {
-      pre = cur;
-      cur = cur->next;
-    }
-    if (cur != NULL) {
-      cur->value = value;
-    } else {
-      pre->next = new SimpleHashEntry(NULL, key, value);
-    }
+
+    MatrixHashEntry* new_entry = allocate_entry((unsigned int)hash_value, key, value);
+    this->add_entry(bucket_index, new_entry);
   }
 
-  void internal_remove(size_t hash, K key) {
-    size_t bucket = hash % bucket_cnt;
-    SimpleHashEntry *e = _buckets[bucket];
-    SimpleHashEntry *cur = e;
-    SimpleHashEntry *prev = NULL;
-    while (cur != NULL && !equals(cur->key, key)) {
-      prev = cur;
-      cur = cur->next;
+  void internal_remove(size_t hash_value, K key) {
+    int bucket_index = this->hash_to_index((unsigned int)hash_value);
+    MatrixHashEntry* prev = NULL;
+    MatrixHashEntry* entry = bucket(bucket_index);
+    while (entry != NULL && !equals(entry->key, key)) {
+      prev = entry;
+      entry = entry->next();
     }
-    if (cur == NULL) {
+    if (entry == NULL) {
       guarantee(false, "deleting unexisted key");
     }
-    if (prev != NULL)
-      prev->next = cur->next;
-    else
-      _buckets[bucket] = cur->next;
-
-    delete cur;
-  }
-
-  V internal_get(size_t hash, K key) {
-    size_t bucket = hash % bucket_cnt;
-    SimpleHashEntry *e = _buckets[bucket];
-    while (e != NULL && !equals(e->key, key)) {
-      e = e->next;
+    if (prev == NULL) {
+      this->safe_set_entry(bucket_index, entry->next());
+    } else {
+      prev->set_next(entry->next());
     }
-    return e == NULL ? _empty_val : e->value;
+    this->free_entry(entry);
   }
 
- protected:
-  SimpleHashEntry *_buckets[bucket_cnt];
+  V internal_get(size_t hash_value, K key) {
+    MatrixHashEntry* entry = find_entry(hash_value, key);
+    return entry == NULL ? _empty_val : entry->value;
+  }
 
-  SimpleHashEntry *_iter;
+ private:
+  MatrixHashEntry* bucket(int index) const {
+    return reinterpret_cast<MatrixHashEntry*>(BasicHashtable<F>::bucket(index));
+  }
+
+  MatrixHashEntry* allocate_entry(unsigned int hash_value, K key, V value) {
+    MatrixHashEntry* entry =
+        reinterpret_cast<MatrixHashEntry*>(BasicHashtable<F>::new_entry(hash_value));
+    entry->key = key;
+    entry->value = value;
+    return entry;
+  }
+
+  MatrixHashEntry* find_entry(size_t hash_value, K key) const {
+    int bucket_index = this->hash_to_index((unsigned int)hash_value);
+    MatrixHashEntry* entry = bucket(bucket_index);
+    while (entry != NULL && !equals(entry->key, key)) {
+      entry = entry->next();
+    }
+    return entry;
+  }
+
+  void advance_bucket() {
+    while (_bucket_iter < (size_t)this->table_size()) {
+      _iter = bucket((int)_bucket_iter++);
+      if (_iter != NULL) return;
+    }
+    _iter = NULL;
+  }
+
+  void maybe_grow() {
+    if (this->table_size() >= MatrixTableMaxSize) return;
+    if (this->number_of_entries() < this->table_size()) return;
+    int new_size = this->table_size() * 2;
+    if (new_size > MatrixTableMaxSize) {
+      new_size = MatrixTableMaxSize;
+    }
+    this->resize(new_size);
+  }
+
   size_t _bucket_iter;
-
-  SimpleHashEntry *_cur_iter;
-
+  MatrixHashEntry* _iter;
+  MatrixHashEntry* _cur_iter;
   V _empty_val;
 };
 
@@ -319,107 +271,122 @@ inline bool ub_option_blank(const char* value) {
   return value == NULL || value[0] == '\0';
 }
 
-inline uint64_t integer_hash(uint64_t h) {
-  h ^= h >> 33;
-  h *= 0xff51afd7ed558ccd;
-  h ^= h >> 33;
-  h *= 0xc4ceb9fe1a85ec53;
-  h ^= h >> 33;
-  return h;
+// MurmurHash3 64-bit finalizer constants.
+inline uint64_t matrix_integer_hash(uint64_t value) {
+  value ^= value >> 33;
+  value *= 0xff51afd7ed558ccdULL;
+  value ^= value >> 33;
+  value *= 0xc4ceb9fe1a85ec53ULL;
+  value ^= value >> 33;
+  return value;
 }
 
-template <typename K, typename V, MEMFLAGS f = mtInternal>
-class PtrTable : public SimpleHashTable<K, V, MATRIX_TABLE_SIZE, f> {
+template <typename K, typename V, MEMFLAGS F = mtInternal>
+class PtrTable : public MatrixHashTable<K, V, MatrixTableSize, F> {
  public:
   explicit PtrTable(V empty_val)
-      : SimpleHashTable<K, V, MATRIX_TABLE_SIZE, f>(empty_val) {}
+      : MatrixHashTable<K, V, MatrixTableSize, F>(empty_val) {}
 
  protected:
-  size_t hash(K k) { return integer_hash(uint64_t(k)); }
+  size_t hash(K key) { return matrix_integer_hash(uint64_t(key)); }
 };
 
-template <typename K, size_t bucket_cnt, MEMFLAGS f = mtInternal>
-class SimpleHashSet : public CHeapObj<f> {
+template <typename K, size_t bucket_cnt, MEMFLAGS F = mtInternal>
+class MatrixHashSet : public BasicHashtable<F> {
  public:
-  SimpleHashSet() { memset(_buckets, 0, sizeof(_buckets)); }
-  ~SimpleHashSet() {}
+  // MatrixHashSet is not thread-safe. Callers must serialize concurrent access.
+  MatrixHashSet() : BasicHashtable<F>(bucket_cnt, sizeof(MatrixHashEntry)) {}
+  ~MatrixHashSet() { this->free_buckets(); }
 
   void add(K key) { internal_put(hash(key), key); }
 
   void remove(K key) { internal_remove(hash(key), key); }
 
   bool exist(K key) {
-    size_t hash_val = hash(key);
-    size_t bucket = hash_val % bucket_cnt;
-    SimpleHashEntry *e = _buckets[bucket];
-    while (e != NULL && !equals(e->key, key)) {
-      e = e->next;
-    }
-    return e == NULL ? false : true;
+    return find_entry(hash(key), key) != NULL;
   }
 
  protected:
-  virtual size_t hash(K k) = 0;
-  virtual bool equals(K k1, K k2) { return k1 == k2; }
+  virtual size_t hash(K key) = 0;
+  virtual bool equals(K key1, K key2) const { return key1 == key2; }
 
-  class SimpleHashEntry : public CHeapObj<f> {
+  class MatrixHashEntry : public BasicHashtableEntry<F> {
    public:
-    SimpleHashEntry *next;
     K key;
 
-    SimpleHashEntry(SimpleHashEntry *n, K k) : next(n), key(k) {}
+    MatrixHashEntry* next() const {
+      return reinterpret_cast<MatrixHashEntry*>(BasicHashtableEntry<F>::next());
+    }
   };
 
-  void internal_put(size_t hash, K key) {
-    size_t bucket = hash % bucket_cnt;
-    SimpleHashEntry *e = _buckets[bucket];
-    if (e == NULL) {
-      _buckets[bucket] = new SimpleHashEntry(NULL, key);
+  void internal_put(size_t hash_value, K key) {
+    maybe_grow();
+    int bucket_index = this->hash_to_index((unsigned int)hash_value);
+    if (find_entry(hash_value, key) != NULL) {
       return;
     }
-    if (equals(e->key, key)) {
-      return;
-    }
-    SimpleHashEntry *pre = e, *cur = e->next;
-    while (cur != NULL && !equals(cur->key, key)) {
-      pre = cur;
-      cur = cur->next;
-    }
-    if (cur == NULL) {
-      pre->next = new SimpleHashEntry(NULL, key);
-    }
+    MatrixHashEntry* entry = allocate_entry((unsigned int)hash_value, key);
+    this->add_entry(bucket_index, entry);
   }
 
-  void internal_remove(size_t hash, K key) {
-    size_t bucket = hash % bucket_cnt;
-    SimpleHashEntry *e = _buckets[bucket];
-    SimpleHashEntry *cur = e;
-    SimpleHashEntry *prev = NULL;
-    while (cur != NULL && !equals(cur->key, key)) {
-      prev = cur;
-      cur = cur->next;
+  void internal_remove(size_t hash_value, K key) {
+    int bucket_index = this->hash_to_index((unsigned int)hash_value);
+    MatrixHashEntry* prev = NULL;
+    MatrixHashEntry* entry = bucket(bucket_index);
+    while (entry != NULL && !equals(entry->key, key)) {
+      prev = entry;
+      entry = entry->next();
     }
-    if (cur == NULL) {
-      // just return no warning
+    if (entry == NULL) {
       return;
     }
-    if (prev != NULL)
-      prev->next = cur->next;
-    else
-      _buckets[bucket] = cur->next;
+    if (prev == NULL) {
+      this->safe_set_entry(bucket_index, entry->next());
+    } else {
+      prev->set_next(entry->next());
+    }
+    this->free_entry(entry);
   }
 
- protected:
-  SimpleHashEntry *_buckets[bucket_cnt];
+ private:
+  MatrixHashEntry* bucket(int index) const {
+    return reinterpret_cast<MatrixHashEntry*>(BasicHashtable<F>::bucket(index));
+  }
+
+  MatrixHashEntry* allocate_entry(unsigned int hash_value, K key) {
+    MatrixHashEntry* entry =
+        reinterpret_cast<MatrixHashEntry*>(BasicHashtable<F>::new_entry(hash_value));
+    entry->key = key;
+    return entry;
+  }
+
+  MatrixHashEntry* find_entry(size_t hash_value, K key) const {
+    int bucket_index = this->hash_to_index((unsigned int)hash_value);
+    MatrixHashEntry* entry = bucket(bucket_index);
+    while (entry != NULL && !equals(entry->key, key)) {
+      entry = entry->next();
+    }
+    return entry;
+  }
+
+  void maybe_grow() {
+    if (this->table_size() >= MatrixTableMaxSize) return;
+    if (this->number_of_entries() < this->table_size()) return;
+    int new_size = this->table_size() * 2;
+    if (new_size > MatrixTableMaxSize) {
+      new_size = MatrixTableMaxSize;
+    }
+    this->resize(new_size);
+  }
 };
 
-template <typename K, MEMFLAGS f = mtInternal>
-class PtrHashSet : public SimpleHashSet<K, MATRIX_TABLE_SIZE, f> {
+template <typename K, MEMFLAGS F = mtInternal>
+class PtrHashSet : public MatrixHashSet<K, MatrixTableSize, F> {
  public:
-  PtrHashSet() : SimpleHashSet<K, MATRIX_TABLE_SIZE, f>() {}
+  PtrHashSet() : MatrixHashSet<K, MatrixTableSize, F>() {}
 
  protected:
-  size_t hash(K k) { return integer_hash(uint64_t(k)); }
+  size_t hash(K key) { return matrix_integer_hash(uint64_t(key)); }
 };
 
 #endif  // SHARE_VM_MATRIX_UTILS_HPP

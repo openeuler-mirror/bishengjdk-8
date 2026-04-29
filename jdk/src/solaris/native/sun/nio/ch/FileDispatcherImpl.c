@@ -83,6 +83,8 @@ static int preCloseFD = -1;     /* File descriptor to which we dup other fd's
 // UB Matrix file-descriptor limit. Descriptors above RLIMIT_NOFILE are used by
 // the UB file path rather than the UB socket path.
 int fd_limit;
+// UB Matrix support: batch buffer length for parsing multiple frames
+static const jint UB_SOCKET_PARSE_BATCH_BUF_LEN = 4096;
 
 JNIEXPORT void JNICALL
 Java_sun_nio_ch_FileDispatcherImpl_init(JNIEnv *env, jclass cl)
@@ -109,6 +111,58 @@ Java_sun_nio_ch_FileDispatcherImpl_init(JNIEnv *env, jclass cl)
     }
 }
 
+// UB Matrix Support
+static jlong
+ub_socket_read_one(JNIEnv *env, jint fd, void *buf, jlong len,
+                   jboolean convert_errors)
+{
+    jlong nread;
+    char ub_msg[UB_SOCKET_PARSE_BATCH_BUF_LEN];
+    int bytes_read;
+
+    nread = (*env)->UbSocketRead(env, buf, fd, len);
+    if (nread > 0) { return nread; }
+    if (nread < 0) {
+        return convert_errors == JNI_TRUE
+            ? convertLongReturnVal(env, nread, JNI_TRUE)
+            : nread;
+    }
+    if ((*env)->IsUbSocketReady(env, fd) == JNI_FALSE) {
+        bytes_read = read(fd, buf, len);
+        return convert_errors == JNI_TRUE
+            ? convertLongReturnVal(env, bytes_read, JNI_TRUE)
+            : bytes_read;
+    }
+
+    bytes_read = read(fd, ub_msg, UB_SOCKET_PARSE_BATCH_BUF_LEN);
+    if (bytes_read <= 0) {
+        return convert_errors == JNI_TRUE
+            ? convertLongReturnVal(env, bytes_read, JNI_TRUE)
+            : bytes_read;
+    }
+    // TCP carries fixed-size binary frame headers. One read may contain
+    // multiple frames or a trailing partial frame; the VM side caches
+    // any incomplete tail per fd and drains all complete frames here.
+    if ((*env)->UbSocketParse(env, fd, ub_msg, bytes_read) < 0) {
+        return convert_errors == JNI_TRUE
+            ? convertLongReturnVal(env, -1, JNI_TRUE)
+            : -1;
+    }
+    nread = (*env)->UbSocketRead(env, buf, fd, len);
+    if (nread < 0) {
+        return convert_errors == JNI_TRUE
+            ? convertLongReturnVal(env, nread, JNI_TRUE)
+            : nread;
+    }
+    if (nread == 0 && (*env)->IsUbSocketReady(env, fd) == JNI_FALSE) {
+        bytes_read = read(fd, buf, len);
+        return convert_errors == JNI_TRUE
+            ? convertLongReturnVal(env, bytes_read, JNI_TRUE)
+            : bytes_read;
+    }
+    return nread;
+}
+
 JNIEXPORT jint JNICALL
 Java_sun_nio_ch_FileDispatcherImpl_read0(JNIEnv *env, jclass clazz,
                              jobject fdo, jlong address, jint len)
@@ -128,21 +182,7 @@ Java_sun_nio_ch_FileDispatcherImpl_read0(JNIEnv *env, jclass clazz,
     // side-channel attach resolves to either "use UB" or "fallback to TCP".
     jboolean ub_ready = (*env)->IsUbSocketReady(env, fd);
     if (ub_ready == JNI_TRUE) {
-        jlong nread = (*env)->UbSocketRead(env, buf, fd, len);
-        if (nread > 0) {
-            return (jint)nread;
-        }
-        char ub_msg[1024];
-        int bytes_read = read(fd, ub_msg, 1024);
-        if (bytes_read <= 0) {
-            return convertReturnVal(env, bytes_read, JNI_TRUE);
-        }
-        // TCP carries compact descriptors, not payload bytes. One read may
-        // contain descriptor fragments or many descriptors together; the VM
-        // side keeps per-fd residual bytes until a full descriptor is formed.
-        (*env)->UbSocketParse(env, fd, ub_msg, bytes_read);
-        nread = (*env)->UbSocketRead(env, buf, fd, len);
-        return (jint)nread;
+        return (jint)ub_socket_read_one(env, fd, buf, len, JNI_TRUE);
     }
     nread = read(fd, buf, len);
 
@@ -165,6 +205,22 @@ Java_sun_nio_ch_FileDispatcherImpl_readv0(JNIEnv *env, jclass clazz,
 {
     jint fd = fdval(env, fdo);
     struct iovec *iov = (struct iovec *)jlong_to_ptr(address);
+    jboolean ub_ready = (*env)->IsUbSocketReady(env, fd);
+    if (ub_ready == JNI_TRUE) {
+        jlong total = 0;
+        int i;
+        for (i = 0; i < len; i++) {
+            jlong nread;
+            if (iov[i].iov_len == 0) { continue; }
+            nread = ub_socket_read_one(env, fd, iov[i].iov_base,
+                                       (jlong)iov[i].iov_len,
+                                       total == 0 ? JNI_TRUE : JNI_FALSE);
+            if (nread <= 0) { return total > 0 ? total : nread; }
+            total += nread;
+            if ((size_t)nread < iov[i].iov_len) { return total; }
+        }
+        return total;
+    }
     return convertLongReturnVal(env, readv(fd, iov, len), JNI_TRUE);
 }
 
@@ -211,6 +267,22 @@ Java_sun_nio_ch_FileDispatcherImpl_writev0(JNIEnv *env, jclass clazz,
 {
     jint fd = fdval(env, fdo);
     struct iovec *iov = (struct iovec *)jlong_to_ptr(address);
+    jboolean ub_ready_write = (*env)->IsUbSocketReady(env, fd);
+    if (ub_ready_write == JNI_TRUE) {
+        jlong total = 0;
+        int i;
+        for (i = 0; i < len; i++) {
+            jlong nwrite;
+            if (iov[i].iov_len == 0) { continue; }
+            nwrite = (*env)->UbSocketWrite(env, iov[i].iov_base, fd, (jlong)iov[i].iov_len);
+            if (nwrite <= 0) {
+                return total > 0 ? total : convertLongReturnVal(env, nwrite, JNI_FALSE);
+            }
+            total += nwrite;
+            if ((size_t)nwrite < iov[i].iov_len) { return total; }
+        }
+        return total;
+    }
     return convertLongReturnVal(env, writev(fd, iov, len), JNI_FALSE);
 }
 

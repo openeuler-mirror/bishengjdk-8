@@ -26,21 +26,20 @@
 
 class Symbol;
 
-// Represents one remote shared-memory mapping in the current JVM. The mapping
-// instance owns the mmap lifetime and reference count; fd binding remains a
-// separate concern handled by SocketDataInfoTable.
 class UBSocketMemMapping : public CHeapObj<mtInternal> {
  public:
-  static UBSocketMemMapping* acquire(Symbol* remote_name, size_t remote_size);
+  static void init();
+  static UBSocketMemMapping* acquire(const char* remote_name, size_t remote_size);
 
   Symbol* name() const { return _name; }
-  void* addr() const { return _addr; }
-  size_t size() const { return _size; }
-  int ref_count() const { return _ref_count; }
+  void*   addr() const { return _addr; }
+  size_t  size() const { return _size; }
+  int     ref_count() const { return _ref_count; }
   UBSocketMemMapping* next() const { return _next; }
   void set_next(UBSocketMemMapping* next) { _next = next; }
 
-  bool release(int* ref_count_ptr);
+  static bool unbind(int fd);
+  static void release_mapping(UBSocketMemMapping* mapping);
 
  private:
   Symbol* _name;
@@ -49,12 +48,17 @@ class UBSocketMemMapping : public CHeapObj<mtInternal> {
   int _ref_count;
   UBSocketMemMapping* _next;
 
-  UBSocketMemMapping(Symbol* name, size_t size, void* addr);
-  void increment_ref() { ++_ref_count; }
-  int decrement_ref();
-};
+  // Registry for tracking shared memory mappings across connections
+  static Monitor* _registry_lock;
+  static UBSocketMemMapping* _registry_head;
 
-bool ub_socket_unbind_remote_mapping(int socket_fd, char* remote_mem_name,
-                                     size_t remote_mem_name_len, int* ref_count_ptr);
+  UBSocketMemMapping(Symbol* name, size_t size, void* addr);
+  int increment_ref() { return ++_ref_count; }
+  int decrement_ref() { return --_ref_count; }
+  bool release();  // returns true if last reference and mapping needs to be deleted
+
+  static UBSocketMemMapping* find_locked(Symbol* remote_name);
+  static void remove_locked(UBSocketMemMapping* mapping);
+};
 
 #endif  // SHARE_VM_MATRIX_UBSOCKETMEMMAPPING_HPP

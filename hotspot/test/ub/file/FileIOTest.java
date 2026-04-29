@@ -52,7 +52,7 @@ public class FileIOTest {
                 "-cp", testDir,
                 "-XX:+UnlockExperimentalVMOptions",
                 "-XX:+UseUBFile",
-                "-XX:UBFileConfPath=" + allowlistPath,
+                "-XX:UBFileConf=" + allowlistPath,
                 "-XX:UBLog=path=" + ubLog.toString() + ",file=debug",
                 "FileIOChild",
                 file.toString(),

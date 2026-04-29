@@ -151,7 +151,7 @@ static bool load_allow_list_entry(AllowListTable* table, UBFeature feature, cons
       SymbolTable::lookup(class_name, (int)strlen(class_name), Thread::current());
   Symbol* method_symbol =
       SymbolTable::lookup(method_name, (int)strlen(method_name), Thread::current());
-  UB_LOG(feature, UB_LOG_DEBUG, "Load allow method: %s.%s\n", class_symbol->as_C_string(),
+  UB_LOG(feature, UB_LOG_INFO, "Load allow method: %s.%s\n", class_symbol->as_C_string(),
          method_symbol->as_C_string());
   table->add(class_symbol, method_symbol);
   return true;
@@ -161,7 +161,7 @@ int AllowListTable::load_from_file(const char* conf_path) {
   FILE* conf_file = fopen(conf_path, "r");
   int allow_method_count = 0;
   if (conf_file == NULL) { return 0; }
-  UB_LOG(_feature, UB_LOG_DEBUG, "Load conf file: %s\n", conf_path);
+  UB_LOG(_feature, UB_LOG_INFO, "Load conf file: %s\n", conf_path);
   
   char line[256];
   int line_no = 0;

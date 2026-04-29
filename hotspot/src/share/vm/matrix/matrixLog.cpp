@@ -23,6 +23,7 @@
 
 #include "matrix/matrixUtils.hpp"
 #include "memory/resourceArea.hpp"
+#include "runtime/arguments.hpp"
 #include "runtime/os.hpp"
 #include "runtime/thread.hpp"
 #include "utilities/globalDefinitions.hpp"
@@ -92,9 +93,24 @@ static char* dup_token(const char* start, const char* end) {
   trim_token(&start, &end);
   size_t len = (size_t)(end - start);
   if (len == 0) { return NULL; }
-  char* value = NEW_C_HEAP_ARRAY(char, len + 1, mtInternal);
-  memcpy(value, start, len);
-  value[len] = '\0';
+  char pid_buf[16];
+  int pid_len = jio_snprintf(pid_buf, sizeof(pid_buf), "%d", os::current_process_id());
+  if (pid_len < 0) { return NULL; }
+
+  size_t pid_pattern_count = 0;
+  for (const char* p = start; p + 1 < end; p++) {
+    if (p[0] == '%' && p[1] == 'p') {
+      pid_pattern_count++;
+      p++;
+    }
+  }
+
+  size_t buf_len = len + pid_pattern_count * (size_t)pid_len + 1;
+  char* value = NEW_C_HEAP_ARRAY(char, buf_len, mtInternal);
+  if (!Arguments::copy_expand_pid(start, len, value, buf_len)) {
+    FREE_C_HEAP_ARRAY(char, value, mtInternal);
+    return NULL;
+  }
   return value;
 }
 
@@ -114,7 +130,7 @@ void MatrixLog::set_log_path(UBFeature feature, const char* start, const char* e
 
 static outputStream* open_log_file(const char* path) {
   if (path == NULL) { return NULL; }
-  fileStream* log_file = new (ResourceObj::C_HEAP, mtInternal) fileStream(path);
+  fileStream* log_file = new (ResourceObj::C_HEAP, mtInternal) fileStream(path, "a");
   if (log_file == NULL) { return NULL; }
   if (log_file->is_open()) { return log_file; }
   delete log_file;

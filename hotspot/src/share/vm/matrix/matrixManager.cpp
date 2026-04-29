@@ -34,7 +34,10 @@ bool MatrixGlobal::_initialized = false;
 
 void MatrixGlobal::init() {
   bool enabled = UseUBFile || UseUBSocket || UseBorrowedMemory;
-  if (!enabled) { return; }
+  if (!enabled) {
+    UBSocketManager::check_options();
+    return;
+  }
 
   if (!os::Linux::ub_libs_ready()) {
     tty->print_cr("Load UB libraries failed, check please.");
@@ -60,8 +63,6 @@ void MatrixGlobal::init() {
 }
 
 void MatrixGlobal::init_features() {
-  ResourceMark rm;
-
   if (!_initialized) { return; }
 
   // init ub socket
@@ -87,28 +88,6 @@ bool MatrixGlobal::check_stack(UBFeature feature) {
   return false;
 }
 
-bool MatrixGlobal::print_stack() {
-  ResourceMark rm;
-  JavaThread* jt = JavaThread::current();
-  if (!jt->has_last_Java_frame()) return false;  // no Java frames
-
-  RegisterMap reg_map(jt);
-  javaVFrame* jvf = jt->last_java_vframe(&reg_map);
-  Method* last_method = jvf->method();
-  int n = 0;
-  tty->print_cr("[%p] Print Stack:", JavaThread::current());
-  while (jvf != NULL) {
-    Method* method = jvf->method();
-    tty->print_cr("[%p] %s.%s(loc %d)", JavaThread::current(),
-                  method->klass_name()->as_C_string(),
-                  method->name_and_sig_as_C_string(), jvf->bci());
-    jvf = jvf->java_sender();
-    n++;
-    if (MaxJavaStackTraceDepth == n) break;
-  }
-  return true;
-}
-
 void MatrixGlobal::before_exit() {
   if (!_initialized) return;
   if (UseUBSocket) {
@@ -120,7 +99,6 @@ void MatrixGlobal::before_exit() {
   if (UBHeapMemory::ub_dynamic_mem_enabled()) {
     UBHeapMemory::dynamic_mem_cleanup();
   }
-
   os::Linux::ub_finalize_env();
   MatrixLog::flush();
 }

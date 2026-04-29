@@ -18,12 +18,17 @@
  */
 
 import java.io.EOFException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -53,6 +58,16 @@ public class NIOScenarioClient {
             runRestartAware(args);
         } else if ("refCount".equals(mode)) {
             runRefCount(args);
+        } else if ("waitSendTimeout".equals(mode)) {
+            runWaitSendTimeout(args);
+        } else if ("multiWrite".equals(mode)) {
+            runMultiWrite(args);
+        } else if ("parallelMultiWrite".equals(mode)) {
+            runParallelMultiWrite(args);
+        } else if ("gatherScatter".equals(mode)) {
+            runGatherScatter(args);
+        } else if ("transferTo".equals(mode)) {
+            runTransferTo(args);
         } else {
             throw new IllegalArgumentException("Unknown mode: " + mode);
         }
@@ -294,6 +309,336 @@ public class NIOScenarioClient {
             if (second != null) {
                 second.close();
             }
+        }
+    }
+
+    private static void runWaitSendTimeout(String[] args) throws Exception {
+        if (args.length < 7) {
+            throw new IllegalArgumentException(
+                "Usage: NIOScenarioClient waitSendTimeout <host> <port> <firstSize> <secondSize> <pauseMs> <clientId>");
+        }
+
+        String host = args[1];
+        int port = Integer.parseInt(args[2]);
+        int firstSize = Integer.parseInt(args[3]);
+        int secondSize = Integer.parseInt(args[4]);
+        long pauseMs = Long.parseLong(args[5]);
+        String clientId = args[6];
+
+        byte[] firstPayload = SocketTestData.upperAlphabetData(firstSize);
+        byte[] secondPayload = SocketTestData.lowerAlphabetData(secondSize);
+        byte[] expectedPayload = new byte[firstSize + secondSize];
+        System.arraycopy(firstPayload, 0, expectedPayload, 0, firstSize);
+        System.arraycopy(secondPayload, 0, expectedPayload, firstSize, secondSize);
+        String expectedHash = SocketTestData.sha256Hex(expectedPayload);
+
+        try (SocketChannel channel = SocketChannel.open()) {
+            channel.configureBlocking(true);
+            channel.connect(new InetSocketAddress(host, port));
+            System.out.println("[" + clientId + "] Connected to server");
+
+            ByteBuffer firstBuffer = ByteBuffer.wrap(firstPayload);
+            while (firstBuffer.hasRemaining()) {
+                channel.write(firstBuffer);
+            }
+            System.out.println("[" + clientId + "] First payload sent: " + firstSize);
+
+            Thread.sleep(pauseMs);
+
+            ByteBuffer secondBuffer = ByteBuffer.wrap(secondPayload);
+            while (secondBuffer.hasRemaining()) {
+                channel.write(secondBuffer);
+            }
+            System.out.println("[" + clientId + "] Second payload sent: " + secondSize);
+
+            ByteBuffer responseBuffer = ByteBuffer.allocate(1024);
+            int bytesRead = channel.read(responseBuffer);
+            if (bytesRead <= 0) {
+                throw new RuntimeException("[" + clientId + "] did not receive ACK");
+            }
+
+            responseBuffer.flip();
+            byte[] response = new byte[bytesRead];
+            responseBuffer.get(response);
+            String ack = new String(response, StandardCharsets.UTF_8);
+            if (!ack.contains("hash " + expectedHash)) {
+                throw new RuntimeException("[" + clientId + "] HASH_MISMATCH expected="
+                    + expectedHash + " ack=" + ack);
+            }
+            System.out.println("[" + clientId + "] Data sent successfully, hash verified");
+        }
+    }
+
+    private static void runMultiWrite(String[] args) throws Exception {
+        if (args.length < 6) {
+            throw new IllegalArgumentException(
+                "Usage: NIOScenarioClient multiWrite <host> <port> <chunkSize> <chunkCount> <clientId>");
+        }
+
+        String host = args[1];
+        int port = Integer.parseInt(args[2]);
+        int chunkSize = Integer.parseInt(args[3]);
+        int chunkCount = Integer.parseInt(args[4]);
+        String clientId = args[5];
+        if (chunkSize <= 0 || chunkCount <= 0) {
+            throw new IllegalArgumentException("chunkSize and chunkCount must be positive");
+        }
+
+        MessageDigest expectedDigest = MessageDigest.getInstance("SHA-256");
+        long totalWritten = 0L;
+
+        try (SocketChannel channel = SocketChannel.open()) {
+            channel.configureBlocking(true);
+            channel.connect(new InetSocketAddress(host, port));
+            System.out.println("[" + clientId + "] Connected to server");
+
+            for (int chunk = 0; chunk < chunkCount; chunk++) {
+                byte[] payload = SocketTestData.scopedUpperAlphabetData(chunk, 0, chunkSize);
+                expectedDigest.update(payload);
+                ByteBuffer writeBuffer = ByteBuffer.wrap(payload);
+                long chunkWritten = 0L;
+                while (writeBuffer.hasRemaining()) {
+                    int n = channel.write(writeBuffer);
+                    totalWritten += n;
+                    chunkWritten += n;
+                }
+                System.out.println("[" + clientId + "] chunk " + chunk
+                    + " sent: " + chunkWritten + " bytes");
+            }
+
+            String expectedHash = toHex(expectedDigest.digest());
+            ByteBuffer responseBuffer = ByteBuffer.allocate(1024);
+            int bytesRead = channel.read(responseBuffer);
+            if (bytesRead <= 0) {
+                throw new RuntimeException("[" + clientId + "] did not receive ACK");
+            }
+
+            responseBuffer.flip();
+            byte[] response = new byte[bytesRead];
+            responseBuffer.get(response);
+            String ack = new String(response, StandardCharsets.UTF_8);
+            if (!ack.contains("hash " + expectedHash)) {
+                throw new RuntimeException("[" + clientId + "] HASH_MISMATCH expected="
+                    + expectedHash + " ack=" + ack);
+            }
+            System.out.println("[" + clientId + "] Sent " + totalWritten
+                + " bytes in " + chunkCount + " chunks, hash verified");
+        }
+    }
+
+    private static void runParallelMultiWrite(String[] args) throws Exception {
+        if (args.length < 7) {
+            throw new IllegalArgumentException(
+                "Usage: NIOScenarioClient parallelMultiWrite <host> <port> <chunkSize> <chunkCount> <clientCount> <clientIdPrefix>");
+        }
+
+        final String host = args[1];
+        final int port = Integer.parseInt(args[2]);
+        final int chunkSize = Integer.parseInt(args[3]);
+        final int chunkCount = Integer.parseInt(args[4]);
+        int clientCount = Integer.parseInt(args[5]);
+        final String clientIdPrefix = args[6];
+        if (clientCount <= 0) {
+            throw new IllegalArgumentException("clientCount must be positive");
+        }
+
+        final CountDownLatch startGate = new CountDownLatch(1);
+        CountDownLatch doneGate = new CountDownLatch(clientCount);
+        List<Throwable> errors = Collections.synchronizedList(new ArrayList<Throwable>());
+        for (int i = 0; i < clientCount; i++) {
+            final int clientIndex = i;
+            Thread thread = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        startGate.await();
+                        runMultiWrite(new String[] {
+                            "multiWrite",
+                            host,
+                            String.valueOf(port),
+                            String.valueOf(chunkSize),
+                            String.valueOf(chunkCount),
+                            clientIdPrefix + "-" + clientIndex
+                        });
+                    } catch (Throwable t) {
+                        errors.add(t);
+                    } finally {
+                        doneGate.countDown();
+                    }
+                }
+            }, "parallel-multi-write-client-" + i);
+            thread.start();
+        }
+
+        startGate.countDown();
+        doneGate.await();
+        if (!errors.isEmpty()) {
+            throw new RuntimeException("Parallel multi-write client failed, total errors="
+                + errors.size(), errors.get(0));
+        }
+        System.out.println("PARALLEL_MULTI_WRITE_OK");
+    }
+
+    private static void runGatherScatter(String[] args) throws Exception {
+        if (args.length < 6) {
+            throw new IllegalArgumentException(
+                "Usage: NIOScenarioClient gatherScatter <host> <port> <dataSize> <segmentSize> <clientId>");
+        }
+
+        String host = args[1];
+        int port = Integer.parseInt(args[2]);
+        int dataSize = Integer.parseInt(args[3]);
+        int segmentSize = Integer.parseInt(args[4]);
+        String clientId = args[5];
+        if (segmentSize <= 0) {
+            throw new IllegalArgumentException("segmentSize must be positive");
+        }
+
+        byte[] payload = SocketTestData.upperAlphabetData(dataSize);
+        String expectedHash = SocketTestData.sha256Hex(payload);
+
+        try (SocketChannel channel = SocketChannel.open()) {
+            channel.configureBlocking(true);
+            channel.connect(new InetSocketAddress(host, port));
+            System.out.println("[" + clientId + "] Connected to server");
+
+            ByteBuffer[] writeBuffers = splitBuffers(payload, segmentSize);
+            long totalWritten = 0L;
+            while (totalWritten < payload.length) {
+                long n = channel.write(writeBuffers);
+                if (n <= 0L) {
+                    throw new RuntimeException("[" + clientId + "] gather write stalled at "
+                        + totalWritten + "/" + payload.length);
+                }
+                totalWritten += n;
+            }
+
+            ByteBuffer[] ackBuffers = new ByteBuffer[] {
+                ByteBuffer.allocate(7),
+                ByteBuffer.allocate(17),
+                ByteBuffer.allocate(128)
+            };
+            long totalRead = 0L;
+            String ack = "";
+            while (!ack.contains("hash " + expectedHash)) {
+                long n = channel.read(ackBuffers);
+                if (n <= 0L) {
+                    throw new RuntimeException("[" + clientId + "] did not receive complete ACK");
+                }
+                totalRead += n;
+                ack = readBuffersAsString(ackBuffers);
+                if (!hasRemaining(ackBuffers)) {
+                    break;
+                }
+            }
+            if (!ack.contains("hash " + expectedHash)) {
+                throw new RuntimeException("[" + clientId + "] HASH_MISMATCH expected="
+                    + expectedHash + " ack=" + ack);
+            }
+            System.out.println("[" + clientId + "] gather write sent " + totalWritten
+                + " bytes, scatter read " + totalRead + " bytes, hash verified");
+        }
+    }
+
+    private static ByteBuffer[] splitBuffers(byte[] payload, int segmentSize) {
+        int count = (payload.length + segmentSize - 1) / segmentSize;
+        ByteBuffer[] buffers = new ByteBuffer[count];
+        for (int i = 0; i < count; i++) {
+            int offset = i * segmentSize;
+            int len = Math.min(segmentSize, payload.length - offset);
+            buffers[i] = ByteBuffer.wrap(payload, offset, len);
+        }
+        return buffers;
+    }
+
+    private static boolean hasRemaining(ByteBuffer[] buffers) {
+        for (ByteBuffer buffer : buffers) {
+            if (buffer.hasRemaining()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String readBuffersAsString(ByteBuffer[] buffers) {
+        int total = 0;
+        for (ByteBuffer buffer : buffers) {
+            total += buffer.position();
+        }
+        byte[] data = new byte[total];
+        int offset = 0;
+        for (ByteBuffer buffer : buffers) {
+            int position = buffer.position();
+            ByteBuffer duplicate = buffer.duplicate();
+            duplicate.flip();
+            duplicate.get(data, offset, position);
+            offset += position;
+        }
+        return new String(data, StandardCharsets.UTF_8);
+    }
+
+    private static String toHex(byte[] bytes) {
+        StringBuilder sb = new StringBuilder(bytes.length * 2);
+        for (byte b : bytes) {
+            sb.append(String.format("%02x", b));
+        }
+        return sb.toString();
+    }
+
+    private static void runTransferTo(String[] args) throws Exception {
+        if (args.length < 5) {
+            throw new IllegalArgumentException(
+                "Usage: NIOScenarioClient transferTo <host> <port> <dataSize> <clientId>");
+        }
+
+        String host = args[1];
+        int port = Integer.parseInt(args[2]);
+        int dataSize = Integer.parseInt(args[3]);
+        String clientId = args[4];
+
+        byte[] payload = SocketTestData.upperAlphabetData(dataSize);
+        String expectedHash = SocketTestData.sha256Hex(payload);
+        Path file = Files.createTempFile("application_ubsocket-transferTo-", ".dat");
+        try {
+            try (FileOutputStream out = new FileOutputStream(file.toFile())) {
+                out.write(payload);
+            }
+
+            try (FileChannel fileChannel = FileChannel.open(file);
+                 SocketChannel channel = SocketChannel.open()) {
+                channel.configureBlocking(true);
+                channel.connect(new InetSocketAddress(host, port));
+
+                long transferred = 0L;
+                while (transferred < payload.length) {
+                    long n = fileChannel.transferTo(transferred,
+                                                    payload.length - transferred,
+                                                    channel);
+                    if (n <= 0L) {
+                        throw new RuntimeException("[" + clientId + "] transferTo stalled at "
+                            + transferred + "/" + payload.length);
+                    }
+                    transferred += n;
+                }
+                System.out.println("[" + clientId + "] transferTo sent " + transferred + " bytes");
+
+                ByteBuffer responseBuffer = ByteBuffer.allocate(1024);
+                int bytesRead = channel.read(responseBuffer);
+                if (bytesRead <= 0) {
+                    throw new RuntimeException("[" + clientId + "] did not receive ACK");
+                }
+                responseBuffer.flip();
+                byte[] response = new byte[bytesRead];
+                responseBuffer.get(response);
+                String ack = new String(response, StandardCharsets.UTF_8);
+                if (!ack.contains("hash " + expectedHash)) {
+                    throw new RuntimeException("[" + clientId + "] HASH_MISMATCH expected="
+                        + expectedHash + " ack=" + ack);
+                }
+                System.out.println("[" + clientId + "] Data sent successfully, hash verified");
+            }
+        } finally {
+            Files.deleteIfExists(file);
         }
     }
 

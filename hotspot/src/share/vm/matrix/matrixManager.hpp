@@ -38,7 +38,6 @@ class MatrixGlobal : public AllStatic {
   static void init_features();
   static void before_exit();
   static bool check_stack(UBFeature feature);
-  static bool print_stack();
 
  private:
   static bool _initialized;

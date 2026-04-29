@@ -25,14 +25,12 @@
 #include <unistd.h>
 
 #include "matrix/matrixLog.hpp"
+#include "matrix/ubSocket/ubSocket.hpp"
 #include "runtime/interfaceSupport.hpp"
 #include "runtime/java.hpp"
 #include "runtime/thread.hpp"
 
-static const long UB_SOCKET_IO_POLL_MIN_MS = 1;
-static const socklen_t UB_SOCKET_SO_ERROR_LEN = sizeof(int);
-
-bool UBSocketIO::is_retryable_error(int error_code) {
+bool UBSocketIO::is_retryable_error(int error_code) { // for attach
   return error_code == EAGAIN || error_code == EINTR || error_code == ECONNRESET ||
          error_code == ECONNABORTED || error_code == EPIPE || error_code == ETIMEDOUT;
 }
@@ -111,7 +109,7 @@ int UBSocketIO::connect(int family, const struct sockaddr* addr,
     }
 
     int so_error = 0;
-    socklen_t so_len = UB_SOCKET_SO_ERROR_LEN;
+    socklen_t so_len = sizeof(so_error);
     if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &so_error, &so_len) != 0) {
       int so_errno = errno;
       close(fd);
@@ -134,16 +132,12 @@ int UBSocketIO::accept(int listen_fd) {
 
 ssize_t UBSocketIO::read(int fd, void* buf, size_t len) {
   ThreadBlockInVM tbivm(JavaThread::current());
-  ssize_t nread = ::read(fd, buf, len);
-  UB_LOG(UB_SOCKET, UB_LOG_DEBUG, "Socket %d read %s res %ld\n", fd, buf, nread);
-  return nread;
+  return ::read(fd, buf, len);
 }
 
 ssize_t UBSocketIO::write(int fd, const void* buf, size_t len) {
   ThreadBlockInVM tbivm(JavaThread::current());
-  ssize_t nwrite = ::write(fd, buf, len);
-  UB_LOG(UB_SOCKET, UB_LOG_DEBUG, "Socket %d write %s res %ld\n", fd, buf, nwrite);
-  return nwrite;
+  return ::write(fd, buf, len);
 }
 
 ssize_t UBSocketIO::send(int fd, const void* buf, size_t len, int flags) {
@@ -156,31 +150,29 @@ ssize_t UBSocketIO::recv(int fd, void* buf, size_t len, int flags) {
   return ::recv(fd, buf, len, flags);
 }
 
-bool UBSocketIO::send_all(int fd, const void* buf, size_t len,
-                          uint64_t ddl_ns, int flags) {
+ssize_t UBSocketIO::send_all(int fd, const void* buf, size_t len,
+                             uint64_t ddl_ns, int flags, size_t* bytes_sent) {
+  if (bytes_sent != NULL) { *bytes_sent = 0; }
   const char* p = (const char*)buf;
   size_t remaining = len;
   while (remaining > 0) {
-    if (!wait_fd(fd, POLLOUT, ddl_ns)) {
-      return false;
-    }
+    if (!wait_fd(fd, POLLOUT, ddl_ns)) { return -1; }
 
     ssize_t written = send(fd, p, remaining, flags);
     if (written < 0) {
-      if (errno == EINTR || errno == EAGAIN) {
-        continue;
-      }
-      return false;
+      if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) { continue; }
+      return written;
     }
     if (written == 0) {
       errno = EPIPE;
-      return false;
+      return written;
     }
 
     p += written;
     remaining -= (size_t)written;
+    if (bytes_sent != NULL) { *bytes_sent = len - remaining; }
   }
-  return true;
+  return (ssize_t)len;
 }
 
 bool UBSocketIO::recv_all(int fd, void* buf, size_t len,
@@ -188,15 +180,11 @@ bool UBSocketIO::recv_all(int fd, void* buf, size_t len,
   char* p = (char*)buf;
   size_t remaining = len;
   while (remaining > 0) {
-    if (!wait_fd(fd, POLLIN, ddl_ns)) {
-      return false;
-    }
+    if (!wait_fd(fd, POLLIN, ddl_ns)) { return false; }
 
     ssize_t nread = recv(fd, p, remaining, flags);
     if (nread < 0) {
-      if (errno == EINTR || errno == EAGAIN) {
-        continue;
-      }
+      if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) { continue; }
       return false;
     }
     if (nread == 0) {

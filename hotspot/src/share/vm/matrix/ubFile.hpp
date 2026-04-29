@@ -116,8 +116,9 @@ class MappedFileSizeTable : public PtrTable<Symbol*, size_t, mtInternal> {
 
 class FileFallbackSet : public PtrHashSet<Symbol*, mtInternal> {};
 
-class SymbolList : public PtrList<Symbol*> {
+class SymbolList : public MatrixList<Symbol*> {
  public:
+  SymbolList() : MatrixList<Symbol*>(NULL) {}
   void clear_list() { clear(_clear_item); }
 
  private:

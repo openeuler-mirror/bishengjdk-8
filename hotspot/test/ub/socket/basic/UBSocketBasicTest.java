@@ -21,33 +21,44 @@
  * @test
  * @summary Test single UB socket attach, data path, and heartbeat mechanism.
  *          1. Basic attach with 1MB data.
- *          2. Large data (8MB) with heartbeat enabled (UBSocketTimeout default 500ms).
- *          3. Dense chunked writes exercise descriptor buffer growth.
- *          4. Large data without heartbeat (UBSocketTimeout=0) should not complete.
+ *          2. IPv6 loopback attach with dual-stack control listener.
+ *          3. Large data (8MB) with heartbeat enabled (UBSocketTimeout default 500ms).
+ *          4. Dense chunked writes exercise fixed-size binary data-frame handling.
+ *          5. Gathering write and scattering read exercise readv/writev handling.
+ *          6. Large data without heartbeat (UBSocketTimeout=0) should not complete.
  * @library /testlibrary
  * @compile ../SocketTestSupport.java ../SocketTestConfig.java ../test-classes/SocketTestData.java ../test-classes/NIOScenarioServer.java ../test-classes/NIOScenarioClient.java
- * @run main/othervm SocketSingleTest
+ * @run main/othervm UBSocketBasicTest
  */
 
 import com.oracle.java.testlibrary.OutputAnalyzer;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.nio.channels.ServerSocketChannel;
 
-public class SocketSingleTest {
+public class UBSocketBasicTest {
     private static final int CLIENT_COUNT = 1;
     private static final int LARGE_DATA_SIZE = 8 * 1024 * 1024;
     private static final int BASIC_DATA_SIZE = 1024 * 1024;
-    private static final int CHUNKED_DATA_SIZE = 256 * 1024;
-    private static final int CHUNK_SIZE = 512;
+    private static final int CHUNKED_NORMAL_DATA_SIZE = 1024 * 1024;
+    private static final int CHUNK_NORMAL_SIZE = 512;
+    private static final int CHUNKED_DATA_SIZE = 888 * 1024;
+    private static final int CHUNK_SIZE = 888;
+    private static final int GATHER_SCATTER_DATA_SIZE = 768 * 1024;
+    private static final int GATHER_SCATTER_SEGMENT_SIZE = 333;
     private static final long NO_HEARTBEAT_SERVER_TIMEOUT_MS = 12000L;
     private static final long NO_HEARTBEAT_CLIENT_SETTLE_MS = 3000L;
 
     public static void main(String[] args) throws Exception {
-        testBasicAttach();
-        testDescriptorBufferGrowth();
+        testUBSocketBasic();
+        testIPv6LoopbackAttach();
+        testFixedDataFrameBatching();
+        testGatherScatterReadWrite();
         testLargeDataWithHeartbeat();
         testLargeDataWithoutHeartbeat();
     }
 
-    private static void testBasicAttach() throws Exception {
+    private static void testUBSocketBasic() throws Exception {
         System.out.println("=== Testing basic attach with " + BASIC_DATA_SIZE + " bytes ===");
 
         String configPath = SocketTestConfig.ensureSharedConfig();
@@ -86,12 +97,87 @@ public class SocketSingleTest {
         SocketTestSupport.assertNoMemoryOperationFailure(
             logs.clientLog + "\n" + logs.serverLog,
             "Basic attach should not report mmap/munmap failures");
+        SocketTestSupport.assertTransferInfoLogs(
+            logs.clientLog + "\n" + logs.serverLog,
+            "Basic attach should log UBSocket data transfer summary");
 
         System.out.println("=== Basic attach test PASSED ===");
     }
 
-    private static void testDescriptorBufferGrowth() throws Exception {
-        System.out.println("=== Testing descriptor buffer growth with chunked writes ===");
+    private static void testIPv6LoopbackAttach() throws Exception {
+        if (!isIPv6LoopbackAvailable()) {
+            System.out.println("=== IPv6 loopback unavailable, skipping IPv6 test ===");
+            return;
+        }
+        System.out.println("=== Testing IPv6 loopback attach and data path ===");
+
+        String configPath = SocketTestConfig.ensureSharedConfig();
+        int dataPort = findFreeIPv6LoopbackPort();
+        int controlPort = SocketTestSupport.findFreePort();
+
+        SocketTestSupport.ScenarioLogs logs = SocketTestSupport.runUbScenario(
+            configPath,
+            controlPort,
+            1000L,
+            "Data sent successfully",
+            "All " + CLIENT_COUNT + " clients completed successfully",
+            new String[] {
+                "NIOScenarioServer", "selector",
+                String.valueOf(dataPort),
+                String.valueOf(BASIC_DATA_SIZE),
+                String.valueOf(CLIENT_COUNT),
+                "::1"
+            },
+            new String[] {
+                "NIOScenarioClient", "basic", "::1",
+                String.valueOf(dataPort),
+                String.valueOf(BASIC_DATA_SIZE),
+                "IPv6LoopbackClient"
+            }
+        );
+        SocketTestSupport.assertDataTransferSuccess(
+            logs.clientLog, "IPv6 loopback client should transfer data successfully");
+        SocketTestSupport.assertBindSuccesses(
+            logs.clientLog, false, CLIENT_COUNT,
+            "IPv6 loopback client should bind UB successfully");
+        SocketTestSupport.assertBindSuccesses(
+            logs.serverLog, true, CLIENT_COUNT,
+            "IPv6 loopback server should bind UB successfully");
+        SocketTestSupport.assertNoFallback(
+            logs.clientLog, "IPv6 loopback client should not fallback");
+        SocketTestSupport.assertNoFallback(
+            logs.serverLog, "IPv6 loopback server should not fallback");
+        SocketTestSupport.assertNoVmCrash(
+            logs.clientLog + "\n" + logs.serverLog,
+            "IPv6 loopback attach should not crash VM");
+
+        System.out.println("=== IPv6 loopback attach test PASSED ===");
+    }
+
+    private static boolean isIPv6LoopbackAvailable() {
+        try (ServerSocketChannel channel = ServerSocketChannel.open()) {
+            channel.bind(new InetSocketAddress(InetAddress.getByName("::1"), 0));
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private static int findFreeIPv6LoopbackPort() throws Exception {
+        for (int i = 0; i < 100; i++) {
+            int port = SocketTestSupport.findFreePort();
+            try (ServerSocketChannel channel = ServerSocketChannel.open()) {
+                channel.bind(new InetSocketAddress(InetAddress.getByName("::1"), port));
+                return port;
+            } catch (Exception e) {
+                // Try another globally reserved test port.
+            }
+        }
+        throw new Exception("Could not find an IPv6 loopback port");
+    }
+
+    private static void testFixedDataFrameBatching() throws Exception {
+        System.out.println("=== Testing fixed-size binary data frames with chunked writes ===");
 
         String configPath = SocketTestConfig.ensureSharedConfig();
         int dataPort = SocketTestSupport.findFreePort();
@@ -114,7 +200,7 @@ public class SocketSingleTest {
                 String.valueOf(dataPort),
                 String.valueOf(CHUNKED_DATA_SIZE),
                 String.valueOf(CHUNK_SIZE),
-                "DescriptorBufferGrowthClient"
+                "FixedDataFrameBatchingClient"
             }
         );
 
@@ -127,7 +213,47 @@ public class SocketSingleTest {
         SocketTestSupport.assertDataTransferSuccess(
             logs.clientLog, "Chunked writes should preserve payload integrity");
 
-        System.out.println("=== Descriptor buffer growth test PASSED ===");
+        System.out.println("=== Fixed data-frame batching test PASSED ===");
+    }
+
+    private static void testGatherScatterReadWrite() throws Exception {
+        System.out.println("=== Testing gathering write and scattering read ===");
+
+        String configPath = SocketTestConfig.ensureSharedConfig();
+        int dataPort = SocketTestSupport.findFreePort();
+        int controlPort = SocketTestSupport.findFreePort();
+
+        SocketTestSupport.ScenarioLogs logs = SocketTestSupport.runUbScenario(
+            configPath,
+            controlPort,
+            1000L,
+            "scatter read",
+            "All " + CLIENT_COUNT + " clients completed successfully",
+            new String[] {
+                "NIOScenarioServer", "selector",
+                String.valueOf(dataPort),
+                String.valueOf(GATHER_SCATTER_DATA_SIZE),
+                String.valueOf(CLIENT_COUNT)
+            },
+            new String[] {
+                "NIOScenarioClient", "gatherScatter", "localhost",
+                String.valueOf(dataPort),
+                String.valueOf(GATHER_SCATTER_DATA_SIZE),
+                String.valueOf(GATHER_SCATTER_SEGMENT_SIZE),
+                "GatherScatterClient"
+            }
+        );
+
+        SocketTestSupport.assertBindSuccesses(
+            logs.clientLog, false, CLIENT_COUNT, "Gather/scatter should bind successfully");
+        SocketTestSupport.assertBindSuccesses(
+            logs.serverLog, true, CLIENT_COUNT, "Gather/scatter should bind successfully");
+        SocketTestSupport.assertNoFallback(
+            logs.clientLog + "\n" + logs.serverLog, "Gather/scatter should not fallback");
+        SocketTestSupport.assertDataTransferSuccess(
+            logs.clientLog, "Gather/scatter should preserve payload integrity");
+
+        System.out.println("=== Gathering write and scattering read test PASSED ===");
     }
 
     private static void testLargeDataWithHeartbeat() throws Exception {
@@ -170,8 +296,7 @@ public class SocketSingleTest {
 
             SocketTestSupport.assertDataTransferSuccess(clientLog, "Large data transfer failed");
 
-            // Verify heartbeat logs: write log contains "Heartbeat:0:0;"
-            // The heartbeat is sent as "Heartbeat:0:0;" and logged via UB_LOG in ubSocketIO::write
+            // Verify heartbeat logs after the protocol switched to binary data frames.
             SocketTestSupport.assertHeartbeat(
                 clientLog + "\n" + serverLog,
                 "Large data transfer should trigger heartbeat writes");

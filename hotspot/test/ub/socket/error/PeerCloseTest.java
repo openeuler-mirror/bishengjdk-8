@@ -22,12 +22,12 @@
  * @summary Test UB socket behavior when peer closes, becomes unavailable, or crashes
  * @library /testlibrary
  * @compile ../SocketTestSupport.java ../SocketTestConfig.java ../test-classes/SocketTestData.java ../test-classes/NIOScenarioServer.java ../test-classes/NIOScenarioClient.java
- * @run main/othervm SocketPeerCloseTest
+ * @run main/othervm PeerCloseTest
  */
 
 import com.oracle.java.testlibrary.OutputAnalyzer;
 
-public class SocketPeerCloseTest {
+public class PeerCloseTest {
     private static final int DATA_SIZE = 64 * 1024;
 
     public static void main(String[] args) throws Exception {
