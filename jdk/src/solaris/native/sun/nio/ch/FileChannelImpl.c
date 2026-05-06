@@ -144,6 +144,20 @@ Java_sun_nio_ch_FileChannelImpl_transferTo0(JNIEnv *env, jobject this,
     jint srcFD = fdval(env, srcFDO);
     jint dstFD = fdval(env, dstFDO);
 
+    if ((*env)->IsUbSocketReady(env, dstFD) == JNI_TRUE) {
+        jlong n = (*env)->UbSocketTransferFromFile(env, srcFD, dstFD,
+                                                   position, count);
+        if (n < 0) {
+            if (errno == EAGAIN)
+                return IOS_UNAVAILABLE;
+            if (errno == EINTR)
+                return IOS_INTERRUPTED;
+            JNU_ThrowIOExceptionWithLastError(env, "Transfer failed");
+            return IOS_THROWN;
+        }
+        return n;
+    }
+
 #if defined(__linux__)
     off64_t offset = (off64_t)position;
     jlong n = sendfile64(dstFD, srcFD, &offset, (size_t)count);
@@ -258,4 +272,3 @@ Java_sun_nio_ch_FileChannelImpl_transferTo0(JNIEnv *env, jobject this,
     return IOS_UNSUPPORTED_CASE;
 #endif
 }
-

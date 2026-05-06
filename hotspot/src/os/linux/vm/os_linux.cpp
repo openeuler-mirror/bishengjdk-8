@@ -32,6 +32,7 @@
 #include "compiler/disassembler.hpp"
 #include "interpreter/interpreter.hpp"
 #include "jvm_linux.h"
+#include "matrix/matrixManager.hpp"
 #include "memory/allocation.inline.hpp"
 #include "memory/filemap.hpp"
 #include "mutex_linux.inline.hpp"
@@ -5568,6 +5569,12 @@ os::Linux::dmh_g1_get_region_limit_t os::Linux::_dmh_g1_get_region_limit;
 os::Linux::get_class_state_t os::Linux::_get_class_state;
 os::Linux::handle_skipped_t os::Linux::_handle_skipped;
 os::Linux::handle_ignore_class_t os::Linux::_handle_ignore_class;
+os::Linux::ub_malloc_func_t os::Linux::_ub_malloc;
+os::Linux::ub_mmap_func_t os::Linux::_ub_mmap;
+os::Linux::ub_munmap_func_t os::Linux::_ub_munmap;
+os::Linux::ub_free_func_t os::Linux::_ub_free;
+os::Linux::ub_prepare_env_func_t os::Linux::_ub_prepare_env;
+os::Linux::ub_finalize_env_func_t os::Linux::_ub_finalize_env;
 
 void os::Linux::load_ACC_library_before_ergo() {
     _dmh_g1_can_shrink = CAST_TO_FN_PTR(dmh_g1_can_shrink_t, dlsym(RTLD_DEFAULT, "DynamicMaxHeap_G1CanShrink"));
@@ -5640,6 +5647,25 @@ void os::Linux::load_ACC_library() {
         if(_handle_ignore_class == NULL) {
           _handle_ignore_class = CAST_TO_FN_PTR(handle_ignore_class_t, dlsym(handle, "Handle_Ignore_Class"));
         }
+    }
+}
+
+void os::Linux::load_UB_library() {
+    void* handle = NULL;
+    char path[JVM_MAXPATHLEN];
+    if (os::dll_build_name(path, sizeof(path), Arguments::get_dll_dir(), "matrix_wrapper")) {
+      handle = dlopen(path, RTLD_LAZY);
+    }
+    if (handle == NULL && os::dll_build_name(path, sizeof(path), "/usr/lib64", "matrix_wrapper")) {
+      handle = dlopen(path, RTLD_LAZY);
+    }
+    if (handle != NULL) {
+      _ub_malloc = CAST_TO_FN_PTR(ub_malloc_func_t, dlsym(handle, "malloc_remote_memory"));
+      _ub_mmap = CAST_TO_FN_PTR(ub_mmap_func_t, dlsym(handle, "mmap_remote_memory"));
+      _ub_munmap = CAST_TO_FN_PTR(ub_munmap_func_t, dlsym(handle, "munmap_shared_memory"));
+      _ub_free = CAST_TO_FN_PTR(ub_free_func_t, dlsym(handle, "free_remote_memory"));
+      _ub_prepare_env = CAST_TO_FN_PTR(ub_prepare_env_func_t, dlsym(handle, "prepare_environments"));
+      _ub_finalize_env = CAST_TO_FN_PTR(ub_finalize_env_func_t, dlsym(handle, "finalize_environments"));
     }
 }
 
@@ -5716,6 +5742,7 @@ jint os::init_2(void)
   }
 
   Linux::load_ACC_library();
+  Linux::load_UB_library();
 
   if (UseNUMA) {
     if (!Linux::libnuma_init()) {
@@ -5751,6 +5778,8 @@ jint os::init_2(void)
       UseNUMA = true;
     }
   }
+
+  MatrixGlobal::init();
 
   if (MaxFDLimit) {
     // set the number of file descriptors to max. print out error

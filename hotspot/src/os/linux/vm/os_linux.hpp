@@ -199,6 +199,7 @@ class Linux {
 
   static void load_ACC_library();
   static void load_ACC_library_before_ergo();
+  static void load_UB_library();
   static void libpthread_init();
   static void parse_numa_nodes();
   static bool libnuma_init();
@@ -310,6 +311,12 @@ private:
   typedef void (*handle_ignore_class_t)(char* class_name, int index, bool is_log_detail);
   typedef bool (*dmh_g1_can_shrink_t)(double used_after_gc_d, size_t _new_max_heap, double maximum_used_percentage, size_t max_heap_size);
   typedef uint (*dmh_g1_get_region_limit_t)(size_t _new_max_heap, size_t region_size);
+  typedef int   (*ub_malloc_func_t)(const char* name, size_t size);
+  typedef void* (*ub_mmap_func_t)(const char* name, size_t length, int* ret_code, void *addr, int prot);
+  typedef int   (*ub_munmap_func_t)(void* start, size_t size);
+  typedef int   (*ub_free_func_t)(const char* name);
+  typedef int   (*ub_prepare_env_func_t)(int log_level, const char* log_path);
+  typedef int   (*ub_finalize_env_func_t)();
   static heap_dict_add_t _heap_dict_add;
   static heap_dict_lookup_t _heap_dict_lookup;
   static heap_dict_free_t _heap_dict_free;
@@ -341,6 +348,12 @@ private:
   static numa_bitmask_free_func_t _numa_bitmask_free;
   static dmh_g1_can_shrink_t _dmh_g1_can_shrink;
   static dmh_g1_get_region_limit_t _dmh_g1_get_region_limit;
+  static ub_malloc_func_t _ub_malloc;
+  static ub_mmap_func_t _ub_mmap;
+  static ub_munmap_func_t _ub_munmap;
+  static ub_free_func_t _ub_free;
+  static ub_prepare_env_func_t _ub_prepare_env;
+  static ub_finalize_env_func_t _ub_finalize_env;
 
   static unsigned long* _numa_all_nodes;
   static struct bitmask* _numa_all_nodes_ptr;
@@ -383,6 +396,53 @@ private:
   static NumaAllocationPolicy _current_numa_policy;
 
 public:
+  static int ub_malloc(const char* name, size_t size) {
+    if (_ub_malloc == NULL) {
+      return -1;
+    }
+    return _ub_malloc(name, size);
+  }
+
+  static void* ub_mmap(const char* name, size_t length, int* ret_code = NULL,
+                       void *addr = NULL, int prot = MEM_PROT_RW) {
+    if (_ub_mmap == NULL) {
+      return NULL;
+    }
+    return _ub_mmap(name, length, ret_code, addr, prot);
+  }
+
+  static int ub_munmap(void* start, size_t size) {
+    if (_ub_munmap == NULL) {
+      return -1;
+    }
+    return _ub_munmap(start, size);
+  }
+
+  static int ub_free(const char* name) {
+    if (_ub_free == NULL) {
+      return -1;
+    }
+    return _ub_free(name);
+  }
+
+  static int ub_prepare_env(int log_level = 0, const char* log_path = NULL) {
+    if (_ub_prepare_env == NULL) {
+      return -1;
+    }
+    return _ub_prepare_env(log_level, log_path);
+  }
+
+  static int ub_finalize_env() {
+    if (_ub_finalize_env == NULL) {
+      return -1;
+    }
+    return _ub_finalize_env();
+  }
+
+  static bool ub_libs_ready() {
+    return _ub_prepare_env != NULL;
+  }
+
   static int sched_getcpu()  { return _sched_getcpu != NULL ? _sched_getcpu() : -1; }
   static int numa_node_to_cpus(int node, unsigned long *buffer, int bufferlen) {
     return _numa_node_to_cpus != NULL ? _numa_node_to_cpus(node, buffer, bufferlen) : -1;

@@ -80,6 +80,10 @@ Java_sun_nio_ch_SocketChannelImpl_checkConnect(JNIEnv *env, jobject this,
             handleSocketError(env, error);
             return JNI_FALSE;
         }
+        // UB Matrix
+        if ((*env)->UbSocketCheckStack(env) == JNI_TRUE) {
+            (*env)->UbSocketRegister(env, fd, JNI_FALSE);
+        }
         return 1;
     }
     return 0;
