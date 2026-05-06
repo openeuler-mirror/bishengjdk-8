@@ -1994,6 +1994,81 @@ JNI_ENTRY_CHECKED(jobjectRefType,
     return result;
 JNI_END
 
+// UB Matrix
+JNI_ENTRY_CHECKED(jboolean,
+  checked_jni_UbSocketCheckStack(JNIEnv *env))
+    functionEnter(thr);
+    jboolean result = UNCHECKED()->UbSocketCheckStack(env);
+    functionExit(thr);
+    return result;
+JNI_END
+
+JNI_ENTRY_CHECKED(jboolean,
+  checked_jni_IsUbSocket(JNIEnv *env, jint fd))
+    functionEnter(thr);
+    jboolean result = UNCHECKED()->IsUbSocket(env, fd);
+    functionExit(thr);
+    return result;
+JNI_END
+
+JNI_ENTRY_CHECKED(jboolean,
+  checked_jni_IsUbSocketReady(JNIEnv *env, jint fd))
+    functionEnter(thr);
+    jboolean result = UNCHECKED()->IsUbSocketReady(env, fd);
+    functionExit(thr);
+    return result;
+JNI_END
+
+JNI_ENTRY_CHECKED(jboolean,
+  checked_jni_UbSocketRegister(JNIEnv *env, jint fd, jboolean isServer))
+    functionEnter(thr);
+    jboolean result = UNCHECKED()->UbSocketRegister(env, fd, isServer);
+    functionExit(thr);
+    return result;
+JNI_END
+
+JNI_ENTRY_CHECKED(jboolean,
+  checked_jni_UbSocketClose(JNIEnv *env, jint fd))
+    functionEnter(thr);
+    jboolean result = UNCHECKED()->UbSocketClose(env, fd);
+    functionExit(thr);
+    return result;
+JNI_END
+
+JNI_ENTRY_CHECKED(jlong,
+  checked_jni_UbSocketRead(JNIEnv *env, void* buf, jint fd, jlong len))
+    functionEnter(thr);
+    jlong result = UNCHECKED()->UbSocketRead(env, buf, fd, len);
+    functionExit(thr);
+    return result;
+JNI_END
+
+JNI_ENTRY_CHECKED(jlong,
+  checked_jni_UbSocketWrite(JNIEnv *env, void* buf, jint fd, jlong len))
+    functionEnter(thr);
+    jlong result = UNCHECKED()->UbSocketWrite(env, buf, fd, len);
+    functionExit(thr);
+    return result;
+JNI_END
+
+JNI_ENTRY_CHECKED(jlong,
+  checked_jni_UbSocketParse(JNIEnv *env, jint fd, char* msg, jint msg_len))
+    functionEnter(thr);
+    jlong result = UNCHECKED()->UbSocketParse(env, fd, msg, msg_len);
+    functionExit(thr);
+    return result;
+JNI_END
+
+JNI_ENTRY_CHECKED(jlong,
+  checked_jni_UbSocketTransferFromFile(JNIEnv *env, jint src_fd, jint socket_fd,
+                                       jlong offset, jlong count))
+    functionEnter(thr);
+    jlong result = UNCHECKED()->UbSocketTransferFromFile(env, src_fd, socket_fd,
+                                                        offset, count);
+    functionExit(thr);
+    return result;
+JNI_END
+
 
 JNI_ENTRY_CHECKED(jint,
   checked_jni_GetVersion(JNIEnv *env))
@@ -2286,7 +2361,18 @@ struct JNINativeInterface_  checked_jni_NativeInterface = {
 
     // New 1.6 Features
 
-    checked_jni_GetObjectRefType
+    checked_jni_GetObjectRefType,
+
+    // UB Matrix Support
+    checked_jni_UbSocketCheckStack,
+    checked_jni_IsUbSocket,
+    checked_jni_IsUbSocketReady,
+    checked_jni_UbSocketRegister,
+    checked_jni_UbSocketClose,
+    checked_jni_UbSocketRead,
+    checked_jni_UbSocketWrite,
+    checked_jni_UbSocketParse,
+    checked_jni_UbSocketTransferFromFile
 };
 
 

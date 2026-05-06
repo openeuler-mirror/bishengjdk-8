@@ -31,6 +31,7 @@
 #include <sys/socket.h>
 #include <fcntl.h>
 #include <sys/uio.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #if defined(__linux__)
@@ -71,6 +72,8 @@
 static int preCloseFD = -1;     /* File descriptor to which we dup other fd's
                                    before closing them for real */
 
+// UB Matrix support: batch buffer length for parsing multiple frames
+static const jint UB_SOCKET_PARSE_BATCH_BUF_LEN = 4096;
 
 JNIEXPORT void JNICALL
 Java_sun_nio_ch_FileDispatcherImpl_init(JNIEnv *env, jclass cl)
@@ -84,12 +87,65 @@ Java_sun_nio_ch_FileDispatcherImpl_init(JNIEnv *env, jclass cl)
     close(sp[1]);
 }
 
+// UB Matrix Support
+static jlong
+ub_socket_read_one(JNIEnv *env, jint fd, void *buf, jlong len,
+                   jboolean convert_errors)
+{
+    jlong nread;
+    char ub_msg[UB_SOCKET_PARSE_BATCH_BUF_LEN];
+    int bytes_read;
+
+    nread = (*env)->UbSocketRead(env, buf, fd, len);
+    if (nread > 0) { return nread; }
+    if (nread < 0) {
+        return convert_errors == JNI_TRUE
+            ? convertLongReturnVal(env, nread, JNI_TRUE)
+            : nread;
+    }
+    if ((*env)->IsUbSocketReady(env, fd) == JNI_FALSE) {
+        bytes_read = read(fd, buf, len);
+        return convert_errors == JNI_TRUE
+            ? convertLongReturnVal(env, bytes_read, JNI_TRUE)
+            : bytes_read;
+    }
+
+    bytes_read = read(fd, ub_msg, UB_SOCKET_PARSE_BATCH_BUF_LEN);
+    if (bytes_read <= 0) {
+        return convert_errors == JNI_TRUE
+            ? convertLongReturnVal(env, bytes_read, JNI_TRUE)
+            : bytes_read;
+    }
+    if ((*env)->UbSocketParse(env, fd, ub_msg, bytes_read) < 0) {
+        return convert_errors == JNI_TRUE
+            ? convertLongReturnVal(env, -1, JNI_TRUE)
+            : -1;
+    }
+    nread = (*env)->UbSocketRead(env, buf, fd, len);
+    if (nread < 0) {
+        return convert_errors == JNI_TRUE
+            ? convertLongReturnVal(env, nread, JNI_TRUE)
+            : nread;
+    }
+    if (nread == 0 && (*env)->IsUbSocketReady(env, fd) == JNI_FALSE) {
+        bytes_read = read(fd, buf, len);
+        return convert_errors == JNI_TRUE
+            ? convertLongReturnVal(env, bytes_read, JNI_TRUE)
+            : bytes_read;
+    }
+    return nread;
+}
+
 JNIEXPORT jint JNICALL
 Java_sun_nio_ch_FileDispatcherImpl_read0(JNIEnv *env, jclass clazz,
                              jobject fdo, jlong address, jint len)
 {
     jint fd = fdval(env, fdo);
     void *buf = (void *)jlong_to_ptr(address);
+    jboolean ub_ready = (*env)->IsUbSocketReady(env, fd);
+    if (ub_ready == JNI_TRUE) {
+        return (jint)ub_socket_read_one(env, fd, buf, len, JNI_TRUE);
+    }
 
     return convertReturnVal(env, read(fd, buf, len), JNI_TRUE);
 }
@@ -110,6 +166,22 @@ Java_sun_nio_ch_FileDispatcherImpl_readv0(JNIEnv *env, jclass clazz,
 {
     jint fd = fdval(env, fdo);
     struct iovec *iov = (struct iovec *)jlong_to_ptr(address);
+    jboolean ub_ready = (*env)->IsUbSocketReady(env, fd);
+    if (ub_ready == JNI_TRUE) {
+        jlong total = 0;
+        int i;
+        for (i = 0; i < len; i++) {
+            jlong nread;
+            if (iov[i].iov_len == 0) { continue; }
+            nread = ub_socket_read_one(env, fd, iov[i].iov_base,
+                                       (jlong)iov[i].iov_len,
+                                       total == 0 ? JNI_TRUE : JNI_FALSE);
+            if (nread <= 0) { return total > 0 ? total : nread; }
+            total += nread;
+            if ((size_t)nread < iov[i].iov_len) { return total; }
+        }
+        return total;
+    }
     return convertLongReturnVal(env, readv(fd, iov, len), JNI_TRUE);
 }
 
@@ -119,8 +191,15 @@ Java_sun_nio_ch_FileDispatcherImpl_write0(JNIEnv *env, jclass clazz,
 {
     jint fd = fdval(env, fdo);
     void *buf = (void *)jlong_to_ptr(address);
+    jint nwrite = 0;
+    jboolean ub_ready_write = (*env)->IsUbSocketReady(env, fd);
+    if (ub_ready_write == JNI_TRUE) {
+        nwrite = (*env)->UbSocketWrite(env, buf, fd, len);
+    } else {
+        nwrite = write(fd, buf, len);
+    }
 
-    return convertReturnVal(env, write(fd, buf, len), JNI_FALSE);
+    return convertReturnVal(env, nwrite, JNI_FALSE);
 }
 
 JNIEXPORT jint JNICALL
@@ -139,6 +218,22 @@ Java_sun_nio_ch_FileDispatcherImpl_writev0(JNIEnv *env, jclass clazz,
 {
     jint fd = fdval(env, fdo);
     struct iovec *iov = (struct iovec *)jlong_to_ptr(address);
+    jboolean ub_ready_write = (*env)->IsUbSocketReady(env, fd);
+    if (ub_ready_write == JNI_TRUE) {
+        jlong total = 0;
+        int i;
+        for (i = 0; i < len; i++) {
+            jlong nwrite;
+            if (iov[i].iov_len == 0) { continue; }
+            nwrite = (*env)->UbSocketWrite(env, iov[i].iov_base, fd, (jlong)iov[i].iov_len);
+            if (nwrite <= 0) {
+                return total > 0 ? total : convertLongReturnVal(env, nwrite, JNI_FALSE);
+            }
+            total += nwrite;
+            if ((size_t)nwrite < iov[i].iov_len) { return total; }
+        }
+        return total;
+    }
     return convertLongReturnVal(env, writev(fd, iov, len), JNI_FALSE);
 }
 
@@ -295,10 +390,19 @@ static void closeFileDescriptor(JNIEnv *env, int fd) {
     }
 }
 
+static jboolean isSocketFD(int fd) {
+    int sotype = 0;
+    socklen_t arglen = sizeof(sotype);
+    return getsockopt(fd, SOL_SOCKET, SO_TYPE, (void *)&sotype, &arglen) == 0;
+}
+
 JNIEXPORT void JNICALL
 Java_sun_nio_ch_FileDispatcherImpl_close0(JNIEnv *env, jclass clazz, jobject fdo)
 {
     jint fd = fdval(env, fdo);
+    if (isSocketFD(fd)) {
+        (*env)->UbSocketClose(env, fd);
+    }
     closeFileDescriptor(env, fd);
 }
 

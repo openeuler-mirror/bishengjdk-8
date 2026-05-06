@@ -765,6 +765,26 @@ struct JNINativeInterface_ {
 
     jobjectRefType (JNICALL *GetObjectRefType)
         (JNIEnv* env, jobject obj);
+
+    /* UB Matrix Support */
+    jboolean (JNICALL *UbSocketCheckStack)
+      (JNIEnv *env);
+    jboolean (JNICALL *IsUbSocket)
+      (JNIEnv *env, jint fd);
+    jboolean (JNICALL *IsUbSocketReady)
+      (JNIEnv *env, jint fd);
+    jboolean (JNICALL *UbSocketRegister)
+      (JNIEnv *env, jint fd, jboolean isServer);
+    jboolean (JNICALL *UbSocketClose)
+      (JNIEnv *env, jint fd);
+    jlong (JNICALL *UbSocketRead)
+      (JNIEnv *env, void* buf, jint fd, jlong len);
+    jlong (JNICALL *UbSocketWrite)
+      (JNIEnv *env, void* buf, jint fd, jlong len);
+    jlong (JNICALL *UbSocketParse)
+      (JNIEnv *env, jint fd, char* msg, jint msg_len);
+    jlong (JNICALL *UbSocketTransferFromFile)
+      (JNIEnv *env, jint src_fd, jint socket_fd, jlong offset, jlong count);
 };
 
 /*
@@ -1855,6 +1875,37 @@ struct JNIEnv_ {
     }
     jobjectRefType GetObjectRefType(jobject obj) {
         return functions->GetObjectRefType(this, obj);
+    }
+
+    // UB Matrix Support
+    jboolean UbSocketCheckStack() {
+        return functions->UbSocketCheckStack(this);
+    }
+    jboolean IsUbSocket(jint fd) {
+        return functions->IsUbSocket(this, fd);
+    }
+    jboolean IsUbSocketReady(jint fd) {
+        return functions->IsUbSocketReady(this, fd);
+    }
+    jboolean UbSocketRegister(jint fd, jboolean isServer) {
+        return functions->UbSocketRegister(this, fd, isServer);
+    }
+    jboolean UbSocketClose(jint fd) {
+        return functions->UbSocketClose(this, fd);
+    }
+    jlong UbSocketRead(void* buf, jint fd, jlong len) {
+        return functions->UbSocketRead(this, buf, fd, len);
+    }
+    jlong UbSocketWrite(void* buf, jint fd, jlong len) {
+        return functions->UbSocketWrite(this, buf, fd, len);
+    }
+    jlong UbSocketParse(jint fd, char* msg, jint msg_len) {
+        return functions->UbSocketParse(this, fd, msg, msg_len);
+    }
+    jlong UbSocketTransferFromFile(jint src_fd, jint socket_fd,
+                                   jlong offset, jlong count) {
+        return functions->UbSocketTransferFromFile(this, src_fd, socket_fd,
+                                                   offset, count);
     }
 
 #endif /* __cplusplus */

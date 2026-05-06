@@ -103,6 +103,7 @@ images:
         ifeq ($(OPENJDK_TARGET_OS), macosx)
 	  +$(MAKE) -f Bundles.gmk
         endif
+		@($(CD) $(JDK_TOPDIR)/src/share/ubwrapper && $(MAKE) JDK_IMAGE_DIR=$(JDK_IMAGE_DIR) OPENJDK_TARGET_CPU=$(OPENJDK_TARGET_CPU_LEGACY_LIB))
         ifeq ($(BUILD_CDS_ARCHIVE), true)
 	  echo Creating CDS archive for jdk image
 	  $(JDK_IMAGE_DIR)/bin/java -Xshare:dump -Xmx128M -Xms128M -XX:ParallelGCThreads=1 -Xint $(LOG_INFO)

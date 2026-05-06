@@ -70,6 +70,8 @@
 #include "runtime/java.hpp"
 #include "runtime/javaCalls.hpp"
 #include "runtime/jfieldIDWorkaround.hpp"
+#include "matrix/matrixManager.hpp"
+#include "matrix/ubSocket/ubSocket.hpp"
 #include "runtime/orderAccess.inline.hpp"
 #include "runtime/reflection.hpp"
 #include "runtime/sharedRuntime.hpp"
@@ -4127,6 +4129,57 @@ JNI_ENTRY(jint, jni_UnregisterNatives(JNIEnv *env, jclass clazz))
 JNI_END
 
 //
+// UB Matrix Support
+//
+
+JNI_ENTRY(jboolean, jni_UbSocketCheckStack(JNIEnv *env))
+  JNIWrapper("jni_UbSocketCheckStack");
+  return MatrixGlobal::check_stack(UB_SOCKET) ? JNI_TRUE : JNI_FALSE;
+JNI_END
+
+JNI_ENTRY(jboolean, jni_IsUbSocket(JNIEnv *env, jint fd))
+  JNIWrapper("jni_IsUbSocket");
+  return UBSocketManager::has_registered(fd) ? JNI_TRUE : JNI_FALSE;
+JNI_END
+
+JNI_ENTRY(jboolean, jni_IsUbSocketReady(JNIEnv *env, jint fd))
+  JNIWrapper("jni_IsUbSocketReady");
+  return UBSocketManager::wait_fd_ready(fd) ? JNI_TRUE : JNI_FALSE;
+JNI_END
+
+JNI_ENTRY(jboolean, jni_UbSocketRegister(JNIEnv *env, jint fd, jboolean is_server))
+  JNIWrapper("jni_UbSocketRegister");
+  return UBSocketManager::register_fd(fd, is_server) ? JNI_TRUE : JNI_FALSE;
+JNI_END
+
+JNI_ENTRY(jboolean, jni_UbSocketClose(JNIEnv *env, jint fd))
+  JNIWrapper("jni_UbSocketClose");
+  return UBSocketManager::unregister_fd(fd) ? JNI_TRUE : JNI_FALSE;
+JNI_END
+
+JNI_ENTRY(jlong, jni_UbSocketRead(JNIEnv *env, void* buf, jint fd, jlong len))
+  JNIWrapper("jni_UbSocketRead");
+  return UBSocketManager::read_data(buf, fd, len);
+JNI_END
+
+JNI_ENTRY(jlong, jni_UbSocketWrite(JNIEnv *env, void* buf, jint fd, jlong len))
+  JNIWrapper("jni_UbSocketWrite");
+  return UBSocketManager::write_data(buf, fd, len);
+JNI_END
+
+JNI_ENTRY(jlong, jni_UbSocketParse(JNIEnv *env, jint fd, char *msg, jint msg_len))
+  JNIWrapper("jni_UbSocketParse");
+  return UBSocketManager::parse_msg(fd, msg, msg_len);
+JNI_END
+
+JNI_ENTRY(jlong, jni_UbSocketTransferFromFile(JNIEnv *env, jint src_fd,
+                                              jint socket_fd, jlong offset,
+                                              jlong count))
+  JNIWrapper("jni_UbSocketTransferFromFile");
+  return UBSocketManager::transfer_from_file(src_fd, socket_fd, offset, count);
+JNI_END
+
+//
 // Monitor functions
 //
 
@@ -4948,7 +5001,18 @@ struct JNINativeInterface_ jni_NativeInterface = {
 
     // New 1_6 features
 
-    jni_GetObjectRefType
+    jni_GetObjectRefType,
+
+    // UB Matrix Support
+    jni_UbSocketCheckStack,
+    jni_IsUbSocket,
+    jni_IsUbSocketReady,
+    jni_UbSocketRegister,
+    jni_UbSocketClose,
+    jni_UbSocketRead,
+    jni_UbSocketWrite,
+    jni_UbSocketParse,
+    jni_UbSocketTransferFromFile
 };
 
 

@@ -35,6 +35,7 @@
 #include "interpreter/oopMapCache.hpp"
 #include "jfr/jfrEvents.hpp"
 #include "jvmtifiles/jvmtiEnv.hpp"
+#include "matrix/matrixManager.hpp"
 #ifdef AARCH64
 #include "jprofilecache/jitProfileCache.hpp"
 #include "jprofilecache/jitProfileCacheThread.hpp"
@@ -3700,6 +3701,8 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
   // Notify JVMTI agents that VM initialization is complete - nop if no agents.
   JvmtiExport::post_vm_initialized();
+
+  MatrixGlobal::init_features();
 
   JFR_ONLY(Jfr::on_vm_start();)
 
