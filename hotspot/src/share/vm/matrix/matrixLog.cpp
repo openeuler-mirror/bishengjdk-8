@@ -233,6 +233,10 @@ outputStream* MatrixLog::log_file(UBFeature feature) {
   return _default_log_file == NULL ? tty : _default_log_file;
 }
 
+outputStream* MatrixLog::stream(UBFeature feature) {
+  return log_file(feature);
+}
+
 void MatrixLog::log(UBFeature feature, UBLogLevel level,
                     const char* format, ...) {
   char buf[32];

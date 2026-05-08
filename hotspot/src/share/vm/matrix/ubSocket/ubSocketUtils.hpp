@@ -108,9 +108,8 @@ class UnreadMsgTable : public AllStatic {
   static bool add_msg(int fd, uintptr_t meta_addr, uint32_t start_blk, uint32_t blk_count);
   static UnreadMsgList* pin_list(int fd);
   static void unpin_list(UnreadMsgList* list);
-  static void add_pinned_msgs(UnreadMsgList* list,
-                              const GrowableArray<UBSocketBlkItem>* blk_items,
-                              int count);
+  static void add_pinned_msg(UnreadMsgList* list,
+                             uintptr_t meta_addr, uint32_t start_blk, uint32_t blk_count);
   static bool has_pending_msg(int fd);
   static void start_timer();
   static void stop_timer();

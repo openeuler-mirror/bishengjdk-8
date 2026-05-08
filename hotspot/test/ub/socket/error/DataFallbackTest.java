@@ -144,6 +144,7 @@ public class DataFallbackTest {
                 "-Xmx256m",
                 "-XX:UBSocketMemorySize=" + ALLOC_FAILED_POOL_SIZE
             },
+            0,
             "reason=alloc_failed",
             "reason=recv_timeout");
     }
@@ -236,6 +237,7 @@ public class DataFallbackTest {
             POST_FALLBACK_READ_DELAY_MS,
             "Expected post-fallback continued writes to stay on TCP",
             new String[] { "-Xmx768m" },
+            SOCKET_TIMEOUT_MS,
             "reason=recv_timeout",
             null);
     }
@@ -247,6 +249,7 @@ public class DataFallbackTest {
                                                            long readDelayMs,
                                                            String fallbackMessage,
                                                            String[] vmOptions,
+                                                           long timeoutMs,
                                                            String expectedReason,
                                                            String unexpectedReason)
         throws Exception {
@@ -259,7 +262,7 @@ public class DataFallbackTest {
             ProcessBuilder serverPb = SocketTestSupport.createUbProcessBuilderWithTimeoutAndVmOptions(
                 configPath,
                 controlPort,
-                0,
+                timeoutMs,
                 vmOptions,
                 "NIOScenarioServer",
                 "delayedRead",
@@ -273,7 +276,7 @@ public class DataFallbackTest {
             ProcessBuilder clientPb = SocketTestSupport.createUbProcessBuilderWithTimeoutAndVmOptions(
                 configPath,
                 controlPort,
-                0,
+                timeoutMs,
                 vmOptions,
                 "NIOScenarioClient",
                 "multiWrite",

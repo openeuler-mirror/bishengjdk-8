@@ -4159,12 +4159,12 @@ JNI_END
 
 JNI_ENTRY(jlong, jni_UbSocketRead(JNIEnv *env, void* buf, jint fd, jlong len))
   JNIWrapper("jni_UbSocketRead");
-  return UBSocketManager::read_data(buf, fd, len);
+  return len <= 0 ? 0 : UBSocketManager::read_data(buf, fd, (size_t)len);
 JNI_END
 
 JNI_ENTRY(jlong, jni_UbSocketWrite(JNIEnv *env, void* buf, jint fd, jlong len))
   JNIWrapper("jni_UbSocketWrite");
-  return UBSocketManager::write_data(buf, fd, len);
+  return len <= 0 ? 0 : UBSocketManager::write_data(buf, fd, (size_t)len);
 JNI_END
 
 JNI_ENTRY(jlong, jni_UbSocketParse(JNIEnv *env, jint fd, char *msg, jint msg_len))
@@ -4177,6 +4177,19 @@ JNI_ENTRY(jlong, jni_UbSocketTransferFromFile(JNIEnv *env, jint src_fd,
                                               jlong count))
   JNIWrapper("jni_UbSocketTransferFromFile");
   return UBSocketManager::transfer_from_file(src_fd, socket_fd, offset, count);
+JNI_END
+
+JNI_ENTRY(jint, jni_UbSocketProfileMode(JNIEnv *env))
+  JNIWrapper("jni_UbSocketProfileMode");
+  return (jint)UBSocketProfile;
+JNI_END
+
+JNI_ENTRY(void, jni_UbSocketProfileRecord(JNIEnv *env, jint event,
+                                          jlong elapsed_ns, jlong bytes,
+                                          jlong count))
+  JNIWrapper("jni_UbSocketProfileRecord");
+  UBSocketProfiler::record((UBSocketProfileEvent)event, (uint64_t)elapsed_ns,
+                           (uint64_t)bytes, (uint64_t)count);
 JNI_END
 
 //
@@ -5012,7 +5025,9 @@ struct JNINativeInterface_ jni_NativeInterface = {
     jni_UbSocketRead,
     jni_UbSocketWrite,
     jni_UbSocketParse,
-    jni_UbSocketTransferFromFile
+    jni_UbSocketTransferFromFile,
+    jni_UbSocketProfileMode,
+    jni_UbSocketProfileRecord
 };
 
 

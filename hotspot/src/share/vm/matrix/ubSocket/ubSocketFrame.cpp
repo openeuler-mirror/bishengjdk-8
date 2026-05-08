@@ -20,6 +20,7 @@
 #include "matrix/ubSocket/ubSocketFrame.hpp"
 #include "matrix/matrixLog.hpp"
 #include "matrix/ubSocket/ubSocketIO.hpp"
+#include "matrix/ubSocket/ubSocketProfile.hpp"
 #include "memory/resourceArea.hpp"
 
 #include <arpa/inet.h>
@@ -45,6 +46,17 @@ static void ub_socket_copy_mem_name(char* dst, const char* src) {
   memset(dst, 0, UB_SOCKET_MEM_NAME_BUF_LEN);
   if (src != NULL) {
     strncpy(dst, src, UB_SOCKET_MEM_NAME_LEN);
+  }
+}
+
+static void ub_socket_copy_mem_name(char* dst, const Symbol* src) {
+  memset(dst, 0, UB_SOCKET_MEM_NAME_BUF_LEN);
+  if (src != NULL) {
+    int len = src->utf8_length();
+    if (len > UB_SOCKET_MEM_NAME_LEN) {
+      len = UB_SOCKET_MEM_NAME_LEN;
+    }
+    memcpy(dst, src->bytes(), len);
   }
 }
 
@@ -211,6 +223,20 @@ UBSocketDataFrame ub_socket_data_frame(uint16_t kind,
   return frame;
 }
 
+UBSocketDataFrame ub_socket_data_frame(uint16_t kind,
+                                       const Symbol* mem_name,
+                                       uint64_t offset,
+                                       uint64_t length) {
+  UBSocketDataFrame frame;
+  memset(&frame, 0, sizeof(frame));
+  frame.offset = offset;
+  frame.length = length;
+  frame.version = UB_SOCKET_PROTOCOL_VERSION;
+  frame.kind = kind;
+  ub_socket_copy_mem_name(frame.mem_name, mem_name);
+  return frame;
+}
+
 bool ub_socket_attach_send(int fd, const UBSocketAttachFrame& frame, uint64_t ddl_ns) {
   UBSocketAttachFrame wire = ub_socket_wire_attach_frame(frame);
   return UBSocketIO::send_all(fd, &wire, UB_SOCKET_ATTACH_FRAME_WIRE_SIZE,
@@ -227,18 +253,15 @@ bool ub_socket_attach_recv(int fd, UBSocketAttachFrame* frame,
   return ub_socket_verify_attach_frame(frame, expected_kind);
 }
 
-ssize_t ub_socket_data_send(int fd, const UBSocketDataFrame* frames,
-                            size_t frame_count, size_t* bytes_sent) {
-  if (frame_count == 0) { return 0; }
-  ResourceMark rm;
-  UBSocketDataFrame* wire_frames = NEW_RESOURCE_ARRAY(UBSocketDataFrame, frame_count);
-  for (size_t i = 0; i < frame_count; i++) {
-    wire_frames[i] = ub_socket_wire_data_frame(frames[i]);
-  }
-  size_t bytes = frame_count * (size_t)UB_SOCKET_DATA_FRAME_WIRE_SIZE;
+ssize_t ub_socket_data_send(int fd, const UBSocketDataFrame& frame,
+                            size_t* bytes_sent) {
+  size_t bytes = UB_SOCKET_DATA_FRAME_WIRE_SIZE;
+  UBSocketProfileScope total_profile(UB_PROF_DESCRIPTOR_SEND_TOTAL, bytes);
   uint64_t ddl_ns = (uint64_t)os::javaTimeNanos() +
                     UB_DATA_FRAME_SEND_TIMEOUT_MS * NANOSECS_PER_MILLISEC;
-  return UBSocketIO::send_all(fd, wire_frames, bytes, ddl_ns, MSG_NOSIGNAL, bytes_sent);
+  UBSocketDataFrame wire_frame = ub_socket_wire_data_frame(frame);
+  return UBSocketIO::send_all(fd, &wire_frame, bytes, ddl_ns, MSG_NOSIGNAL,
+                              bytes_sent, UB_PROF_DESCRIPTOR_SEND_SYSCALL);
 }
 
 bool ub_socket_data_parse(const void* raw, UBSocketDataFrame* frame) {

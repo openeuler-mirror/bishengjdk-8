@@ -38,6 +38,7 @@ class MatrixLog : public AllStatic {
   static int min_log_level() { return _min_log_level; }
   static const char* log_path() { return _default_log_path; }
   static bool enabled(UBFeature feature);
+  static outputStream* stream(UBFeature feature);
   static void flush();
 
  private:

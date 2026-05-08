@@ -28,9 +28,9 @@
 #include "matrix/ubSocket/ubSocketFrame.hpp"
 #include "matrix/ubSocket/ubSocketIO.hpp"
 #include "matrix/ubSocket/ubSocketMemMapping.hpp"
+#include "matrix/ubSocket/ubSocketProfile.hpp"
 #include "matrix/ubSocket/ubSocketUtils.hpp"
 #include "memory/resourceArea.hpp"
-#include "runtime/atomic.inline.hpp"
 #include "runtime/thread.hpp"
 #include "utilities/growableArray.hpp"
 
@@ -41,6 +41,7 @@ static const uint32_t UB_SOCKET_DEFAULT_BLOCK_COUNT = 128 * K; // 256M total
 static const uint64_t UB_SOCKET_MAX_MEMORY_SIZE = 4ULL * G;
 static const size_t UB_SOCKET_DATA_FRAME_SIZE = UB_SOCKET_DATA_FRAME_WIRE_SIZE;
 static const int64_t UB_SOCKET_TRANSFER_BUF_SIZE = 64 * K;
+static const int32_t UB_SOCKET_PARSE_FRAME_BATCH_MAX = 64;
 
 Symbol *UBSocketManager::shared_memory_name = NULL;
 void *UBSocketManager::shared_memory_addr = NULL;
@@ -50,15 +51,6 @@ uint32_t UBSocketManager::_blk_size = UB_SOCKET_DEFAULT_BLOCK_SIZE;
 uint32_t UBSocketManager::_blk_count = UB_SOCKET_DEFAULT_BLOCK_COUNT;
 
 AllowListTable* UBSocketManager::_allow_list_table = NULL;
-
-static void release_untracked_blocks(GrowableArray<UBSocketBlkItem>* blk_items,
-                                     int start_index = 0) {
-  for (int i = start_index; i < blk_items->length(); i++) {
-    UBSocketBlkItem item = blk_items->at(i);
-    UBSocketManager::clear_mark(item.meta_addr + sizeof(UBSocketBlkMeta));
-    UBSocketBlkBitmap::release(item.start_blk, item.blk_count);
-  }
-}
 
 size_t UBSocketManager::memory_size() {
   return (size_t)_blk_size * _blk_count;
@@ -279,21 +271,26 @@ void *UBSocketManager::get_free_memory(uint64_t len, uint64_t *offset, uint64_t 
   return (void *)data_addr;
 }
 
-long UBSocketManager::write_data(void *buf, int socket_fd, long len) {
-  if (!UseUBSocket || !_initialized || len <= 0) {
+long UBSocketManager::write_data(void *buf, int socket_fd, size_t len) {
+  if (!UseUBSocket || !_initialized || len == 0) {
     return 0;
   }
 
-  if (SocketDataInfoTable::is_fallback_draining(socket_fd)) {
+  bool fallback_draining = SocketDataInfoTable::is_fallback_draining(socket_fd);
+  if (fallback_draining) {
     ssize_t sent_res = ensure_fallback_sent(socket_fd, "write_fallback");
     if (sent_res <= 0) { return sent_res; }
-    long tcp_write = (long)UBSocketIO::write(socket_fd, buf, (size_t)len);
+    long tcp_write;
+    {
+      UBSocketProfileScope fallback_profile(UB_PROF_UB_TCP_FALLBACK_WRITE, len);
+      tcp_write = (long)UBSocketIO::write(socket_fd, buf, len);
+    }
     if (tcp_write > 0) {
       // try to unregister if fallback is drained after write
       unregister_if_fallback_drained(socket_fd);
     }
     UB_LOG(UB_SOCKET, UB_LOG_DEBUG,
-           "fd=%d write_data fallback_tcp requested=%ld written=%ld\n",
+           "fd=%d write_data fallback_tcp requested=" SIZE_FORMAT " written=%ld\n",
            socket_fd, len, tcp_write);
     return tcp_write;
   }
@@ -308,99 +305,80 @@ long UBSocketManager::write_data(void *buf, int socket_fd, long len) {
     return -1;
   }
 
-  ResourceMark rm;
-  const char* mem_name = shared_memory_name->as_C_string();
-  GrowableArray<UBSocketDataFrame> frames(UB_INIT_ARRAY_CAP, true, mtInternal);
-  GrowableArray<UBSocketBlkItem> blk_items(UB_INIT_ARRAY_CAP, true, mtInternal);
-  long total_write = 0;
-  while (total_write < len) {
-    uint64_t ub_offset;
-    uint64_t ub_size;
-    uint32_t start_blk = 0;
-    uint32_t blk_count = 0;
-    uint64_t remaining = (uint64_t)(len - total_write);
-    void *socket_addr = get_free_memory(remaining, &ub_offset, &ub_size,
-                                        &start_blk, &blk_count);
-    if (socket_addr == NULL) {
-      release_untracked_blocks(&blk_items);
-      UB_LOG(UB_SOCKET, UB_LOG_WARNING,
-             "fd=%d UBSocket send buffer allocation failed for payload=%ld bytes "
-             "err=%d; switching to TCP fallback\n", socket_fd, len, errno);
-      if (!SocketDataInfoTable::request_fallback(socket_fd, "alloc_failed")) {
-        UnreadMsgTable::unpin_list(unread_list);
-        SocketDataInfoTable::unpin_list(info_list);
-        return -1;
-      }
-      ssize_t sent_res = ensure_fallback_sent(socket_fd, "alloc_failed");
-      if (sent_res <= 0) {
-        UnreadMsgTable::unpin_list(unread_list);
-        SocketDataInfoTable::unpin_list(info_list);
-        return sent_res;
-      }
-      long tcp_write = (long)UBSocketIO::write(socket_fd, buf, (size_t)len);
+  uint64_t ub_offset = 0;
+  uint64_t ub_size = 0;
+  uint32_t start_blk = 0;
+  uint32_t blk_count = 0;
+  void *socket_addr = get_free_memory(len, &ub_offset, &ub_size, &start_blk, &blk_count);
+  if (socket_addr == NULL) {
+    UB_LOG(UB_SOCKET, UB_LOG_WARNING,
+           "fd=%d UBSocket send buffer allocation failed for payload=" SIZE_FORMAT " bytes "
+           "err=%d; switching to TCP fallback\n", socket_fd, len, errno);
+    if (!SocketDataInfoTable::request_fallback(socket_fd, "alloc_failed")) {
       UnreadMsgTable::unpin_list(unread_list);
       SocketDataInfoTable::unpin_list(info_list);
-      if (tcp_write > 0) {
-        unregister_if_fallback_drained(socket_fd);
-      }
-      UB_LOG(UB_SOCKET, UB_LOG_DEBUG,
-             "fd=%d write_data fallback_tcp requested=%ld written=%ld reason=alloc_failed\n",
-             socket_fd, len, tcp_write);
-      return tcp_write;
-    }
-
-    uint64_t write_size = MIN2(ub_size, remaining);
-    uintptr_t data_addr = (uintptr_t)socket_addr;
-    uintptr_t meta_addr = data_addr - sizeof(UBSocketBlkMeta);
-    mark_send((void*)meta_addr, socket_fd);
-    memcpy(socket_addr, (void*)((uintptr_t)buf + total_write), (size_t)write_size);
-    frames.append(ub_socket_data_frame(UB_SOCKET_DATA_DESCRIPTOR, mem_name,
-                                       ub_offset, write_size));
-    UBSocketBlkItem item = {meta_addr, start_blk, blk_count};
-    blk_items.append(item);
-    total_write += (long)write_size;
-  }
-
-  size_t expected_bytes = (size_t)frames.length() * UB_SOCKET_DATA_FRAME_SIZE;
-  size_t bytes_sent = 0;
-  ssize_t send_res = ub_socket_data_send(socket_fd, frames.adr_at(0),
-                                         (size_t)frames.length(), &bytes_sent);
-  if (send_res != (ssize_t)expected_bytes) {
-    int send_errno = errno;
-    int complete_frames = (int)(bytes_sent / UB_SOCKET_DATA_FRAME_SIZE);
-    bool partial_frame = (bytes_sent % UB_SOCKET_DATA_FRAME_SIZE) != 0;
-    long complete_write = 0;
-    for (int i = 0; i < complete_frames; i++) {
-      complete_write += (long)frames.at(i).length;
-    }
-    // Only complete descriptors are visible to the peer; track them before
-    // releasing blocks whose descriptors never reached a frame boundary.
-    UnreadMsgTable::add_pinned_msgs(unread_list, &blk_items, complete_frames);
-    release_untracked_blocks(&blk_items, complete_frames);
-    UB_LOG(UB_SOCKET, UB_LOG_ERROR,
-           "fd=%d send descriptor batch failed len=%ld frames=%d rc=%ld "
-           "bytes_sent=" SIZE_FORMAT " complete_frames=%d partial=%d err=%d\n",
-           socket_fd, len, frames.length(), (long)send_res,
-           bytes_sent, complete_frames, partial_frame ? 1 : 0, send_errno);
-    UnreadMsgTable::unpin_list(unread_list);
-    SocketDataInfoTable::unpin_list(info_list);
-    if (partial_frame) {
-      // A partial descriptor corrupts the stream; do not fallback on this fd.
-      errno = send_errno != 0 ? send_errno : EIO;
       return -1;
     }
-    if (complete_write > 0) { return complete_write; }
-    errno = send_errno;
-    return (long)send_res;
+    ssize_t sent_res = ensure_fallback_sent(socket_fd, "alloc_failed");
+    if (sent_res <= 0) {
+      UnreadMsgTable::unpin_list(unread_list);
+      SocketDataInfoTable::unpin_list(info_list);
+      return sent_res;
+    }
+    long tcp_write;
+    {
+      UBSocketProfileScope fallback_profile(UB_PROF_UB_TCP_FALLBACK_WRITE, len);
+      tcp_write = (long)UBSocketIO::write(socket_fd, buf, len);
+    }
+    UnreadMsgTable::unpin_list(unread_list);
+    SocketDataInfoTable::unpin_list(info_list);
+    if (tcp_write > 0) {
+      unregister_if_fallback_drained(socket_fd);
+    }
+    UB_LOG(UB_SOCKET, UB_LOG_DEBUG,
+           "fd=%d write_data fallback_tcp requested=" SIZE_FORMAT
+           " written=%ld reason=alloc_failed\n",
+           socket_fd, len, tcp_write);
+    return tcp_write;
   }
 
-  UnreadMsgTable::add_pinned_msgs(unread_list, &blk_items, blk_items.length());
+  uint64_t write_size = MIN2(ub_size, (uint64_t)len);
+  uintptr_t data_addr = (uintptr_t)socket_addr;
+  uintptr_t meta_addr = data_addr - sizeof(UBSocketBlkMeta);
+  mark_send((void*)meta_addr, socket_fd);
+  {
+    UBSocketProfileScope memcpy_profile(UB_PROF_UB_WRITE_MEMCPY, write_size);
+    memcpy(socket_addr, buf, (size_t)write_size);
+  }
+
+  UBSocketDataFrame frame = ub_socket_data_frame(UB_SOCKET_DATA_DESCRIPTOR, shared_memory_name,
+                                                 ub_offset, write_size);
+  size_t expected_bytes = UB_SOCKET_DATA_FRAME_SIZE;
+  size_t bytes_sent = 0;
+  ssize_t send_res = ub_socket_data_send(socket_fd, frame, &bytes_sent);
+  if (send_res != (ssize_t)expected_bytes) {
+    int send_errno = errno;
+    clear_mark(meta_addr + sizeof(UBSocketBlkMeta));
+    UBSocketBlkBitmap::release(start_blk, blk_count);
+    UB_LOG(UB_SOCKET, UB_LOG_ERROR,
+           "fd=%d send descriptor failed len=" SIZE_FORMAT " rc=%ld bytes_sent=" SIZE_FORMAT
+           " expected=" SIZE_FORMAT " err=%d\n",
+           socket_fd, len, (long)send_res, bytes_sent, expected_bytes, send_errno);
+    UnreadMsgTable::unpin_list(unread_list);
+    SocketDataInfoTable::unpin_list(info_list);
+    errno = send_errno != 0 ? send_errno : EIO;
+    return -1;
+  }
+
+  UnreadMsgTable::add_pinned_msg(unread_list, meta_addr, start_blk, blk_count);
+
   UnreadMsgTable::unpin_list(unread_list);
   SocketDataInfoTable::unpin_list(info_list);
   UB_LOG(UB_SOCKET, UB_LOG_DEBUG,
-         "fd=%d write_data success requested=%ld written=%ld frames=%d\n",
-         socket_fd, len, total_write, frames.length());
-  return total_write;
+         "fd=%d write_data success requested=" SIZE_FORMAT
+         " written=%ld descriptor_sent=" SIZE_FORMAT "\n",
+         socket_fd, len, (long)write_size, bytes_sent);
+  return (long)write_size;
 }
 
 int64_t UBSocketManager::transfer_from_file(int src_fd, int socket_fd,
@@ -445,7 +423,7 @@ int64_t UBSocketManager::transfer_from_file(int src_fd, int socket_fd,
     int64_t chunk_write = 0;
     while (chunk_write < total_read) {
       long nwrite = write_data(buffer + chunk_write, socket_fd,
-                               (long)(total_read - chunk_write));
+                               (size_t)(total_read - chunk_write));
       if (nwrite <= 0) {
         if (total_write + chunk_write > 0) {
           FREE_C_HEAP_ARRAY(char, buffer, mtInternal);
@@ -469,13 +447,13 @@ int64_t UBSocketManager::transfer_from_file(int src_fd, int socket_fd,
 ssize_t UBSocketManager::send_heartbeat(int socket_fd) {
   UBSocketDataFrame frame = ub_socket_data_frame(UB_SOCKET_DATA_HEARTBEAT, "", 0, 0);
   UB_LOG(UB_SOCKET, UB_LOG_INFO, "fd=%d send HEARTBEAT frame\n", socket_fd);
-  return ub_socket_data_send(socket_fd, &frame, 1);
+  return ub_socket_data_send(socket_fd, frame);
 }
 
 ssize_t UBSocketManager::ensure_fallback_sent(int socket_fd, const char* reason) {
   if (!SocketDataInfoTable::begin_fallback_mark_send(socket_fd)) { return 1; }
   UBSocketDataFrame frame = ub_socket_data_frame(UB_SOCKET_DATA_FALLBACK, "", 0, 0);
-  ssize_t nsend = ub_socket_data_send(socket_fd, &frame, 1);
+  ssize_t nsend = ub_socket_data_send(socket_fd, frame);
   if (nsend != UB_SOCKET_DATA_FRAME_WIRE_SIZE) {
     SocketDataInfoTable::abort_fallback_mark_send(socket_fd);
     UB_LOG(UB_SOCKET, UB_LOG_ERROR,
@@ -513,16 +491,49 @@ static long ub_socket_handle_fallback_frame(int socket_fd,
   return 0;
 }
 
-static long ub_socket_handle_data_frame(int socket_fd, const UBSocketDataFrame& frame) {
-  if (frame.kind == UB_SOCKET_DATA_HEARTBEAT) {
-    UB_LOG(UB_SOCKET, UB_LOG_INFO, "fd=%d recv HEARTBEAT frame\n", socket_fd);
-    return 0;
-  }
+static bool ub_socket_handle_parsed_frame(int socket_fd,
+                                          const UBSocketDataFrame& frame,
+                                          UBSocketDataFrame* data_frames,
+                                          int* data_frame_count,
+                                          long* total_parse_size,
+                                          const char* fallback_tail,
+                                          size_t fallback_tail_len,
+                                          bool* stop_parse,
+                                          long* result) {
+  UB_PROFILE_COUNT(UB_PROF_DESCRIPTOR_FRAME_COUNT, frame.length);
   if (frame.kind == UB_SOCKET_DATA_FALLBACK) {
-    return 0;
+    if (*data_frame_count > 0) {
+      long batch_size = SocketDataInfoTable::append_ranges(socket_fd, data_frames,
+                                                           *data_frame_count);
+      if (batch_size < 0) { return false; }
+      *total_parse_size += batch_size;
+      *data_frame_count = 0;
+    }
+    *result = ub_socket_handle_fallback_frame(socket_fd, fallback_tail,
+                                              fallback_tail_len);
+    *stop_parse = true;
+    return *result >= 0;
   }
-  return SocketDataInfoTable::append_range(socket_fd, frame.mem_name,
-                                           frame.offset, frame.length);
+  if (frame.kind == UB_SOCKET_DATA_HEARTBEAT) {
+    if (*data_frame_count > 0) {
+      long batch_size = SocketDataInfoTable::append_ranges(socket_fd, data_frames,
+                                                           *data_frame_count);
+      if (batch_size < 0) { return false; }
+      *total_parse_size += batch_size;
+      *data_frame_count = 0;
+    }
+    UB_LOG(UB_SOCKET, UB_LOG_INFO, "fd=%d recv HEARTBEAT frame\n", socket_fd);
+    return true;
+  }
+  data_frames[(*data_frame_count)++] = frame;
+  if (*data_frame_count == UB_SOCKET_PARSE_FRAME_BATCH_MAX) {
+    long batch_size = SocketDataInfoTable::append_ranges(socket_fd, data_frames,
+                                                         *data_frame_count);
+    if (batch_size < 0) { return false; }
+    *total_parse_size += batch_size;
+    *data_frame_count = 0;
+  }
+  return true;
 }
 
 long UBSocketManager::parse_msg(int socket_fd, const char* ub_msg, size_t ub_msg_len) {
@@ -530,8 +541,14 @@ long UBSocketManager::parse_msg(int socket_fd, const char* ub_msg, size_t ub_msg
     return 0;
   }
 
+  UBSocketProfileScope total_profile(UB_PROF_DESCRIPTOR_HANDLE_TOTAL,
+                                     (uint64_t)ub_msg_len);
   long total_parse_size = 0;
   size_t consumed = 0;
+  UBSocketDataFrame data_frames[UB_SOCKET_PARSE_FRAME_BATCH_MAX];
+  int data_frame_count = 0;
+  bool stop_parse = false;
+  long result = 0;
   char frame_buf[UB_SOCKET_DATA_FRAME_WIRE_SIZE];
   size_t residue_len = 0;
   if (!SocketDataInfoTable::take_frame_residue(socket_fd, frame_buf, sizeof(frame_buf),
@@ -566,15 +583,15 @@ long UBSocketManager::parse_msg(int socket_fd, const char* ub_msg, size_t ub_msg
              socket_fd, strerror(errno));
       return -1;
     }
-    if (frame.kind == UB_SOCKET_DATA_FALLBACK) {
-      return ub_socket_handle_fallback_frame(socket_fd, ub_msg + consumed,
-                                             ub_msg_len - consumed);
-    }
-    long parse_size = ub_socket_handle_data_frame(socket_fd, frame);
-    if (parse_size < 0) {
+    if (!ub_socket_handle_parsed_frame(socket_fd, frame, data_frames,
+                                       &data_frame_count, &total_parse_size,
+                                       ub_msg + consumed, ub_msg_len - consumed,
+                                       &stop_parse, &result)) {
       return -1;
     }
-    total_parse_size += parse_size;
+    if (stop_parse) {
+      return result;
+    }
   }
 
   while (ub_msg_len - consumed >= UB_SOCKET_DATA_FRAME_SIZE) {
@@ -584,30 +601,35 @@ long UBSocketManager::parse_msg(int socket_fd, const char* ub_msg, size_t ub_msg
              socket_fd, strerror(errno));
       return -1;
     }
-    if (frame.kind == UB_SOCKET_DATA_FALLBACK) {
-      consumed += UB_SOCKET_DATA_FRAME_SIZE;
-      return ub_socket_handle_fallback_frame(socket_fd, ub_msg + consumed,
-                                             ub_msg_len - consumed);
-    }
-    long parse_size = ub_socket_handle_data_frame(socket_fd, frame);
-    if (parse_size < 0) {
+    consumed += UB_SOCKET_DATA_FRAME_SIZE;
+    if (!ub_socket_handle_parsed_frame(socket_fd, frame, data_frames,
+                                       &data_frame_count, &total_parse_size,
+                                       ub_msg + consumed, ub_msg_len - consumed,
+                                       &stop_parse, &result)) {
       return -1;
     }
-    total_parse_size += parse_size;
-    consumed += UB_SOCKET_DATA_FRAME_SIZE;
+    if (stop_parse) {
+      return result;
+    }
+  }
+
+  if (data_frame_count > 0) {
+    long batch_size = SocketDataInfoTable::append_ranges(socket_fd, data_frames,
+                                                         data_frame_count);
+    if (batch_size < 0) { return -1; }
+    total_parse_size += batch_size;
+    data_frame_count = 0;
   }
 
   if (ub_msg_len > consumed) {
     size_t remain = ub_msg_len - consumed;
     if (!SocketDataInfoTable::store_frame_residue(socket_fd, ub_msg + consumed, remain)) {
-      UB_LOG(UB_SOCKET, UB_LOG_ERROR,
-             "fd=%d residue store failed len=" SIZE_FORMAT "\n",
+      UB_LOG(UB_SOCKET, UB_LOG_ERROR, "fd=%d residue store failed len=" SIZE_FORMAT "\n",
              socket_fd, remain);
       return -1;
     }
     UB_LOG(UB_SOCKET, UB_LOG_DEBUG,
-           "fd=%d parse_msg stored tail residue=" SIZE_FORMAT
-           " consumed=" SIZE_FORMAT "\n",
+           "fd=%d parse_msg stored tail residue=" SIZE_FORMAT " consumed=" SIZE_FORMAT "\n",
            socket_fd, remain, consumed);
   }
 
@@ -615,20 +637,19 @@ long UBSocketManager::parse_msg(int socket_fd, const char* ub_msg, size_t ub_msg
     return 0;
   }
   UB_LOG(UB_SOCKET, UB_LOG_DEBUG,
-         "fd=%d parse_msg result parsed=%ld consumed=" SIZE_FORMAT
-         " input=" SIZE_FORMAT "\n",
+         "fd=%d parse_msg result parsed=%ld consumed=" SIZE_FORMAT " input=" SIZE_FORMAT "\n",
          socket_fd, total_parse_size, consumed, ub_msg_len);
   return total_parse_size;
 }
 
-long UBSocketManager::read_data(void *buf, int socket_fd, long len) {
+long UBSocketManager::read_data(void *buf, int socket_fd, size_t len) {
   if (!UseUBSocket || !_initialized) return 0;
   long nread = SocketDataInfoTable::read_data(socket_fd, buf, len);
   if (nread >= 0) {
     unregister_if_fallback_drained(socket_fd);
   }
   UB_LOG(UB_SOCKET, UB_LOG_DEBUG,
-         "fd=%d read_data requested=%ld read=%ld\n", socket_fd, len, nread);
+         "fd=%d read_data requested=" SIZE_FORMAT " read=%ld\n", socket_fd, len, nread);
   return nread;
 }
 
@@ -644,6 +665,7 @@ bool UBSocketManager::register_fd(int socket_fd, bool is_server) {
   UBSocketAttach socket_attach(socket_fd, is_server, shared_memory_name, memory_size());
   bool attach_ok = socket_attach.do_attach();
   if (!attach_ok) {
+    UB_PROFILE_COUNT(UB_PROF_UB_ATTACH_FALLBACK, 0);
     UB_LOG(UB_SOCKET, UB_LOG_WARNING, "fd=%d register attach failed role=%s fallback=tcp\n",
            socket_fd, is_server ? "server" : "client");
     if (has_registered(socket_fd)) { unregister_fd(socket_fd); }
@@ -651,6 +673,7 @@ bool UBSocketManager::register_fd(int socket_fd, bool is_server) {
   }
 
   long cost_time = os::javaTimeNanos() - start_time;
+  UB_PROFILE_COUNT(UB_PROF_UB_ATTACH_SUCCESS, 0);
   UB_LOG(UB_SOCKET, UB_LOG_INFO, "fd=%d register success role=%s cost_ns=%ld\n",
          socket_fd, is_server ? "server" : "client", cost_time);
   return true;

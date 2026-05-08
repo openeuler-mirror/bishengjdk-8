@@ -26,13 +26,15 @@
 
 #include "matrix/matrixLog.hpp"
 #include "matrix/ubSocket/ubSocket.hpp"
+#include "matrix/ubSocket/ubSocketProfile.hpp"
 #include "runtime/interfaceSupport.hpp"
 #include "runtime/java.hpp"
 #include "runtime/thread.hpp"
 
 bool UBSocketIO::is_retryable_error(int error_code) { // for attach
   return error_code == EAGAIN || error_code == EINTR || error_code == ECONNRESET ||
-         error_code == ECONNABORTED || error_code == EPIPE || error_code == ETIMEDOUT;
+         error_code == ECONNABORTED || error_code == ECONNREFUSED ||
+         error_code == EPIPE || error_code == ETIMEDOUT;
 }
 
 bool UBSocketIO::wait_fd(int fd, short events, uint64_t ddl_ns) {
@@ -151,16 +153,27 @@ ssize_t UBSocketIO::recv(int fd, void* buf, size_t len, int flags) {
 }
 
 ssize_t UBSocketIO::send_all(int fd, const void* buf, size_t len,
-                             uint64_t ddl_ns, int flags, size_t* bytes_sent) {
+                             uint64_t ddl_ns, int flags, size_t* bytes_sent,
+                             int syscall_profile_event) {
   if (bytes_sent != NULL) { *bytes_sent = 0; }
   const char* p = (const char*)buf;
   size_t remaining = len;
   while (remaining > 0) {
-    if (!wait_fd(fd, POLLOUT, ddl_ns)) { return -1; }
-
+    uint64_t syscall_start = syscall_profile_event >= 0
+        ? UBSocketProfiler::start((UBSocketProfileEvent)syscall_profile_event) : 0;
     ssize_t written = send(fd, p, remaining, flags);
+    UBSocketProfiler::end((UBSocketProfileEvent)syscall_profile_event,
+                          syscall_start, written > 0 ? (uint64_t)written : 0);
     if (written < 0) {
-      if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) { continue; }
+      if (errno == EINTR) { continue; }
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        UB_PROFILE_COUNT(UB_PROF_SEND_EAGAIN, remaining);
+        UB_PROFILE_NANOS(UB_PROF_SEND_WAIT, wait_start);
+        bool ready = wait_fd(fd, POLLOUT, ddl_ns);
+        UB_PROFILE_RECORD(UB_PROF_SEND_WAIT, wait_start, remaining);
+        if (!ready) { return -1; }
+        continue;
+      }
       return written;
     }
     if (written == 0) {

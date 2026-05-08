@@ -2069,6 +2069,22 @@ JNI_ENTRY_CHECKED(jlong,
     return result;
 JNI_END
 
+JNI_ENTRY_CHECKED(jint,
+  checked_jni_UbSocketProfileMode(JNIEnv *env))
+    functionEnter(thr);
+    jint result = UNCHECKED()->UbSocketProfileMode(env);
+    functionExit(thr);
+    return result;
+JNI_END
+
+JNI_ENTRY_CHECKED(void,
+  checked_jni_UbSocketProfileRecord(JNIEnv *env, jint event, jlong elapsed_ns,
+                                    jlong bytes, jlong count))
+    functionEnter(thr);
+    UNCHECKED()->UbSocketProfileRecord(env, event, elapsed_ns, bytes, count);
+    functionExit(thr);
+JNI_END
+
 
 JNI_ENTRY_CHECKED(jint,
   checked_jni_GetVersion(JNIEnv *env))
@@ -2372,7 +2388,9 @@ struct JNINativeInterface_  checked_jni_NativeInterface = {
     checked_jni_UbSocketRead,
     checked_jni_UbSocketWrite,
     checked_jni_UbSocketParse,
-    checked_jni_UbSocketTransferFromFile
+    checked_jni_UbSocketTransferFromFile,
+    checked_jni_UbSocketProfileMode,
+    checked_jni_UbSocketProfileRecord
 };
 
 

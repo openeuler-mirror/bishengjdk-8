@@ -87,12 +87,16 @@ UBSocketDataFrame ub_socket_data_frame(uint16_t kind,
                                        const char* mem_name,
                                        uint64_t offset,
                                        uint64_t length);
+UBSocketDataFrame ub_socket_data_frame(uint16_t kind,
+                                       const Symbol* mem_name,
+                                       uint64_t offset,
+                                       uint64_t length);
 
 bool ub_socket_attach_send(int fd, const UBSocketAttachFrame& frame, uint64_t ddl_ns);
 bool ub_socket_attach_recv(int fd, UBSocketAttachFrame* frame,
                            uint16_t expected_kind, uint64_t ddl_ns);
-ssize_t ub_socket_data_send(int fd, const UBSocketDataFrame* frames,
-                            size_t frame_count, size_t* bytes_sent = NULL);
+ssize_t ub_socket_data_send(int fd, const UBSocketDataFrame& frame,
+                            size_t* bytes_sent = NULL);
 bool ub_socket_data_parse(const void* raw, UBSocketDataFrame* frame);
 
 bool ub_socket_endpoint_equals(const UBSocketEndpoint* lhs,

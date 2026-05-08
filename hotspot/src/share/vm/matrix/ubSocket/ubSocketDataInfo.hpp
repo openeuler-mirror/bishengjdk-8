@@ -27,6 +27,7 @@
 
 class Monitor;
 class UBSocketMemMapping;
+struct UBSocketDataFrame;
 
 static const int UB_SOCKET_FRAME_RESIDUE_BUF_LEN = 64;
 // same as UB_SOCKET_PARSE_BATCH_BUF_LEN in FileDispatcherImpl.c
@@ -99,6 +100,7 @@ class UBSocketInfoList : public CHeapObj<mtInternal> {
   }
 
   bool append_range(const char* name, uint64_t off, uint64_t len); // cache <off,len>
+  bool append_ranges(const UBSocketDataFrame* frames, int count, long* total_len);
   long read_data(void* dst, size_t len);  // read len data of this fd to dst
   bool take_frame_residue(char* dst, size_t dst_len, size_t* len);
   bool store_frame_residue(const char* src, size_t len);
@@ -169,6 +171,7 @@ class SocketDataInfoTable : public AllStatic {
   static bool publish(int fd, UBSocketInfoList* info);
   static bool contains(int fd);
   static long append_range(int fd, const char* name, uint64_t off, uint64_t len);
+  static long append_ranges(int fd, const UBSocketDataFrame* frames, int count);
   static long read_data(int fd, void* dst, size_t len);
   static bool is_fallback_draining(int fd);
   static bool can_send_frame(int fd);

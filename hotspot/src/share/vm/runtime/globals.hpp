@@ -4211,6 +4211,8 @@ class CommandLineFlags {
   experimental(uintx, UBSocketTimeout, 200,                                 \
           "UB Socket blk read timeout(ms), 0 means no timeout")             \
                                                                             \
+  experimental(uintx, UBSocketProfile, 0,                                   \
+          "UB Socket profile: 0=off, 1=summary, 2=detail")                  \
 /*
  *  Macros for factoring of globals
  */
