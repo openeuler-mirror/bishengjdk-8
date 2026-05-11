@@ -28,6 +28,7 @@
 #include "classfile/symbolTable.hpp"
 #include "matrix/matrixAllowList.hpp"
 #include "matrix/matrixLog.hpp"
+#include "matrix/ubSocket/ubSocketProfile.hpp"
 #include "matrix/ubSocket/ubSocketUtils.hpp"
 #include "runtime/os.hpp"
 
@@ -57,8 +58,8 @@ enum {
   UB_SOCKET_READ_TIMEOUT_DEFAULT_MS = 200,
   // Fixed internal deadlines for data-frame send and attach handshake.
   UB_DATA_FRAME_SEND_TIMEOUT_MS = 300,
-  // Server accept only waits briefly for ATTACH_REQ before falling back to TCP.
-  UB_ATTACH_REQUEST_WAIT_MS = 50,
+  // Server accept waits past the attach agent idle poll interval before TCP fallback.
+  UB_ATTACH_REQUEST_WAIT_MS = 200,
   UB_ATTACH_TIMEOUT_MS = 500,
 };
 
@@ -92,8 +93,8 @@ class UBSocketManager : public AllStatic {
 
   static void* get_free_memory(uint64_t len, uint64_t* offset, uint64_t* size,
                                uint32_t* start_blk = NULL, uint32_t* blk_count = NULL);
-  static long read_data(void* buf, int socket_fd, long len);
-  static long write_data(void* buf, int socket_fd, long len);
+  static long read_data(void* buf, int socket_fd, size_t len);
+  static long write_data(void* buf, int socket_fd, size_t len);
   static int64_t transfer_from_file(int src_fd, int socket_fd,
                                     int64_t offset, int64_t count);
   static ssize_t send_heartbeat(int socket_fd);
@@ -105,14 +106,21 @@ class UBSocketManager : public AllStatic {
   static bool unregister_fd(int socket_fd);
   static bool has_registered(int socket_fd);
   static bool wait_fd_ready(int socket_fd);
+  static bool metadata_timestamps_enabled() { return package_timeout != 0; }
 
   static void mark_send(void* addr, int socket_fd) {
-    UBSocketBlkMeta meta = {
-        UB_SOCKET_BLK_SEND, (uint32_t)socket_fd,
-        (uint64_t)os::javaTimeNanos(), 0, 0};
+    UBSocketProfileScope profile(UB_PROF_METADATA_MARK_SEND,
+                                 sizeof(UBSocketBlkMeta));
+    uint64_t send_nanos = 0;
+    if (metadata_timestamps_enabled()) {
+      send_nanos = (uint64_t)os::javaTimeNanos();
+    }
+    UBSocketBlkMeta meta = { UB_SOCKET_BLK_SEND, (uint32_t)socket_fd, send_nanos, 0, 0 };
     memcpy(addr, &meta, sizeof(UBSocketBlkMeta));
   };
   static bool mark_recv(uintptr_t data_addr) {
+    UBSocketProfileScope profile(UB_PROF_METADATA_MARK_RECV,
+                                 sizeof(UBSocketBlkMeta));
     void* addr = reinterpret_cast<char*>(data_addr) - sizeof(UBSocketBlkMeta);
     UBSocketBlkMeta meta;
     memcpy(&meta, addr, sizeof(UBSocketBlkMeta));
@@ -123,11 +131,15 @@ class UBSocketManager : public AllStatic {
       return false;
     }
     meta.state = UB_SOCKET_BLK_RECV;
-    meta.recv_nanos = (uint64_t)os::javaTimeNanos();
+    if (metadata_timestamps_enabled()) {
+      meta.recv_nanos = (uint64_t)os::javaTimeNanos();
+    }
     memcpy(addr, &meta, sizeof(UBSocketBlkMeta));
     return true;
   };
   static bool mark_read(uintptr_t data_addr) {
+    UBSocketProfileScope profile(UB_PROF_METADATA_MARK_READ,
+                                 sizeof(UBSocketBlkMeta));
     void* addr = reinterpret_cast<char*>(data_addr) - sizeof(UBSocketBlkMeta);
     UBSocketBlkMeta meta;
     memcpy(&meta, addr, sizeof(UBSocketBlkMeta));
@@ -138,7 +150,9 @@ class UBSocketManager : public AllStatic {
       return false;
     }
     meta.state = UB_SOCKET_BLK_READ;
-    meta.read_nanos = (uint64_t)os::javaTimeNanos();
+    if (metadata_timestamps_enabled()) {
+      meta.read_nanos = (uint64_t)os::javaTimeNanos();
+    }
     memcpy(addr, &meta, sizeof(UBSocketBlkMeta));
     return true;
   };

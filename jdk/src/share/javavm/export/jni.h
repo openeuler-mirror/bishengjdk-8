@@ -785,6 +785,10 @@ struct JNINativeInterface_ {
       (JNIEnv *env, jint fd, char* msg, jint msg_len);
     jlong (JNICALL *UbSocketTransferFromFile)
       (JNIEnv *env, jint src_fd, jint socket_fd, jlong offset, jlong count);
+    jint (JNICALL *UbSocketProfileMode)
+      (JNIEnv *env);
+    void (JNICALL *UbSocketProfileRecord)
+      (JNIEnv *env, jint event, jlong elapsed_ns, jlong bytes, jlong count);
 };
 
 /*
@@ -1906,6 +1910,12 @@ struct JNIEnv_ {
                                    jlong offset, jlong count) {
         return functions->UbSocketTransferFromFile(this, src_fd, socket_fd,
                                                    offset, count);
+    }
+    jint UbSocketProfileMode() {
+        return functions->UbSocketProfileMode(this);
+    }
+    void UbSocketProfileRecord(jint event, jlong elapsed_ns, jlong bytes, jlong count) {
+        functions->UbSocketProfileRecord(this, event, elapsed_ns, bytes, count);
     }
 
 #endif /* __cplusplus */

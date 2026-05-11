@@ -40,7 +40,8 @@ class UBSocketIO : public AllStatic {
   static ssize_t recv(int fd, void* buf, size_t len, int flags);
 
   static ssize_t send_all(int fd, const void* buf, size_t len,
-                          uint64_t ddl_ns, int flags, size_t* bytes_sent = NULL);
+                          uint64_t ddl_ns, int flags, size_t* bytes_sent = NULL,
+                          int syscall_profile_event = -1);
   static bool recv_all(int fd, void* buf, size_t len,
                        uint64_t ddl_ns, int flags);
 };

@@ -34,6 +34,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <time.h>
 #if defined(__linux__)
 #include <linux/fs.h>
 #include <sys/ioctl.h>
@@ -74,10 +75,53 @@ static int preCloseFD = -1;     /* File descriptor to which we dup other fd's
 
 // UB Matrix support: batch buffer length for parsing multiple frames
 static const jint UB_SOCKET_PARSE_BATCH_BUF_LEN = 4096;
+static jboolean ub_profile_enabled = JNI_FALSE;
+// Notice: same as UBSocketProfileEvent in ubSocketProfile.hpp
+enum {
+    UB_PROF_NIO_WRITE_TOTAL = 0,
+    UB_PROF_NIO_READ_TOTAL = 8,
+    UB_PROF_UB_FIRST_HIT = 9,
+    UB_PROF_UB_FIRST_MISS = 10,
+    UB_PROF_DESCRIPTOR_RECV_TOTAL = 11,
+    UB_PROF_DESCRIPTOR_RECV_SYSCALL = 12
+};
+
+static jlong
+ub_nio_profile_nanos(void)
+{
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) { return 0; }
+    return (jlong)ts.tv_sec * 1000000000LL + (jlong)ts.tv_nsec;
+}
+
+#define UB_NIO_PROFILE_START(var)                                          \
+    do {                                                                   \
+        (var) = ub_profile_enabled ? ub_nio_profile_nanos() : 0;           \
+    } while (0)
+
+#define UB_NIO_PROFILE_END(env, event, start_ns, bytes)                     \
+    do {                                                                    \
+        if ((start_ns) != 0) {                                              \
+            jlong elapsed_ns = ub_nio_profile_nanos() - (start_ns);         \
+            (*env)->UbSocketProfileRecord(env, (event), elapsed_ns,         \
+                                          (bytes), 1);                      \
+        }                                                                   \
+    } while (0)
+
+#define UB_NIO_PROFILE_COUNT(env, event, bytes)                             \
+    do {                                                                    \
+        if (ub_profile_enabled) {                                           \
+            (*env)->UbSocketProfileRecord(env, (event), 0, (bytes), 1);     \
+        }                                                                   \
+    } while (0)
 
 JNIEXPORT void JNICALL
 Java_sun_nio_ch_FileDispatcherImpl_init(JNIEnv *env, jclass cl)
 {
+    // UB Matrix support: C wrapper profile events are detail-only.
+    ub_profile_enabled =
+        (*env)->UbSocketProfileMode(env) >= 2 ? JNI_TRUE : JNI_FALSE;
+
     int sp[2];
     if (socketpair(PF_UNIX, SOCK_STREAM, 0, sp) < 0) {
         JNU_ThrowIOExceptionWithLastError(env, "socketpair failed");
@@ -95,43 +139,60 @@ ub_socket_read_one(JNIEnv *env, jint fd, void *buf, jlong len,
     jlong nread;
     char ub_msg[UB_SOCKET_PARSE_BATCH_BUF_LEN];
     int bytes_read;
+    jlong result;
+    jlong descriptor_recv_start;
+    jlong descriptor_syscall_start;
 
     nread = (*env)->UbSocketRead(env, buf, fd, len);
-    if (nread > 0) { return nread; }
+    if (nread > 0) {
+        UB_NIO_PROFILE_COUNT(env, UB_PROF_UB_FIRST_HIT, nread);
+        return nread;
+    }
     if (nread < 0) {
         return convert_errors == JNI_TRUE
-            ? convertLongReturnVal(env, nread, JNI_TRUE)
-            : nread;
+            ? convertLongReturnVal(env, nread, JNI_TRUE) : nread;
     }
+    // need to receive and parse new descriptors
+    UB_NIO_PROFILE_COUNT(env, UB_PROF_UB_FIRST_MISS, 0);
+
     if ((*env)->IsUbSocketReady(env, fd) == JNI_FALSE) {
         bytes_read = read(fd, buf, len);
-        return convert_errors == JNI_TRUE
-            ? convertLongReturnVal(env, bytes_read, JNI_TRUE)
-            : bytes_read;
+        result = convert_errors == JNI_TRUE
+            ? convertLongReturnVal(env, bytes_read, JNI_TRUE) : bytes_read;
+        return result;
     }
 
+    UB_NIO_PROFILE_START(descriptor_recv_start);
+    UB_NIO_PROFILE_START(descriptor_syscall_start);
     bytes_read = read(fd, ub_msg, UB_SOCKET_PARSE_BATCH_BUF_LEN);
+    UB_NIO_PROFILE_END(env, UB_PROF_DESCRIPTOR_RECV_SYSCALL,
+                       descriptor_syscall_start, bytes_read > 0 ? bytes_read : 0);
     if (bytes_read <= 0) {
-        return convert_errors == JNI_TRUE
-            ? convertLongReturnVal(env, bytes_read, JNI_TRUE)
-            : bytes_read;
+        result = convert_errors == JNI_TRUE
+            ? convertLongReturnVal(env, bytes_read, JNI_TRUE) : bytes_read;
+        UB_NIO_PROFILE_END(env, UB_PROF_DESCRIPTOR_RECV_TOTAL,
+                           descriptor_recv_start, 0);
+        return result;
     }
     if ((*env)->UbSocketParse(env, fd, ub_msg, bytes_read) < 0) {
-        return convert_errors == JNI_TRUE
-            ? convertLongReturnVal(env, -1, JNI_TRUE)
-            : -1;
+        result = convert_errors == JNI_TRUE
+            ? convertLongReturnVal(env, -1, JNI_TRUE) : -1;
+        UB_NIO_PROFILE_END(env, UB_PROF_DESCRIPTOR_RECV_TOTAL,
+                           descriptor_recv_start, bytes_read);
+        return result;
     }
+    UB_NIO_PROFILE_END(env, UB_PROF_DESCRIPTOR_RECV_TOTAL,
+                       descriptor_recv_start, bytes_read);
     nread = (*env)->UbSocketRead(env, buf, fd, len);
     if (nread < 0) {
         return convert_errors == JNI_TRUE
-            ? convertLongReturnVal(env, nread, JNI_TRUE)
-            : nread;
+            ? convertLongReturnVal(env, nread, JNI_TRUE) : nread;
     }
     if (nread == 0 && (*env)->IsUbSocketReady(env, fd) == JNI_FALSE) {
         bytes_read = read(fd, buf, len);
-        return convert_errors == JNI_TRUE
-            ? convertLongReturnVal(env, bytes_read, JNI_TRUE)
-            : bytes_read;
+        result = convert_errors == JNI_TRUE
+            ? convertLongReturnVal(env, bytes_read, JNI_TRUE) : bytes_read;
+        return result;
     }
     return nread;
 }
@@ -142,12 +203,24 @@ Java_sun_nio_ch_FileDispatcherImpl_read0(JNIEnv *env, jclass clazz,
 {
     jint fd = fdval(env, fdo);
     void *buf = (void *)jlong_to_ptr(address);
-    jboolean ub_ready = (*env)->IsUbSocketReady(env, fd);
+    jint result;
+    jlong total_start;
+    jboolean ub_ready;
+
+    UB_NIO_PROFILE_START(total_start);
+    ub_ready = (*env)->IsUbSocketReady(env, fd);
     if (ub_ready == JNI_TRUE) {
-        return (jint)ub_socket_read_one(env, fd, buf, len, JNI_TRUE);
+        result = (jint)ub_socket_read_one(env, fd, buf, len, JNI_TRUE);
+        UB_NIO_PROFILE_END(env, UB_PROF_NIO_READ_TOTAL, total_start,
+                           result > 0 ? result : 0);
+        return result;
     }
 
-    return convertReturnVal(env, read(fd, buf, len), JNI_TRUE);
+    result = read(fd, buf, len);
+    result = convertReturnVal(env, result, JNI_TRUE);
+    UB_NIO_PROFILE_END(env, UB_PROF_NIO_READ_TOTAL, total_start,
+                       result > 0 ? result : 0);
+    return result;
 }
 
 JNIEXPORT jint JNICALL
@@ -192,14 +265,21 @@ Java_sun_nio_ch_FileDispatcherImpl_write0(JNIEnv *env, jclass clazz,
     jint fd = fdval(env, fdo);
     void *buf = (void *)jlong_to_ptr(address);
     jint nwrite = 0;
-    jboolean ub_ready_write = (*env)->IsUbSocketReady(env, fd);
+    jlong total_start;
+    jboolean ub_ready_write;
+
+    UB_NIO_PROFILE_START(total_start);
+    ub_ready_write = (*env)->IsUbSocketReady(env, fd);
     if (ub_ready_write == JNI_TRUE) {
         nwrite = (*env)->UbSocketWrite(env, buf, fd, len);
     } else {
         nwrite = write(fd, buf, len);
     }
 
-    return convertReturnVal(env, nwrite, JNI_FALSE);
+    nwrite = convertReturnVal(env, nwrite, JNI_FALSE);
+    UB_NIO_PROFILE_END(env, UB_PROF_NIO_WRITE_TOTAL, total_start,
+                       nwrite > 0 ? nwrite : 0);
+    return nwrite;
 }
 
 JNIEXPORT jint JNICALL

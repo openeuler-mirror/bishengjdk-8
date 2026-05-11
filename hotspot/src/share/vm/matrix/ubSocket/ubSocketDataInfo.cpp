@@ -23,7 +23,9 @@
 
 #include "matrix/matrixLog.hpp"
 #include "matrix/ubSocket/ubSocket.hpp"
+#include "matrix/ubSocket/ubSocketFrame.hpp"
 #include "matrix/ubSocket/ubSocketMemMapping.hpp"
+#include "matrix/ubSocket/ubSocketProfile.hpp"
 #include "memory/resourceArea.hpp"
 #include "runtime/mutexLocker.hpp"
 
@@ -93,6 +95,7 @@ void UBSocketInfoList::append(size_t offset, size_t size) {
 }
 
 bool UBSocketInfoList::append_range(const char* name, uint64_t off, uint64_t len) {
+  UBSocketProfileScope total_profile(UB_PROF_APPEND_UNREAD_TOTAL, len);
   uint64_t mapping_size = _mem_mapping->size();
   ResourceMark rm;
   const char* expected_name = _mem_mapping->name()->as_C_string();
@@ -121,6 +124,19 @@ bool UBSocketInfoList::append_range(const char* name, uint64_t off, uint64_t len
   return true;
 }
 
+bool UBSocketInfoList::append_ranges(const UBSocketDataFrame* frames,
+                                     int count,
+                                     long* total_len) {
+  *total_len = 0;
+  for (int i = 0; i < count; i++) {
+    if (!append_range(frames[i].mem_name, frames[i].offset, frames[i].length)) {
+      return false;
+    }
+    *total_len += (long)frames[i].length;
+  }
+  return true;
+}
+
 long UBSocketInfoList::read_data(void* dst, size_t len) {
   if (len == 0) return 0;
 
@@ -131,7 +147,10 @@ long UBSocketInfoList::read_data(void* dst, size_t len) {
     size_t ncopy = MIN2(len - total, cursor_remain);
     uintptr_t read_addr = (uintptr_t)_mem_mapping->addr() + _cursor->offset + _cur_loc;
 
-    memcpy(out + total, (void*)read_addr, ncopy);
+    {
+      UBSocketProfileScope memcpy_profile(UB_PROF_UB_READ_MEMCPY, ncopy);
+      memcpy(out + total, (void*)read_addr, ncopy);
+    }
     total += ncopy;
 
     size_t next_loc = _cur_loc + ncopy;
@@ -256,6 +275,20 @@ long SocketDataInfoTable::append_range(int fd, const char* name, uint64_t off, u
   long result = info->append_range(name, off, len) ? (long)len : -1;
   unpin_list(info);
   return result;
+}
+
+long SocketDataInfoTable::append_ranges(int fd, const UBSocketDataFrame* frames, int count) {
+  if (count <= 0) { return 0; }
+  UBSocketInfoList* info = NULL;
+  {
+    MonitorLockerEx locker(_info_table_lock, Mutex::_no_safepoint_check_flag);
+    info = pin_list_locked(fd);
+    if (info == NULL) { return -1; }
+  }
+  long total_len = 0;
+  bool ok = info->append_ranges(frames, count, &total_len);
+  unpin_list(info);
+  return ok ? total_len : -1;
 }
 
 long SocketDataInfoTable::read_data(int fd, void* dst, size_t len) {

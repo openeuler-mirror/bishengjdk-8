@@ -227,14 +227,12 @@ bool UnreadMsgTable::add_msg(int fd, uintptr_t meta_addr, uint32_t start_blk, ui
   return true;
 }
 
-void UnreadMsgTable::add_pinned_msgs(UnreadMsgList* list,
-                                     const GrowableArray<UBSocketBlkItem>* blk_items,
-                                     int count) {
+void UnreadMsgTable::add_pinned_msg(UnreadMsgList* list,
+                                    uintptr_t meta_addr,
+                                    uint32_t start_blk,
+                                    uint32_t blk_count) {
   MutexLocker list_locker(list->lock());
-  for (int i = 0; i < count; i++) {
-    UBSocketBlkItem item = blk_items->at(i);
-    list->append(item.meta_addr, item.start_blk, item.blk_count);
-  }
+  list->append(meta_addr, start_blk, blk_count);
 }
 
 bool UnreadMsgTable::has_pending_msg(int fd) {

@@ -23,6 +23,7 @@
 
 #include "matrix/matrixLog.hpp"
 #include "matrix/ubSocket/ubSocket.hpp"
+#include "matrix/ubSocket/ubSocketProfile.hpp"
 
 bool MatrixGlobal::_initialized = false;
 
@@ -69,7 +70,10 @@ bool MatrixGlobal::check_stack(UBFeature feature) {
 }
 
 void MatrixGlobal::before_exit() {
-  if (!_initialized) return;
+  // now for performance analysis
+  UBSocketProfiler::print_summary();
+  
+  if (!_initialized) { return; }
   if (UseUBSocket) {
     UBSocketManager::before_exit();
   }
