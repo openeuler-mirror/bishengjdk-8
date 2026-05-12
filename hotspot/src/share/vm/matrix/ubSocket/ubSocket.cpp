@@ -68,6 +68,8 @@ void UBSocketManager::init() {
     tty->print_cr("UBSocket load allow-list failed or empty: %s\n", UBSocketConf);
     return;
   }
+  UBSocketEndpointMap::init();
+  UBSocketEndpointMap::load_from_file(UBSocketConf);
 
   if (UBSocketPort <= 0 || UBSocketPort > 65535) {
     tty->print_cr("UBSocket port(" UINTX_FORMAT ") invalid, UBSocket is disabled.",
@@ -195,6 +197,7 @@ void UBSocketManager::before_exit() {
   UnreadMsgTable::stop_timer();
   UnreadMsgTable::cleanup();
   UBSocketAttachAgent::shutdown();
+  UBSocketEndpointMap::cleanup();
   int abnormal_fds = SocketDataInfoTable::unregister_abnormal_fds();
   if (abnormal_fds > 0) {
     UB_LOG(UB_SOCKET, UB_LOG_WARNING, "shutdown cleaned %d abnormal fds\n", abnormal_fds);
@@ -276,8 +279,7 @@ long UBSocketManager::write_data(void *buf, int socket_fd, size_t len) {
     return 0;
   }
 
-  bool fallback_draining = SocketDataInfoTable::is_fallback_draining(socket_fd);
-  if (fallback_draining) {
+  if (SocketDataInfoTable::is_fallback_draining(socket_fd)) {
     ssize_t sent_res = ensure_fallback_sent(socket_fd, "write_fallback");
     if (sent_res <= 0) { return sent_res; }
     long tcp_write;
@@ -351,7 +353,7 @@ long UBSocketManager::write_data(void *buf, int socket_fd, size_t len) {
     memcpy(socket_addr, buf, (size_t)write_size);
   }
 
-  UBSocketDataFrame frame = ub_socket_data_frame(UB_SOCKET_DATA_DESCRIPTOR, shared_memory_name,
+  UBSocketDataFrame frame = ub_socket_data_frame(UB_SOCKET_DATA_DESCRIPTOR,
                                                  ub_offset, write_size);
   size_t expected_bytes = UB_SOCKET_DATA_FRAME_SIZE;
   size_t bytes_sent = 0;
@@ -445,14 +447,14 @@ int64_t UBSocketManager::transfer_from_file(int src_fd, int socket_fd,
 }
 
 ssize_t UBSocketManager::send_heartbeat(int socket_fd) {
-  UBSocketDataFrame frame = ub_socket_data_frame(UB_SOCKET_DATA_HEARTBEAT, "", 0, 0);
+  UBSocketDataFrame frame = ub_socket_data_frame(UB_SOCKET_DATA_HEARTBEAT, 0, 0);
   UB_LOG(UB_SOCKET, UB_LOG_INFO, "fd=%d send HEARTBEAT frame\n", socket_fd);
   return ub_socket_data_send(socket_fd, frame);
 }
 
 ssize_t UBSocketManager::ensure_fallback_sent(int socket_fd, const char* reason) {
   if (!SocketDataInfoTable::begin_fallback_mark_send(socket_fd)) { return 1; }
-  UBSocketDataFrame frame = ub_socket_data_frame(UB_SOCKET_DATA_FALLBACK, "", 0, 0);
+  UBSocketDataFrame frame = ub_socket_data_frame(UB_SOCKET_DATA_FALLBACK, 0, 0);
   ssize_t nsend = ub_socket_data_send(socket_fd, frame);
   if (nsend != UB_SOCKET_DATA_FRAME_WIRE_SIZE) {
     SocketDataInfoTable::abort_fallback_mark_send(socket_fd);

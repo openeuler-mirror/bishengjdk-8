@@ -86,20 +86,16 @@ class UBSocketFallbackState {
 class UBSocketInfoList : public CHeapObj<mtInternal> {
  public:
   explicit UBSocketInfoList(int fd, UBSocketMemMapping* mapping)
-      : _head(NULL), _tail(NULL), _cursor(NULL),
+      : _head(NULL), _tail(NULL), _cursor(NULL), _free_nodes(NULL),
         _cur_loc(0), _socket_fd(fd),
         _mem_mapping(mapping),
         _closing(false), _active_count(0),
         _frame_residue_len(0) {}
   ~UBSocketInfoList() {
-    while (_head) {
-      SocketListNode* next = _head->next;
-      delete _head;
-      _head = next;
-    }
+    delete_nodes(_head, NULL);
+    delete_nodes(_free_nodes, NULL);
   }
 
-  bool append_range(const char* name, uint64_t off, uint64_t len); // cache <off,len>
   bool append_ranges(const UBSocketDataFrame* frames, int count, long* total_len);
   long read_data(void* dst, size_t len);  // read len data of this fd to dst
   bool take_frame_residue(char* dst, size_t dst_len, size_t* len);
@@ -137,6 +133,7 @@ class UBSocketInfoList : public CHeapObj<mtInternal> {
   SocketListNode* _head;
   SocketListNode* _tail;
   SocketListNode* _cursor;  // current node
+  SocketListNode* _free_nodes;
   size_t _cur_loc;          // current node location
 
   int _socket_fd;     // one instance pre socket
@@ -157,8 +154,10 @@ class UBSocketInfoList : public CHeapObj<mtInternal> {
   bool has_ub_pending_data() const {
     return _cursor != NULL && (_cur_loc < _cursor->size || _cursor->next != NULL);
   }
+  SocketListNode* alloc_node(size_t offset, size_t size);
   void append(size_t offset, size_t size);
   bool finish_current_range();
+  int recycle_nodes(SocketListNode* start, SocketListNode* end);
   int delete_nodes(SocketListNode* start, SocketListNode* end);
 };
 
@@ -170,7 +169,6 @@ class SocketDataInfoTable : public AllStatic {
   static void init();
   static bool publish(int fd, UBSocketInfoList* info);
   static bool contains(int fd);
-  static long append_range(int fd, const char* name, uint64_t off, uint64_t len);
   static long append_ranges(int fd, const UBSocketDataFrame* frames, int count);
   static long read_data(int fd, void* dst, size_t len);
   static bool is_fallback_draining(int fd);

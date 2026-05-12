@@ -102,6 +102,7 @@ public class OptionsTest {
 
         String invalidConfig = SocketTestConfig.writeConfig(
             "UBSocketInvalid.conf",
+            "#stack\n" +
             "sun/nio/ch/SocketChannelImpl.connect\n" +
             "sun/nio/ch/SocketChannelImpl.invalid-method!\n"
         );
@@ -120,6 +121,37 @@ public class OptionsTest {
         mustContain(invalidConfOutput, "Load allow method: sun/nio/ch/SocketChannelImpl.connect");
         mustContain(invalidConfOutput, "Ignore invalid allow-list entry");
         mustContain(invalidConfOutput, "sun/nio/ch/SocketChannelImpl.invalid-method!");
+        output.shouldHaveExitValue(0);
+
+        String mappedConfig = SocketTestConfig.writeConfig(
+            "UBSocketMapped.conf",
+            "#stack\n" +
+            "sun/nio/ch/SocketChannelImpl.connect\n" +
+            "sun/nio/ch/SocketChannelImpl.checkConnect\n" +
+            "sun/nio/ch/ServerSocketChannelImpl.accept\n" +
+            "#address\n" +
+            "self.ip=192.168.231.44 -> *\n" +
+            "self.port=23081 -> 20880\n" +
+            "self.port=24081 -> 33081\n" +
+            "remote.mapping=192.168.231.44:23091 -> 192.168.231.44:24091\n"
+        );
+        Path mappedConfLog = Files.createTempFile("ubsocket-options-mapped-", ".log");
+        pb = ProcessTools.createJavaProcessBuilder(
+            true,
+            "-XX:+UnlockExperimentalVMOptions",
+            "-XX:+UseUBSocket",
+            "-XX:UBSocketConf=" + mappedConfig,
+            "-XX:UBLog=path=" + mappedConfLog + ",socket=debug",
+            appClass[0]
+        );
+        output = new OutputAnalyzer(pb.start());
+        String mappedConfOutput = output.getOutput() + readText(mappedConfLog);
+        mustContain(mappedConfOutput, "Load allow method: sun/nio/ch/SocketChannelImpl.connect");
+        mustContain(mappedConfOutput, "Load self ip map");
+        mustContain(mappedConfOutput, "Load self port map public_port=23081 local_port=20880");
+        mustContain(mappedConfOutput, "Load self port map public_port=24081 local_port=33081");
+        mustContain(mappedConfOutput, "Load remote endpoint map data_port=23091 control_port=24091");
+        mustNotContain(mappedConfOutput, "Ignore invalid allow-list entry");
         output.shouldHaveExitValue(0);
 
         // UBSocket Port

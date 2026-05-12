@@ -351,6 +351,14 @@ public final class SocketTestSupport {
         }
     }
 
+    public static void assertDescriptorFrameBytes(String text, int expectedBytes,
+                                                  String message) {
+        String token = "descriptor_sent=" + expectedBytes;
+        if (!text.contains(token)) {
+            throw new RuntimeException(message + ": missing " + token + "\n" + text);
+        }
+    }
+
     public static void assertNoPayloadPrefixLog(String text, String message) {
         String token = "payload_prefix=";
         if (text.contains(token)) {

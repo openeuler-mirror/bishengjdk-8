@@ -39,6 +39,13 @@ enum UBSocketProfileMode {
 //				append_unread_total: append parsed descriptor ranges to the per-fd unread list.
 //					metadata_mark_recv: receiver marks remote metadata after descriptor parse.
 //		UB_READ_MEMCPY: copy payload from remote UB shared memory to Java read buffer.
+//			ub_read_memcpy_lt_1us: count/bytes for read memcpy calls below 1 us.
+//			ub_read_memcpy_1_2us: count/bytes for read memcpy calls in [1 us, 2 us).
+//			ub_read_memcpy_2_5us: count/bytes for read memcpy calls in [2 us, 5 us).
+//			ub_read_memcpy_5_10us: count/bytes for read memcpy calls in [5 us, 10 us).
+//			ub_read_memcpy_10_20us: count/bytes for read memcpy calls in [10 us, 20 us).
+//			ub_read_memcpy_20_30us: count/bytes for read memcpy calls in [20 us, 30 us).
+//			ub_read_memcpy_ge_30us: count/bytes for read memcpy calls at least 30 us.
 //			metadata_mark_read: receiver marks remote metadata after payload drain.
 //	UB_ATTACH_SUCCESS: count fds that successfully attach to the UB data path.
 //	UB_ATTACH_FALLBACK: count fds whose attach/register path falls back to TCP.
@@ -62,6 +69,13 @@ enum UBSocketProfileEvent {
   UB_PROF_APPEND_UNREAD_TOTAL,
   UB_PROF_METADATA_MARK_RECV,
   UB_PROF_UB_READ_MEMCPY,
+  UB_PROF_UB_READ_MEMCPY_LT_1US,
+  UB_PROF_UB_READ_MEMCPY_1_2US,
+  UB_PROF_UB_READ_MEMCPY_2_5US,
+  UB_PROF_UB_READ_MEMCPY_5_10US,
+  UB_PROF_UB_READ_MEMCPY_10_20US,
+  UB_PROF_UB_READ_MEMCPY_20_30US,
+  UB_PROF_UB_READ_MEMCPY_GE_30US,
   UB_PROF_METADATA_MARK_READ,
 
   UB_PROF_UB_ATTACH_SUCCESS,
@@ -74,8 +88,8 @@ class UBSocketProfiler : public AllStatic {
  public:
   static bool enabled(UBSocketProfileEvent event);
   static uint64_t start(UBSocketProfileEvent event);
-  static void end(UBSocketProfileEvent event, uint64_t start_ns,
-                  uint64_t bytes = 0);
+  static uint64_t end(UBSocketProfileEvent event, uint64_t start_ns,
+                      uint64_t bytes = 0);
   static void count(UBSocketProfileEvent event, uint64_t bytes = 0);
   static void record(UBSocketProfileEvent event, uint64_t elapsed_ns,
                      uint64_t bytes, uint64_t count);

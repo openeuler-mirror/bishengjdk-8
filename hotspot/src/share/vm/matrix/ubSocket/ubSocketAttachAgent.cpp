@@ -108,8 +108,7 @@ bool UBSocketAttachAgent::handle_control_connection(int control_fd, bool* keep_o
     return false;
   }
 
-  UBSocketAttachSession* session =
-      UBSocketSessionCaches::find(&request.local_endpoint, &request.remote_endpoint);
+  UBSocketAttachSession* session = UBSocketSessionCaches::find(&request);
   if (session != NULL) {
     bool result = session->drive_server_handshake(control_fd, &request, ddl_ns);
     UBSocketSessionCaches::release(session);
@@ -146,9 +145,7 @@ void UBSocketAttachAgent::listener_entry(JavaThread* thread, TRAPS) {
       }
 
       bool expired = (uint64_t)os::javaTimeNanos() >= cached_ddl_ns;
-      UBSocketAttachSession* session =
-          UBSocketSessionCaches::find(&cached_request.local_endpoint,
-                                      &cached_request.remote_endpoint);
+      UBSocketAttachSession* session = UBSocketSessionCaches::find(&cached_request);
       if (!expired && session == NULL) {
         UBSocketEarlyReqQueue::cache(cached_fd, &cached_request, cached_ddl_ns);
         continue;

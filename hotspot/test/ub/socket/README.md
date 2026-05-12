@@ -46,7 +46,10 @@ for full byte-by-byte comparison (strictest possible verification).
 
 ## Data-Path Memory Reuse
 
-UBSocket data frames point to sender-side shared-memory ranges.
+UBSocket data frames carry only sender-side shared-memory ranges; the remote
+memory name is established during attach and is not repeated in each data frame.
+The data-frame wire layout is 18 bytes: `offset` + `length` + `kind`. Protocol
+version is negotiated by the attach frame and is not repeated on the data path.
 `UBSocketBlkBitmap` prevents `get_free_memory()` from reusing blocks that have
 not been consumed yet. `UnreadMsgTable` runs a background reclaim loop for all
 UBSocket configurations: it always detects consumed ranges and releases bitmap

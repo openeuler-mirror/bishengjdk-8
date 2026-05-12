@@ -26,13 +26,32 @@
 #include "matrix/ubSocket/ubSocketFrame.hpp"
 #include "matrix/ubSocket/ubSocketMemMapping.hpp"
 #include "matrix/ubSocket/ubSocketProfile.hpp"
-#include "memory/resourceArea.hpp"
 #include "runtime/mutexLocker.hpp"
+#include "runtime/os.hpp"
 
 #include "matrix/ubSocket/ubSocketDataInfo.hpp"
 
 Monitor* SocketDataInfoTable::_info_table_lock = NULL;
 PtrTable<int, UBSocketInfoList*, mtInternal> SocketDataInfoTable::_table(NULL);
+
+static void ub_socket_profile_read_memcpy_bucket(uint64_t elapsed_ns,
+                                                 size_t bytes) {
+  if (elapsed_ns < 1000) {
+    UBSocketProfiler::count(UB_PROF_UB_READ_MEMCPY_LT_1US, bytes);
+  } else if (elapsed_ns < 2000) {
+    UBSocketProfiler::count(UB_PROF_UB_READ_MEMCPY_1_2US, bytes);
+  } else if (elapsed_ns < 5000) {
+    UBSocketProfiler::count(UB_PROF_UB_READ_MEMCPY_2_5US, bytes);
+  } else if (elapsed_ns < 10000) {
+    UBSocketProfiler::count(UB_PROF_UB_READ_MEMCPY_5_10US, bytes);
+  } else if (elapsed_ns < 20000) {
+    UBSocketProfiler::count(UB_PROF_UB_READ_MEMCPY_10_20US, bytes);
+  } else if (elapsed_ns < 30000) {
+    UBSocketProfiler::count(UB_PROF_UB_READ_MEMCPY_20_30US, bytes);
+  } else {
+    UBSocketProfiler::count(UB_PROF_UB_READ_MEMCPY_GE_30US, bytes);
+  }
+}
 
 /************************UBSocketFallbackState**********************/
 
@@ -84,8 +103,21 @@ bool UBSocketInfoList::unpin() {
   return _closing && _active_count == 0;
 }
 
+UBSocketInfoList::SocketListNode* UBSocketInfoList::alloc_node(size_t offset,
+                                                               size_t size) {
+  SocketListNode* node = _free_nodes;
+  if (node != NULL) {
+    _free_nodes = node->next;
+    node->offset = offset;
+    node->size = size;
+    node->next = NULL;
+    return node;
+  }
+  return new SocketListNode(offset, size, NULL);
+}
+
 void UBSocketInfoList::append(size_t offset, size_t size) {
-  SocketListNode* newNode = new SocketListNode(offset, size, NULL);
+  SocketListNode* newNode = alloc_node(offset, size);
   if (_head == NULL) {
     _head = _tail = _cursor = newNode;
   } else {
@@ -94,45 +126,44 @@ void UBSocketInfoList::append(size_t offset, size_t size) {
   }
 }
 
-bool UBSocketInfoList::append_range(const char* name, uint64_t off, uint64_t len) {
-  UBSocketProfileScope total_profile(UB_PROF_APPEND_UNREAD_TOTAL, len);
-  uint64_t mapping_size = _mem_mapping->size();
-  ResourceMark rm;
-  const char* expected_name = _mem_mapping->name()->as_C_string();
-  if (strncmp(name, expected_name, UB_SOCKET_MEM_NAME_BUF_LEN) != 0) {
-    errno = EBADMSG;
-    UB_LOG(UB_SOCKET, UB_LOG_ERROR, "fd=%d data frame mem mismatch expected=%s actual=%s\n",
-           _socket_fd, expected_name, name);
-    return false;
-  }
-  if (off < sizeof(UBSocketBlkMeta) || off > mapping_size ||
-      len == 0 || len > mapping_size - off || len > (uint64_t)LONG_MAX) {
-    errno = ERANGE;
-    UB_LOG(UB_SOCKET, UB_LOG_ERROR,
-           "fd=%d data frame range invalid off=" UINT64_FORMAT
-           " len=" UINT64_FORMAT " size=" UINT64_FORMAT "\n",
-           _socket_fd, off, len, mapping_size);
-    return false;
-  }
-  size_t range_off = (size_t)off;
-  size_t range_len = (size_t)len;
-  if (!UBSocketManager::mark_recv((uintptr_t)_mem_mapping->addr() + range_off)) {
-    errno = EBADMSG;
-    return false;
-  }
-  append(range_off, range_len);
-  return true;
-}
-
 bool UBSocketInfoList::append_ranges(const UBSocketDataFrame* frames,
                                      int count,
                                      long* total_len) {
   *total_len = 0;
+  if (count <= 0) {
+    return true;
+  }
+  uint64_t start_ns = UBSocketProfiler::start(UB_PROF_APPEND_UNREAD_TOTAL);
+  uint64_t mapping_size = _mem_mapping->size();
+  uintptr_t mapping_addr = (uintptr_t)_mem_mapping->addr();
+  int appended = 0;
   for (int i = 0; i < count; i++) {
-    if (!append_range(frames[i].mem_name, frames[i].offset, frames[i].length)) {
+    uint64_t off = frames[i].offset;
+    uint64_t len = frames[i].length;
+    if (off < sizeof(UBSocketBlkMeta) || off > mapping_size ||
+        len == 0 || len > mapping_size - off || len > (uint64_t)LONG_MAX) {
+      errno = ERANGE;
+      UB_LOG(UB_SOCKET, UB_LOG_ERROR,
+             "fd=%d data frame range invalid off=" UINT64_FORMAT
+             " len=" UINT64_FORMAT " size=" UINT64_FORMAT "\n",
+             _socket_fd, off, len, mapping_size);
       return false;
     }
-    *total_len += (long)frames[i].length;
+    size_t range_off = (size_t)off;
+    size_t range_len = (size_t)len;
+    if (!UBSocketManager::mark_recv(mapping_addr + range_off)) {
+      errno = EBADMSG;
+      return false;
+    }
+    append(range_off, range_len);
+    *total_len += (long)range_len;
+    appended++;
+  }
+  if (appended > 0) {
+    uint64_t elapsed_ns = start_ns == 0 ? 0 :
+        (uint64_t)os::javaTimeNanos() - start_ns;
+    UBSocketProfiler::record(UB_PROF_APPEND_UNREAD_TOTAL, elapsed_ns,
+                             (uint64_t)*total_len, (uint64_t)appended);
   }
   return true;
 }
@@ -147,10 +178,11 @@ long UBSocketInfoList::read_data(void* dst, size_t len) {
     size_t ncopy = MIN2(len - total, cursor_remain);
     uintptr_t read_addr = (uintptr_t)_mem_mapping->addr() + _cursor->offset + _cur_loc;
 
-    {
-      UBSocketProfileScope memcpy_profile(UB_PROF_UB_READ_MEMCPY, ncopy);
-      memcpy(out + total, (void*)read_addr, ncopy);
-    }
+    uint64_t memcpy_start = UBSocketProfiler::start(UB_PROF_UB_READ_MEMCPY);
+    memcpy(out + total, (void*)read_addr, ncopy);
+    uint64_t memcpy_ns = UBSocketProfiler::end(UB_PROF_UB_READ_MEMCPY,
+                                               memcpy_start, ncopy);
+    ub_socket_profile_read_memcpy_bucket(memcpy_ns, ncopy);
     total += ncopy;
 
     size_t next_loc = _cur_loc + ncopy;
@@ -204,14 +236,26 @@ bool UBSocketInfoList::finish_current_range() {
   SocketListNode* next = _cursor->next;
   if (next != NULL) {
     _cursor = next;
-    delete_nodes(_head, _cursor);
+    recycle_nodes(_head, _cursor);
     _head = _cursor;
   } else {
-    delete_nodes(_head, NULL);
+    recycle_nodes(_head, NULL);
     _head = _tail = _cursor = NULL;
   }
   _cur_loc = 0;
   return true;
+}
+
+int UBSocketInfoList::recycle_nodes(SocketListNode* start, SocketListNode* end) {
+  int recycle_count = 0;
+  while (start != end && start != NULL) {
+    SocketListNode* next = start->next;
+    start->next = _free_nodes;
+    _free_nodes = start;
+    start = next;
+    recycle_count++;
+  }
+  return recycle_count;
 }
 
 int UBSocketInfoList::delete_nodes(SocketListNode* start, SocketListNode* end) {
@@ -263,18 +307,6 @@ void SocketDataInfoTable::unpin_list(UBSocketInfoList* info) {
 UBSocketInfoList* SocketDataInfoTable::pin_list(int fd) {
   MonitorLockerEx locker(_info_table_lock, Mutex::_no_safepoint_check_flag);
   return pin_list_locked(fd);
-}
-
-long SocketDataInfoTable::append_range(int fd, const char* name, uint64_t off, uint64_t len) {
-  UBSocketInfoList* info = NULL;
-  {
-    MonitorLockerEx locker(_info_table_lock, Mutex::_no_safepoint_check_flag);
-    info = pin_list_locked(fd);
-    if (info == NULL) { return -1; }
-  }
-  long result = info->append_range(name, off, len) ? (long)len : -1;
-  unpin_list(info);
-  return result;
 }
 
 long SocketDataInfoTable::append_ranges(int fd, const UBSocketDataFrame* frames, int count) {

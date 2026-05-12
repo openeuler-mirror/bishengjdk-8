@@ -32,7 +32,7 @@
 #include "matrix/ubSocket/ubSocketUtils.hpp"
 #include "runtime/os.hpp"
 
-static const char UB_SOCKET_MEM_PREFIX[] = "SOCK_";
+static const char UB_SOCKET_MEM_PREFIX[] = "sock_";
 enum {
   UB_SOCKET_MEM_PREFIX_LEN   = sizeof(UB_SOCKET_MEM_PREFIX) - 1,
   UB_SOCKET_MEM_HOST_LEN     = 10,
@@ -111,10 +111,14 @@ class UBSocketManager : public AllStatic {
   static void mark_send(void* addr, int socket_fd) {
     UBSocketProfileScope profile(UB_PROF_METADATA_MARK_SEND,
                                  sizeof(UBSocketBlkMeta));
-    uint64_t send_nanos = 0;
-    if (metadata_timestamps_enabled()) {
-      send_nanos = (uint64_t)os::javaTimeNanos();
+    if (!metadata_timestamps_enabled()) {
+      UBSocketBlkMeta* meta = reinterpret_cast<UBSocketBlkMeta*>(addr);
+      meta->fd = (uint32_t)socket_fd;
+      volatile uint32_t* state = &meta->state;
+      *state = UB_SOCKET_BLK_SEND;
+      return;
     }
+    uint64_t send_nanos = (uint64_t)os::javaTimeNanos();
     UBSocketBlkMeta meta = { UB_SOCKET_BLK_SEND, (uint32_t)socket_fd, send_nanos, 0, 0 };
     memcpy(addr, &meta, sizeof(UBSocketBlkMeta));
   };
@@ -122,6 +126,19 @@ class UBSocketManager : public AllStatic {
     UBSocketProfileScope profile(UB_PROF_METADATA_MARK_RECV,
                                  sizeof(UBSocketBlkMeta));
     void* addr = reinterpret_cast<char*>(data_addr) - sizeof(UBSocketBlkMeta);
+    if (!metadata_timestamps_enabled()) {
+      volatile uint32_t* state = &reinterpret_cast<UBSocketBlkMeta*>(addr)->state;
+      uint32_t state_value = *state;
+      if (state_value != UB_SOCKET_BLK_SEND) {
+        uint32_t fd = reinterpret_cast<UBSocketBlkMeta*>(addr)->fd;
+        UB_LOG(UB_SOCKET, UB_LOG_ERROR,
+               "mark_recv skipped state=" UINT32_FORMAT " socket_fd=" UINT32_FORMAT "\n",
+               state_value, fd);
+        return false;
+      }
+      *state = UB_SOCKET_BLK_RECV;
+      return true;
+    }
     UBSocketBlkMeta meta;
     memcpy(&meta, addr, sizeof(UBSocketBlkMeta));
     if (meta.state != UB_SOCKET_BLK_SEND) {
@@ -141,6 +158,19 @@ class UBSocketManager : public AllStatic {
     UBSocketProfileScope profile(UB_PROF_METADATA_MARK_READ,
                                  sizeof(UBSocketBlkMeta));
     void* addr = reinterpret_cast<char*>(data_addr) - sizeof(UBSocketBlkMeta);
+    if (!metadata_timestamps_enabled()) {
+      volatile uint32_t* state = &reinterpret_cast<UBSocketBlkMeta*>(addr)->state;
+      uint32_t state_value = *state;
+      if (state_value != UB_SOCKET_BLK_RECV) {
+        uint32_t fd = reinterpret_cast<UBSocketBlkMeta*>(addr)->fd;
+        UB_LOG(UB_SOCKET, UB_LOG_ERROR,
+               "mark_read skipped state=" UINT32_FORMAT " socket_fd=" UINT32_FORMAT "\n",
+               state_value, fd);
+        return false;
+      }
+      *state = UB_SOCKET_BLK_READ;
+      return true;
+    }
     UBSocketBlkMeta meta;
     memcpy(&meta, addr, sizeof(UBSocketBlkMeta));
     if (meta.state != UB_SOCKET_BLK_RECV) {
