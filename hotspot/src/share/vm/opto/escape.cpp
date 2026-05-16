@@ -556,6 +556,8 @@ void ConnectionGraph::add_node_to_connection_graph(Node *n, Unique_Node_List *de
     case Op_StrComp:
     case Op_StrEquals:
     case Op_StrIndexOf:
+    case Op_EncodeUtf8FromUtf16:
+    case Op_DecodeUtf8ToUtf16:
     case Op_VectorizedHashCode:
     case Op_EncodeISOArray: {
       add_local_var(n, PointsToNode::ArgEscape);
@@ -740,6 +742,8 @@ void ConnectionGraph::add_final_edges(Node *n) {
     case Op_StrComp:
     case Op_StrEquals:
     case Op_StrIndexOf:
+    case Op_EncodeUtf8FromUtf16:
+    case Op_DecodeUtf8ToUtf16:
     case Op_VectorizedHashCode:
     case Op_EncodeISOArray: {
       // char[] arrays passed to string intrinsic do not escape but
@@ -2709,7 +2713,9 @@ Node* ConnectionGraph::find_inst_mem(Node *orig_mem, int alias_idx, GrowableArra
       if (mem->is_LoadStore()) {
         adr = mem->in(MemNode::Address);
       } else {
-        assert(mem->Opcode() == Op_EncodeISOArray, "sanity");
+        assert(mem->Opcode() == Op_EncodeISOArray ||
+               mem->Opcode() == Op_EncodeUtf8FromUtf16 ||
+               mem->Opcode() == Op_DecodeUtf8ToUtf16, "sanity");
         adr = mem->in(3); // Memory edge corresponds to destination array
       }
       const Type *at = igvn->type(adr);
@@ -3073,9 +3079,11 @@ void ConnectionGraph::split_unique_types(GrowableArray<Node *>  &alloc_worklist)
         if (m->is_MergeMem()) {
           assert(_mergemem_worklist.contains(m->as_MergeMem()), "EA: missing MergeMem node in the worklist");
         }
-      } else if (use->Opcode() == Op_EncodeISOArray) {
+      } else if (use->Opcode() == Op_EncodeISOArray ||
+                 use->Opcode() == Op_EncodeUtf8FromUtf16 ||
+                 use->Opcode() == Op_DecodeUtf8ToUtf16) {
         if (use->in(MemNode::Memory) == n || use->in(3) == n) {
-          // EncodeISOArray overwrites destination array
+          // Charset conversion intrinsics overwrite destination array
           memnode_worklist.append_if_missing(use);
         }
       } else {
@@ -3083,7 +3091,8 @@ void ConnectionGraph::split_unique_types(GrowableArray<Node *>  &alloc_worklist)
         if (!(op == Op_CmpP || op == Op_Conv2B ||
               op == Op_CastP2X || op == Op_StoreCM ||
               op == Op_FastLock || op == Op_AryEq || op == Op_StrComp ||
-              op == Op_StrEquals || op == Op_StrIndexOf || op == Op_VectorizedHashCode)) {
+              op == Op_StrEquals || op == Op_StrIndexOf || op == Op_VectorizedHashCode ||
+              op == Op_EncodeUtf8FromUtf16 || op == Op_DecodeUtf8ToUtf16)) {
           n->dump();
           use->dump();
           assert(false, "EA: missing allocation reference path");
@@ -3113,7 +3122,9 @@ void ConnectionGraph::split_unique_types(GrowableArray<Node *>  &alloc_worklist)
       n = n->as_MemBar()->proj_out(TypeFunc::Memory);
       if (n == NULL)
         continue;
-    } else if (n->Opcode() == Op_EncodeISOArray) {
+    } else if (n->Opcode() == Op_EncodeISOArray ||
+               n->Opcode() == Op_EncodeUtf8FromUtf16 ||
+               n->Opcode() == Op_DecodeUtf8ToUtf16) {
       // get the memory projection
       for (DUIterator_Fast imax, i = n->fast_outs(imax); i < imax; i++) {
         Node *use = n->fast_out(i);
@@ -3173,9 +3184,11 @@ void ConnectionGraph::split_unique_types(GrowableArray<Node *>  &alloc_worklist)
         assert(use->in(MemNode::Memory) != n, "EA: missing memory path");
       } else if (use->is_MergeMem()) {
         assert(_mergemem_worklist.contains(use->as_MergeMem()), "EA: missing MergeMem node in the worklist");
-      } else if (use->Opcode() == Op_EncodeISOArray) {
+      } else if (use->Opcode() == Op_EncodeISOArray ||
+                 use->Opcode() == Op_EncodeUtf8FromUtf16 ||
+                 use->Opcode() == Op_DecodeUtf8ToUtf16) {
         if (use->in(MemNode::Memory) == n || use->in(3) == n) {
-          // EncodeISOArray overwrites destination array
+          // Charset conversion intrinsics overwrite destination array
           memnode_worklist.append_if_missing(use);
         }
       } else {
@@ -3184,7 +3197,8 @@ void ConnectionGraph::split_unique_types(GrowableArray<Node *>  &alloc_worklist)
               (op == Op_CallLeaf && use->as_CallLeaf()->_name != NULL &&
                strcmp(use->as_CallLeaf()->_name, "g1_wb_pre") == 0) ||
               op == Op_AryEq || op == Op_StrComp ||
-              op == Op_StrEquals || op == Op_StrIndexOf || op == Op_VectorizedHashCode)) {
+              op == Op_StrEquals || op == Op_StrIndexOf || op == Op_VectorizedHashCode ||
+              op == Op_EncodeUtf8FromUtf16 || op == Op_DecodeUtf8ToUtf16)) {
           n->dump();
           use->dump();
           assert(false, "EA: missing memory path");

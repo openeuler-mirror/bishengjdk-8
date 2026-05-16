@@ -1226,6 +1226,21 @@ public:
                         Register len, Register result,
                         FloatRegister Vtmp1, FloatRegister Vtmp2,
                         FloatRegister Vtmp3, FloatRegister Vtmp4);
+  void encode_utf8_from_utf16(Register src, Register dst,
+                              Register len, Register res,
+                              FloatRegister vtmp0, FloatRegister vtmp1,
+                              FloatRegister vtmp2, FloatRegister vtmp3,
+                              FloatRegister vtmp4, FloatRegister vtmp5,
+                              FloatRegister vtmp6, FloatRegister vtmp7,
+                              FloatRegister vtmp8, FloatRegister vtmp9);
+  void decode_utf8_to_utf16(Register src, Register dst,
+                            Register len, Register res,
+                            FloatRegister vtmp0, FloatRegister vtmp1,
+                            FloatRegister vtmp2, FloatRegister vtmp3,
+                            FloatRegister vtmp4, FloatRegister vtmp5,
+                            FloatRegister vtmp6, FloatRegister vtmp7,
+                            FloatRegister vtmp8, FloatRegister vtmp9,
+                            FloatRegister vtmp10);
   void string_indexof(Register str1, Register str2,
                       Register cnt1, Register cnt2,
                       Register tmp1, Register tmp2,

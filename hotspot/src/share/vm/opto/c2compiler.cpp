@@ -215,6 +215,12 @@ bool C2Compiler::is_intrinsic_supported(methodHandle method, bool is_virtual) {
   case vmIntrinsics::_encodeISOArray:
     if (!Matcher::match_rule_supported(Op_EncodeISOArray)) return false;
     break;
+  case vmIntrinsics::_encodeUtf8FromUtf16:
+    if (!Matcher::match_rule_supported(Op_EncodeUtf8FromUtf16)) return false;
+    break;
+  case vmIntrinsics::_decodeUtf8ToUtf16:
+    if (!Matcher::match_rule_supported(Op_DecodeUtf8ToUtf16)) return false;
+    break;
   case vmIntrinsics::_bitCount_i:
     if (!Matcher::match_rule_supported(Op_PopCountI)) return false;
     break;

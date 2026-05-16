@@ -327,6 +327,8 @@ class LibraryCallKit : public GraphKit {
   Node* get_long_state_from_digest_object(Node *digestBase_object);
   Node* inline_digestBase_implCompressMB_predicate(int predicate);
   bool inline_encodeISOArray();
+  bool inline_encodeUtf8FromUtf16();
+  bool inline_decodeUtf8ToUtf16();
   bool inline_updateCRC32();
   bool inline_updateBytesCRC32();
   bool inline_updateByteBufferCRC32();
@@ -707,6 +709,10 @@ bool LibraryCallKit::try_to_inline(int predicate) {
 
   case vmIntrinsics::_encodeISOArray:
     return inline_encodeISOArray();
+  case vmIntrinsics::_encodeUtf8FromUtf16:
+    return inline_encodeUtf8FromUtf16();
+  case vmIntrinsics::_decodeUtf8ToUtf16:
+    return inline_decodeUtf8ToUtf16();
 
   case vmIntrinsics::_updateCRC32:
     return inline_updateCRC32();
@@ -5636,6 +5642,80 @@ bool LibraryCallKit::inline_encodeISOArray() {
   Node* res_mem = _gvn.transform(new (C) SCMemProjNode(enc));
   set_memory(res_mem, mtype);
   set_result(enc);
+  return true;
+}
+
+//-------------inline_encodeUtf8FromUtf16------------------------------
+// encode char[] to byte[] in UTF-8
+bool LibraryCallKit::inline_encodeUtf8FromUtf16() {
+  assert(callee()->signature()->size() == 5, "encodeUtf8FromUtf16 has 5 parameters");
+  Node *src         = argument(0);
+  Node *src_offset  = argument(1);
+  Node *dst         = argument(2);
+  Node *dst_offset  = argument(3);
+  Node *length      = argument(4);
+
+  const Type* src_type = src->Value(&_gvn);
+  const Type* dst_type = dst->Value(&_gvn);
+  const TypeAryPtr* top_src = src_type->isa_aryptr();
+  const TypeAryPtr* top_dest = dst_type->isa_aryptr();
+  if (top_src  == NULL || top_src->klass()  == NULL ||
+      top_dest == NULL || top_dest->klass() == NULL) {
+    return false;
+  }
+
+  BasicType src_elem = src_type->isa_aryptr()->klass()->as_array_klass()->element_type()->basic_type();
+  BasicType dst_elem = dst_type->isa_aryptr()->klass()->as_array_klass()->element_type()->basic_type();
+  if (src_elem != T_CHAR || dst_elem != T_BYTE) {
+    return false;
+  }
+
+  Node* src_start = array_element_address(src, src_offset, src_elem);
+  Node* dst_start = array_element_address(dst, dst_offset, dst_elem);
+
+  const TypeAryPtr* mtype = TypeAryPtr::BYTES;
+  Node* enc = new (C) EncodeUtf8FromUtf16Node(control(), memory(mtype), src_start, dst_start, length);
+  enc = _gvn.transform(enc);
+  Node* res_mem = _gvn.transform(new (C) SCMemProjNode(enc));
+  set_memory(res_mem, mtype);
+  set_result(enc);
+  return true;
+}
+
+//-------------inline_decodeUtf8ToUtf16------------------------------
+// decode byte[] in UTF-8 to char[]
+bool LibraryCallKit::inline_decodeUtf8ToUtf16() {
+  assert(callee()->signature()->size() == 5, "decodeUtf8ToUtf16 has 5 parameters");
+  Node *src         = argument(0);
+  Node *src_offset  = argument(1);
+  Node *dst         = argument(2);
+  Node *dst_offset  = argument(3);
+  Node *length      = argument(4);
+
+  const Type* src_type = src->Value(&_gvn);
+  const Type* dst_type = dst->Value(&_gvn);
+  const TypeAryPtr* top_src = src_type->isa_aryptr();
+  const TypeAryPtr* top_dest = dst_type->isa_aryptr();
+  if (top_src  == NULL || top_src->klass()  == NULL ||
+      top_dest == NULL || top_dest->klass() == NULL) {
+    return false;
+  }
+
+  BasicType src_elem = src_type->isa_aryptr()->klass()->as_array_klass()->element_type()->basic_type();
+  BasicType dst_elem = dst_type->isa_aryptr()->klass()->as_array_klass()->element_type()->basic_type();
+  if (src_elem != T_BYTE || dst_elem != T_CHAR) {
+    return false;
+  }
+
+  Node* src_start = array_element_address(src, src_offset, src_elem);
+  Node* dst_start = array_element_address(dst, dst_offset, dst_elem);
+
+  const TypeAryPtr* mtype = TypeAryPtr::CHARS;
+  Node* dec = new (C) DecodeUtf8ToUtf16Node(control(), memory(mtype), src_start, dst_start, length);
+  dec = _gvn.transform(dec);
+  Node* res_mem = _gvn.transform(new (C) SCMemProjNode(dec));
+  set_memory(res_mem, mtype);
+  set_result(dec);
   return true;
 }
 

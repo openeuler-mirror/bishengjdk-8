@@ -1047,6 +1047,38 @@ public:
   virtual const Type *Value(PhaseTransform *phase) const;
 };
 
+//------------------------------EncodeUtf8FromUtf16---------------------------
+// encode char[] to byte[] in UTF-8
+class EncodeUtf8FromUtf16Node: public Node {
+public:
+  EncodeUtf8FromUtf16Node(Node *control, Node* arymem, Node* s1, Node* s2, Node* c):
+    Node(control, arymem, s1, s2, c) {};
+  virtual int Opcode() const;
+  virtual bool depends_only_on_test() const { return false; }
+  virtual const Type* bottom_type() const { return TypeInt::INT; }
+  virtual const TypePtr* adr_type() const { return TypePtr::BOTTOM; }
+  virtual uint match_edge(uint idx) const;
+  virtual uint ideal_reg() const { return Op_RegI; }
+  virtual Node *Ideal(PhaseGVN *phase, bool can_reshape);
+  virtual const Type *Value(PhaseTransform *phase) const;
+};
+
+//------------------------------DecodeUtf8ToUtf16-----------------------------
+// decode byte[] in UTF-8 to char[]
+class DecodeUtf8ToUtf16Node: public Node {
+public:
+  DecodeUtf8ToUtf16Node(Node *control, Node* arymem, Node* s1, Node* s2, Node* c):
+    Node(control, arymem, s1, s2, c) {};
+  virtual int Opcode() const;
+  virtual bool depends_only_on_test() const { return false; }
+  virtual const Type* bottom_type() const { return TypeInt::INT; }
+  virtual const TypePtr* adr_type() const { return TypePtr::BOTTOM; }
+  virtual uint match_edge(uint idx) const;
+  virtual uint ideal_reg() const { return Op_RegI; }
+  virtual Node *Ideal(PhaseGVN *phase, bool can_reshape);
+  virtual const Type *Value(PhaseTransform *phase) const;
+};
+
 //------------------------------MemBar-----------------------------------------
 // There are different flavors of Memory Barriers to match the Java Memory
 // Model.  Monitor-enter and volatile-load act as Aquires: no following ref

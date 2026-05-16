@@ -2218,6 +2218,583 @@ class StubGenerator: public StubCodeGenerator {
     return entry;
   }
 
+  address generate_scalar_convert_utf8_to_utf16() {
+    int dcache_line = VM_Version::dcache_line_size();
+
+    Label CNV_LOOP, CHK_3BYTES,NO_FAST, NON_ASCII_LOOP, U8_2BT, U8_3BT, U8_4BT, IS_ERR, DONE;
+    Register dst = r1, src = r2, len = r3, res = r0;
+    
+    Register maxSrc = r10; // it's calculated already
+    Register rTemp = rscratch1;
+    Register bytesLeft = r11;
+    Register dat0 = r12;
+    Register dat1 = r13;
+    Register dat2 = r14;
+    Register tstChn1 = r15; // same register as actPos, used after actPos usage expired
+    Register dat3 = rscratch2;
+    Register errInfo = r16;
+  
+    FloatRegister vIn0 = v0;        // order of registers can not be changed !!!
+    FloatRegister vCalcZero = v1;   // rename register to describe usage as "zeros"
+    FloatRegister vCalcC0 = v2;     // vIn1 - vIn3 are free to use now, because we are working on 1 chunk only
+    FloatRegister vCalcSuzie = v3;
+    FloatRegister vIn2 = v4;
+    FloatRegister vCalcJack = v5;
+    FloatRegister vIn3 = v6;
+    FloatRegister vCalcMartha = v7;
+    FloatRegister vCalcGreg = v8;
+    FloatRegister vCalcViki = v9;
+    FloatRegister vErrors = v10;
+
+    uint8_t idx;
+
+    __ align(CodeEntryAlignment);
+
+    StubCodeMark mark(this, "StubRoutines", "scalar_convert_utf8_to_utf16");
+
+    address entry = __ pc();
+    // based on  https://github.com/simdutf/simdutf/blob/36e2d53e8f182ac47047a024db653407d28c9cb3/src/scalar/utf8_to_utf16/utf8_to_utf16.h#L10
+    // with additional fastpaths
+    __ enter();
+
+    __ movi(vCalcZero, __ T16B, 0);  // to use in fastascii
+    __ movi(vCalcC0, __ T16B, 0xC0); // to check chinafastpath
+
+    __ mov(tstChn1, (u_int64_t)0xFF00FFFF00FFFF00); 
+
+    __ BIND(CNV_LOOP);
+    __ sub(bytesLeft, maxSrc, src);
+    __ cbz(bytesLeft, DONE);
+
+    __ cmpw(bytesLeft, 16);
+    __ br(Assembler::LT, NO_FAST); // there must be at least 1 simd vector to fill to use fastpaths
+
+    __ ld1(vIn0, __ T16B, src);
+    __ umov(dat0, vIn0, __ D, 0); // return vminvq_s8(value);
+    __ andr(rTemp, dat0, 0x8080808080808080);
+    __ cbnz(rTemp, CHK_3BYTES);
+    __ umov(dat1, vIn0, __ D, 1);
+    __ andr(rTemp, dat1, 0x8080808080808080);
+    __ cbnz(rTemp, CHK_3BYTES);
+
+      __ st2(vIn0, vCalcZero, __ T16B, __ post(dst, 32)); // just store data mixing with zeros
+      __ add(src, src, 16);
+      __ add(res, res, 16);
+    __ b(CNV_LOOP);
+
+    __ BIND(CHK_3BYTES);
+
+    __ cm(__ GT, vCalcSuzie, __ T16B, vCalcC0, vIn0); // compare with -64
+    __ umov(dat0, vCalcSuzie, __ D, 0);
+
+    __ eor(dat0, dat0, tstChn1);
+    __ cbnz(dat0, NO_FAST);
+    
+    __ umov(dat1, vCalcSuzie, __ D, 1);
+    __ mov(rTemp, (u_int64_t)0x000000FFFFFFFFFF);  // including 13th byte because after 3 3-byte units there can be 1 4-byte unit
+    __ andr(dat1, dat1, rTemp);
+    __ mov(rTemp, (u_int64_t)0x00000000FFFF00FF); // 0xFF00FFFF00000000 
+    __ eor(dat1, dat1, rTemp);  
+    __ cbnz(dat1, NO_FAST);
+
+    // 3 bytes fastpath
+    // https://github.com/simdutf/simdutf/blob/36e2d53e8f182ac47047a024db653407d28c9cb3/src/arm64/implementation.cpp#L32
+      __ mov(rTemp, (u_int64_t)0x0B09080605030200); // sh = {0, 2, 3, 5, 6, 8, 9, 11    , 1, 1, 4, 4, 7, 7, 10, 10};
+      __ fmovd(vCalcSuzie, rTemp);
+      __ mov(rTemp, (u_int64_t)0x0A0A070704040101);
+      __ fmovd(vCalcJack, rTemp);
+      __ ins(vCalcSuzie, __ D, vCalcJack, 1, 0);
+
+      __ tbl(vCalcSuzie, __ T16B, vIn0, 1, vCalcSuzie); // perm
+
+      __ umov(rTemp, vCalcSuzie, __ D, 0); // perm_low
+      __ fmovd(vCalcJack, rTemp);
+
+      __ umov(rTemp, vCalcSuzie, __ D, 1); // perm_high
+      __ fmovd(vCalcGreg, rTemp);
+
+      __ sli(vCalcGreg, __ T4H, vCalcJack, 6); // mid_high
+      __ rev16(vCalcJack, __ T8B, vCalcJack);  // low
+
+      __ sli(vCalcJack, __ T4H, vCalcGreg, 6); // composed
+
+      __ st1(vCalcJack, __ T8B, __ post(dst, 8));
+
+      __ add(src, src, 12);
+      __ add(res, res, 4); // We wrote 4 16-bit characters.
+    __ b(CNV_LOOP);
+
+    __ BIND(NO_FAST);
+      __ ldrb(dat0, __ post(src, 1)); // get leading_byte
+
+      __ cmpw(dat0, 0b10000000);
+      __ br(Assembler::GE, U8_2BT);
+      __ strh(dat0, __ post(dst, 2)); // just store 2 bytes when ascii (during ldrb dat0 is 0 extended)
+      __ add(res, res, 1);
+
+      __ b(CNV_LOOP);
+    __ BIND(U8_2BT);
+      __ mov(rTemp, dat0);
+      __ andr(rTemp, rTemp, 0b11100000);
+      __ cmpw(rTemp, 0b11000000);
+      __ br(Assembler::NE, U8_3BT);
+      // process 2 byte unit
+      __ cmpw(bytesLeft, 1);
+        __ br(Assembler::LE, IS_ERR);
+        __ ldrb(dat1, __ post(src, 1));
+        __ mov(rTemp, dat1);
+        __ andr(rTemp, rTemp, 0b11000000);
+        __ cmpw(rTemp, 0b10000000);
+        __ br(Assembler::NE, IS_ERR);
+
+        __ andr(dat0, dat0, 0b00011111);
+        __ lsl(dat0, dat0, 6);
+        __ andr(dat1, dat1, 0b00111111);
+        __ orr(rTemp, dat0, dat1);
+
+        __ cmpw(rTemp, 0x80);
+        __ br(Assembler::LO, IS_ERR);
+        __ cmpw(rTemp, 0x7ff);
+        __ br(Assembler::GT, IS_ERR);
+        __ strh(rTemp, __ post(dst, 2));
+        __ add(res, res, 1); // We stored 1 2-byte unit
+
+        __ b(CNV_LOOP);
+      
+    __ BIND(U8_3BT); 
+      __ mov(rTemp, dat0);
+      __ andr(rTemp, rTemp, 0b11110000);
+      __ cmpw(rTemp, 0b11100000);
+      __ br(Assembler::NE, U8_4BT);
+      // process 3 byte unit
+      __ cmpw(bytesLeft, 2);
+      __ br(Assembler::LE, IS_ERR); 
+
+        __ ldrb(dat1, __ post(src,1));
+        __ mov(rTemp, dat1);
+        __ andr(rTemp, rTemp, 0b11000000);
+        __ cmpw(rTemp, 0b10000000);
+        __ br(Assembler::NE, IS_ERR);
+
+        __ ldrb(dat2, __ post(src, 1));
+        __ mov(rTemp, dat2);
+        __ andr(rTemp, rTemp, 0b11000000);
+        __ cmpw(rTemp, 0b10000000);
+        __ br(Assembler::NE, IS_ERR);
+
+        __ andr(dat0, dat0, 0b00001111);
+        __ andr(dat1, dat1, 0b00111111);
+        __ andr(dat2, dat2, 0b00111111);
+
+        __ lsl(dat0, dat0, 12);
+        __ lsl(dat1, dat1, 6);
+        __ orr(rTemp, dat0, dat1);
+        __ orr(rTemp, rTemp, dat2);
+
+        __ mov(dat0, rTemp);
+
+        __ cmpw(rTemp, 0x800);
+          __ br(Assembler::LO, IS_ERR);
+
+        {
+          Label CHK_2, CHK_OK;
+
+          __ mov(dat3, 0xd7ff);
+          __ cmp(rTemp, dat3);
+          __ br(Assembler::HI, CHK_2);
+          __ b(CHK_OK);
+
+          __ BIND(CHK_2);
+          __ mov(dat3, 0xe000);
+          __ cmp(rTemp, dat3);
+          __ br(Assembler::LO, IS_ERR);
+
+          __ BIND(CHK_OK);
+        }
+        __ lsr(rTemp, rTemp, 16);  
+        __ cbnz(rTemp, IS_ERR);
+      
+        __ strh(dat0, __ post(dst, 2));
+
+        __ add(res, res, 1);
+        __ b(CNV_LOOP);
+
+
+    __ BIND(U8_4BT); 
+    // process 4 byte unit
+    __ mov(rTemp, dat0);
+    __ andr(rTemp, rTemp, 0b11111000);
+    __ cmpw(rTemp, 0b11110000);
+    __ br(Assembler::NE, IS_ERR);
+
+    __ cmpw(bytesLeft, 3);
+    __ br(Assembler::LE, IS_ERR); 
+
+      __ ldrb(dat1, __ post(src, 1));
+      __ mov(rTemp, dat1);
+      __ andr(rTemp, rTemp, 0b11000000);
+      __ cmpw(rTemp, 0b10000000);
+      __ br(Assembler::NE, IS_ERR);
+
+      __ ldrb(dat2, __ post(src, 1));
+      __ mov(rTemp, dat2);
+      __ andr(rTemp, rTemp, 0b11000000);
+      __ cmpw(rTemp, 0b10000000);
+      __ br(Assembler::NE, IS_ERR);
+
+      __ ldrb(dat3, __ post(src,1));
+      __ mov(rTemp, dat3);
+      __ andr(rTemp, rTemp, 0b11000000);
+      __ cmpw(rTemp, 0b10000000);
+      __ br(Assembler::NE, IS_ERR);
+
+        __ andr(dat0, dat0, 0b00000111);
+        __ andr(dat1, dat1, 0b00111111);
+        __ andr(dat2, dat2, 0b00111111);
+        __ andr(dat3, dat3, 0b00111111);
+
+        __ lsl(dat0, dat0, 18);
+        __ lsl(dat1, dat1, 12);
+        __ lsl(dat2, dat2, 6);
+        __ orr(rTemp, dat0, dat1);
+        __ orr(rTemp, rTemp, dat2);
+        __ orr(rTemp, rTemp, dat3);
+
+        __ mov(dat2, rTemp);
+
+        __ mov(rTemp, 0xffff);
+        __ cmpw(dat2, rTemp);
+        __ br(Assembler::LE, IS_ERR);
+        __ mov(rTemp, 0x10ffff);
+        __ cmpw(dat2, rTemp);
+        __ br(Assembler::GT, IS_ERR);
+
+        __ sub(dat2, dat2, 0x10000);
+        __ mov(dat1, dat2);
+        __ lsr(dat1, dat1, 10);
+        __ add(dat1, dat1, 0xD800);
+        __ strh(dat1, __ post(dst, 2));
+        __ andr(dat2, dat2, 0x3FF);
+        __ add(dat2, dat2, 0xDC00);
+        __ strh(dat2, __ post(dst, 2));
+
+        __ add(res, res, 2);
+    __ b(CNV_LOOP);
+
+    __ BIND(IS_ERR);
+      __ mov(errInfo, -5);
+
+    __ BIND(DONE);
+
+      __ leave();
+      __ ret(lr);
+
+    return entry;
+  }
+
+
+
+  address generate_convert_masked_utf8_to_utf16() {
+
+    int dcache_line = VM_Version::dcache_line_size();
+
+    Label CHK_8ASCII, CHK_3BYTES, CHK_2BYTES, CHK_4CU, CHK_3CU, CHK_3_1_4CU, IS_ERR, NO_FASTPATH, DONE;
+    // iRegP_R2 src, iRegP_R1 dst, iRegI_R3 len, iRegI_R0 result,
+    Register dst = r1, src = r2, len = r3, res = r0;
+
+    // It's assumed that cMask, register is filled by caller
+    Register rTemp = rscratch1;
+    Register cMask = r11;
+    Register cnvTemp = r12;
+    Register lookAddr = r14;
+    Register idx = rscratch2;
+  
+    FloatRegister vIn0 = v0; //order of registers can not be changed !!!
+    FloatRegister vCalcJohn = v1;
+    FloatRegister vIn1 = v2;
+    FloatRegister vCalcSuzie = v3;
+    FloatRegister vIn2 = v4;
+    FloatRegister vCalcJack = v5;
+    FloatRegister vIn3 = v6;
+    FloatRegister vCalcMartha = v7;
+    FloatRegister vCalcGreg = v8;
+    FloatRegister vCalcViki = v9;
+    FloatRegister vErrors = v10;
+
+    uint64_t offset;
+
+    __ align(CodeEntryAlignment);
+
+    StubCodeMark mark(this, "StubRoutines", "convert_masked_utf8_to_utf16");
+
+    address entry = __ pc();
+
+    __ enter();
+
+    __ ld1(vIn0, __ T16B, src);
+    // checking for fastpaths
+    // https://github.com/simdutf/simdutf/blob/36e2d53e8f182ac47047a024db653407d28c9cb3/src/arm64/arm_convert_utf8_to_utf16.cpp#L24
+    __ andr(rTemp, cMask, 0xFFFF);
+    __ sub(rTemp, rTemp, 0xFFFF);
+    __ cbnz(rTemp, CHK_3BYTES);
+      __ movi(vCalcJohn, __ T16B, 0);
+      __ st2(vIn0, vCalcJohn, __ T16B, __ post(dst, 32)); // ascii fastpath, just store mixing with 0
+      __ add(res, res, 16); // We wrote 16 16-bit characters.
+      __ mov(cnvTemp, 16); // We consumed 16 bytes.  
+      __ b(DONE);
+
+    __ BIND(CHK_3BYTES);
+    __ andr(cnvTemp, cMask, 0xFFF);
+    // https://github.com/simdutf/simdutf/blob/36e2d53e8f182ac47047a024db653407d28c9cb3/src/arm64/arm_convert_utf8_to_utf16.cpp#L35
+    __ cmpw(cnvTemp, 0x924);
+    __ br(Assembler::NE, CHK_8ASCII);
+    // 3 bytes fastpath
+    // https://github.com/simdutf/simdutf/blob/36e2d53e8f182ac47047a024db653407d28c9cb3/src/arm64/implementation.cpp#L32
+    __ mov(rTemp, (u_int64_t)0x0B09080605030200); // sh = {0, 2, 3, 5, 6, 8, 9, 11    , 1, 1, 4, 4, 7, 7, 10, 10};
+      __ fmovd(vCalcSuzie, rTemp);
+      __ mov(rTemp, (u_int64_t)0x0A0A070704040101);
+      __ fmovd(vCalcJack, rTemp);
+      __ ins(vCalcSuzie, __ D, vCalcJack, 1, 0);
+
+      __ tbl(vCalcSuzie, __ T16B, vIn0, 1, vCalcSuzie);
+
+      __ umov(rTemp, vCalcSuzie, __ D, 0);
+      __ fmovd(vCalcJack, rTemp);
+
+      __ umov(rTemp, vCalcSuzie, __ D, 1);
+      __ fmovd(vCalcGreg, rTemp);
+
+      __ sli(vCalcGreg, __ T4H, vCalcJack, 6);
+      __ rev16(vCalcJack, __ T8B, vCalcJack);
+
+      __ sli(vCalcJack, __ T4H, vCalcGreg, 6);
+
+      __ st1(vCalcJack, __ T8B, __ post(dst, 8));
+
+      __ add(res, res, 4); // We wrote 4 characters.
+      __ mov(cnvTemp, 12); // We consumed 12 utf8 bytes.
+      __ b(DONE);
+    
+    __ BIND(CHK_8ASCII);
+    __ andr(rTemp, cMask, 0x00FF);
+    __ sub(rTemp, rTemp, 0x00FF);
+    __ cbnz(rTemp, CHK_2BYTES);
+      __ movi(vCalcJohn, __ T16B, 0);
+      __ st2(vIn0, vCalcJohn, __ T8B, __ post(dst, 16)); // ascii fastpath, just store mixing with 0
+      __ add(res, res, 8); // We wrote 8 16-bit characters.
+      __ mov(cnvTemp, 8); // We consumed 8 bytes.
+      __ b(DONE);
+
+    __ BIND(CHK_2BYTES);
+    __ andr(rTemp, cMask, 0xFFF);
+    __ cmpw(rTemp, 0xaaa);
+    __ br(Assembler::NE, NO_FASTPATH);
+    // 2 bytes fastpath
+    // https://github.com/simdutf/simdutf/blob/36e2d53e8f182ac47047a024db653407d28c9cb3/src/arm64/implementation.cpp#L63
+      __ rev16(vCalcSuzie, __ T16B, vIn0);
+
+      __ movi(vCalcJack, __ T8H, 0x1f);
+      __ andr(vCalcJack, __ T16B, vIn0, vCalcJack);
+      __ sli(vCalcSuzie, __ T8H, vCalcJack, 6);
+
+      __ st1(vCalcSuzie, __ T16B, dst);
+      __ add(dst, dst, 12);
+
+      __ add(res, res, 6); // We wrote 6 16-bit characters
+      __ mov(cnvTemp, 12); // We consumed 12 bytes.
+
+      __ b(DONE);
+
+    __ BIND(NO_FASTPATH);
+
+    //there is no fastpaths, let's use lookup table solution
+    __ adrp(lookAddr, ExternalAddress(StubRoutines::utf8bigindex_adr()), offset); 
+    __ add(lookAddr, lookAddr, offset);
+
+    __ mov(rTemp, 2);
+    __ mul(rTemp, cnvTemp, rTemp); 
+    __ add(rTemp, lookAddr, rTemp);
+    __ ldrb(idx, rTemp); // const uint8_t idx
+
+    __ add(rTemp, rTemp, 1);
+    __ ldrb(cnvTemp, rTemp); // utf8bigindex[input_utf8_end_of_code_point_mask][1];
+
+    __ cmpw(idx, 209);
+    __ br(Assembler::GE, IS_ERR);
+
+    __ adrp(lookAddr, ExternalAddress(StubRoutines::shufutf8_adr()), offset); 
+    __ add(lookAddr, lookAddr, offset); 
+
+    __ mov(rTemp, 16);// prescending table is: const uint8_t shufutf8[209][16]
+    __ mul(rTemp, idx, rTemp); 
+    __ add(rTemp, lookAddr, rTemp); 
+    __ ld1(vCalcSuzie, __ T16B, rTemp);
+
+    __ cmpw(idx, 0x40); // if (idx < 64) { // SIX (6) input code-code units
+    __ br(Assembler::GE, CHK_4CU);
+      // https://github.com/simdutf/simdutf/blob/36e2d53e8f182ac47047a024db653407d28c9cb3/src/arm64/implementation.cpp#L83
+      __ tbl(vCalcSuzie, __ T16B, vIn0, 1, vCalcSuzie); // perm
+
+      __ movi(vCalcJack, __ T8H, 0x7F);
+      __ andr(vCalcJack, __ T16B, vCalcSuzie, vCalcJack); // ascii 6 or 7 bits
+
+      __ movi(vCalcMartha, __ T8H, 0x1F,8);
+      __ andr(vCalcMartha, __ T16B, vCalcSuzie, vCalcMartha); // highbyte 5 bits
+
+      __ usra(vCalcJack, __ T8H, vCalcMartha, 2); //composed
+      
+      __ st1(vCalcJack, __ T16B, dst);
+      __ add(dst, dst, 12);
+      
+      __ add(res, res, 6); // We wrote 6 16-bit characters
+     // bytes consumed put to cnvTemp from utf8bigindex[input_utf8_end_of_code_point_mask][1];
+      __ b(DONE);
+
+    __ BIND(CHK_4CU);
+    __ cmpw(idx, 0x91); //else if (idx < 145)
+      __ br(Assembler::GE, CHK_3CU);
+    // https://github.com/simdutf/simdutf/blob/36e2d53e8f182ac47047a024db653407d28c9cb3/src/arm64/arm_convert_utf8_to_utf16.cpp#L86C5-L86C38
+      __ tbl(vCalcSuzie, __ T16B, vIn0, 1, vCalcSuzie); // perm
+
+      __ xtn(vCalcJack, __ T4H, vCalcSuzie, __ T4S); // lowperm
+
+      __ movi(vCalcMartha, __ T4H, 0xFF); // middlebyte
+      __ bic(vCalcMartha,__ T16B, vCalcJack, vCalcMartha);
+
+      __ movi(vCalcGreg, __ T4H, 0x7F); // ascii
+      __ andr(vCalcGreg,__ T16B, vCalcGreg, vCalcJack);
+
+      __ ushrnw(vCalcSuzie,__ T4S, vCalcSuzie, 16);  // highperm
+      __ xtn(vCalcSuzie, __ T4H, vCalcSuzie, __ T4S);
+
+      __ usra(vCalcGreg, __ T4H, vCalcMartha, 2); // middlelow
+     
+      __ sli(vCalcGreg, __ T4H, vCalcSuzie, 12); // composed
+     
+      __ st1(vCalcGreg, __ T8B, __ post(dst, 8));
+
+      __ add(res, res, 4); // We wrote 4 16-bit codepoints
+      // bytes consumed put to cnvTemp from utf8bigindex[input_utf8_end_of_code_point_mask][1];
+      __ b(DONE);
+
+    __ BIND(CHK_3CU);
+    __ cmpw(idx, 0xD1); // else if (idx < 209)
+      __ br(Assembler::GE, IS_ERR);
+      __ andr(rTemp, cMask, 0xFFF); 
+      __ cmpw(rTemp, 0x888);
+      __ br(Assembler::NE, CHK_3_1_4CU);
+      // https://github.com/simdutf/simdutf/blob/36e2d53e8f182ac47047a024db653407d28c9cb3/src/arm64/arm_convert_utf8_to_utf16.cpp#L134
+
+        __ rev16(vCalcSuzie, __ T16B, vIn0); // swap
+
+        __ shl(vCalcJack, __ T16B, vCalcSuzie, 2); // shift
+
+        __ mov(rTemp, (u_int64_t)0xDC00E7C0DC00E7C0); // magic
+        __ fmovd(vCalcMartha, rTemp);
+        __ ins(vCalcMartha, __ D, vCalcMartha, 1, 0);
+
+        __ mov(vCalcGreg, __ T16B, vCalcJack); // trail
+        __ movi(vCalcViki, __ T4S, 0xFF, 8);
+        __ bit(vCalcGreg, __ T16B, vCalcSuzie, vCalcViki); 
+      
+        __ usra(vCalcMartha, __ T4S, vCalcJack, 30); // magic_with_low_2
+        __ sli(vCalcSuzie, __ T8H, vIn0, 6); // lead
+
+        __ movi(vCalcViki, __ T4S, 0xFC, 24);
+        __ bic(vCalcSuzie, __ T16B, vCalcSuzie, vCalcViki);
+      
+        __ mov(rTemp, (u_int64_t)0x0000FFFF);
+        __ dup(vCalcViki, __ T4S, rTemp);
+        __ bit(vCalcSuzie, __ T16B, vCalcGreg, vCalcViki); // blend
+      
+        __ addv(vCalcSuzie, __ T8H, vCalcSuzie, vCalcMartha); // composed
+
+        __ st1(vCalcSuzie, __ T16B, dst); // store from register
+        __ add(dst, dst, 12); // We wrote 3 32-bit surrogate pairs. so 3x4
+        __ add(res, res, 6);  // utf16_output += 6;
+
+      __ b(DONE);
+
+      __ BIND(CHK_3_1_4CU);
+        // https://github.com/simdutf/simdutf/blob/36e2d53e8f182ac47047a024db653407d28c9cb3/src/arm64/arm_convert_utf8_to_utf16.cpp#L216
+        __ tbl(vCalcSuzie, __ T16B, vIn0, 1, vCalcSuzie); // perm
+
+        __ movi(vCalcMartha, __ T4S, 0x7F);
+        __ andr(vCalcMartha, __ T16B, vCalcSuzie, vCalcMartha); // ascii
+
+        __ shl(vCalcJack, __ T4S, vCalcSuzie, 2); // middlehigh
+
+        __ movi(vCalcGreg, __ T4S, 0x3F, 8);
+        __ andr(vCalcGreg, __ T16B, vCalcSuzie, vCalcGreg); // middlebyte
+
+        __ movi(vCalcViki, __ T4S, 0xFF, 24);
+        __ bit(vCalcJack, __ T16B, vCalcSuzie, vCalcViki); // ab
+
+        __ mov(rTemp, (u_int64_t)0xFFFC0000);
+        __ dup(vCalcViki, __ T4S, rTemp);
+        __ shl(vCalcGreg, __ T4S, vCalcGreg, 4);
+        __ bit(vCalcGreg, __ T16B, vCalcJack, vCalcViki); // abc
+
+        __ usra(vCalcMartha, __ T4S, vCalcGreg, 6);// composed
+        __ mov(vCalcJack, __ T16B, vCalcMartha);
+
+        __ mov(rTemp, (u_int64_t)0xFFFF0000);
+        __ dup(vCalcViki, __ T4S, rTemp);
+        __ bit(vCalcJack, __ T16B, vCalcGreg, vCalcViki);  // mixed
+
+        __ movi(vCalcViki, __ T4S, 0xFC,8);
+        __ bic(vCalcJack, __ T16B, vCalcJack, vCalcViki);// masked_pair
+
+        __ mov(rTemp, (u_int64_t)0xE7C0DC00);
+        __ dup(vCalcGreg, __ T4S, rTemp); // magic
+
+        __ addv(vCalcJack, __ T8H, vCalcJack, vCalcGreg); // surrogates
+
+        __ mov(vCalcGreg, __ T16B, vCalcSuzie);
+        __ cm(Assembler::LT, vCalcGreg, __ T4S, vCalcGreg); // is_pair
+
+         __ bit(vCalcMartha, __ T16B, vCalcJack, vCalcGreg);  // selected
+
+        {
+          int i=0;
+          for (i = 0; i < 3; i++) {
+            Label TST_FAIL, LOOP_END;
+            __ umov(rTemp, vCalcSuzie, __ S, i); //if ((permbuffer[i] & 0xf8000000) == 0xf0000000) {
+            __ umov(idx, vCalcMartha, __ S, i); // this is  buffer[i]
+            __ andr(rTemp, rTemp, 0xf8000000);
+            __ mov(lookAddr, (u_int64_t)0xf0000000);
+            __ cmp (rTemp, lookAddr);
+            __ br(Assembler::NE, TST_FAIL);
+              __ mov(rTemp, idx);
+              __ lsr(rTemp, rTemp,16);
+              __ strh(rTemp, __ post(dst, 2));
+              __ andr(idx, idx, 0xFFFF);
+              __ strh(idx, __ post(dst, 2));
+              __ add(res, res, 2);
+
+              __ b(LOOP_END);
+            __ BIND(TST_FAIL);
+              __ andr(idx, idx, 0xFFFF);
+              __ str(idx, __ post(dst, 2));
+              __ add(res, res, 1);
+            __ BIND(LOOP_END);
+        
+          }
+        }
+
+      __ b(DONE);
+
+    __ BIND(IS_ERR);  
+      __ mov(cnvTemp, -3); // just return -3 and go out
+      
+
+    __ BIND(DONE);
+    __ leave();
+    __ ret(lr);
+
+    return entry;
+  }
+
   //
   // Generate stub for array fill. If "aligned" is true, the
   // "to" address is assumed to be heapword aligned.
@@ -5469,6 +6046,10 @@ class StubGenerator: public StubCodeGenerator {
       StubRoutines::_crc_table_adr = (address)StubRoutines::aarch64::_crc_table;
       StubRoutines::_updateBytesCRC32 = generate_updateBytesCRC32();
     }
+    StubRoutines::_pack_1_2_3_utf8_bytes_adr = (address)StubRoutines::aarch64::_pack_1_2_3_utf8_bytes;
+    StubRoutines::_pack_1_2_utf8_bytes_adr = (address)StubRoutines::aarch64::_pack_1_2_utf8_bytes;
+    StubRoutines::_pack_shufutf8_adr = (address)StubRoutines::aarch64::_shufutf8;
+    StubRoutines::_pack_utf8bigindex_adr = (address)StubRoutines::aarch64::_utf8bigindex;
 
     if (UseF2jBLASIntrinsics) {
       StubRoutines::_BLAS_library = load_BLAS_library();
@@ -5564,6 +6145,10 @@ class StubGenerator: public StubCodeGenerator {
     StubRoutines::aarch64::_large_arrays_hashcode_char = generate_large_arrays_hashcode(T_CHAR);
     StubRoutines::aarch64::_large_arrays_hashcode_int = generate_large_arrays_hashcode(T_INT);
     StubRoutines::aarch64::_large_arrays_hashcode_short = generate_large_arrays_hashcode(T_SHORT);
+
+    // it would be nice to add en/dis flag here
+    StubRoutines::aarch64::_convert_masked_utf8_to_utf16 = generate_convert_masked_utf8_to_utf16();
+    StubRoutines::aarch64::_scalar_convert_utf8_to_utf16 = generate_scalar_convert_utf8_to_utf16();
 
     // Safefetch stubs.
     generate_safefetch("SafeFetch32", sizeof(int),     &StubRoutines::_safefetch32_entry,

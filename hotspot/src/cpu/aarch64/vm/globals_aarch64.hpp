@@ -105,7 +105,9 @@ define_pd_global(intx, InlineSmallCode,          1000);
           "Auto enable the AppCDS feature"                              \
           "the path save classlist and jsa file")                       \
   product(bool, PrintAutoAppCDS, false,                                 \
-          "Print some information about AutoSharedArchivePath")          \
+          "Print some information about AutoSharedArchivePath")         \
+  product(bool, UseUTFConversionIntrinsics, false,                      \
+          "Use intrinsics for conversion between UTF8 and UTF16")       \
                                                                          \
   experimental(bool, ExitVMProfileCacheFlush, false,                    \
           "Flush JProfileCache on VM exit")                             \

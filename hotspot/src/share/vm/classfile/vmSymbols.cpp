@@ -630,6 +630,20 @@ bool vmIntrinsics::is_disabled_by_flags(vmIntrinsics::ID id) {
   case vmIntrinsics::_encodeISOArray:
     if (!SpecialEncodeISOArray) return true;
     break;
+  case vmIntrinsics::_encodeUtf8FromUtf16:
+#if defined(AARCH64)
+    if (!UseUTFConversionIntrinsics) return true;
+    break;
+#else
+    return true;
+#endif
+  case vmIntrinsics::_decodeUtf8ToUtf16:
+#if defined(AARCH64)
+    if (!(SpecialDecodeUtf8ToUtf16 && UseUTFConversionIntrinsics)) return true;
+    break;
+#else
+    return true;
+#endif
   case vmIntrinsics::_getCallerClass:
     if (!InlineReflectionGetCallerClass) return true;
     break;

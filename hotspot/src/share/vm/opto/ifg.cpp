@@ -578,7 +578,8 @@ uint PhaseChaitin::build_ifg_physical( ResourceArea *a ) {
               // Don't remove KILL projections if their "defining" nodes have
               // memory effects (have SCMemProj projection node) -
               // they are not dead even when their result is not used.
-              // For example, compareAndSwapL (and other CAS) and EncodeISOArray nodes.
+              // For example, compareAndSwapL (and other CAS) and EncodeISOArray,
+              // EncodeUtf8FromUtf16 and DecodeUft8ToUtf16 nodes.
               // The method add_input_to_liveout() keeps such nodes alive (put them on liveout list)
               // when it sees SCMemProj node in a block. Unfortunately SCMemProj node could be placed
               // in block in such order that KILL MachProj nodes are processed first.

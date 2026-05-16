@@ -128,6 +128,7 @@
   template(sun_misc_Version,                          "sun/misc/Version")                         \
   template(java_runtime_name_name,                    "java_runtime_name")                        \
   template(java_runtime_version_name,                 "java_runtime_version")                     \
+  template(utf_conversion_intrinsics_name,            "UTF_CONVERSION_INTRINSICS")                \
                                                                                                   \
   /* class file format tags */                                                                    \
   template(tag_source_file,                           "SourceFile")                               \
@@ -817,6 +818,15 @@
   do_intrinsic(_encodeISOArray,     sun_nio_cs_iso8859_1_Encoder, encodeISOArray_name, encodeISOArray_signature, F_S)   \
    do_name(     encodeISOArray_name,                             "encodeISOArray")                                      \
    do_signature(encodeISOArray_signature,                        "([CI[BII)I")                                          \
+                                                                                                                        \
+  do_class(sun_nio_cs_utf_8_Decoder,       "sun/nio/cs/UTF_8$Decoder")                                                  \
+  do_intrinsic(_decodeUtf8ToUtf16,  sun_nio_cs_utf_8_Decoder, decodeUtf8ToUtf16_name, decodeUtf8ToUtf16_signature, F_S) \
+   do_name(     decodeUtf8ToUtf16_name,                         "implDecodeUtf8ToUtf16")                                \
+   do_signature(decodeUtf8ToUtf16_signature,                    "([BI[CII)I")                                          \
+                                                                                                                        \
+  do_class(sun_nio_cs_utf_8_Encoder,       "sun/nio/cs/UTF_8$Encoder")                                                  \
+  do_intrinsic(_encodeUtf8FromUtf16, sun_nio_cs_utf_8_Encoder, encodeUtf8FromUtf16_name, encodeISOArray_signature, F_S) \
+   do_name(     encodeUtf8FromUtf16_name,                       "implEncodeUtf8FromUtf16")                              \
                                                                                                                         \
   do_class(java_math_BigInteger,                      "java/math/BigInteger")                                           \
   do_intrinsic(_multiplyToLen,      java_math_BigInteger, multiplyToLen_name, multiplyToLen_signature, F_S)             \

@@ -3122,6 +3122,40 @@ const Type *EncodeISOArrayNode::Value(PhaseTransform *phase) const {
 }
 
 //=============================================================================
+//------------------------------match_edge-------------------------------------
+uint EncodeUtf8FromUtf16Node::match_edge(uint idx) const {
+  return idx == 2 || idx == 3; // EncodeUtf8FromUtf16 src (Binary dst len)
+}
+
+//------------------------------Ideal------------------------------------------
+Node *EncodeUtf8FromUtf16Node::Ideal(PhaseGVN *phase, bool can_reshape) {
+  return remove_dead_region(phase, can_reshape) ? this : NULL;
+}
+
+//------------------------------Value------------------------------------------
+const Type *EncodeUtf8FromUtf16Node::Value(PhaseTransform *phase) const {
+  if (in(0) && phase->type(in(0)) == Type::TOP) return Type::TOP;
+  return bottom_type();
+}
+
+//=============================================================================
+//------------------------------match_edge-------------------------------------
+uint DecodeUtf8ToUtf16Node::match_edge(uint idx) const {
+  return idx == 2 || idx == 3; // DecodeUtf8ToUtf16 src (Binary dst len)
+}
+
+//------------------------------Ideal------------------------------------------
+Node *DecodeUtf8ToUtf16Node::Ideal(PhaseGVN *phase, bool can_reshape) {
+  return remove_dead_region(phase, can_reshape) ? this : NULL;
+}
+
+//------------------------------Value------------------------------------------
+const Type *DecodeUtf8ToUtf16Node::Value(PhaseTransform *phase) const {
+  if (in(0) && phase->type(in(0)) == Type::TOP) return Type::TOP;
+  return bottom_type();
+}
+
+//=============================================================================
 MemBarNode::MemBarNode(Compile* C, int alias_idx, Node* precedent)
   : MultiNode(TypeFunc::Parms + (precedent == NULL? 0: 1)),
   _adr_type(C->get_adr_type(alias_idx)), _kind(Standalone)
