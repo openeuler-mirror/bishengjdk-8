@@ -556,6 +556,7 @@ void ConnectionGraph::add_node_to_connection_graph(Node *n, Unique_Node_List *de
     case Op_StrComp:
     case Op_StrEquals:
     case Op_StrIndexOf:
+    case Op_VectorizedHashCode:
     case Op_EncodeISOArray: {
       add_local_var(n, PointsToNode::ArgEscape);
       delayed_worklist->push(n); // Process it later.
@@ -739,6 +740,7 @@ void ConnectionGraph::add_final_edges(Node *n) {
     case Op_StrComp:
     case Op_StrEquals:
     case Op_StrIndexOf:
+    case Op_VectorizedHashCode:
     case Op_EncodeISOArray: {
       // char[] arrays passed to string intrinsic do not escape but
       // they are not scalar replaceable. Adjust escape state for them.
@@ -3081,7 +3083,7 @@ void ConnectionGraph::split_unique_types(GrowableArray<Node *>  &alloc_worklist)
         if (!(op == Op_CmpP || op == Op_Conv2B ||
               op == Op_CastP2X || op == Op_StoreCM ||
               op == Op_FastLock || op == Op_AryEq || op == Op_StrComp ||
-              op == Op_StrEquals || op == Op_StrIndexOf)) {
+              op == Op_StrEquals || op == Op_StrIndexOf || op == Op_VectorizedHashCode)) {
           n->dump();
           use->dump();
           assert(false, "EA: missing allocation reference path");
@@ -3182,7 +3184,7 @@ void ConnectionGraph::split_unique_types(GrowableArray<Node *>  &alloc_worklist)
               (op == Op_CallLeaf && use->as_CallLeaf()->_name != NULL &&
                strcmp(use->as_CallLeaf()->_name, "g1_wb_pre") == 0) ||
               op == Op_AryEq || op == Op_StrComp ||
-              op == Op_StrEquals || op == Op_StrIndexOf)) {
+              op == Op_StrEquals || op == Op_StrIndexOf || op == Op_VectorizedHashCode)) {
           n->dump();
           use->dump();
           assert(false, "EA: missing memory path");

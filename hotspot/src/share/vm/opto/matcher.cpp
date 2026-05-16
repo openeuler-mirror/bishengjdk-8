@@ -939,6 +939,7 @@ static void match_alias_type(Compile* C, Node* n, Node* m) {
     case Op_StrEquals:
     case Op_StrIndexOf:
     case Op_AryEq:
+    case Op_VectorizedHashCode:
     case Op_MemBarVolatile:
     case Op_MemBarCPUOrder: // %%% these ideals should have narrower adr_type?
     case Op_EncodeISOArray:
@@ -2139,6 +2140,7 @@ void Matcher::find_shared( Node *n ) {
       case Op_StrEquals:
       case Op_StrIndexOf:
       case Op_AryEq:
+      case Op_VectorizedHashCode:
       case Op_EncodeISOArray:
         set_shared(n); // Force result into register (it will be anyways)
         break;
@@ -2339,6 +2341,15 @@ void Matcher::find_shared( Node *n ) {
         n->set_req(2,pair1);
         Node *pair2 = new (C) BinaryNode(n->in(4),n->in(5));
         n->set_req(3,pair2);
+        n->del_req(5);
+        n->del_req(4);
+        break;
+      }
+      case Op_VectorizedHashCode: {
+        Node *pair1 = new (C) BinaryNode(n->in(2),n->in(3));
+        n->set_req(2, pair1);
+        Node *pair2 = new (C) BinaryNode(n->in(4),n->in(5));
+        n->set_req(3, pair2);
         n->del_req(5);
         n->del_req(4);
         break;

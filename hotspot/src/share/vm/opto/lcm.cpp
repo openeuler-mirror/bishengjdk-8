@@ -214,6 +214,7 @@ void PhaseCFG::implicit_null_check(Block* block, Node *proj, Node *val, int allo
     case Op_StrEquals:
     case Op_StrIndexOf:
     case Op_AryEq:
+    case Op_VectorizedHashCode:
     case Op_EncodeISOArray:
       // Not a legit memory op for implicit null check regardless of
       // embedded loads

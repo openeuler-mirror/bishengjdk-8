@@ -1014,6 +1014,23 @@ public:
   virtual const Type* bottom_type() const { return TypeInt::BOOL; }
 };
 
+//------------------------------VectorizedHashCode----------------------------
+class VectorizedHashCodeNode: public Node {
+public:
+  VectorizedHashCodeNode(Node* control, Node* ary_mem,
+                         Node* ary, Node* cnt, Node* result, Node* basic_type):
+    Node(control, ary_mem, ary, cnt, result, basic_type) {}
+
+  virtual bool depends_only_on_test() const { return false; }
+  virtual const TypePtr* adr_type() const;
+  virtual uint match_edge(uint idx) const;
+  virtual uint ideal_reg() const { return Op_RegI; }
+  virtual Node* Ideal(PhaseGVN* phase, bool can_reshape);
+  virtual const Type* Value(PhaseTransform* phase) const;
+  virtual int Opcode() const;
+  virtual const Type* bottom_type() const { return TypeInt::INT; }
+};
+
 
 //------------------------------EncodeISOArray--------------------------------
 // encode char[] to byte[] in ISO_8859_1

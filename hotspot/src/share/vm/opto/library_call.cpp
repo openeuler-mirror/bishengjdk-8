@@ -205,6 +205,7 @@ class LibraryCallKit : public GraphKit {
   bool inline_string_indexOf();
   Node* string_indexOf(Node* string_object, ciTypeArray* target_array, jint offset, jint cache_i, jint md2_i);
   bool inline_string_equals();
+  bool inline_vectorizedHashCode();
   Node* round_double_node(Node* n);
   bool runtime_math(const TypeFunc* call_type, address funcAddr, const char* funcName);
   bool inline_math_native(vmIntrinsics::ID id);
@@ -533,6 +534,7 @@ bool LibraryCallKit::try_to_inline(int predicate) {
   case vmIntrinsics::_compareTo:                return inline_string_compareTo();
   case vmIntrinsics::_indexOf:                  return inline_string_indexOf();
   case vmIntrinsics::_equals:                   return inline_string_equals();
+  case vmIntrinsics::_vectorizedHashCode:       return inline_vectorizedHashCode();
 
   case vmIntrinsics::_getObject:                return inline_unsafe_access(!is_native_ptr, !is_store, T_OBJECT,  !is_volatile, false);
   case vmIntrinsics::_getBoolean:               return inline_unsafe_access(!is_native_ptr, !is_store, T_BOOLEAN, !is_volatile, false);
@@ -1092,6 +1094,41 @@ bool LibraryCallKit::inline_string_equals() {
   record_for_igvn(region);
 
   set_result(_gvn.transform(phi));
+  return true;
+}
+
+//------------------------------inline_vectorizedHashCode------------------------
+bool LibraryCallKit::inline_vectorizedHashCode() {
+  assert(callee()->signature()->size() == 5, "vectorizedHashCode has 5 parameters");
+
+  Node* array = argument(0);
+  Node* from_index = argument(1);
+  Node* length = argument(2);
+  Node* initial_value = argument(3);
+  Node* basic_type = argument(4);
+
+  array = cast_not_null(array, true);
+  if (stopped()) {
+    return true;
+  }
+  if (basic_type == top()) {
+    return false;
+  }
+
+  const TypeInt* basic_type_t = _gvn.type(basic_type)->isa_int();
+  if (basic_type_t == NULL || !basic_type_t->is_con()) {
+    return false;
+  }
+  BasicType bt = (BasicType) basic_type_t->get_con();
+  Node* array_start = array_element_address(array, from_index, bt);
+
+  set_result(_gvn.transform(new (C) VectorizedHashCodeNode(control(),
+                                                           memory(TypeAryPtr::get_array_body_type(bt)),
+                                                           array_start,
+                                                           length,
+                                                           initial_value,
+                                                           basic_type)));
+  C->set_has_split_ifs(true);
   return true;
 }
 

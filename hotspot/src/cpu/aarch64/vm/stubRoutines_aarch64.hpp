@@ -59,6 +59,12 @@ class aarch64 {
 
   static address _zero_longs;
 
+  static address _large_arrays_hashcode_boolean;
+  static address _large_arrays_hashcode_byte;
+  static address _large_arrays_hashcode_char;
+  static address _large_arrays_hashcode_int;
+  static address _large_arrays_hashcode_short;
+
  public:
 
   static address get_previous_fp_entry()
@@ -116,7 +122,26 @@ class aarch64 {
     return _zero_longs;
   }
 
- private:
+  static address large_arrays_hashcode(BasicType eltype) {
+    switch (eltype) {
+    case T_BOOLEAN:
+      return _large_arrays_hashcode_boolean;
+    case T_BYTE:
+      return _large_arrays_hashcode_byte;
+    case T_CHAR:
+      return _large_arrays_hashcode_char;
+    case T_SHORT:
+      return _large_arrays_hashcode_short;
+    case T_INT:
+      return _large_arrays_hashcode_int;
+    default:
+      ShouldNotReachHere();
+    }
+
+    return NULL;
+  }
+
+private:
   static juint    _crc_table[];
 
 };

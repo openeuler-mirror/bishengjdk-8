@@ -45,6 +45,11 @@ address StubRoutines::aarch64::_float_sign_flip = NULL;
 address StubRoutines::aarch64::_double_sign_mask = NULL;
 address StubRoutines::aarch64::_double_sign_flip = NULL;
 address StubRoutines::aarch64::_zero_longs = NULL;
+address StubRoutines::aarch64::_large_arrays_hashcode_boolean = NULL;
+address StubRoutines::aarch64::_large_arrays_hashcode_byte = NULL;
+address StubRoutines::aarch64::_large_arrays_hashcode_char = NULL;
+address StubRoutines::aarch64::_large_arrays_hashcode_int = NULL;
+address StubRoutines::aarch64::_large_arrays_hashcode_short = NULL;
 
 /**
  *  crc_table[] from jdk/src/share/native/java/util/zip/zlib-1.2.5/crc32.h

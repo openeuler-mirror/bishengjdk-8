@@ -108,6 +108,7 @@
   template(java_io_ByteArrayInputStream,              "java/io/ByteArrayInputStream")             \
   template(java_io_Serializable,                      "java/io/Serializable")                     \
   template(java_util_Arrays,                          "java/util/Arrays")                         \
+  template(jdk_internal_util_ArraysSupport,           "jdk/internal/util/ArraysSupport")          \
   template(java_util_Properties,                      "java/util/Properties")                     \
   template(java_util_Vector,                          "java/util/Vector")                         \
   template(java_util_AbstractList,                    "java/util/AbstractList")                   \
@@ -471,6 +472,7 @@
   template(byte_array_signature,                      "[B")                                       \
   template(char_array_signature,                      "[C")                                       \
   template(int_array_signature,                       "[I")                                       \
+  template(object_int_int_int_int_signature,          "(Ljava/lang/Object;IIII)I")               \
   template(object_void_signature,                     "(Ljava/lang/Object;)V")                    \
   template(object_int_signature,                      "(Ljava/lang/Object;)I")                    \
   template(object_boolean_signature,                  "(Ljava/lang/Object;)Z")                    \
@@ -497,6 +499,7 @@
   template(classloader_string_long_signature,         "(Ljava/lang/ClassLoader;Ljava/lang/String;)J")             \
   template(byte_array_void_signature,                 "([B)V")                                                    \
   template(char_array_void_signature,                 "([C)V")                                                    \
+  template(char_array_int_signature,                  "([C)I")                                                    \
   template(int_int_void_signature,                    "(II)V")                                                    \
   template(long_long_void_signature,                  "(JJ)V")                                                    \
   template(void_classloader_signature,                "()Ljava/lang/ClassLoader;")                                \
@@ -803,6 +806,8 @@
   do_intrinsic(_indexOf,                  java_lang_String,       indexOf_name, string_int_signature,            F_R)   \
    do_name(     indexOf_name,                                    "indexOf")                                             \
   do_intrinsic(_equals,                   java_lang_String,       equals_name, object_boolean_signature,         F_R)   \
+  do_intrinsic(_vectorizedHashCode,       jdk_internal_util_ArraysSupport, vectorizedHashCode_name, object_int_int_int_int_signature, F_S) \
+   do_name(     vectorizedHashCode_name,                         "vectorizedHashCode")                                  \
                                                                                                                         \
   do_class(java_nio_Buffer,               "java/nio/Buffer")                                                            \
   do_intrinsic(_checkIndex,               java_nio_Buffer,        checkIndex_name, int_int_signature,            F_R)   \

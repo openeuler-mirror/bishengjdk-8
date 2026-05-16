@@ -753,6 +753,9 @@ class CommandLineFlags {
   diagnostic(bool, UseMD5Intrinsics, false,                                 \
           "Use intrinsics for MD5 crypto hash function")                    \
                                                                             \
+  diagnostic(bool, UseVectorizedHashCodeIntrinsic, false,                   \
+          "Enables intrinsification of ArraysSupport.vectorizedHashCode()") \
+                                                                            \
   product(bool, UseAESCTRIntrinsics, false,                                 \
           "Use intrinsics for the paralleled version of AES/CTR crypto")    \
                                                                             \

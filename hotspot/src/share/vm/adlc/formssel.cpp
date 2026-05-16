@@ -608,7 +608,8 @@ bool InstructForm::needs_anti_dependence_check(FormDict &globals) const {
       ( strcmp(_matrule->_rChild->_opType,"StrComp"    )==0 ||
         strcmp(_matrule->_rChild->_opType,"StrEquals"  )==0 ||
         strcmp(_matrule->_rChild->_opType,"StrIndexOf" )==0 ||
-        strcmp(_matrule->_rChild->_opType,"AryEq"      )==0 ))
+        strcmp(_matrule->_rChild->_opType,"AryEq"      )==0 ||
+        strcmp(_matrule->_rChild->_opType,"VectorizedHashCode")==0 ))
     return true;
 
   // Check if instruction has a USE of a memory operand class, but no defs
@@ -890,8 +891,9 @@ uint InstructForm::oper_input_base(FormDict &globals) {
         strcmp(_matrule->_rChild->_opType,"StrComp"   )==0 ||
         strcmp(_matrule->_rChild->_opType,"StrEquals" )==0 ||
         strcmp(_matrule->_rChild->_opType,"StrIndexOf")==0 ||
+        strcmp(_matrule->_rChild->_opType,"VectorizedHashCode")==0 ||
         strcmp(_matrule->_rChild->_opType,"EncodeISOArray")==0)) {
-        // String.(compareTo/equals/indexOf) and Arrays.equals
+        // String.(compareTo/equals/indexOf) and Arrays.(equals/hashCode)
         // and sun.nio.cs.iso8859_1$Encoder.EncodeISOArray
         // take 1 control and 1 memory edges.
     return 2;

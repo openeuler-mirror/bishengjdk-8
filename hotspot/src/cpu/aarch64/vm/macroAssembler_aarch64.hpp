@@ -1208,6 +1208,13 @@ public:
   void string_equals(Register str1, Register str2,
                      Register cnt, Register result,
                      Register tmp1);
+  address arrays_hashcode(Register ary, Register cnt, Register result,
+                          FloatRegister vdata0, FloatRegister vdata1,
+                          FloatRegister vdata2, FloatRegister vdata3,
+                          FloatRegister vmul0, FloatRegister vmul1,
+                          FloatRegister vmul2, FloatRegister vmul3,
+                          FloatRegister vpow, FloatRegister vpowm,
+                          BasicType eltype);
   void char_arrays_equals(Register ary1, Register ary2,
                           Register result, Register tmp1);
   void fill_words(Register base, Register cnt, Register value);
@@ -1315,6 +1322,23 @@ public:
     }
   }
 };
+
+#define ARRAYS_HASHCODE_REGISTERS \
+  do {                            \
+    assert(result == r0  &&       \
+           ary    == r1  &&       \
+           cnt    == r2  &&       \
+           vdata0 == v3  &&       \
+           vdata1 == v2  &&       \
+           vdata2 == v1  &&       \
+           vdata3 == v0  &&       \
+           vmul0  == v4  &&       \
+           vmul1  == v5  &&       \
+           vmul2  == v6  &&       \
+           vmul3  == v7  &&       \
+           vpow   == v12 &&       \
+           vpowm  == v13, "registers must match aarch64.ad"); \
+  } while (0)
 
 #ifdef ASSERT
 inline bool AbstractAssembler::pd_check_instruction_mark() { return false; }
