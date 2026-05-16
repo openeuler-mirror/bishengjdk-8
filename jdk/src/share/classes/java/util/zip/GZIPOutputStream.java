@@ -59,10 +59,20 @@ class GZIPOutputStream extends DeflaterOutputStream {
 
     private static int WINDOWBITS = 31;
 
+    private static int getIntProperty(String key, int defaultValue) {
+        try {
+            return Integer.parseInt(System.getProperty(key, Integer.toString(defaultValue)));
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
     static {
         if ("aarch64".equals(System.getProperty("os.arch"))) {
             GZIP_USE_KAE = Boolean.parseBoolean(System.getProperty("GZIP_USE_KAE", "false"));
-            WINDOWBITS = Integer.parseInt(System.getProperty("WINDOWBITS", "31"));
+            if (GZIP_USE_KAE) {
+                WINDOWBITS = getIntProperty("WINDOWBITS", 31);
+            }
         }
     }
 
