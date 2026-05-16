@@ -1850,10 +1850,10 @@ jint G1CollectedHeap::initialize() {
 
   size_t init_byte_size = collector_policy()->initial_heap_byte_size();
   size_t max_byte_size = collector_policy()->max_heap_byte_size();
-  if (Universe::is_dynamic_max_heap_enable()) {
-    max_byte_size = collector_policy()->max_heap_byte_size_limit();
-  }
   size_t heap_alignment = collector_policy()->heap_alignment();
+  if (Universe::is_dynamic_max_heap_enable()) {
+    max_byte_size = align_size_up(collector_policy()->max_heap_byte_size_limit(), heap_alignment);
+  }
 
   if (G1Uncommit) {
     if (G1PeriodicGCInterval == 0) {

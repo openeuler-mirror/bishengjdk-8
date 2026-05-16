@@ -3310,6 +3310,24 @@ class CommandLineFlags {
   product(bool, TraceDynamicMaxHeap, false,                                 \
           "Trace Dynamic Max Heap resizing log and cause of failure")       \
                                                                             \
+  product(uintx, DynamicMaxHeapShrinkMinFreeRatio, 40,                      \
+          "The percentage of Dynamic Max Heap min free ratio after shrink") \
+                                                                            \
+  product(uintx, ElasticMaxHeapSize, ScaleForWordSize(96*M),                \
+          "The limit of Elastic maximum heap size (in bytes)")              \
+                                                                            \
+  product(bool, ElasticMaxHeap, false,                                      \
+          "Enable Elastic Max Heap")                                        \
+                                                                            \
+  product(bool, TraceElasticMaxHeap, false,                                 \
+          "Trace Elastic Max Heap resizing log and cause of failure")       \
+                                                                            \
+  product(uintx, ElasticMaxHeapShrinkMinFreeRatio, 40,                      \
+          "The percentage of Elastic Max Heap min free ratio after shrink") \
+                                                                            \
+  product(bool, ElasticMaxDirectMemory, false,                              \
+          "Allow change max direct memory size during runtime with jcmd")   \
+                                                                            \
   product(uintx, OldSize, ScaleForWordSize(4*M),                            \
           "Initial tenured generation size (in bytes)")                     \
                                                                             \

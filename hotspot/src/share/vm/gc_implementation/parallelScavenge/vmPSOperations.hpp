@@ -26,6 +26,7 @@
 #define SHARE_VM_GC_IMPLEMENTATION_PARALLELSCAVENGE_VMPSOPERATIONS_HPP
 
 #include "gc_implementation/parallelScavenge/parallelScavengeHeap.hpp"
+#include "gc_implementation/shared/dynamicMaxHeap.hpp"
 #include "gc_implementation/shared/vmGCOperations.hpp"
 #include "gc_interface/gcCause.hpp"
 
@@ -44,6 +45,14 @@ class VM_ParallelGCSystemGC: public VM_GC_Operation {
   VM_ParallelGCSystemGC(uint gc_count, uint full_gc_count, GCCause::Cause gc_cause);
   virtual VMOp_Type type() const { return VMOp_ParallelGCSystemGC; }
   virtual void doit();
+};
+
+class PS_ChangeMaxHeapOp : public VM_ChangeMaxHeapOp {
+ public:
+  PS_ChangeMaxHeapOp(size_t new_max_heap);
+  virtual void doit();
+  bool ps_old_gen_can_shrink(size_t new_limit, bool print_logs);
+  bool ps_young_gen_can_shrink(size_t new_limit);
 };
 
 #endif // SHARE_VM_GC_IMPLEMENTATION_PARALLELSCAVENGE_VMPSOPERATIONS_HPP

@@ -1883,7 +1883,6 @@ static bool verify_serial_gc_flags() {
 
 void Arguments::set_gc_specific_flags() {
 #if INCLUDE_ALL_GCS
-  DynamicMaxHeapChecker::common_check();
   // Set per-collector flags
   if (UseParallelGC || UseParallelOldGC) {
     set_parallel_gc_flags();
@@ -4521,6 +4520,15 @@ jint Arguments::apply_ergo(JavaVMInitArgs* args) {
 
   // Set heap size based on available physical memory
   set_heap_size();
+  if (Universe::is_dynamic_max_heap_enable() &&
+      ElasticMaxHeap &&
+      !Universe::dynamic_max_heap_size_limit_set_on_cmdline() &&
+      !Universe::elastic_max_heap_size_set_on_cmdline() &&
+      DynamicMaxHeapSizeLimit <= MaxHeapSize) {
+    size_t heap_alignment = CollectorPolicy::compute_heap_alignment();
+    uintx aligned_max_heap_size = align_size_up(MaxHeapSize, heap_alignment);
+    FLAG_SET_ERGO(uintx, DynamicMaxHeapSizeLimit, aligned_max_heap_size);
+  }
 
   ArgumentsExt::set_gc_specific_flags();
 

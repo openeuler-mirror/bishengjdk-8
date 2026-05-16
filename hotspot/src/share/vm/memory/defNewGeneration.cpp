@@ -30,6 +30,7 @@
 #include "gc_implementation/shared/gcTraceTime.hpp"
 #include "gc_implementation/shared/gcTrace.hpp"
 #include "gc_implementation/shared/spaceDecorator.hpp"
+#include "gc_implementation/shared/dynamicMaxHeap.hpp"
 #include "memory/defNewGeneration.inline.hpp"
 #include "memory/gcLocker.inline.hpp"
 #include "memory/genCollectedHeap.hpp"
@@ -389,6 +390,10 @@ void DefNewGeneration::compute_new_size() {
   size_t new_size_before = _virtual_space.committed_size();
   size_t min_new_size = spec()->init_size();
   size_t max_new_size = reserved().byte_size();
+  // Dynamic Max Heap
+  if (Universe::is_dynamic_max_heap_enable()) {
+    max_new_size = dynamic_max_heap_size();
+  }
   assert(min_new_size <= new_size_before &&
          new_size_before <= max_new_size,
          "just checking");
@@ -401,6 +406,28 @@ void DefNewGeneration::compute_new_size() {
   int threads_count = Threads::number_of_non_daemon_threads();
   size_t thread_increase_size = threads_count * NewSizeThreadIncrease;
   desired_new_size = align_size_up(desired_new_size + thread_increase_size, alignment);
+
+  // Dynamic Max Heap
+  // setting desired_new_size as exp_dynamic_max_heap_size with following conditions
+  // 1. exp_dynamic_max_heap_size is set
+  // 2. exp_dynamic_max_heap_size is smaller than current young capacity(commited size)
+  // 3. exp_dynamic_max_heap_size is bigger than min_new_size // min_new_size might need fix
+  // 4. young is empty
+  // 5. exp_dynamic_max_heap_size is smaller than current desired_new_size
+  // exp_size is smller than desired_new_size might increase young gc/cms frequency
+  size_t exp_size = exp_dynamic_max_heap_size();
+  if (Universe::is_dynamic_max_heap_enable() &&
+      used() == 0 &&
+      exp_size > 0 &&
+      exp_size < new_size_before &&
+      exp_size >= min_new_size &&
+      exp_size < desired_new_size) {
+    guarantee(exp_size % alignment == 0, "must be");
+    guarantee(exp_size <= max_new_size, "must be");
+    guarantee(to()->is_empty() && from()->is_empty() && eden()->is_empty(), "must be");
+    desired_new_size = exp_size;
+    DMH_LOG("Gen_ElasticMaxHeapOp: DefNewGeneration shrink according to ElasticMaxHeap");
+  }
 
   // Adjust new generation size
   desired_new_size = MAX2(MIN2(desired_new_size, max_new_size), min_new_size);
@@ -451,6 +478,17 @@ void DefNewGeneration::compute_new_size() {
       gclog_or_tty->cr();
     }
   }
+  // Dynamic Max Heap
+  if (Universe::is_dynamic_max_heap_enable() && exp_size > 0) {
+    size_t current_byte_size = _virtual_space.committed_size();
+    DMH_LOG("Gen_ElasticMaxHeapOp: DefNewGeneration ElasticMaxHeap adjust %s, expect "
+            SIZE_FORMAT "K, actual " SIZE_FORMAT "K, min "
+            SIZE_FORMAT "K",
+            (exp_size >= current_byte_size) ? "success" : "fail",
+            exp_size / K,
+            current_byte_size / K,
+            min_new_size / K);
+  }
 }
 
 void DefNewGeneration::younger_refs_iterate(OopsInGenClosure* cl) {
@@ -477,7 +515,12 @@ size_t DefNewGeneration::free() const {
 
 size_t DefNewGeneration::max_capacity() const {
   const size_t alignment = GenCollectedHeap::heap()->collector_policy()->space_alignment();
-  const size_t reserved_bytes = reserved().byte_size();
+  size_t reserved_bytes = reserved().byte_size();
+  // Dynamic Max Heap
+  if (Universe::is_dynamic_max_heap_enable()) {
+    guarantee(dynamic_max_heap_size() <= reserved_bytes, "must be");
+    reserved_bytes = dynamic_max_heap_size();
+  }
   return reserved_bytes - compute_survivor_size(reserved_bytes, alignment);
 }
 

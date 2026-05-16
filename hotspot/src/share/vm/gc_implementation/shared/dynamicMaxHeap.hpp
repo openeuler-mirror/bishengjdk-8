@@ -52,7 +52,7 @@ private:
 
 class DynamicMaxHeapChecker : AllStatic {
 public:
-  static void common_check();
+  static bool common_check();
   static bool check_dynamic_max_heap_size_limit();
   static void warning_and_disable(const char *reason);
 private:

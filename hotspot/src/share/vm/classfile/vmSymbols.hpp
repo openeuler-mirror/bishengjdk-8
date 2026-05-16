@@ -528,6 +528,9 @@
   template(referencequeue_signature,                  "Ljava/lang/ref/ReferenceQueue;")                           \
   template(sun_misc_Cleaner_signature,                "Lsun/misc/Cleaner;")                                       \
   template(executable_signature,                      "Ljava/lang/reflect/Executable;")                           \
+  template(java_nio_Bits,                             "java/nio/Bits")                                            \
+  template(updateMaxMemory_name,                      "updateMaxMemory")                                          \
+  template(updateMaxMemory_signature,                 "(J)Ljava/lang/String;")                                    \
   template(concurrenthashmap_signature,               "Ljava/util/concurrent/ConcurrentHashMap;")                 \
   template(String_StringBuilder_signature,            "(Ljava/lang/String;)Ljava/lang/StringBuilder;")            \
   template(int_StringBuilder_signature,               "(I)Ljava/lang/StringBuilder;")                             \
