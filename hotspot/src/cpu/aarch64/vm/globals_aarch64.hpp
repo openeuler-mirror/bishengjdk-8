@@ -92,6 +92,8 @@ define_pd_global(intx, InlineSmallCode,          1000);
           "Use CRC32 instructions for CRC32 computation")               \
   experimental(bool, UseLSE, false,                                     \
           "Use LSE instructions")                                       \
+  product(bool, UseLSEPrefetch, false,                                  \
+          "Prefetch before lock-related LSE instructions (CAS)")        \
   product(bool, UseSIMDForMemoryOps, false,                             \
           "Use SIMD instructions in generated memory move code")        \
   product(bool, AvoidUnalignedAccesses, false,                          \
