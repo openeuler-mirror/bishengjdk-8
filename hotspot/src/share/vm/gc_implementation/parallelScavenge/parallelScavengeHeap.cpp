@@ -35,6 +35,7 @@
 #include "gc_implementation/parallelScavenge/psPromotionManager.hpp"
 #include "gc_implementation/parallelScavenge/psScavenge.hpp"
 #include "gc_implementation/parallelScavenge/vmPSOperations.hpp"
+#include "gc_implementation/shared/dynamicMaxHeap.hpp"
 #include "gc_implementation/shared/gcHeapSummary.hpp"
 #include "gc_implementation/shared/gcTrimNativeHeap.hpp"
 #include "gc_implementation/shared/gcWhen.hpp"
@@ -100,6 +101,22 @@ jint ParallelScavengeHeap::initialize() {
 
   _old_gen = _gens->old_gen();
   _young_gen = _gens->young_gen();
+
+  if (Universe::is_dynamic_max_heap_enable()) {
+    size_t cur_heap_limit = MaxHeapSize;
+    size_t cur_young_limit = align_size_down_bounded(cur_heap_limit / (NewRatio + 1),
+                                                     _collector_policy->gen_alignment());
+    cur_young_limit = MIN2(cur_young_limit, _young_gen->reserved().byte_size());
+    cur_young_limit = MAX2(cur_young_limit, _young_gen->min_gen_size());
+    size_t cur_old_limit = cur_heap_limit - cur_young_limit;
+    if (cur_old_limit > _old_gen->reserved().byte_size()) {
+      cur_old_limit = _old_gen->reserved().byte_size();
+      cur_young_limit = cur_heap_limit - cur_old_limit;
+    }
+    _old_gen->set_cur_max_gen_size(cur_old_limit);
+    _young_gen->set_cur_max_gen_size(cur_young_limit);
+    set_current_max_heap_size(cur_heap_limit);
+  }
 
   const size_t eden_capacity = _young_gen->eden_space()->capacity_in_bytes();
   const size_t old_capacity = _old_gen->capacity_in_bytes();
@@ -176,6 +193,12 @@ bool ParallelScavengeHeap::is_maximal_no_gc() const {
 
 size_t ParallelScavengeHeap::max_capacity() const {
   size_t estimated = reserved_region().byte_size();
+  // Dynamic Max Heap
+  if (Universe::is_dynamic_max_heap_enable()) {
+    // young_gen()->max_size() is also controlled by DynamicMaxHeap
+    guarantee(current_max_heap_size() <= estimated, "must be");
+    estimated = current_max_heap_size();
+  }
   if (UseAdaptiveSizePolicy) {
     estimated -= _size_policy->max_survivor_size(young_gen()->max_size());
   } else {
@@ -222,6 +245,13 @@ bool ParallelScavengeHeap::is_in_partial_collection(const void *p) {
   return p >= old_gen()->reserved().end();
 }
 #endif
+
+bool ParallelScavengeHeap::change_max_heap(size_t new_size){
+  assert(!Heap_lock->owned_by_self(), "this thread should not own the Heap_lock");
+  PS_ChangeMaxHeapOp op(new_size);
+  VMThread::execute(&op);
+  return op.resize_success();
+}
 
 // There are two levels of allocation policy here.
 //

@@ -26,6 +26,7 @@
 #define SHARE_VM_GC_IMPLEMENTATION_CONCURRENTMARKSWEEP_VMCMSOPERATIONS_HPP
 
 #include "gc_implementation/concurrentMarkSweep/concurrentMarkSweepGeneration.hpp"
+#include "gc_implementation/shared/dynamicMaxHeap.hpp"
 #include "gc_implementation/shared/vmGCOperations.hpp"
 #include "gc_interface/gcCause.hpp"
 #include "runtime/vm_operations.hpp"
@@ -145,6 +146,12 @@ class VM_GenCollectFullConcurrent: public VM_GC_Operation {
   virtual void doit_epilogue();
   virtual bool is_cheap_allocated() const { return false; }
   virtual bool evaluate_at_safepoint() const;
+};
+
+class Gen_ChangeMaxHeapOp : public VM_ChangeMaxHeapOp {
+ public:
+  Gen_ChangeMaxHeapOp(size_t new_max_heap);
+  virtual void doit();
 };
 
 #endif // SHARE_VM_GC_IMPLEMENTATION_CONCURRENTMARKSWEEP_VMCMSOPERATIONS_HPP

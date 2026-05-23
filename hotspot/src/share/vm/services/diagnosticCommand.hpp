@@ -272,6 +272,7 @@ public:
     return "Medium";
   }
   static int num_arguments();
+  static int num_arguments(ChangeMaxHeapDCmd* dcmd);
   static const JavaPermission permission() {
     JavaPermission p = {"java.lang.management.ManagementPermission",
       "monitor", NULL};
@@ -280,6 +281,40 @@ public:
   virtual void execute(DCmdSource source, TRAPS);
 protected:
   DCmdArgument<MemorySizeArgument> _new_max_heap_size;
+};
+
+class ElasticMaxHeapDCmd : public ChangeMaxHeapDCmd {
+public:
+  ElasticMaxHeapDCmd(outputStream* output, bool heap);
+  static const char* name() { return "GC.elastic_max_heap"; }
+  static const char* description() {
+    return "Change elastic max heap size during runtime.";
+  }
+  static const char* impact() {
+    return "Medium";
+  }
+  static int num_arguments();
+};
+
+class ElasticMaxDirectMemoryDCmd : public DCmdWithParser {
+public:
+  ElasticMaxDirectMemoryDCmd(outputStream* output, bool heap);
+  static const char* name() { return "GC.elastic_max_direct_memory"; }
+  static const char* description() {
+    return "Change elastic max direct memory size during runtime.";
+  }
+  static const char* impact() {
+    return "Medium";
+  }
+  static int num_arguments();
+  static const JavaPermission permission() {
+    JavaPermission p = {"java.lang.management.ManagementPermission",
+      "monitor", NULL};
+      return p;
+  }
+  virtual void execute(DCmdSource source, TRAPS);
+protected:
+  DCmdArgument<MemorySizeArgument> _new_max_direct_memory;
 };
 
 #if INCLUDE_SERVICES   // Heap dumping supported

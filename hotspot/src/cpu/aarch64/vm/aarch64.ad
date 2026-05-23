@@ -887,6 +887,51 @@ reg_class v3_reg(
     V3, V3_H
 );
 
+// Class for 128 bit register v4
+reg_class v4_reg(
+    V4, V4_H
+);
+
+// Class for 128 bit register v5
+reg_class v5_reg(
+    V5, V5_H
+);
+
+// Class for 128 bit register v6
+reg_class v6_reg(
+    V6, V6_H
+);
+
+// Class for 128 bit register v7
+reg_class v7_reg(
+    V7, V7_H
+);
+
+// Class for 128 bit register v8
+reg_class v8_reg(
+    V8, V8_H
+);
+
+// Class for 128 bit register v9
+reg_class v9_reg(
+    V9, V9_H
+);
+
+// Class for 128 bit register v10
+reg_class v10_reg(
+    V10, V10_H
+);
+
+// Class for 128 bit register v12
+reg_class v12_reg(
+    V12, V12_H
+);
+
+// Class for 128 bit register v13
+reg_class v13_reg(
+    V13, V13_H
+);
+
 // Singleton class for condition codes
 reg_class int_flags(RFLAGS);
 
@@ -4776,6 +4821,87 @@ operand vRegD_V2()
 operand vRegD_V3()
 %{
   constraint(ALLOC_IN_RC(v3_reg));
+  match(RegD);
+  op_cost(0);
+  format %{ %}
+  interface(REG_INTER);
+%}
+
+operand vRegD_V4()
+%{
+  constraint(ALLOC_IN_RC(v4_reg));
+  match(RegD);
+  op_cost(0);
+  format %{ %}
+  interface(REG_INTER);
+%}
+
+operand vRegD_V5()
+%{
+  constraint(ALLOC_IN_RC(v5_reg));
+  match(RegD);
+  op_cost(0);
+  format %{ %}
+  interface(REG_INTER);
+%}
+
+operand vRegD_V6()
+%{
+  constraint(ALLOC_IN_RC(v6_reg));
+  match(RegD);
+  op_cost(0);
+  format %{ %}
+  interface(REG_INTER);
+%}
+
+operand vRegD_V7()
+%{
+  constraint(ALLOC_IN_RC(v7_reg));
+  match(RegD);
+  op_cost(0);
+  format %{ %}
+  interface(REG_INTER);
+%}
+
+operand vRegD_V8()
+%{
+  constraint(ALLOC_IN_RC(v8_reg));
+  match(RegD);
+  op_cost(0);
+  format %{ %}
+  interface(REG_INTER);
+%}
+
+operand vRegD_V9()
+%{
+  constraint(ALLOC_IN_RC(v9_reg));
+  match(RegD);
+  op_cost(0);
+  format %{ %}
+  interface(REG_INTER);
+%}
+
+operand vRegD_V10()
+%{
+  constraint(ALLOC_IN_RC(v10_reg));
+  match(RegD);
+  op_cost(0);
+  format %{ %}
+  interface(REG_INTER);
+%}
+
+operand vRegD_V12()
+%{
+  constraint(ALLOC_IN_RC(v12_reg));
+  match(RegD);
+  op_cost(0);
+  format %{ %}
+  interface(REG_INTER);
+%}
+
+operand vRegD_V13()
+%{
+  constraint(ALLOC_IN_RC(v13_reg));
   match(RegD);
   op_cost(0);
   format %{ %}
@@ -14122,6 +14248,35 @@ instruct array_equals(iRegP_R1 ary1, iRegP_R2 ary2, iRegI_R0 result,
   ins_pipe(pipe_class_memory);
 %}
 
+instruct arrays_hashcode(iRegP_R1 ary, iRegI_R2 cnt, iRegI_R0 result, immI basic_type,
+                         vRegD_V0 vtmp0, vRegD_V1 vtmp1, vRegD_V2 vtmp2, vRegD_V3 vtmp3,
+                         vRegD_V4 vtmp4, vRegD_V5 vtmp5, vRegD_V6 vtmp6, vRegD_V7 vtmp7,
+                         vRegD_V12 vtmp8, vRegD_V13 vtmp9,
+                         rFlagsReg cr)
+%{
+  match(Set result (VectorizedHashCode (Binary ary cnt) (Binary result basic_type)));
+  effect(TEMP vtmp0, TEMP vtmp1, TEMP vtmp2, TEMP vtmp3,
+         TEMP vtmp4, TEMP vtmp5, TEMP vtmp6, TEMP vtmp7,
+         TEMP vtmp8, TEMP vtmp9,
+         USE_KILL ary, USE_KILL cnt, USE basic_type, KILL cr);
+
+  format %{ "Array HashCode array[] $ary,$cnt,$result,$basic_type -> $result   // KILL all" %}
+  ins_encode %{
+    address tpc = __ arrays_hashcode($ary$$Register, $cnt$$Register, $result$$Register,
+                                     $vtmp3$$FloatRegister, $vtmp2$$FloatRegister,
+                                     $vtmp1$$FloatRegister, $vtmp0$$FloatRegister,
+                                     $vtmp4$$FloatRegister, $vtmp5$$FloatRegister,
+                                     $vtmp6$$FloatRegister, $vtmp7$$FloatRegister,
+                                     $vtmp8$$FloatRegister, $vtmp9$$FloatRegister,
+                                     (BasicType)$basic_type$$constant);
+    if (tpc == NULL) {
+      ciEnv::current()->record_failure("CodeCache is full");
+      return;
+    }
+  %}
+  ins_pipe(pipe_class_memory);
+%}
+
 // encode char[] to byte[] in ISO_8859_1
 instruct encode_iso_array(iRegP_R2 src, iRegP_R1 dst, iRegI_R3 len,
                           vRegD_V0 Vtmp1, vRegD_V1 Vtmp2,
@@ -14139,6 +14294,58 @@ instruct encode_iso_array(iRegP_R2 src, iRegP_R1 dst, iRegI_R3 len,
          $Vtmp3$$FloatRegister,  $Vtmp4$$FloatRegister);
   %}
   ins_pipe( pipe_class_memory );
+%}
+
+// encode char[] to char[] in UTF_8
+instruct encode_utf8_from_utf16(iRegP_R2 src, iRegP_R1 dst, iRegI_R3 len,
+                          vRegD_V0 Vtmp0, vRegD_V1 Vtmp1, vRegD_V2 Vtmp2,
+                          vRegD_V3 Vtmp3, vRegD_V4 Vtmp4, vRegD_V5 Vtmp5,
+                          vRegD_V6 Vtmp6, vRegD_V7 Vtmp7, vRegD_V8 Vtmp8,
+                          vRegD_V9 Vtmp9, iRegI_R0 result, rFlagsReg cr)
+%{
+  match(Set result (EncodeUtf8FromUtf16 src (Binary dst len)));
+  effect(USE_KILL src, USE_KILL dst, USE_KILL len, KILL Vtmp0, KILL Vtmp1,
+         KILL Vtmp2, KILL Vtmp3, KILL Vtmp4, KILL Vtmp5, KILL Vtmp6, KILL Vtmp7, KILL Vtmp8, KILL Vtmp9, KILL cr);
+
+  size(8192);
+
+  format %{ "Encode array $src,$dst,$len -> $result" %}
+  ins_encode %{
+    __ encode_utf8_from_utf16($src$$Register, $dst$$Register, $len$$Register,
+         $result$$Register,
+         $Vtmp0$$FloatRegister, $Vtmp1$$FloatRegister,  $Vtmp2$$FloatRegister,
+         $Vtmp3$$FloatRegister,  $Vtmp4$$FloatRegister,  $Vtmp5$$FloatRegister,
+         $Vtmp6$$FloatRegister,  $Vtmp7$$FloatRegister,  $Vtmp8$$FloatRegister,
+         $Vtmp9$$FloatRegister);
+  %}
+  ins_pipe( pipe_class_memory );
+%}
+
+// decode byte[] in utf8 to byte[] in UTF16
+instruct decode_utf8_to_utf16(iRegP_R2 src, iRegP_R1 dst, iRegI_R3 len,
+                          vRegD_V0 vtmp0, vRegD_V1 vtmp1, vRegD_V2 vtmp2,
+                          vRegD_V3 vtmp3, vRegD_V4 vtmp4, vRegD_V5 vtmp5,
+                          vRegD_V6 vtmp6, vRegD_V7 vtmp7, vRegD_V8 vtmp8,
+                          vRegD_V9 vtmp9, vRegD_V10 vtmp10, iRegI_R0 result, rFlagsReg cr)
+%{
+  match(Set result (DecodeUtf8ToUtf16 src (Binary dst len)));
+  effect(USE_KILL src, USE_KILL dst, USE_KILL len, KILL vtmp0, KILL vtmp1, KILL vtmp2, KILL vtmp3,
+          KILL vtmp4, KILL vtmp5, KILL vtmp6, KILL vtmp7, KILL vtmp8, KILL vtmp9, KILL vtmp10, KILL cr);
+
+  size(8192);
+
+  format %{ "Decode UTF8 to UTF16 $src,$dst,$len -> $result" %}
+  ins_encode %{
+    __ decode_utf8_to_utf16($src$$Register, $dst$$Register, $len$$Register,
+                        $result$$Register,
+                        $vtmp0$$FloatRegister, $vtmp1$$FloatRegister,
+                        $vtmp2$$FloatRegister, $vtmp3$$FloatRegister,
+                        $vtmp4$$FloatRegister, $vtmp5$$FloatRegister,
+                        $vtmp6$$FloatRegister, $vtmp7$$FloatRegister,
+                        $vtmp8$$FloatRegister, $vtmp9$$FloatRegister,
+                        $vtmp10$$FloatRegister);
+  %}
+  ins_pipe(pipe_class_memory);
 %}
 
 // ============================================================================

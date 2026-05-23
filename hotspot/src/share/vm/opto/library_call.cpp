@@ -205,6 +205,7 @@ class LibraryCallKit : public GraphKit {
   bool inline_string_indexOf();
   Node* string_indexOf(Node* string_object, ciTypeArray* target_array, jint offset, jint cache_i, jint md2_i);
   bool inline_string_equals();
+  bool inline_vectorizedHashCode();
   Node* round_double_node(Node* n);
   bool runtime_math(const TypeFunc* call_type, address funcAddr, const char* funcName);
   bool inline_math_native(vmIntrinsics::ID id);
@@ -326,6 +327,8 @@ class LibraryCallKit : public GraphKit {
   Node* get_long_state_from_digest_object(Node *digestBase_object);
   Node* inline_digestBase_implCompressMB_predicate(int predicate);
   bool inline_encodeISOArray();
+  bool inline_encodeUtf8FromUtf16();
+  bool inline_decodeUtf8ToUtf16();
   bool inline_updateCRC32();
   bool inline_updateBytesCRC32();
   bool inline_updateByteBufferCRC32();
@@ -533,6 +536,7 @@ bool LibraryCallKit::try_to_inline(int predicate) {
   case vmIntrinsics::_compareTo:                return inline_string_compareTo();
   case vmIntrinsics::_indexOf:                  return inline_string_indexOf();
   case vmIntrinsics::_equals:                   return inline_string_equals();
+  case vmIntrinsics::_vectorizedHashCode:       return inline_vectorizedHashCode();
 
   case vmIntrinsics::_getObject:                return inline_unsafe_access(!is_native_ptr, !is_store, T_OBJECT,  !is_volatile, false);
   case vmIntrinsics::_getBoolean:               return inline_unsafe_access(!is_native_ptr, !is_store, T_BOOLEAN, !is_volatile, false);
@@ -705,6 +709,10 @@ bool LibraryCallKit::try_to_inline(int predicate) {
 
   case vmIntrinsics::_encodeISOArray:
     return inline_encodeISOArray();
+  case vmIntrinsics::_encodeUtf8FromUtf16:
+    return inline_encodeUtf8FromUtf16();
+  case vmIntrinsics::_decodeUtf8ToUtf16:
+    return inline_decodeUtf8ToUtf16();
 
   case vmIntrinsics::_updateCRC32:
     return inline_updateCRC32();
@@ -1092,6 +1100,41 @@ bool LibraryCallKit::inline_string_equals() {
   record_for_igvn(region);
 
   set_result(_gvn.transform(phi));
+  return true;
+}
+
+//------------------------------inline_vectorizedHashCode------------------------
+bool LibraryCallKit::inline_vectorizedHashCode() {
+  assert(callee()->signature()->size() == 5, "vectorizedHashCode has 5 parameters");
+
+  Node* array = argument(0);
+  Node* from_index = argument(1);
+  Node* length = argument(2);
+  Node* initial_value = argument(3);
+  Node* basic_type = argument(4);
+
+  array = cast_not_null(array, true);
+  if (stopped()) {
+    return true;
+  }
+  if (basic_type == top()) {
+    return false;
+  }
+
+  const TypeInt* basic_type_t = _gvn.type(basic_type)->isa_int();
+  if (basic_type_t == NULL || !basic_type_t->is_con()) {
+    return false;
+  }
+  BasicType bt = (BasicType) basic_type_t->get_con();
+  Node* array_start = array_element_address(array, from_index, bt);
+
+  set_result(_gvn.transform(new (C) VectorizedHashCodeNode(control(),
+                                                           memory(TypeAryPtr::get_array_body_type(bt)),
+                                                           array_start,
+                                                           length,
+                                                           initial_value,
+                                                           basic_type)));
+  C->set_has_split_ifs(true);
   return true;
 }
 
@@ -5599,6 +5642,80 @@ bool LibraryCallKit::inline_encodeISOArray() {
   Node* res_mem = _gvn.transform(new (C) SCMemProjNode(enc));
   set_memory(res_mem, mtype);
   set_result(enc);
+  return true;
+}
+
+//-------------inline_encodeUtf8FromUtf16------------------------------
+// encode char[] to byte[] in UTF-8
+bool LibraryCallKit::inline_encodeUtf8FromUtf16() {
+  assert(callee()->signature()->size() == 5, "encodeUtf8FromUtf16 has 5 parameters");
+  Node *src         = argument(0);
+  Node *src_offset  = argument(1);
+  Node *dst         = argument(2);
+  Node *dst_offset  = argument(3);
+  Node *length      = argument(4);
+
+  const Type* src_type = src->Value(&_gvn);
+  const Type* dst_type = dst->Value(&_gvn);
+  const TypeAryPtr* top_src = src_type->isa_aryptr();
+  const TypeAryPtr* top_dest = dst_type->isa_aryptr();
+  if (top_src  == NULL || top_src->klass()  == NULL ||
+      top_dest == NULL || top_dest->klass() == NULL) {
+    return false;
+  }
+
+  BasicType src_elem = src_type->isa_aryptr()->klass()->as_array_klass()->element_type()->basic_type();
+  BasicType dst_elem = dst_type->isa_aryptr()->klass()->as_array_klass()->element_type()->basic_type();
+  if (src_elem != T_CHAR || dst_elem != T_BYTE) {
+    return false;
+  }
+
+  Node* src_start = array_element_address(src, src_offset, src_elem);
+  Node* dst_start = array_element_address(dst, dst_offset, dst_elem);
+
+  const TypeAryPtr* mtype = TypeAryPtr::BYTES;
+  Node* enc = new (C) EncodeUtf8FromUtf16Node(control(), memory(mtype), src_start, dst_start, length);
+  enc = _gvn.transform(enc);
+  Node* res_mem = _gvn.transform(new (C) SCMemProjNode(enc));
+  set_memory(res_mem, mtype);
+  set_result(enc);
+  return true;
+}
+
+//-------------inline_decodeUtf8ToUtf16------------------------------
+// decode byte[] in UTF-8 to char[]
+bool LibraryCallKit::inline_decodeUtf8ToUtf16() {
+  assert(callee()->signature()->size() == 5, "decodeUtf8ToUtf16 has 5 parameters");
+  Node *src         = argument(0);
+  Node *src_offset  = argument(1);
+  Node *dst         = argument(2);
+  Node *dst_offset  = argument(3);
+  Node *length      = argument(4);
+
+  const Type* src_type = src->Value(&_gvn);
+  const Type* dst_type = dst->Value(&_gvn);
+  const TypeAryPtr* top_src = src_type->isa_aryptr();
+  const TypeAryPtr* top_dest = dst_type->isa_aryptr();
+  if (top_src  == NULL || top_src->klass()  == NULL ||
+      top_dest == NULL || top_dest->klass() == NULL) {
+    return false;
+  }
+
+  BasicType src_elem = src_type->isa_aryptr()->klass()->as_array_klass()->element_type()->basic_type();
+  BasicType dst_elem = dst_type->isa_aryptr()->klass()->as_array_klass()->element_type()->basic_type();
+  if (src_elem != T_BYTE || dst_elem != T_CHAR) {
+    return false;
+  }
+
+  Node* src_start = array_element_address(src, src_offset, src_elem);
+  Node* dst_start = array_element_address(dst, dst_offset, dst_elem);
+
+  const TypeAryPtr* mtype = TypeAryPtr::CHARS;
+  Node* dec = new (C) DecodeUtf8ToUtf16Node(control(), memory(mtype), src_start, dst_start, length);
+  dec = _gvn.transform(dec);
+  Node* res_mem = _gvn.transform(new (C) SCMemProjNode(dec));
+  set_memory(res_mem, mtype);
+  set_result(dec);
   return true;
 }
 

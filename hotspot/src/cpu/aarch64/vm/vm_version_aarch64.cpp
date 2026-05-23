@@ -249,6 +249,10 @@ void VM_Version::get_processor_features() {
     UseCRC32Intrinsics = true;
   }
 
+  if (FLAG_IS_DEFAULT(UseVectorizedHashCodeIntrinsic)) {
+    FLAG_SET_DEFAULT(UseVectorizedHashCodeIntrinsic, true);
+  }
+
   if (FLAG_IS_DEFAULT(UseMD5Intrinsics)) {
     UseMD5Intrinsics = true;
   }

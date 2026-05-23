@@ -45,6 +45,28 @@ address StubRoutines::aarch64::_float_sign_flip = NULL;
 address StubRoutines::aarch64::_double_sign_mask = NULL;
 address StubRoutines::aarch64::_double_sign_flip = NULL;
 address StubRoutines::aarch64::_zero_longs = NULL;
+address StubRoutines::aarch64::_large_arrays_hashcode_boolean = NULL;
+address StubRoutines::aarch64::_large_arrays_hashcode_byte = NULL;
+address StubRoutines::aarch64::_large_arrays_hashcode_char = NULL;
+address StubRoutines::aarch64::_large_arrays_hashcode_int = NULL;
+address StubRoutines::aarch64::_large_arrays_hashcode_short = NULL;
+address StubRoutines::aarch64::_convert_masked_utf8_to_utf16 = NULL;
+address StubRoutines::aarch64::_scalar_convert_utf8_to_utf16 = NULL;
+
+// UTF conversion lookup tables derived from simdutf.
+#ifndef ATTRIBUTE_ALIGNED
+#define ATTRIBUTE_ALIGNED(x) __attribute__ ((aligned(x)))
+#define ATTRIBUTE_ALIGNED_DEFINED_FOR_SIMDUTF
+#endif
+
+#define STUB_ROUTINES_AARCH64_SIMDUTF_TABLES_IMPL
+#include "simdutf_utf_tables.hpp"
+#undef STUB_ROUTINES_AARCH64_SIMDUTF_TABLES_IMPL
+
+#ifdef ATTRIBUTE_ALIGNED_DEFINED_FOR_SIMDUTF
+#undef ATTRIBUTE_ALIGNED
+#undef ATTRIBUTE_ALIGNED_DEFINED_FOR_SIMDUTF
+#endif
 
 /**
  *  crc_table[] from jdk/src/share/native/java/util/zip/zlib-1.2.5/crc32.h

@@ -222,6 +222,13 @@ class java_lang_String : AllStatic {
   friend class JavaClasses;
 };
 
+#ifdef AARCH64
+class sun_nio_cs_UTF_8 : AllStatic {
+ public:
+  static void set_utf_conversion_intrinsics(bool value, TRAPS);
+};
+#endif // AARCH64
+
 
 // Interface to java.lang.Class objects
 

@@ -189,6 +189,14 @@ G1CollectorPolicy::G1CollectorPolicy() :
   // aligned with the region size. To get around this we use the
   // unaligned values for the heap.
   if (Universe::is_dynamic_max_heap_enable()) {
+    if (ElasticMaxHeap &&
+        !Universe::dynamic_max_heap_size_limit_set_on_cmdline() &&
+        !Universe::elastic_max_heap_size_set_on_cmdline() &&
+        DynamicMaxHeapSizeLimit <= MaxHeapSize) {
+      assert(ElasticMaxHeap, "must be");
+      FLAG_SET_ERGO(uintx, DynamicMaxHeapSizeLimit, MaxHeapSize);
+    }
+    _max_heap_byte_size_limit = DynamicMaxHeapSizeLimit;
     HeapRegion::setup_heap_region_size(DynamicMaxHeapSizeLimit);
   } else {
     HeapRegion::setup_heap_region_size(MaxHeapSize);

@@ -138,6 +138,10 @@ address StubRoutines::_sha512_implCompressMB = NULL;
 
 address StubRoutines::_updateBytesCRC32 = NULL;
 address StubRoutines::_crc_table_adr = NULL;
+address StubRoutines::_pack_1_2_3_utf8_bytes_adr = NULL;
+address StubRoutines::_pack_1_2_utf8_bytes_adr = NULL;
+address StubRoutines::_pack_shufutf8_adr = NULL;
+address StubRoutines::_pack_utf8bigindex_adr = NULL;
 
 address StubRoutines::_BLAS_library = NULL;
 address StubRoutines::_ddotF2jBLAS = NULL;

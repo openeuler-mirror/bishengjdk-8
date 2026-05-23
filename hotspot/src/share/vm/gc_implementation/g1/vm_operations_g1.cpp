@@ -289,12 +289,12 @@ void G1_ChangeMaxHeapOp::doit() {
     if (!is_valid) {
       // We should not reach here because we have already checked the existence of
       // the ACC and disabled this feature when the ACC is absent.
-      DMH_LOG("G1_ChangeMaxHeapOp fail for missing ACC");
+      DMH_LOG("G1_ElasticMaxHeapOp fail for missing ACC");
       return;
     }
   }
 
-  DMH_LOG("G1_ChangeMaxHeapOp: current capacity " SIZE_FORMAT "K, new max heap " SIZE_FORMAT "K",
+  DMH_LOG("G1_ElasticMaxHeapOp: current capacity " SIZE_FORMAT "K, new max heap " SIZE_FORMAT "K",
           heap->capacity() / K, _new_max_heap / K);
 
   // step3 check if can update new limit
@@ -303,7 +303,7 @@ void G1_ChangeMaxHeapOp::doit() {
     if (!is_valid) {
       // We should not reach here because we have already checked the existence of
       // the ACC and disabled this feature when the ACC is absent.
-      DMH_LOG("G1_ChangeMaxHeapOp fail for missing ACC");
+      DMH_LOG("G1_ElasticMaxHeapOp fail for missing ACC");
       return;
     }
     heap->set_current_max_heap_size(_new_max_heap);
@@ -311,9 +311,9 @@ void G1_ChangeMaxHeapOp::doit() {
     // G1 young/old share same max size
     heap->update_gen_max_counter(_new_max_heap);
     _resize_success = true;
-    DMH_LOG("G1_ChangeMaxHeapOp success");
+    DMH_LOG("G1_ElasticMaxHeapOp success");
   } else {
-    DMH_LOG("G1_ChangeMaxHeapOp fail");
+    DMH_LOG("G1_ElasticMaxHeapOp fail");
   }
 }
 
@@ -334,7 +334,7 @@ void G1_ChangeMaxHeapOp::trigger_gc_shrink(size_t _new_max_heap,
       GCCauseSetter gccs(heap, _gc_cause);
       bool minor_gc_succeeded = heap->do_collection_pause_at_safepoint(policy->max_pause_time_ms());
       if (minor_gc_succeeded) {
-        DMH_LOG("G1_ChangeMaxHeapOp heap after Young GC");
+        DMH_LOG("G1_ElasticMaxHeapOp heap after Young GC");
         if (TraceDynamicMaxHeap) {
           heap->print_on(tty);
         }
@@ -347,7 +347,7 @@ void G1_ChangeMaxHeapOp::trigger_gc_shrink(size_t _new_max_heap,
         // trigger Full GC and adjust everything in resize_if_necessary_after_full_collection
         heap->set_exp_dynamic_max_heap_size(_new_max_heap);
         heap->do_full_collection(true);
-        DMH_LOG("G1_ChangeMaxHeapOp heap after Full GC");
+        DMH_LOG("G1_ElasticMaxHeapOp heap after Full GC");
         if (TraceDynamicMaxHeap) {
           heap->print_on(tty);
         }
@@ -382,11 +382,11 @@ void G1_ChangeMaxHeapOp::g1_shrink_without_full_gc(size_t _new_max_heap) {
   heap->verify_region_sets_optional();
   heap->verify_after_gc();
 
-  DMH_LOG("G1_ChangeMaxHeapOp: attempt heap shrinking for dynamic max heap %s "
+  DMH_LOG("G1_ElasticMaxHeapOp: attempt heap shrinking for dynamic max heap %s "
           "origin capacity " SIZE_FORMAT "K "
           "new capacity " SIZE_FORMAT "K "
           "shrink by " SIZE_FORMAT "K",
-          heap->capacity() <= _new_max_heap ? "success":"fail",
+          heap->capacity() <= _new_max_heap ? "success" : "fail",
           capacity_before_shrink / K,
           heap->capacity() / K,
           shrink_bytes / K);

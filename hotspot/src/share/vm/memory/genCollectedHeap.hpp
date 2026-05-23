@@ -48,6 +48,7 @@ class GenCollectedHeap : public SharedHeap {
   friend class VM_GenCollectFullConcurrent;
   friend class VM_GC_HeapInspection;
   friend class VM_HeapDumper;
+  friend class Gen_ChangeMaxHeapOp;
   friend class HeapInspection;
   friend class GCCauseSetter;
   friend class VMStructs;
@@ -551,10 +552,7 @@ protected:
 public:
   void stop();
   // Dynamic Max Heap
-  bool change_max_heap(size_t new_size) {
-    // Not Implement yet
-    return false;
-  }
+  virtual bool change_max_heap(size_t new_size);
 };
 
 #endif // SHARE_VM_MEMORY_GENCOLLECTEDHEAP_HPP

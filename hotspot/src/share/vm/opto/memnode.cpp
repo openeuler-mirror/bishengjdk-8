@@ -3070,6 +3070,38 @@ const Type *StrIntrinsicNode::Value( PhaseTransform *phase ) const {
 }
 
 //=============================================================================
+uint VectorizedHashCodeNode::match_edge(uint idx) const {
+  return idx >= 2 && idx <= 5;
+}
+
+const TypePtr* VectorizedHashCodeNode::adr_type() const {
+  Node* basic_type = in(5);
+  assert(basic_type != NULL && basic_type->is_Con(), "basic type must be constant");
+  return TypeAryPtr::get_array_body_type((BasicType) basic_type->get_int());
+}
+
+Node* VectorizedHashCodeNode::Ideal(PhaseGVN* phase, bool can_reshape) {
+  if (remove_dead_region(phase, can_reshape)) return this;
+  if (in(0) && in(0)->is_top()) return NULL;
+
+  if (can_reshape) {
+    Node* mem = phase->transform(in(MemNode::Memory));
+    uint alias_idx = phase->C->get_alias_index(adr_type());
+    mem = mem->is_MergeMem() ? mem->as_MergeMem()->memory_at(alias_idx) : mem;
+    if (mem != in(MemNode::Memory)) {
+      set_req(MemNode::Memory, mem);
+      return this;
+    }
+  }
+  return NULL;
+}
+
+const Type* VectorizedHashCodeNode::Value(PhaseTransform* phase) const {
+  if (in(0) && phase->type(in(0)) == Type::TOP) return Type::TOP;
+  return bottom_type();
+}
+
+//=============================================================================
 //------------------------------match_edge-------------------------------------
 // Do not match memory edge
 uint EncodeISOArrayNode::match_edge(uint idx) const {
@@ -3085,6 +3117,40 @@ Node *EncodeISOArrayNode::Ideal(PhaseGVN *phase, bool can_reshape) {
 
 //------------------------------Value------------------------------------------
 const Type *EncodeISOArrayNode::Value(PhaseTransform *phase) const {
+  if (in(0) && phase->type(in(0)) == Type::TOP) return Type::TOP;
+  return bottom_type();
+}
+
+//=============================================================================
+//------------------------------match_edge-------------------------------------
+uint EncodeUtf8FromUtf16Node::match_edge(uint idx) const {
+  return idx == 2 || idx == 3; // EncodeUtf8FromUtf16 src (Binary dst len)
+}
+
+//------------------------------Ideal------------------------------------------
+Node *EncodeUtf8FromUtf16Node::Ideal(PhaseGVN *phase, bool can_reshape) {
+  return remove_dead_region(phase, can_reshape) ? this : NULL;
+}
+
+//------------------------------Value------------------------------------------
+const Type *EncodeUtf8FromUtf16Node::Value(PhaseTransform *phase) const {
+  if (in(0) && phase->type(in(0)) == Type::TOP) return Type::TOP;
+  return bottom_type();
+}
+
+//=============================================================================
+//------------------------------match_edge-------------------------------------
+uint DecodeUtf8ToUtf16Node::match_edge(uint idx) const {
+  return idx == 2 || idx == 3; // DecodeUtf8ToUtf16 src (Binary dst len)
+}
+
+//------------------------------Ideal------------------------------------------
+Node *DecodeUtf8ToUtf16Node::Ideal(PhaseGVN *phase, bool can_reshape) {
+  return remove_dead_region(phase, can_reshape) ? this : NULL;
+}
+
+//------------------------------Value------------------------------------------
+const Type *DecodeUtf8ToUtf16Node::Value(PhaseTransform *phase) const {
   if (in(0) && phase->type(in(0)) == Type::TOP) return Type::TOP;
   return bottom_type();
 }

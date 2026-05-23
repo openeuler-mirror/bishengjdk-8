@@ -378,6 +378,7 @@ VirtualSpace::VirtualSpace() {
   _upper_alignment        = 0;
   _special                = false;
   _executable             = false;
+  _dynamic_max_heap_size  = 0;      // Dynamic Max Heap
 }
 
 
@@ -396,6 +397,9 @@ bool VirtualSpace::initialize_with_granularity(ReservedSpace rs, size_t committe
 
   _low = low_boundary();
   _high = low();
+
+  // Dynamic Max Heap
+  _dynamic_max_heap_size = reserved_size();
 
   _special = rs.special();
   _executable = rs.executable();
@@ -457,6 +461,7 @@ void VirtualSpace::release() {
   _upper_alignment        = 0;
   _special                = false;
   _executable             = false;
+  _dynamic_max_heap_size  = 0;
 }
 
 
@@ -470,7 +475,10 @@ size_t VirtualSpace::reserved_size() const {
 }
 
 
-size_t VirtualSpace::uncommitted_size()  const {
+size_t VirtualSpace::uncommitted_size() const {
+  if (Universe::is_dynamic_max_heap_enable()) {
+    return dynamic_max_heap_size() - committed_size();
+  }
   return reserved_size() - committed_size();
 }
 
@@ -508,6 +516,19 @@ size_t VirtualSpace::actual_committed_size() const {
 #endif
 
   return committed_low + committed_middle + committed_high;
+}
+
+// Dynamic Max heap
+void VirtualSpace::set_dynamic_max_heap_size(size_t new_size) {
+  guarantee(new_size <= reserved_size(), "must be");
+  guarantee(new_size >= committed_size(), "must be");
+  _dynamic_max_heap_size = new_size;
+}
+
+size_t VirtualSpace::dynamic_max_heap_size() const {
+  guarantee(_dynamic_max_heap_size <= reserved_size(), "must be");
+  guarantee(_dynamic_max_heap_size >= committed_size(), "must be");
+  return _dynamic_max_heap_size;
 }
 
 

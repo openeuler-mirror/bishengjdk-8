@@ -3849,6 +3849,7 @@ void PhaseIdealLoop::build_loop_late_post( Node *n ) {
     case Op_StrEquals:
     case Op_StrIndexOf:
     case Op_AryEq:
+    case Op_VectorizedHashCode:
       pinned = false;
     }
     if( pinned ) {

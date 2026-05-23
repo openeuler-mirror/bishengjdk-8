@@ -43,6 +43,7 @@ class PSOldGen;
 class CodeHeap;
 class ContiguousSpace;
 class CompactibleFreeListSpace;
+class ConcurrentMarkSweepGeneration;
 class GenCollectedHeap;
 class ParallelScavengeHeap;
 class G1CollectedHeap;
@@ -99,6 +100,7 @@ private:
                                        GCMemoryManager* minor_mgr);
 
   static MemoryPool* add_space(ContiguousSpace* space,
+                               DefNewGeneration* gen,
                                const char* name,
                                bool is_heap,
                                size_t max_size,
@@ -113,6 +115,7 @@ private:
                              bool is_heap,
                              bool support_usage_threshold);
   static MemoryPool* add_cms_space(CompactibleFreeListSpace* space,
+                                   ConcurrentMarkSweepGeneration* gen,
                                    const char* name,
                                    bool is_heap,
                                    size_t max_size,

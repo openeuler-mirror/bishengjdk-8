@@ -53,12 +53,19 @@ public class WhitespaceTest {
         String doubleSlash = slash + slash;
         System.out.println("test: " + Arrays.asList(args));
         String out = javap(args);
+        boolean inSwitchTable = false;
         for (String line: out.split("[\r\n]+")) {
             if (line.endsWith(" "))
                 error("line has trailing whitespace: " + line);
             int comment = line.indexOf(doubleSlash);
             if (comment > 0 && line.charAt(comment - 1) != ' ')
                 error("no space before comment: " + line);
+            if (line.matches(".*\\b(?:lookupswitch|tableswitch)\\s+\\{.*")) {
+                inSwitchTable = true;
+            } else if (inSwitchTable && line.matches(" +}")) {
+                inSwitchTable = false;
+                continue;
+            }
             if (line.matches(" +}"))
                 error("bad indentation: " + line);
         }
