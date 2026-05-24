@@ -26,6 +26,7 @@
 #define SHARE_VM_GC_IMPLEMENTATION_PARALLELSCAVENGE_PSVIRTUALSPACE_HPP
 
 #include "runtime/virtualspace.hpp"
+#include "memory/universe.hpp"
 
 // VirtualSpace for the parallel scavenge collector.
 //
