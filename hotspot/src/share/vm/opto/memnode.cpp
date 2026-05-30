@@ -28,6 +28,7 @@
 #include "memory/allocation.inline.hpp"
 #include "oops/objArrayKlass.hpp"
 #include "opto/addnode.hpp"
+#include "opto/c2compiler.hpp"
 #include "opto/cfgnode.hpp"
 #include "opto/compile.hpp"
 #include "opto/connode.hpp"
@@ -1018,6 +1019,7 @@ Node* MemNode::can_see_stored_value(Node* st, PhaseTransform* phase) const {
     // through any kind of MemBar but normal loads shouldn't skip
     // through MemBarAcquire since the could allow them to move out of
     // a synchronized region.
+    int loop_count = 0;
     while (current->is_Proj()) {
       int opc = current->in(0)->Opcode();
       if ((final && (opc == Op_MemBarAcquire ||
@@ -1034,6 +1036,13 @@ Node* MemNode::can_see_stored_value(Node* st, PhaseTransform* phase) const {
           if (new_st == merge->base_memory()) {
             // Keep searching
             current = new_st;
+            if (opc == Op_MemBarCPUOrder) {
+              loop_count++;
+            }
+            if (!DisableMemNodeLoopOptimize && (loop_count > MemNodeLoopCount)) {
+              phase->C->record_method_not_compilable(C2Compiler::may_dead_loop_in_stored_value());
+              return NULL;
+            }
             continue;
           }
           // Save the new memory state for the slice and fall through
