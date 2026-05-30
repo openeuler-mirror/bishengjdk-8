@@ -21,6 +21,7 @@
 #include "precompiled.hpp"
 #include "classfile/symbolTable.hpp"
 #include "compiler/compileBroker.hpp"
+#include "jprofilecache/jitProfileCacheLog.hpp"
 #include "jprofilecache/jitProfileCacheUtils.hpp"
 #include "runtime/compilationPolicy.hpp"
 #include "runtime/thread.hpp"
@@ -75,6 +76,15 @@ Symbol* JitProfileCacheUtils::remove_meaningless_suffix(Symbol* s) {
 bool JitProfileCacheUtils::commit_compilation(methodHandle m, int comp_level, int bci, TRAPS) {
   if (comp_level > JProfilingCacheMaxTierLimit) {
     comp_level = JProfilingCacheMaxTierLimit;
+  }
+  if (!TieredCompilation && comp_level != CompLevel_highest_tier) {
+    jprofilecache_log_info(jprofilecache, "skip compilation at level %d: non-tiered compilation requires level %d",
+                           comp_level, CompLevel_highest_tier);
+    return false;
+  }
+  if (CompileBroker::compiler(comp_level) == NULL) {
+    jprofilecache_log_info(jprofilecache, "skip compilation at level %d: compiler is unavailable", comp_level);
+    return false;
   }
   if (CompilationPolicy::can_be_compiled(m, comp_level)) {
       CompileBroker::compile_method(m, bci, comp_level,
