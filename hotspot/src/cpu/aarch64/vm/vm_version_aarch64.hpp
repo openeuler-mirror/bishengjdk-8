@@ -96,7 +96,7 @@ public:
   static int cpu_revision()                   { return _revision; }
   static int cpu_cpuFeatures()                { return _cpuFeatures; }
   static bool is_hisi_enabled() {
-    if (_cpu == CPU_HISILICON && (_model == 0xd01 || _model == 0xd02)) {
+    if (_cpu == CPU_HISILICON) {
       return true;
     }
     return false;
