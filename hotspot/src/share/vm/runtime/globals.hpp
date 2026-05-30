@@ -3297,6 +3297,12 @@ class CommandLineFlags {
   product_pd(intx, PreInflateSpin,                                          \
           "Number of times to spin wait before inflation")                  \
                                                                             \
+  product(bool, DisableMemNodeLoopOptimize, false,                          \
+          "Avoid potential dead loop in MemNode loop")                      \
+                                                                            \
+  product(intx, MemNodeLoopCount, 200,                                      \
+          "Number of times to iterate in MemNode loop")                     \
+                                                                            \
   /* gc parameters */                                                       \
   product(uintx, InitialHeapSize, 0,                                        \
           "Initial heap size (in bytes); zero means use ergonomics")        \
