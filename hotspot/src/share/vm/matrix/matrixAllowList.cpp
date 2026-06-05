@@ -163,11 +163,32 @@ int AllowListTable::load_from_file(const char* conf_path) {
   if (conf_file == NULL) { return 0; }
   UB_LOG(_feature, UB_LOG_INFO, "Load conf file: %s\n", conf_path);
 
+  enum ConfSection {
+    CONF_SECTION_NONE,
+    CONF_SECTION_STACK,
+    CONF_SECTION_ADDRESS
+  };
+  ConfSection section = CONF_SECTION_NONE;
   char line[256];
   int line_no = 0;
   while (fgets(line, sizeof(line), conf_file) != NULL) {
     line_no++;
     line[strcspn(line, "\n")] = '\0';
+    char* entry = trim_allow_list_line(line);
+    if (strcmp(entry, "#stack") == 0) {
+      section = CONF_SECTION_STACK;
+      continue;
+    }
+    if (strcmp(entry, "#address") == 0) {
+      section = CONF_SECTION_ADDRESS;
+      continue;
+    }
+    if (*entry == '\0' || *entry == '#') {
+      continue;
+    }
+    if (section != CONF_SECTION_STACK) {
+      continue;
+    }
     if (load_allow_list_entry(this, _feature, conf_path, line_no, line)) {
       allow_method_count++;
     }

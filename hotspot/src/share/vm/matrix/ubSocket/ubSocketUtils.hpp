@@ -136,6 +136,7 @@ class UBSocketSessionCaches : public AllStatic {
   static void add(UBSocketAttachSession* session);
   static UBSocketAttachSession* find(const UBSocketEndpoint* local_ep,
                                      const UBSocketEndpoint* remote_ep);
+  static UBSocketAttachSession* find(const UBSocketAttachFrame* request);
   static void release(UBSocketAttachSession* session);
   static void remove(const UBSocketEndpoint* local_ep, const UBSocketEndpoint* remote_ep);
   static void cleanup();
@@ -143,6 +144,18 @@ class UBSocketSessionCaches : public AllStatic {
  private:
   static Mutex* _cache_lock;
   static UBSocketAttachSession* _cache_head;
+};
+
+class UBSocketEndpointMap : public AllStatic {
+ public:
+  static void init();
+  static int load_from_file(const char* conf_path);
+  static void cleanup();
+  static bool control_endpoint_for_data(const UBSocketEndpoint* data_ep,
+                                        UBSocketEndpoint* control_ep);
+  static bool has_mapping_for_data(const UBSocketEndpoint* data_ep);
+  static bool matches_local_data(const UBSocketEndpoint* request_ep,
+                                 const UBSocketEndpoint* session_ep);
 };
 
 class UBSocketEarlyReqQueue : public AllStatic {

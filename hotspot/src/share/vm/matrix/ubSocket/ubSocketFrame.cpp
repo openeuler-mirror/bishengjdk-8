@@ -21,7 +21,6 @@
 #include "matrix/matrixLog.hpp"
 #include "matrix/ubSocket/ubSocketIO.hpp"
 #include "matrix/ubSocket/ubSocketProfile.hpp"
-#include "memory/resourceArea.hpp"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -49,17 +48,6 @@ static void ub_socket_copy_mem_name(char* dst, const char* src) {
   }
 }
 
-static void ub_socket_copy_mem_name(char* dst, const Symbol* src) {
-  memset(dst, 0, UB_SOCKET_MEM_NAME_BUF_LEN);
-  if (src != NULL) {
-    int len = src->utf8_length();
-    if (len > UB_SOCKET_MEM_NAME_LEN) {
-      len = UB_SOCKET_MEM_NAME_LEN;
-    }
-    memcpy(dst, src->bytes(), len);
-  }
-}
-
 static UBSocketAttachFrame ub_socket_wire_attach_frame(const UBSocketAttachFrame& frame) {
   UBSocketAttachFrame wire;
   memset(&wire, 0, sizeof(wire));
@@ -76,18 +64,22 @@ static UBSocketAttachFrame ub_socket_wire_attach_frame(const UBSocketAttachFrame
   return wire;
 }
 
-static UBSocketDataFrame ub_socket_wire_data_frame(const UBSocketDataFrame& frame) {
-  UBSocketDataFrame wire;
-  memset(&wire, 0, sizeof(wire));
-  wire.offset = frame.offset;
-  wire.length = frame.length;
-  wire.checksum = 0;
-  wire.version = frame.version;
-  wire.kind = frame.kind;
-  memcpy(wire.mem_name, frame.mem_name, UB_SOCKET_MEM_NAME_BUF_LEN);
-  // Checksum is reserved for future protocol hardening; current wire value is 0.
-  wire.checksum = 0;
-  return wire;
+static void ub_socket_encode_data_frame(const UBSocketDataFrame& frame, void* raw) {
+  char* pos = (char*)raw;
+  memcpy(pos, &frame.offset, sizeof(frame.offset));
+  pos += sizeof(frame.offset);
+  memcpy(pos, &frame.length, sizeof(frame.length));
+  pos += sizeof(frame.length);
+  memcpy(pos, &frame.kind, sizeof(frame.kind));
+}
+
+static void ub_socket_decode_data_frame(const void* raw, UBSocketDataFrame* frame) {
+  const char* pos = (const char*)raw;
+  memcpy(&frame->offset, pos, sizeof(frame->offset));
+  pos += sizeof(frame->offset);
+  memcpy(&frame->length, pos, sizeof(frame->length));
+  pos += sizeof(frame->length);
+  memcpy(&frame->kind, pos, sizeof(frame->kind));
 }
 
 static bool ub_socket_verify_attach_frame(UBSocketAttachFrame* frame,
@@ -104,10 +96,7 @@ static bool ub_socket_verify_attach_frame(UBSocketAttachFrame* frame,
 }
 
 static bool ub_socket_verify_data_frame(UBSocketDataFrame* frame) {
-  if (frame->version != UB_SOCKET_PROTOCOL_VERSION ||
-      !ub_socket_is_data_kind(frame->kind) ||
-      frame->checksum != 0 ||
-      frame->mem_name[UB_SOCKET_MEM_NAME_LEN] != '\0') {
+  if (!ub_socket_is_data_kind(frame->kind)) {
     errno = EBADMSG;
     return false;
   }
@@ -116,9 +105,19 @@ static bool ub_socket_verify_data_frame(UBSocketDataFrame* frame) {
 
 bool ub_socket_endpoint_equals(const UBSocketEndpoint* lhs,
                                const UBSocketEndpoint* rhs) {
-  if (lhs->family != rhs->family) { return false; }
-  if (memcmp(lhs->addr, rhs->addr, sizeof(lhs->addr)) != 0) { return false; }
-  return (int)lhs->port == (int)rhs->port;
+  if ((int)lhs->port != (int)rhs->port) { return false; }
+  if (lhs->family == rhs->family) {
+    return memcmp(lhs->addr, rhs->addr, sizeof(lhs->addr)) == 0;
+  }
+  if (lhs->family == AF_INET && rhs->family == AF_INET6 &&
+      IN6_IS_ADDR_V4MAPPED((const struct in6_addr*)rhs->addr)) {
+    return memcmp(lhs->addr, rhs->addr + 12, 4) == 0;
+  }
+  if (lhs->family == AF_INET6 && rhs->family == AF_INET &&
+      IN6_IS_ADDR_V4MAPPED((const struct in6_addr*)lhs->addr)) {
+    return memcmp(lhs->addr + 12, rhs->addr, 4) == 0;
+  }
+  return false;
 }
 
 static bool ub_socket_endpoint_from_addr(const struct sockaddr_storage* storage,
@@ -210,30 +209,13 @@ UBSocketAttachFrame ub_socket_attach_frame(uint16_t kind,
 }
 
 UBSocketDataFrame ub_socket_data_frame(uint16_t kind,
-                                       const char* mem_name,
                                        uint64_t offset,
                                        uint64_t length) {
   UBSocketDataFrame frame;
   memset(&frame, 0, sizeof(frame));
   frame.offset = offset;
   frame.length = length;
-  frame.version = UB_SOCKET_PROTOCOL_VERSION;
   frame.kind = kind;
-  ub_socket_copy_mem_name(frame.mem_name, mem_name);
-  return frame;
-}
-
-UBSocketDataFrame ub_socket_data_frame(uint16_t kind,
-                                       const Symbol* mem_name,
-                                       uint64_t offset,
-                                       uint64_t length) {
-  UBSocketDataFrame frame;
-  memset(&frame, 0, sizeof(frame));
-  frame.offset = offset;
-  frame.length = length;
-  frame.version = UB_SOCKET_PROTOCOL_VERSION;
-  frame.kind = kind;
-  ub_socket_copy_mem_name(frame.mem_name, mem_name);
   return frame;
 }
 
@@ -259,13 +241,14 @@ ssize_t ub_socket_data_send(int fd, const UBSocketDataFrame& frame,
   UBSocketProfileScope total_profile(UB_PROF_DESCRIPTOR_SEND_TOTAL, bytes);
   uint64_t ddl_ns = (uint64_t)os::javaTimeNanos() +
                     UB_DATA_FRAME_SEND_TIMEOUT_MS * NANOSECS_PER_MILLISEC;
-  UBSocketDataFrame wire_frame = ub_socket_wire_data_frame(frame);
-  return UBSocketIO::send_all(fd, &wire_frame, bytes, ddl_ns, MSG_NOSIGNAL,
+  char wire_frame[UB_SOCKET_DATA_FRAME_WIRE_SIZE];
+  ub_socket_encode_data_frame(frame, wire_frame);
+  return UBSocketIO::send_all(fd, wire_frame, bytes, ddl_ns, MSG_NOSIGNAL,
                               bytes_sent, UB_PROF_DESCRIPTOR_SEND_SYSCALL);
 }
 
 bool ub_socket_data_parse(const void* raw, UBSocketDataFrame* frame) {
   memset(frame, 0, sizeof(*frame));
-  memcpy(frame, raw, UB_SOCKET_DATA_FRAME_WIRE_SIZE);
+  ub_socket_decode_data_frame(raw, frame);
   return ub_socket_verify_data_frame(frame);
 }

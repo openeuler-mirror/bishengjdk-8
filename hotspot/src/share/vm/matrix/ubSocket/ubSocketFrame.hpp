@@ -63,18 +63,18 @@ struct UBSocketAttachFrame {
   char mem_name[UB_SOCKET_MEM_NAME_BUF_LEN];
 };
 
-// Keep offset/length first to avoid padding before uint64_t fields.
+// In-memory data-frame representation. The TCP wire layout is explicitly
+// encoded as offset(8) + length(8) + kind(2); do not use sizeof(this struct)
+// as the wire size because C++ tail padding keeps it 8-byte aligned.
 struct UBSocketDataFrame {
   uint64_t offset;
   uint64_t length;
-  uint32_t checksum;
-  uint16_t version;
   uint16_t kind;
-  char mem_name[UB_SOCKET_MEM_NAME_BUF_LEN];
 };
 
 static const int UB_SOCKET_ATTACH_FRAME_WIRE_SIZE = sizeof(UBSocketAttachFrame);
-static const int UB_SOCKET_DATA_FRAME_WIRE_SIZE = sizeof(UBSocketDataFrame);
+static const int UB_SOCKET_DATA_FRAME_WIRE_SIZE =
+    sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint16_t);
 
 UBSocketAttachFrame ub_socket_attach_frame(uint16_t kind,
                                            uint32_t request_id,
@@ -84,11 +84,6 @@ UBSocketAttachFrame ub_socket_attach_frame(uint16_t kind,
                                            const char* mem_name);
 
 UBSocketDataFrame ub_socket_data_frame(uint16_t kind,
-                                       const char* mem_name,
-                                       uint64_t offset,
-                                       uint64_t length);
-UBSocketDataFrame ub_socket_data_frame(uint16_t kind,
-                                       const Symbol* mem_name,
                                        uint64_t offset,
                                        uint64_t length);
 

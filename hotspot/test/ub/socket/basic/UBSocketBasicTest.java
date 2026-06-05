@@ -46,6 +46,7 @@ public class UBSocketBasicTest {
     private static final int CHUNK_SIZE = 888;
     private static final int GATHER_SCATTER_DATA_SIZE = 768 * 1024;
     private static final int GATHER_SCATTER_SEGMENT_SIZE = 333;
+    private static final int DATA_DESCRIPTOR_FRAME_SIZE = 18;
     private static final long NO_HEARTBEAT_SERVER_TIMEOUT_MS = 12000L;
     private static final long NO_HEARTBEAT_CLIENT_SETTLE_MS = 3000L;
 
@@ -212,6 +213,10 @@ public class UBSocketBasicTest {
             logs.clientLog + "\n" + logs.serverLog, "Chunked writes should not fallback");
         SocketTestSupport.assertDataTransferSuccess(
             logs.clientLog, "Chunked writes should preserve payload integrity");
+        SocketTestSupport.assertDescriptorFrameBytes(
+            logs.clientLog + "\n" + logs.serverLog,
+            DATA_DESCRIPTOR_FRAME_SIZE,
+            "Data descriptor should only carry range/type fields");
 
         System.out.println("=== Fixed data-frame batching test PASSED ===");
     }

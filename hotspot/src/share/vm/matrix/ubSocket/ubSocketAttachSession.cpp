@@ -23,6 +23,7 @@
 
 #include "matrix/ubSocket/ubSocketFrame.hpp"
 #include "matrix/ubSocket/ubSocketIO.hpp"
+#include "matrix/ubSocket/ubSocketUtils.hpp"
 #include "matrix/matrixLog.hpp"
 #include "runtime/mutex.hpp"
 #include "runtime/mutexLocker.hpp"
@@ -71,6 +72,14 @@ bool UBSocketAttachSession::matches(const UBSocketEndpoint* local_ep,
                                     const UBSocketEndpoint* remote_ep) const {
   return ub_socket_endpoint_equals(&_local_endpoint, local_ep) &&
          ub_socket_endpoint_equals(&_remote_endpoint, remote_ep);
+}
+
+bool UBSocketAttachSession::matches_request(const UBSocketAttachFrame* request) const {
+  if (UBSocketEndpointMap::has_mapping_for_data(&request->local_endpoint)) {
+    return UBSocketEndpointMap::matches_local_data(&request->local_endpoint, &_local_endpoint);
+  }
+  return ub_socket_endpoint_equals(&request->local_endpoint, &_local_endpoint) &&
+         ub_socket_endpoint_equals(&request->remote_endpoint, &_remote_endpoint);
 }
 
 bool UBSocketAttachSession::try_pin() {
@@ -218,8 +227,7 @@ void UBSocketAttachSession::finish_control(bool success) {
 bool UBSocketAttachSession::drive_server_handshake(int control_fd,
                                                    const UBSocketAttachFrame* request,
                                                    uint64_t ddl_ns) {
-  if (!ub_socket_endpoint_equals(&request->local_endpoint, &_local_endpoint) ||
-      !ub_socket_endpoint_equals(&request->remote_endpoint, &_remote_endpoint)) {
+  if (!matches_request(request)) {
     return false;
   }
   if (_request_id != 0 && _request_id != request->request_id) {
@@ -234,7 +242,7 @@ bool UBSocketAttachSession::drive_server_handshake(int control_fd,
   UBSocketAttachFrame response =
       ub_socket_attach_frame(UB_SOCKET_ATTACH_RSP, _request_id,
                              is_prepared() ? UB_SOCKET_OK_CODE : UB_SOCKET_ERROR_CODE,
-                             &_local_endpoint, &_remote_endpoint,
+                             &request->local_endpoint, &request->remote_endpoint,
                              is_prepared() ? _local_mem_name : "");
   if (!ub_socket_attach_send(control_fd, response, ddl_ns)) {
     UB_LOG(UB_SOCKET, UB_LOG_WARNING, "control fd=%d send attach rsp failed: %s\n",
@@ -255,8 +263,8 @@ bool UBSocketAttachSession::drive_server_handshake(int control_fd,
     return false;
   }
   if (commit.request_id != _request_id ||
-      !ub_socket_endpoint_equals(&commit.local_endpoint, &_local_endpoint) ||
-      !ub_socket_endpoint_equals(&commit.remote_endpoint, &_remote_endpoint)) {
+      !ub_socket_endpoint_equals(&commit.local_endpoint, &request->local_endpoint) ||
+      !ub_socket_endpoint_equals(&commit.remote_endpoint, &request->remote_endpoint)) {
     finish_control(false);
     return false;
   }
@@ -270,7 +278,7 @@ bool UBSocketAttachSession::drive_server_handshake(int control_fd,
   UBSocketAttachFrame ack =
       ub_socket_attach_frame(UB_SOCKET_ATTACH_ACK, _request_id,
                              is_finalized_ok() ? UB_SOCKET_OK_CODE : UB_SOCKET_ERROR_CODE,
-                             &_local_endpoint, &_remote_endpoint, "");
+                             &request->local_endpoint, &request->remote_endpoint, "");
   bool send_ok = ub_socket_attach_send(control_fd, ack, ddl_ns);
   if (!send_ok) {
     UB_LOG(UB_SOCKET, UB_LOG_WARNING, "control fd=%d send attach ack failed: %s\n",

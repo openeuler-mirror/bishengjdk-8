@@ -113,6 +113,7 @@ class UBSocketAttachSession : public CHeapObj<mtInternal> {
   void close_and_wait();
 
   bool matches(const UBSocketEndpoint* local_ep, const UBSocketEndpoint* remote_ep) const;
+  bool matches_request(const UBSocketAttachFrame* request) const;
 
   bool wait_for_request(uint64_t ddl_ns, char* client_mem_name);
   // Control side entry: drive ATTACH_REQ/RSP/COMMIT/ACK on control_fd.

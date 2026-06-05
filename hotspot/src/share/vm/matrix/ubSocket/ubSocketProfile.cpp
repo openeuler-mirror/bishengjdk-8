@@ -51,6 +51,13 @@ static const UBSocketProfileEventDef ub_socket_profile_events[UB_PROF_COUNT] = {
   { "append_unread_total", UB_PROFILE_DETAIL, UB_PROFILE_TIMING },
   { "metadata_mark_recv", UB_PROFILE_DETAIL, UB_PROFILE_TIMING },
   { "ub_read_memcpy", UB_PROFILE_SUMMARY, UB_PROFILE_TIMING },
+  { "ub_read_memcpy_lt_1us", UB_PROFILE_DETAIL, UB_PROFILE_COUNTER },
+  { "ub_read_memcpy_1_2us", UB_PROFILE_DETAIL, UB_PROFILE_COUNTER },
+  { "ub_read_memcpy_2_5us", UB_PROFILE_DETAIL, UB_PROFILE_COUNTER },
+  { "ub_read_memcpy_5_10us", UB_PROFILE_DETAIL, UB_PROFILE_COUNTER },
+  { "ub_read_memcpy_10_20us", UB_PROFILE_DETAIL, UB_PROFILE_COUNTER },
+  { "ub_read_memcpy_20_30us", UB_PROFILE_DETAIL, UB_PROFILE_COUNTER },
+  { "ub_read_memcpy_ge_30us", UB_PROFILE_DETAIL, UB_PROFILE_COUNTER },
   { "metadata_mark_read", UB_PROFILE_DETAIL, UB_PROFILE_TIMING },
 
   { "ub_attach_success", UB_PROFILE_SUMMARY, UB_PROFILE_COUNTER },
@@ -79,11 +86,11 @@ uint64_t UBSocketProfiler::start(UBSocketProfileEvent event) {
   return (uint64_t)os::javaTimeNanos();
 }
 
-void UBSocketProfiler::end(UBSocketProfileEvent event, uint64_t start_ns,
-                           uint64_t bytes) {
+uint64_t UBSocketProfiler::end(UBSocketProfileEvent event, uint64_t start_ns,
+                               uint64_t bytes) {
   if (!enabled(event) ||
       ub_socket_profile_events[event].kind != UB_PROFILE_TIMING) {
-    return;
+    return 0;
   }
   UBSocketProfileCounter* counter = &ub_socket_profile_counters[event];
   counter->count++;
@@ -91,7 +98,7 @@ void UBSocketProfiler::end(UBSocketProfileEvent event, uint64_t start_ns,
     counter->bytes += (jlong)bytes;
   }
   if (start_ns == 0) {
-    return;
+    return 0;
   }
   uint64_t ns = (uint64_t)os::javaTimeNanos() - start_ns;
   uint64_t total_ns = ns;
@@ -102,6 +109,7 @@ void UBSocketProfiler::end(UBSocketProfileEvent event, uint64_t start_ns,
   if ((jlong)ns > counter->max_ns) {
     counter->max_ns = (jlong)ns;
   }
+  return ns;
 }
 
 void UBSocketProfiler::count(UBSocketProfileEvent event, uint64_t bytes) {

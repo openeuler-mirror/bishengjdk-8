@@ -186,8 +186,11 @@ bool UBSocketAttach::attach_client() {
     return false;
   }
 
-  UBSocketEndpoint peer_ctrl = remote_ep;
-  peer_ctrl.port = (uint16_t)UBSocketPort;
+  UBSocketEndpoint peer_ctrl;
+  if (!UBSocketEndpointMap::control_endpoint_for_data(&remote_ep, &peer_ctrl)) {
+    peer_ctrl = remote_ep;
+    peer_ctrl.port = (uint16_t)UBSocketPort;
+  }
   struct sockaddr_storage peer_ctrl_addr;
   socklen_t peer_ctrl_addr_len = 0;
   if (!ub_socket_endpoint_to_addr(&peer_ctrl, &peer_ctrl_addr, &peer_ctrl_addr_len)) {
