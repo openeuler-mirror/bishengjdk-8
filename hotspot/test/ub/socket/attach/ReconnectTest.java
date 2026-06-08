@@ -207,7 +207,7 @@ public class ReconnectTest {
                 configPath,
                 controlPort,
                 "NIOScenarioClient",
-                "basic",
+                "nonBlockingBasic",
                 "localhost",
                 String.valueOf(dataPort),
                 String.valueOf(DATA_SIZE),
@@ -249,7 +249,7 @@ public class ReconnectTest {
                     "1"
                 },
                 new String[] {
-                    "NIOScenarioClient", "basic", "localhost",
+                    "NIOScenarioClient", "nonBlockingBasic", "localhost",
                     String.valueOf(restartDataPort),
                     String.valueOf(DATA_SIZE),
                     "LifecycleRestartClient"

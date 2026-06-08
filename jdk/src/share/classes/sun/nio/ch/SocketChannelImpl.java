@@ -52,6 +52,7 @@ class SocketChannelImpl
     // Our file descriptor object
     private final FileDescriptor fd;
     private final int fdVal;
+    private final boolean ubServerSide;
 
     // IDs of native threads doing reads and writes, for signalling
     private volatile long readerThread = 0;
@@ -89,6 +90,8 @@ class SocketChannelImpl
     private boolean isInputOpen = true;
     private boolean isOutputOpen = true;
     private boolean readyToConnect = false;
+    private boolean ubRegistrationStarted = false;
+    private boolean ubRegistrationInProgress = false;
 
     // Socket adaptor, created on demand
     private Socket socket;
@@ -102,6 +105,7 @@ class SocketChannelImpl
         super(sp);
         this.fd = Net.socket(true);
         this.fdVal = IOUtil.fdVal(fd);
+        this.ubServerSide = false;
         this.state = ST_UNCONNECTED;
     }
 
@@ -113,6 +117,7 @@ class SocketChannelImpl
         super(sp);
         this.fd = fd;
         this.fdVal = IOUtil.fdVal(fd);
+        this.ubServerSide = false;
         this.state = ST_UNCONNECTED;
         if (bound)
             this.localAddress = Net.localAddress(fd);
@@ -127,6 +132,7 @@ class SocketChannelImpl
         super(sp);
         this.fd = fd;
         this.fdVal = IOUtil.fdVal(fd);
+        this.ubServerSide = true;
         this.state = ST_CONNECTED;
         this.localAddress = Net.localAddress(fd);
         this.remoteAddress = remote;
@@ -551,6 +557,40 @@ class SocketChannelImpl
         IOUtil.configureBlocking(fd, block);
     }
 
+    private static final int UB_REGISTER_FALLBACK = 0;
+    private static final int UB_REGISTER_SUCCESS = 1;
+    private static final int UB_REGISTER_ABORT = 2;
+
+    void registerUbSocketIfNeeded() throws IOException {
+        boolean serverSide;
+        synchronized (stateLock) {
+            if (!isOpen() || state != ST_CONNECTED || ubRegistrationStarted)
+                return;
+            serverSide = ubServerSide;
+            if (!serverSide && isBlocking()) {
+                System.err.println("UBSocket WARNING: skip blocking client SocketChannel fd="
+                    + fdVal);
+                return;
+            }
+            ubRegistrationStarted = true;
+            ubRegistrationInProgress = true;
+        }
+
+        int result = UB_REGISTER_FALLBACK;
+        try {
+            result = registerUbSocket(fd, serverSide);
+        } finally {
+            synchronized (stateLock) {
+                ubRegistrationInProgress = false;
+                stateLock.notifyAll();
+            }
+        }
+        if (result == UB_REGISTER_ABORT) {
+            close();
+            throw new IOException("UBSocket committed attach failed");
+        }
+    }
+
     public InetSocketAddress localAddress() {
         synchronized (stateLock) {
             return localAddress;
@@ -665,6 +705,7 @@ class SocketChannelImpl
                         close();
                         throw x;
                     }
+                    boolean connected = false;
                     synchronized (stateLock) {
                         remoteAddress = isa;
                         if (n > 0) {
@@ -674,14 +715,18 @@ class SocketChannelImpl
                             state = ST_CONNECTED;
                             if (isOpen())
                                 localAddress = Net.localAddress(fd);
-                            return true;
+                            connected = true;
                         }
                         // If nonblocking and no exception then connection
                         // pending; disallow another invocation
-                        if (!isBlocking())
+                        if (!connected && !isBlocking())
                             state = ST_PENDING;
-                        else
+                        else if (!connected)
                             assert false;
+                    }
+                    if (connected) {
+                        registerUbSocketIfNeeded();
+                        return true;
                     }
                 }
                 return false;
@@ -765,6 +810,7 @@ class SocketChannelImpl
                         if (isOpen())
                             localAddress = Net.localAddress(fd);
                     }
+                    registerUbSocketIfNeeded();
                     return true;
                 }
                 return false;
@@ -825,6 +871,17 @@ class SocketChannelImpl
     //
     protected void implCloseSelectableChannel() throws IOException {
         synchronized (stateLock) {
+            boolean interrupted = false;
+            while (ubRegistrationInProgress) {
+                try {
+                    stateLock.wait();
+                } catch (InterruptedException x) {
+                    interrupted = true;
+                }
+            }
+            if (interrupted)
+                Thread.currentThread().interrupt();
+
             isInputOpen = false;
             isOutputOpen = false;
 
@@ -1028,6 +1085,10 @@ class SocketChannelImpl
         throws IOException;
 
     private static native int sendOutOfBandData(FileDescriptor fd, byte data)
+        throws IOException;
+
+    private static native int registerUbSocket(FileDescriptor fd,
+                                               boolean serverSide)
         throws IOException;
 
     static {

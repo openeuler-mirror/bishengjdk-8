@@ -19,7 +19,7 @@
 
 /*
  * @test
- * @summary Test attach early-request queue rejects requests after its hard limit
+ * @summary Test attach early-request flood falls back to TCP without hanging
  * @library /testlibrary
  * @compile ../SocketTestSupport.java ../SocketTestConfig.java ../test-classes/SocketTestData.java ../test-classes/NIOScenarioServer.java ../test-classes/NIOScenarioClient.java
  * @run main/othervm EarlyRequestQueueLimitTest
@@ -77,7 +77,7 @@ public class EarlyRequestQueueLimitTest {
                 configPath,
                 controlPort,
                 "NIOScenarioClient",
-                "basic",
+                "nonBlockingBasic",
                 "localhost",
                 String.valueOf(dataPort),
                 String.valueOf(DATA_SIZE),
@@ -99,7 +99,7 @@ public class EarlyRequestQueueLimitTest {
                 configPath,
                 controlPort,
                 "NIOScenarioClient",
-                "basic",
+                "nonBlockingBasic",
                 "localhost",
                 String.valueOf(dataPort),
                 String.valueOf(DATA_SIZE),
@@ -122,8 +122,9 @@ public class EarlyRequestQueueLimitTest {
             OutputAnalyzer serverOutput = new OutputAnalyzer(server);
             serverOutput.shouldHaveExitValue(0);
             String serverLog = SocketTestSupport.combinedOutput(serverOutput, serverPb);
-            if (!serverLog.contains("early request queue full limit=128")) {
-                throw new RuntimeException("Expected early request queue limit warning\n" + serverLog);
+            if (!serverLog.contains("wait req timed out")
+                    && !serverLog.contains("recv attach req failed: Connection timed out")) {
+                throw new RuntimeException("Expected early request timeout warning\n" + serverLog);
             }
             if (!serverLog.contains("attach agent started") ||
                     !serverLog.contains("port=" + controlPort)) {
@@ -255,7 +256,7 @@ class EarlyRequestQueueLimitServer {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         long totalRead = 0L;
         try {
-            channel.configureBlocking(true);
+            channel.configureBlocking(false);
             while (totalRead < expectedSize) {
                 readBuffer.clear();
                 int n = channel.read(readBuffer);
@@ -263,6 +264,7 @@ class EarlyRequestQueueLimitServer {
                     throw new IOException("Client closed early at " + totalRead + "/" + expectedSize);
                 }
                 if (n == 0) {
+                    Thread.sleep(1L);
                     continue;
                 }
                 readBuffer.flip();
@@ -282,7 +284,9 @@ class EarlyRequestQueueLimitServer {
                 ("ACK " + totalRead + " bytes received, hash " + hash.toString())
                     .getBytes(StandardCharsets.UTF_8));
             while (ack.hasRemaining()) {
-                channel.write(ack);
+                if (channel.write(ack) == 0) {
+                    Thread.sleep(1L);
+                }
             }
         } finally {
             channel.close();

@@ -129,7 +129,17 @@ int UBSocketIO::connect(int family, const struct sockaddr* addr,
 
 int UBSocketIO::accept(int listen_fd) {
   ThreadBlockInVM tbivm(JavaThread::current());
-  return ::accept(listen_fd, NULL, NULL);
+  int fd = ::accept(listen_fd, NULL, NULL);
+  if (fd < 0) { return fd; }
+
+  int flags = fcntl(fd, F_GETFL, 0);
+  if (flags < 0 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) != 0) {
+    int set_errno = errno;
+    close(fd);
+    errno = set_errno;
+    return -1;
+  }
+  return fd;
 }
 
 ssize_t UBSocketIO::read(int fd, void* buf, size_t len) {
@@ -161,16 +171,16 @@ ssize_t UBSocketIO::send_all(int fd, const void* buf, size_t len,
   while (remaining > 0) {
     uint64_t syscall_start = syscall_profile_event >= 0
         ? UBSocketProfiler::start((UBSocketProfileEvent)syscall_profile_event) : 0;
-    ssize_t written = send(fd, p, remaining, flags);
+    ssize_t written = ::send(fd, p, remaining, flags);
     UBSocketProfiler::end((UBSocketProfileEvent)syscall_profile_event,
                           syscall_start, written > 0 ? (uint64_t)written : 0);
     if (written < 0) {
       if (errno == EINTR) { continue; }
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
-        UB_PROFILE_COUNT(UB_PROF_SEND_EAGAIN, remaining);
-        UB_PROFILE_NANOS(UB_PROF_SEND_WAIT, wait_start);
+        UB_PROFILE_COUNT(UB_PROF_WAKEUP_SEND_EAGAIN, remaining);
+        UB_PROFILE_NANOS(UB_PROF_WAKEUP_SEND_WAIT, wait_start);
         bool ready = wait_fd(fd, POLLOUT, ddl_ns);
-        UB_PROFILE_RECORD(UB_PROF_SEND_WAIT, wait_start, remaining);
+        UB_PROFILE_RECORD(UB_PROF_WAKEUP_SEND_WAIT, wait_start, remaining);
         if (!ready) { return -1; }
         continue;
       }

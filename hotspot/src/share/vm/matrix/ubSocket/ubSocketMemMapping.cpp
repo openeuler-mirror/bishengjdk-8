@@ -23,9 +23,7 @@
 
 #include "classfile/symbolTable.hpp"
 #include "matrix/matrixLog.hpp"
-#include "matrix/ubSocket/ubSocketDataInfo.hpp"
-#include "matrix/ubSocket/ubSocket.hpp"
-#include "matrix/ubSocket/ubSocketUtils.hpp"
+#include "memory/resourceArea.hpp"
 #include "runtime/mutex.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "runtime/thread.hpp"
@@ -35,6 +33,13 @@ UBSocketMemMapping* UBSocketMemMapping::_registry_head = NULL;
 
 UBSocketMemMapping::UBSocketMemMapping(Symbol* name, size_t size, void* addr)
   : _name(name), _size(size), _addr(addr), _ref_count(1), _next(NULL) {}
+
+UBSocketMemMapping::~UBSocketMemMapping() {
+  if (_name != NULL) {
+    _name->decrement_refcount();
+    _name = NULL;
+  }
+}
 
 void UBSocketMemMapping::init() {
   _registry_lock = new Monitor(Mutex::leaf, "UBSocketMemMapping_lock");
@@ -79,12 +84,14 @@ UBSocketMemMapping* UBSocketMemMapping::acquire(const char* remote_name_str, siz
                "remote=%s mapping size mismatch existing=" SIZE_FORMAT
                " requested=" SIZE_FORMAT "\n",
                remote_name_str, existing->size(), remote_size);
+        remote_name->decrement_refcount();
         return NULL;
       }
       existing->increment_ref();
       UB_LOG(UB_SOCKET, UB_LOG_INFO,
              "remote=%s reuse addr=%p size=" SIZE_FORMAT " ref=%d\n",
              remote_name_str, existing->addr(), remote_size, existing->ref_count());
+      remote_name->decrement_refcount();
       return existing;
     }
   }
@@ -96,6 +103,7 @@ UBSocketMemMapping* UBSocketMemMapping::acquire(const char* remote_name_str, siz
     UB_LOG(UB_SOCKET, UB_LOG_WARNING,
            "remote=%s mmap failed size=" SIZE_FORMAT " err=%d\n",
            remote_name_str, remote_size, error_code);
+    remote_name->decrement_refcount();
     return NULL;
   }
 
@@ -103,6 +111,7 @@ UBSocketMemMapping* UBSocketMemMapping::acquire(const char* remote_name_str, siz
       new (std::nothrow) UBSocketMemMapping(remote_name, remote_size, mapped_addr);
   if (created == NULL) {
     os::Linux::ub_munmap(mapped_addr, remote_size);
+    remote_name->decrement_refcount();
     errno = ENOMEM;
     return NULL;
   }
@@ -165,18 +174,4 @@ bool UBSocketMemMapping::release() {
 void UBSocketMemMapping::release_mapping(UBSocketMemMapping* mapping) {
   bool last_ref = mapping->release();
   if (last_ref) { delete mapping; }
-}
-
-bool UBSocketMemMapping::unbind(int fd) {
-  UBSocketInfoList* info_list = SocketDataInfoTable::detach(fd);
-  if (info_list == NULL) { return false; }
-
-  UBSocketMemMapping* mapping = info_list->mapping();
-  UnreadMsgTable::unregister_fd(fd);
-
-  delete info_list;
-
-  release_mapping(mapping);
-
-  return true;
 }

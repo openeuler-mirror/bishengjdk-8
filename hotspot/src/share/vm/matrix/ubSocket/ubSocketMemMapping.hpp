@@ -38,7 +38,6 @@ class UBSocketMemMapping : public CHeapObj<mtInternal> {
   UBSocketMemMapping* next() const { return _next; }
   void set_next(UBSocketMemMapping* next) { _next = next; }
 
-  static bool unbind(int fd);
   static void release_mapping(UBSocketMemMapping* mapping);
 
  private:
@@ -53,6 +52,7 @@ class UBSocketMemMapping : public CHeapObj<mtInternal> {
   static UBSocketMemMapping* _registry_head;
 
   UBSocketMemMapping(Symbol* name, size_t size, void* addr);
+  ~UBSocketMemMapping();
   int increment_ref() { return ++_ref_count; }
   int decrement_ref() { return --_ref_count; }
   bool release();  // returns true if last reference and mapping needs to be deleted

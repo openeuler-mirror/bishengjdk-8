@@ -30,6 +30,7 @@
 static const uint16_t UB_SOCKET_PROTOCOL_VERSION = 800; // JDK 08 + VER 00
 static const uint32_t UB_SOCKET_OK_CODE = 0;
 static const uint32_t UB_SOCKET_ERROR_CODE = 1;
+static const size_t UB_SOCKET_PEER_TEXT_BUF_LEN = 128;
 
 enum UBSocketAttachKind {
   UB_SOCKET_ATTACH_REQ = 1,
@@ -38,10 +39,9 @@ enum UBSocketAttachKind {
   UB_SOCKET_ATTACH_ACK = 4
 };
 
-enum UBSocketDataKind {
-  UB_SOCKET_DATA_DESCRIPTOR = 1,
-  UB_SOCKET_DATA_HEARTBEAT = 2,
-  UB_SOCKET_DATA_FALLBACK = 3
+enum UBSocketWakeupKind {
+  UB_SOCKET_WAKEUP = 1,
+  UB_SOCKET_CLOSE = 2
 };
 
 struct UBSocketEndpoint {
@@ -56,43 +56,40 @@ struct UBSocketAttachFrame {
   uint16_t version;
   uint16_t kind;
   uint32_t request_id;
-  uint32_t checksum;
   uint32_t error_code;
   UBSocketEndpoint local_endpoint;
   UBSocketEndpoint remote_endpoint;
+  uint32_t ring_slot;
+  uint64_t ring_offset;
+  uint64_t ring_size;
   char mem_name[UB_SOCKET_MEM_NAME_BUF_LEN];
 };
 
-// In-memory data-frame representation. The TCP wire layout is explicitly
-// encoded as offset(8) + length(8) + kind(2); do not use sizeof(this struct)
-// as the wire size because C++ tail padding keeps it 8-byte aligned.
-struct UBSocketDataFrame {
-  uint64_t offset;
-  uint64_t length;
+struct UBSocketWakeupFrame {
   uint16_t kind;
 };
 
 static const int UB_SOCKET_ATTACH_FRAME_WIRE_SIZE = sizeof(UBSocketAttachFrame);
-static const int UB_SOCKET_DATA_FRAME_WIRE_SIZE =
-    sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint16_t);
+static const int UB_SOCKET_WAKEUP_FRAME_WIRE_SIZE = sizeof(UBSocketWakeupFrame);
 
 UBSocketAttachFrame ub_socket_attach_frame(uint16_t kind,
                                            uint32_t request_id,
                                            uint32_t error_code,
                                            const UBSocketEndpoint* local_ep,
                                            const UBSocketEndpoint* remote_ep,
-                                           const char* mem_name);
+                                           const char* mem_name,
+                                           uint32_t ring_slot = 0,
+                                           uint64_t ring_offset = 0,
+                                           uint64_t ring_size = 0);
 
-UBSocketDataFrame ub_socket_data_frame(uint16_t kind,
-                                       uint64_t offset,
-                                       uint64_t length);
+UBSocketWakeupFrame ub_socket_wakeup_frame(uint16_t kind);
 
 bool ub_socket_attach_send(int fd, const UBSocketAttachFrame& frame, uint64_t ddl_ns);
 bool ub_socket_attach_recv(int fd, UBSocketAttachFrame* frame,
                            uint16_t expected_kind, uint64_t ddl_ns);
-ssize_t ub_socket_data_send(int fd, const UBSocketDataFrame& frame,
-                            size_t* bytes_sent = NULL);
-bool ub_socket_data_parse(const void* raw, UBSocketDataFrame* frame);
+ssize_t ub_socket_wakeup_send(int fd, const UBSocketWakeupFrame& frame,
+                              size_t* bytes_sent = NULL);
+bool ub_socket_wakeup_parse(const void* raw, UBSocketWakeupFrame* frame);
 
 bool ub_socket_endpoint_equals(const UBSocketEndpoint* lhs,
                                const UBSocketEndpoint* rhs);
@@ -100,5 +97,6 @@ bool ub_socket_endpoint_to_addr(const UBSocketEndpoint* endpoint,
                                 struct sockaddr_storage* storage, socklen_t* addr_len);
 bool ub_socket_endpoint_get(int fd, UBSocketEndpoint* local_ep,
                             UBSocketEndpoint* remote_ep);
+void ub_socket_peer_to_string(int fd, char* buf, size_t len);
 
 #endif  // SHARE_VM_MATRIX_UBSOCKETFRAME_HPP

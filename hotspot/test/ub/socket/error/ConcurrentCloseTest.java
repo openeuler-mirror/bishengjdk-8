@@ -19,9 +19,9 @@
 
 /*
  * @test
- * @summary Test closing SocketChannel while UBSocket attach or data fallback is in progress
+ * @summary Test closing SocketChannel while UBSocket attach or delayed writes are in progress
  * @library /testlibrary
- * @compile ../SocketTestSupport.java ../SocketTestConfig.java ../test-classes/SocketTestData.java ../test-classes/NIOScenarioServer.java
+ * @compile ../SocketTestSupport.java ../SocketTestConfig.java ../test-classes/SocketTestData.java ../test-classes/NIOScenarioServer.java ../test-classes/NIOScenarioClient.java
  * @run main/othervm ConcurrentCloseTest
  */
 
@@ -92,10 +92,9 @@ public class ConcurrentCloseTest {
         Process server = null;
         try {
             ProcessBuilder serverPb =
-                SocketTestSupport.createUbProcessBuilderWithTimeoutAndVmOptions(
+                SocketTestSupport.createUbProcessBuilderWithVmOptions(
                     configPath,
                     controlPort,
-                    0,
                     vmOptions,
                     "NIOScenarioServer",
                     "delayedRead",
@@ -107,10 +106,9 @@ public class ConcurrentCloseTest {
             Thread.sleep(500L);
 
             ProcessBuilder clientPb =
-                SocketTestSupport.createUbProcessBuilderWithTimeoutAndVmOptions(
+                SocketTestSupport.createUbProcessBuilderWithVmOptions(
                     configPath,
                     controlPort,
-                    0,
                     vmOptions,
                     "CloseDuringFallbackClient",
                     "localhost",

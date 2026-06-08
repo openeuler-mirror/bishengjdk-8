@@ -30,6 +30,7 @@
 #include <errno.h>
 #include <string.h>
 #include <poll.h>
+#include <fcntl.h>
 
 #if __linux__
 #include <netinet/in.h>
@@ -80,13 +81,22 @@ Java_sun_nio_ch_SocketChannelImpl_checkConnect(JNIEnv *env, jobject this,
             handleSocketError(env, error);
             return JNI_FALSE;
         }
-        // UB Matrix
-        if ((*env)->UbSocketCheckStack(env) == JNI_TRUE) {
-            (*env)->UbSocketRegister(env, fd, JNI_FALSE);
-        }
         return 1;
     }
     return 0;
+}
+
+#define UB_SOCKET_REGISTER_FALLBACK 0
+
+JNIEXPORT jint JNICALL
+Java_sun_nio_ch_SocketChannelImpl_registerUbSocket(JNIEnv *env, jclass this,
+                                                   jobject fdo,
+                                                   jboolean serverSide)
+{
+    if ((*env)->UbSocketCheckStack(env) != JNI_TRUE) {
+        return UB_SOCKET_REGISTER_FALLBACK;
+    }
+    return (*env)->UbSocketRegister(env, fdval(env, fdo), serverSide);
 }
 
 JNIEXPORT jint JNICALL

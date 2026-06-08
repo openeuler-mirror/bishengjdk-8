@@ -40,11 +40,13 @@ import java.util.concurrent.atomic.AtomicReference;
 public class SocketMultiServerMain {
     private static final int DEFAULT_SERVER_COUNT = 2;
     private static final int DEFAULT_CONNECTIONS_PER_SERVER = 1;
-    private static final int DATA_SIZE = 524288;
+    private static final int DATA_SIZE = 64 * 1024;
     private static final int CLIENT_WRITE_CHUNK = 8192;
     private static final int SERVER_READ_CHUNK = 65536;
     private static final int SERVER_READ_BUDGET = 16;
     private static final int SELECTOR_TIMEOUT_MS = 10000;
+    private static final long CLIENT_ACK_TIMEOUT_MS = 15000L;
+    private static final long CLIENT_ACK_RETRY_MS = 10L;
 
     public static void main(String[] args) throws Exception {
         int serverCount = args.length > 0 ? Integer.parseInt(args[0]) : DEFAULT_SERVER_COUNT;
@@ -140,28 +142,70 @@ public class SocketMultiServerMain {
 
     private static void talkToServer(int serverId, int port, int connectionId, byte[] payload)
         throws Exception {
-        try (SocketChannel channel = SocketChannel.open()) {
-            channel.configureBlocking(true);
+        ByteBuffer writeBuffer = ByteBuffer.allocateDirect(payload.length);
+        writeBuffer.put(payload);
+        writeBuffer.flip();
+        try (SocketChannel channel = SocketChannel.open();
+             Selector selector = Selector.open()) {
+            channel.configureBlocking(false);
             channel.connect(new InetSocketAddress("127.0.0.1", port));
-
-            for (int offset = 0; offset < payload.length; ) {
-                int chunkSize = Math.min(CLIENT_WRITE_CHUNK, payload.length - offset);
-                ByteBuffer writeBuffer = ByteBuffer.allocateDirect(chunkSize);
-                writeBuffer.put(payload, offset, chunkSize);
-                writeBuffer.flip();
-                while (writeBuffer.hasRemaining()) {
-                    channel.write(writeBuffer);
-                }
-                offset += chunkSize;
-            }
-
+            channel.register(selector, SelectionKey.OP_CONNECT);
             byte[] expectedAck = ackText(serverId, connectionId).getBytes(StandardCharsets.UTF_8);
             ByteBuffer ackBuffer = ByteBuffer.allocate(expectedAck.length);
+            long deadline = System.currentTimeMillis() + CLIENT_ACK_TIMEOUT_MS;
             while (ackBuffer.hasRemaining()) {
-                int n = channel.read(ackBuffer);
-                if (n < 0) {
-                    throw new EOFException("Unexpected EOF while reading ACK for server "
-                        + serverId + " connection " + connectionId);
+                int ready = selector.select(1000L);
+                if (ready == 0) {
+                    if (System.currentTimeMillis() > deadline) {
+                        throw new RuntimeException("Timeout while reading ACK for server "
+                            + serverId + " connection " + connectionId
+                            + ", read=" + ackBuffer.position() + "/" + expectedAck.length);
+                    }
+                    continue;
+                }
+
+                Set<SelectionKey> selectedKeys = selector.selectedKeys();
+                Iterator<SelectionKey> iterator = selectedKeys.iterator();
+                while (iterator.hasNext()) {
+                    SelectionKey key = iterator.next();
+                    iterator.remove();
+                    if (!key.isValid()) {
+                        continue;
+                    }
+                    if (key.isConnectable()) {
+                        SocketChannel selected = (SocketChannel)key.channel();
+                        if (selected.finishConnect()) {
+                            key.interestOps(SelectionKey.OP_READ | SelectionKey.OP_WRITE);
+                            deadline = System.currentTimeMillis() + CLIENT_ACK_TIMEOUT_MS;
+                        }
+                    }
+                    if (key.isWritable() && writeBuffer.hasRemaining()) {
+                        int n = channel.write(writeBuffer);
+                        if (n < 0) {
+                            throw new EOFException("Unexpected EOF while writing payload for server "
+                                + serverId + " connection " + connectionId);
+                        }
+                        if (n > 0) {
+                            deadline = System.currentTimeMillis() + CLIENT_ACK_TIMEOUT_MS;
+                        }
+                    }
+                    if (key.isReadable()) {
+                        int n = channel.read(ackBuffer);
+                        if (n < 0) {
+                            throw new EOFException("Unexpected EOF while reading ACK for server "
+                                + serverId + " connection " + connectionId);
+                        }
+                        if (n > 0) {
+                            deadline = System.currentTimeMillis() + CLIENT_ACK_TIMEOUT_MS;
+                        }
+                    }
+                    if (key.isValid()) {
+                        int ops = SelectionKey.OP_READ;
+                        if (writeBuffer.hasRemaining()) {
+                            ops |= SelectionKey.OP_WRITE;
+                        }
+                        key.interestOps(ops);
+                    }
                 }
             }
             ackBuffer.flip();

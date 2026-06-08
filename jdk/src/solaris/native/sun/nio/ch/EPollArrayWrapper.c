@@ -33,6 +33,29 @@
 #include <unistd.h>
 #include <sys/time.h>
 #include <sys/epoll.h>
+#include <errno.h>
+#include <time.h>
+
+#define UB_SOCKET_PARSE_BATCH_BUF_LEN 4096
+
+enum UBSocketDrainResult {
+    UB_SOCKET_DRAIN_ERROR = -1,
+    UB_SOCKET_DRAIN_EOF = -2
+};
+
+enum {
+    UB_PROFILE_DETAIL = 2,
+    UB_PROF_WAKEUP_DRAIN_TOTAL = 14,
+    UB_PROF_WAKEUP_DRAIN_SYSCALL = 15,
+    UB_PROF_SELECTOR_PENDING_CHECK = 17,
+    UB_PROF_SELECTOR_PENDING_READY = 18,
+    UB_PROF_SELECTOR_PROBE_CHECK = 27,
+    UB_PROF_SELECTOR_PROBE_READY = 28,
+    UB_PROF_SELECTOR_PROBE_EMPTY = 29,
+    UB_PROF_SELECTOR_READY_INJECT = 30
+};
+
+static const jlong UB_NANOS_PER_SECOND = 1000000000LL;
 
 #define RESTARTABLE(_cmd, _result) do { \
   do { \
@@ -147,6 +170,133 @@ Java_sun_nio_ch_EPollArrayWrapper_epollWait(JNIEnv *env, jobject this,
         JNU_ThrowIOExceptionWithLastError(env, "epoll_wait failed");
     }
     return res;
+}
+
+JNIEXPORT jint JNICALL
+Java_sun_nio_ch_EPollArrayWrapper_drainUbSocketWakeups(JNIEnv *env, jclass this,
+                                                       jint fd)
+{
+    char buf[UB_SOCKET_PARSE_BATCH_BUF_LEN];
+    jint profile_mode;
+    jint parsed_any = 0;
+
+    if ((*env)->IsUbSocketReady(env, fd) == JNI_FALSE) {
+        return 0;
+    }
+
+    profile_mode = (*env)->UbSocketProfileMode(env);
+    for (;;) {
+        ssize_t nread;
+        jlong parsed;
+        jlong total_start = 0;
+        jlong syscall_start = 0;
+
+        if (profile_mode >= UB_PROFILE_DETAIL) {
+            struct timespec ts;
+            if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0) {
+                total_start = (jlong)ts.tv_sec * UB_NANOS_PER_SECOND +
+                              (jlong)ts.tv_nsec;
+                syscall_start = total_start;
+            }
+        }
+
+        nread = read(fd, buf, sizeof(buf));
+
+        if (profile_mode >= UB_PROFILE_DETAIL && syscall_start != 0) {
+            struct timespec ts;
+            if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0) {
+                jlong now = (jlong)ts.tv_sec * UB_NANOS_PER_SECOND +
+                             (jlong)ts.tv_nsec;
+                (*env)->UbSocketProfileRecord(env, UB_PROF_WAKEUP_DRAIN_SYSCALL,
+                                              now - syscall_start,
+                                              nread > 0 ? nread : 0, 1);
+            }
+        }
+
+        if (nread < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                return parsed_any;
+            }
+            return UB_SOCKET_DRAIN_ERROR;
+        }
+        if (nread == 0) {
+            return UB_SOCKET_DRAIN_EOF;
+        }
+
+        parsed = (*env)->UbSocketParse(env, fd, buf, (jint)nread);
+        if (parsed < 0) {
+            return UB_SOCKET_DRAIN_ERROR;
+        }
+        if (parsed > 0) {
+            parsed_any = 1;
+        }
+
+        if (profile_mode >= UB_PROFILE_DETAIL && total_start != 0) {
+            struct timespec ts;
+            if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0) {
+                jlong now = (jlong)ts.tv_sec * UB_NANOS_PER_SECOND +
+                             (jlong)ts.tv_nsec;
+                (*env)->UbSocketProfileRecord(env, UB_PROF_WAKEUP_DRAIN_TOTAL,
+                                              now - total_start, nread, 1);
+            }
+        }
+    }
+}
+
+JNIEXPORT void JNICALL
+Java_sun_nio_ch_EPollArrayWrapper_ubSocketProfileCount(JNIEnv *env, jclass this,
+                                                       jint event)
+{
+    if ((*env)->UbSocketProfileMode(env) >= UB_PROFILE_DETAIL) {
+        (*env)->UbSocketProfileRecord(env, event, 0, 0, 1);
+    }
+}
+
+JNIEXPORT jint JNICALL
+Java_sun_nio_ch_EPollArrayWrapper_ubSocketProfileMode(JNIEnv *env, jclass this)
+{
+    return (*env)->UbSocketProfileMode(env);
+}
+
+JNIEXPORT void JNICALL
+Java_sun_nio_ch_EPollArrayWrapper_unregisterUbSocket(JNIEnv *env, jclass this,
+                                                     jint fd)
+{
+    (*env)->UbSocketDetach(env, fd);
+}
+
+JNIEXPORT void JNICALL
+Java_sun_nio_ch_EPollArrayWrapper_markUbSocketControlClosed(JNIEnv *env,
+                                                            jclass this,
+                                                            jint fd)
+{
+    (*env)->UbSocketMarkControlClosed(env, fd);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_sun_nio_ch_EPollArrayWrapper_isUbSocketAttached(JNIEnv *env, jclass this,
+                                                     jint fd)
+{
+    return (*env)->IsUbSocket(env, fd);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_sun_nio_ch_EPollArrayWrapper_ubSocketHasPendingData(JNIEnv *env, jclass this,
+                                                         jint fd)
+{
+    jboolean ready;
+    jint profile_mode = (*env)->UbSocketProfileMode(env);
+    if (profile_mode >= UB_PROFILE_DETAIL) {
+        (*env)->UbSocketProfileRecord(env, UB_PROF_SELECTOR_PENDING_CHECK, 0, 0, 1);
+    }
+    ready = (*env)->UbSocketHasPendingData(env, fd);
+    if (ready == JNI_TRUE && profile_mode >= UB_PROFILE_DETAIL) {
+        (*env)->UbSocketProfileRecord(env, UB_PROF_SELECTOR_PENDING_READY, 0, 0, 1);
+    }
+    return ready;
 }
 
 JNIEXPORT void JNICALL

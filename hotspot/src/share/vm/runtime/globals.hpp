@@ -4208,11 +4208,11 @@ class CommandLineFlags {
   experimental(uintx, UBSocketMemorySize, 256*M,                            \
           "UB Socket shared memory size in bytes")                          \
                                                                             \
-  experimental(uintx, UBSocketTimeout, 200,                                 \
-          "UB Socket blk read timeout(ms), 0 means no timeout")             \
-                                                                            \
   experimental(uintx, UBSocketProfile, 0,                                   \
           "UB Socket profile: 0=off, 1=summary, 2=detail")                  \
+                                                                            \
+  experimental(bool, UBSocketAggressiveWakeup, false,                       \
+          "UB Socket sends a wakeup for each committed ring write")          \
 /*
  *  Macros for factoring of globals
  */

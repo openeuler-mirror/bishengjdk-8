@@ -39,10 +39,17 @@ SUNWprivate_1.1 {
                 Java_sun_nio_ch_EPollArrayWrapper_epollCreate;
                 Java_sun_nio_ch_EPollArrayWrapper_epollCtl;
                 Java_sun_nio_ch_EPollArrayWrapper_epollWait;
+                Java_sun_nio_ch_EPollArrayWrapper_drainUbSocketWakeups;
+                Java_sun_nio_ch_EPollArrayWrapper_unregisterUbSocket;
+                Java_sun_nio_ch_EPollArrayWrapper_markUbSocketControlClosed;
+                Java_sun_nio_ch_EPollArrayWrapper_isUbSocketAttached;
 		Java_sun_nio_ch_EPollArrayWrapper_init;
 		Java_sun_nio_ch_EPollArrayWrapper_interrupt;
-		Java_sun_nio_ch_EPollArrayWrapper_offsetofData;
-		Java_sun_nio_ch_EPollArrayWrapper_sizeofEPollEvent;
+                Java_sun_nio_ch_EPollArrayWrapper_offsetofData;
+                Java_sun_nio_ch_EPollArrayWrapper_sizeofEPollEvent;
+                Java_sun_nio_ch_EPollArrayWrapper_ubSocketHasPendingData;
+                Java_sun_nio_ch_EPollArrayWrapper_ubSocketProfileCount;
+                Java_sun_nio_ch_EPollArrayWrapper_ubSocketProfileMode;
 		Java_sun_nio_ch_EPoll_eventSize;
 		Java_sun_nio_ch_EPoll_eventsOffset;
 		Java_sun_nio_ch_EPoll_dataOffset;
@@ -129,6 +136,7 @@ SUNWprivate_1.1 {
                 Java_sun_nio_ch_ServerSocketChannelImpl_accept0;
                 Java_sun_nio_ch_ServerSocketChannelImpl_initIDs;
                 Java_sun_nio_ch_SocketChannelImpl_checkConnect;
+                Java_sun_nio_ch_SocketChannelImpl_registerUbSocket;
 		Java_sun_nio_ch_SocketChannelImpl_sendOutOfBandData;
 		Java_sun_nio_ch_UnixAsynchronousServerSocketChannelImpl_accept0;
 		Java_sun_nio_ch_UnixAsynchronousServerSocketChannelImpl_initIDs;

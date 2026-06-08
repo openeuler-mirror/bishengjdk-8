@@ -77,28 +77,14 @@ public final class SocketTestSupport {
         return createProcessBuilder(true, configPath, controlPort, mainClass, args);
     }
 
-    public static ProcessBuilder createUbProcessBuilderWithTimeout(String configPath,
-                                                                   int controlPort,
-                                                                   long timeoutMs,
-                                                                   String mainClass,
-                                                                   String ... args)
-        throws Exception {
-        return createUbProcessBuilderWithTimeoutAndVmOptions(
-            configPath, controlPort, timeoutMs, new String[0], mainClass, args);
-    }
-
-    public static ProcessBuilder createUbProcessBuilderWithTimeoutAndVmOptions(
+    public static ProcessBuilder createUbProcessBuilderWithVmOptions(
                                                                    String configPath,
                                                                    int controlPort,
-                                                                   long timeoutMs,
                                                                    String[] vmOptions,
                                                                    String mainClass,
                                                                    String ... args)
         throws Exception {
         List<String> command = createUbOptions(configPath, controlPort, mainClass);
-        if (timeoutMs >= 0L) {
-            command.add("-XX:UBSocketTimeout=" + timeoutMs);
-        }
         for (String vmOption : vmOptions) {
             command.add(vmOption);
         }
@@ -356,6 +342,51 @@ public final class SocketTestSupport {
         String token = "descriptor_sent=" + expectedBytes;
         if (!text.contains(token)) {
             throw new RuntimeException(message + ": missing " + token + "\n" + text);
+        }
+    }
+
+    public static long profileCount(String text, String event) {
+        long count = 0L;
+        for (String line : text.split("\\R")) {
+            String prefix = "UBSocketProfile ";
+            if (!line.startsWith(prefix)) {
+                continue;
+            }
+            String rest = line.substring(prefix.length()).trim();
+            if (!rest.startsWith(event + " ")) {
+                continue;
+            }
+            String[] fields = rest.split("\\s+");
+            if (fields.length >= 2) {
+                count += Long.parseLong(fields[1]);
+            }
+        }
+        return count;
+    }
+
+    public static void assertProfileCountAtLeast(String text, String event,
+                                                 long expected, String message) {
+        long actual = profileCount(text, event);
+        if (actual < expected) {
+            throw new RuntimeException(message + ": event=" + event
+                + ", expected>=" + expected + ", actual=" + actual + "\n" + text);
+        }
+    }
+
+    public static void assertProfileCountLessThan(String text, String leftEvent,
+                                                  String rightEvent, String message) {
+        long left = profileCount(text, leftEvent);
+        long right = profileCount(text, rightEvent);
+        if (left >= right) {
+            throw new RuntimeException(message + ": expected " + leftEvent + " < "
+                + rightEvent + ", actual " + left + " >= " + right + "\n" + text);
+        }
+    }
+
+    public static void assertNoLegacyControlFrames(String text, String message) {
+        if (containsDataFallback(text) || containsHeartbeat(text)
+                || text.contains("descriptor_sent=")) {
+            throw new RuntimeException(message + "\n" + text);
         }
     }
 
