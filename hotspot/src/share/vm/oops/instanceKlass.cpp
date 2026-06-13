@@ -1304,7 +1304,8 @@ Klass* InstanceKlass::array_klass_impl(bool or_null, int n, TRAPS) {
 }
 
 Klass* InstanceKlass::array_klass_impl(instanceKlassHandle this_oop, bool or_null, int n, TRAPS) {
-  if (this_oop->array_klasses() == NULL) {
+  // Need load-acquire for lock-free read
+  if (this_oop->array_klasses_acquire() == NULL) {
     if (or_null) return NULL;
 
     ResourceMark rm;
@@ -1317,7 +1318,8 @@ Klass* InstanceKlass::array_klass_impl(instanceKlassHandle this_oop, bool or_nul
       // Check if update has already taken place
       if (this_oop->array_klasses() == NULL) {
         Klass*    k = ObjArrayKlass::allocate_objArray_klass(this_oop->class_loader_data(), 1, this_oop, CHECK_NULL);
-        this_oop->set_array_klasses(k);
+        // use 'release' to pair with lock-free load
+        this_oop->release_set_array_klasses(k);
       }
     }
   }

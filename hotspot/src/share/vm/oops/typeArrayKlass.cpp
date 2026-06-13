@@ -32,6 +32,7 @@
 #include "memory/resourceArea.hpp"
 #include "memory/universe.hpp"
 #include "memory/universe.inline.hpp"
+#include "oops/arrayKlass.inline.hpp"
 #include "oops/instanceKlass.hpp"
 #include "oops/klass.inline.hpp"
 #include "oops/objArrayKlass.hpp"
@@ -39,7 +40,6 @@
 #include "oops/typeArrayKlass.hpp"
 #include "oops/typeArrayOop.hpp"
 #include "runtime/handles.inline.hpp"
-#include "runtime/orderAccess.inline.hpp"
 #include "utilities/macros.hpp"
 
 bool TypeArrayKlass::compute_is_subtype_of(Klass* k) {
@@ -165,7 +165,8 @@ Klass* TypeArrayKlass::array_klass_impl(bool or_null, int n, TRAPS) {
     if (dim == n)
       return this;
 
-  if (higher_dimension() == NULL) {
+  // lock-free read needs acquire semantics
+  if (higher_dimension_acquire() == NULL) {
     if (or_null)  return NULL;
 
     ResourceMark rm;
@@ -180,8 +181,8 @@ Klass* TypeArrayKlass::array_klass_impl(bool or_null, int n, TRAPS) {
               class_loader_data(), dim + 1, this, CHECK_NULL);
         ObjArrayKlass* h_ak = ObjArrayKlass::cast(oak);
         h_ak->set_lower_dimension(this);
-        OrderAccess::storestore();
-        set_higher_dimension(h_ak);
+        // use 'release' to pair with lock-free load
+        release_set_higher_dimension(h_ak);
         assert(h_ak->oop_is_objArray(), "incorrect initialization of ObjArrayKlass");
       }
     }
