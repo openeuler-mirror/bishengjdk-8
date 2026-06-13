@@ -48,14 +48,16 @@ class MetaIndex: public CHeapObj<mtClass> {
 
 class ClassPathEntry: public CHeapObj<mtClass> {
  private:
-  ClassPathEntry* _next;
+  ClassPathEntry* volatile _next;
   bool _sys_class;
  public:
   // Next entry in class path
-  ClassPathEntry* next()              { return _next; }
+  ClassPathEntry* next() const {
+    return (ClassPathEntry*) OrderAccess::load_ptr_acquire(&_next);
+  }
   bool sys_class() const { return _sys_class; }
   void set_next(ClassPathEntry* next) {
-    // may have unlocked readers, so write atomically.
+    // may have unlocked readers, so ensure visibility.
     OrderAccess::release_store_ptr(&_next, next);
   }
   void set_sys_class(bool isSysClass) {
