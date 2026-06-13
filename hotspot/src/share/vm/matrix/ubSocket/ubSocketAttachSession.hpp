@@ -73,6 +73,12 @@ class UBSocketAttachSession : public CHeapObj<mtInternal> {
   uint32_t _request_id;
   char _local_mem_name[UB_SOCKET_MEM_NAME_BUF_LEN];
   char _client_mem_name[UB_SOCKET_MEM_NAME_BUF_LEN];
+  uint32_t _local_ring_slot;
+  uint64_t _local_ring_offset;
+  uint64_t _local_ring_size;
+  uint32_t _client_ring_slot;
+  uint64_t _client_ring_offset;
+  uint64_t _client_ring_size;
   UBSocketAttachPhase _phase;
   UBSocketAttachSession* _next;
   bool _closing;
@@ -80,19 +86,20 @@ class UBSocketAttachSession : public CHeapObj<mtInternal> {
 
   bool wait_until(uint64_t ddl_ns);
 
-  void accept_request(const char* client_mem_name, uint32_t request_id);
+  bool accept_request(const UBSocketAttachFrame* request);
   bool wait_for_response(uint64_t ddl_ns);
   void accept_commit(bool success);
   bool wait_for_final_result(uint64_t ddl_ns);
   void finish_control(bool success);
 
   void publish_response(bool success);
-  bool wait_for_commit(uint64_t ddl_ns);
+  bool wait_for_commit(uint64_t ddl_ns, bool* peer_commit_failed);
   bool finish_pending(bool success, uint64_t ddl_ns);
 
  public:
   UBSocketAttachSession(const UBSocketEndpoint* local_ep, const UBSocketEndpoint* remote_ep,
-                        const char* local_mem_name);
+                        const char* local_mem_name, uint32_t local_ring_slot,
+                        uint64_t local_ring_offset, uint64_t local_ring_size);
   ~UBSocketAttachSession();
 
   const UBSocketEndpoint& local_endpoint() const { return _local_endpoint; }
@@ -115,12 +122,14 @@ class UBSocketAttachSession : public CHeapObj<mtInternal> {
   bool matches(const UBSocketEndpoint* local_ep, const UBSocketEndpoint* remote_ep) const;
   bool matches_request(const UBSocketAttachFrame* request) const;
 
-  bool wait_for_request(uint64_t ddl_ns, char* client_mem_name);
+  bool wait_for_request(uint64_t ddl_ns, char* client_mem_name,
+                        uint32_t* client_ring_slot, uint64_t* client_ring_offset,
+                        uint64_t* client_ring_size);
   // Control side entry: drive ATTACH_REQ/RSP/COMMIT/ACK on control_fd.
   bool drive_server_handshake(int control_fd,
                               const UBSocketAttachFrame* request,
                               uint64_t ddl_ns);
-  bool finish_server_attach(bool prepare_success, uint64_t ddl_ns);
+  int32_t finish_server_attach(bool prepare_success, uint64_t ddl_ns);
 };
 
 #endif  // SHARE_VM_MATRIX_UBSOCKETATTACHSSESSION_HPP

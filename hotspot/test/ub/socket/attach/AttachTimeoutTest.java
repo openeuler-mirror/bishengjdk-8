@@ -62,7 +62,7 @@ public class AttachTimeoutTest {
                 String.valueOf(ACCEPT_DELAY_MS)
             },
             new String[] {
-                "NIOScenarioClient", "basic", "localhost",
+                "NIOScenarioClient", "nonBlockingBasic", "localhost",
                 String.valueOf(dataPort),
                 String.valueOf(DATA_SIZE),
                 clientId

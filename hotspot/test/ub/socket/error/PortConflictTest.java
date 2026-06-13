@@ -70,7 +70,7 @@ public class PortConflictTest {
             Thread.sleep(500L);
 
             ProcessBuilder clientPb = SocketTestSupport.createUbProcessBuilder(
-                configPath, controlPort, "NIOScenarioClient", "basic", "localhost",
+                configPath, controlPort, "NIOScenarioClient", "nonBlockingBasic", "localhost",
                 String.valueOf(dataPort), String.valueOf(DATA_SIZE), "Client");
             OutputAnalyzer clientOutput = new OutputAnalyzer(clientPb.start());
             clientOutput.shouldHaveExitValue(0);
@@ -139,10 +139,10 @@ public class PortConflictTest {
             Thread.sleep(500L);
 
             ProcessBuilder clientAPb = SocketTestSupport.createUbProcessBuilder(
-                configPath, controlPort, "NIOScenarioClient", "basic", "localhost",
+                configPath, controlPort, "NIOScenarioClient", "nonBlockingBasic", "localhost",
                 String.valueOf(dataPortA), String.valueOf(DATA_SIZE), "ClientA");
             ProcessBuilder clientBPb = SocketTestSupport.createUbProcessBuilder(
-                configPath, controlPort, "NIOScenarioClient", "basic", "localhost",
+                configPath, controlPort, "NIOScenarioClient", "nonBlockingBasic", "localhost",
                 String.valueOf(dataPortB), String.valueOf(DATA_SIZE), "ClientB");
 
             // Start both clients concurrently (NOT sequential via OutputAnalyzer)

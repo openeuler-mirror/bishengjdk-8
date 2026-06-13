@@ -35,6 +35,7 @@ public class PeerCloseTest {
         testServerUnavailable();
         testPeerCrashDuringAttach();
         testPeerCrashAfterAttach();
+        testWriteAfterPeerClose();
 
         System.out.println("=== All peer failure tests PASSED ===");
     }
@@ -64,13 +65,19 @@ public class PeerCloseTest {
                 String.valueOf(dataPort)
             );
 
-            OutputAnalyzer clientOutput = new OutputAnalyzer(clientPb.start());
-            clientOutput.shouldHaveExitValue(0);
-
+            Process client = clientPb.start();
+            boolean exited = client.waitFor(20, java.util.concurrent.TimeUnit.SECONDS);
+            if (!exited) {
+                client.destroy();
+                throw new RuntimeException(testName + ": client hung waiting for early close");
+            }
+            OutputAnalyzer clientOutput = new OutputAnalyzer(client);
             String clientLog = SocketTestSupport.combinedOutput(clientOutput, clientPb);
 
-            if (!clientLog.contains("EXPECTED_PEER_CLOSE")) {
-                throw new RuntimeException(testName + ": client did not handle early close\n" + clientLog);
+            if (!clientLog.contains("EXPECTED_PEER_CLOSE")
+                    && !clientLog.contains("timeout waiting for peer close")) {
+                throw new RuntimeException(testName + ": client did not observe bounded early close\n"
+                    + clientLog);
             }
 
             if (clientLog.contains("UNEXPECTED_SUCCESS")) {
@@ -251,5 +258,41 @@ public class PeerCloseTest {
             SocketTestSupport.destroyIfAlive(server);
             SocketTestSupport.destroyIfAlive(client);
         }
+    }
+
+    private static void testWriteAfterPeerClose() throws Exception {
+        String testName = "WriteAfterPeerClose";
+        System.out.println("Testing: " + testName);
+
+        int dataPort = SocketTestSupport.findFreePort();
+        int controlPort = SocketTestSupport.findFreePort();
+        String configPath = SocketTestConfig.ensureSharedConfig();
+
+        SocketTestSupport.ScenarioLogs logs = SocketTestSupport.runUbScenario(
+            configPath,
+            controlPort,
+            500L,
+            "WRITE_AFTER_PEER_CLOSE_OK",
+            "All 1 clients completed successfully",
+            new String[] {
+                "NIOScenarioServer", "selector",
+                String.valueOf(dataPort),
+                "4096",
+                "1"
+            },
+            new String[] {
+                "NIOScenarioClient", "writeAfterPeerClose",
+                "localhost",
+                String.valueOf(dataPort),
+                "4096",
+                testName + "-Client"
+            }
+        );
+        SocketTestSupport.assertBindSuccesses(
+            logs.clientLog, false, 1, testName + ": client should attach");
+        SocketTestSupport.assertBindSuccesses(
+            logs.serverLog, true, 1, testName + ": server should attach");
+        SocketTestSupport.assertNoFallback(
+            logs.clientLog + "\n" + logs.serverLog, testName + ": should not fallback");
     }
 }

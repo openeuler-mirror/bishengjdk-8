@@ -42,16 +42,21 @@ class UBSocketAttach : public CHeapObj<mtInternal> {
  public:
   UBSocketAttach(int fd, bool is_server, Symbol* local_mem_name, size_t mem_size);
 
-  bool do_attach();
+  int32_t do_attach();
 
  private:
-  bool attach_client();
-  bool attach_server();
-  bool publish_server_mapping(const char* client_mem_name);
-  bool attach_client_once(int control_fd, const UBSocketEndpoint& request_local_ep,
-                          const UBSocketEndpoint& request_remote_ep,
-                          uint32_t request_id, uint64_t ddl_ns,
-                          char* remote_mem_name, bool* retry);
+  int32_t attach_client();
+  int32_t attach_server();
+  bool publish_server_mapping(const char* client_mem_name,
+                              uint32_t* local_ring_slot,
+                              uint64_t client_ring_offset);
+  int32_t attach_client_once(int control_fd, const UBSocketEndpoint& request_local_ep,
+                             const UBSocketEndpoint& request_remote_ep,
+                             uint32_t request_id, uint64_t ddl_ns,
+                             uint32_t* local_ring_slot,
+                             uint64_t local_ring_offset,
+                             uint64_t local_ring_size,
+                             char* remote_mem_name, bool* retry);
 };
 
 class UBSocketAttachAgent : public AllStatic {

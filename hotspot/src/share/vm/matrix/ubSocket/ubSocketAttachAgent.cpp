@@ -21,6 +21,7 @@
 
 #include <arpa/inet.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -44,6 +45,11 @@ bool UBSocketAttachAgent::_exited = true;
 int UBSocketAttachAgent::_listen_fd = -1;
 bool UBSocketAttachAgent::_dual_stack = false;
 
+static bool set_socket_nonblocking(int fd) {
+  int flags = fcntl(fd, F_GETFL, 0);
+  return flags >= 0 && fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0;
+}
+
 void UBSocketAttachAgent::init() {
   _agent_lock = new Monitor(Mutex::leaf, "UBSocketAttachAgent_lock");
   _started = false;
@@ -57,6 +63,12 @@ static int create_listener_socket(uint16_t port, bool* dual_stack_enabled) {
   if (dual_stack_enabled != NULL) { *dual_stack_enabled = false; }
 
   int fd = socket(AF_INET6, SOCK_STREAM, 0);
+  if (fd >= 0) {
+    if (!set_socket_nonblocking(fd)) {
+      close(fd);
+      fd = -1;
+    }
+  }
   if (fd >= 0) {
     int reuse_addr = 1;
     setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse_addr, sizeof(reuse_addr));
@@ -73,12 +85,21 @@ static int create_listener_socket(uint16_t port, bool* dual_stack_enabled) {
         if (dual_stack_enabled != NULL) { *dual_stack_enabled = true; }
         return fd;
       }
+      UB_LOG(UB_SOCKET, UB_LOG_INFO,
+             "attach agent ipv6 bind/listen failed port=%u errno=%d %s\n",
+             port, errno, strerror(errno));
     }
     close(fd);
   }
 
   fd = socket(AF_INET, SOCK_STREAM, 0);
   if (fd < 0) { return -1; }
+  if (!set_socket_nonblocking(fd)) {
+    int set_errno = errno;
+    close(fd);
+    errno = set_errno;
+    return -1;
+  }
 
   int reuse_addr = 1;
   setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse_addr, sizeof(reuse_addr));
@@ -91,6 +112,9 @@ static int create_listener_socket(uint16_t port, bool* dual_stack_enabled) {
 
   if (bind(fd, (struct sockaddr*)&addr4, sizeof(addr4)) != 0 ||
       listen(fd, UB_SOCKET_CONTROL_LISTEN_BACKLOG) != 0) {
+    UB_LOG(UB_SOCKET, UB_LOG_INFO,
+           "attach agent ipv4 bind/listen failed port=%u errno=%d %s\n",
+           port, errno, strerror(errno));
     close(fd);
     return -1;
   }
@@ -136,7 +160,7 @@ void UBSocketAttachAgent::listener_entry(JavaThread* thread, TRAPS) {
     // Cached early requests are retried before blocking in accept() so that
     // short accept/publish races do not force the client side to reconnect.
     int queued = UBSocketEarlyReqQueue::count();
-    while (queued-- > 0) {
+    while (!_should_stop && queued-- > 0) {
       int cached_fd = -1;
       uint64_t cached_ddl_ns = 0;
       UBSocketAttachFrame cached_request;
@@ -162,16 +186,31 @@ void UBSocketAttachAgent::listener_entry(JavaThread* thread, TRAPS) {
 
     int poll_timeout_ms = UBSocketEarlyReqQueue::has_requests()
                           ? UB_ATTACH_IO_BUSY_POLL_MS
-                          : UB_ATTACH_IO_BUSY_POLL_MS * 10;
+                          : UB_ATTACH_IO_IDLE_POLL_MS;
     uint64_t poll_ddl_ns = (uint64_t)os::javaTimeNanos() +
                                 (uint64_t)poll_timeout_ms * NANOSECS_PER_MILLISEC;
-    if (!UBSocketIO::wait_fd(listen_fd, POLLIN, poll_ddl_ns)) { continue; }
+    if (!UBSocketIO::wait_fd(listen_fd, POLLIN, poll_ddl_ns)) {
+      if (_should_stop) { break; }
+      continue;
+    }
+    if (_should_stop) { break; }
 
     int control_fd = UBSocketIO::accept(listen_fd);
     if (control_fd < 0) { continue; }
+    if (_should_stop) {
+      close(control_fd);
+      break;
+    }
     bool keep_open = false;
     handle_control_connection(control_fd, &keep_open);
     if (!keep_open) { close(control_fd); }
+  }
+
+  int closed_early_requests = UBSocketEarlyReqQueue::cleanup();
+  if (closed_early_requests > 0) {
+    UB_LOG(UB_SOCKET, UB_LOG_INFO,
+           "attach agent cleaned %d cached early requests on exit\n",
+           closed_early_requests);
   }
 
   {
@@ -208,12 +247,12 @@ bool UBSocketAttachAgent::start() {
 }
 
 void UBSocketAttachAgent::shutdown() {
-  bool started = false;
   int listen_fd = -1;
+  bool wait_exit = false;
   {
     MonitorLockerEx locker(_agent_lock, Mutex::_no_safepoint_check_flag);
-    started = _started;
     listen_fd = _listen_fd;
+    wait_exit = !_exited;
     _should_stop = true;
     _started = false;
     _listen_fd = -1;
@@ -221,13 +260,15 @@ void UBSocketAttachAgent::shutdown() {
     locker.notify_all();
   }
 
-  if (listen_fd >= 0) { close(listen_fd); }
-
-  {
-    MonitorLockerEx locker(_agent_lock, Mutex::_no_safepoint_check_flag);
-    while (started && !_exited) { locker.wait(Mutex::_no_safepoint_check_flag); }
+  if (listen_fd >= 0) {
+    ::shutdown(listen_fd, SHUT_RDWR);
+    close(listen_fd);
   }
 
-  UBSocketEarlyReqQueue::cleanup();
-  UBSocketSessionCaches::cleanup();
+  if (wait_exit) {
+    MonitorLockerEx locker(_agent_lock, Mutex::_no_safepoint_check_flag);
+    while (!_exited) {
+      locker.wait(Mutex::_no_safepoint_check_flag);
+    }
+  }
 }

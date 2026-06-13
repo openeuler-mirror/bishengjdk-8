@@ -55,7 +55,7 @@ public class EarlyRequestCacheTest {
                 String.valueOf(CACHE_ACCEPT_DELAY_MS)
             },
             new String[] {
-                "NIOScenarioClient", "basic", "localhost",
+                "NIOScenarioClient", "nonBlockingBasic", "localhost",
                 String.valueOf(dataPort),
                 String.valueOf(DATA_SIZE),
                 "EarlyCacheClient"
@@ -90,7 +90,7 @@ public class EarlyRequestCacheTest {
                 String.valueOf(EXPIRY_ACCEPT_DELAY_MS)
             },
             new String[] {
-                "NIOScenarioClient", "basic", "localhost",
+                "NIOScenarioClient", "nonBlockingBasic", "localhost",
                 String.valueOf(dataPort),
                 String.valueOf(DATA_SIZE),
                 "EarlyExpiryClient"

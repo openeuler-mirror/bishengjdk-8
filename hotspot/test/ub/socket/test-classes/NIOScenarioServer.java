@@ -29,6 +29,7 @@ import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -42,6 +43,7 @@ public class NIOScenarioServer {
     private static final int SELECTOR_MAX_READ_SIZE = 65536;
     private static final int SELECTOR_MAX_READ_COUNT = 16;
     private static final int SELECTOR_TIMEOUT_MS = 10000;
+    private static final int ECHO_FRAME_HEADER_SIZE = 8;
 
     public static void main(String[] args) throws Exception {
         if (args.length < 1) {
@@ -57,6 +59,10 @@ public class NIOScenarioServer {
             runDelayedRead(args);
         } else if ("earlyClose".equals(mode)) {
             runEarlyClose(args);
+        } else if ("echoFrames".equals(mode)) {
+            runEchoFrames(args);
+        } else if ("acceptHold".equals(mode)) {
+            runAcceptHold(args);
         } else {
             throw new IllegalArgumentException("Unknown mode: " + mode);
         }
@@ -250,7 +256,7 @@ public class NIOScenarioServer {
             for (int i = 0; i < clientCount; i++) {
                 final int clientIndex = i;
                 final SocketChannel channel = server.accept();
-                channel.configureBlocking(true);
+                channel.configureBlocking(false);
                 tasks.add(executor.submit(new Runnable() {
                     @Override
                     public void run() {
@@ -290,6 +296,10 @@ public class NIOScenarioServer {
                     throw new RuntimeException("Client-" + clientIndex
                         + " closed early at " + totalRead + "/" + expectedSize);
                 }
+                if (n == 0) {
+                    Thread.sleep(1L);
+                    continue;
+                }
                 if (n > 0) {
                     readBuffer.flip();
                     byte[] chunk = new byte[n];
@@ -308,7 +318,9 @@ public class NIOScenarioServer {
             ByteBuffer ack = ByteBuffer.wrap(
                 ("ACK " + totalRead + " bytes received, hash " + hashStr.toString()).getBytes(StandardCharsets.UTF_8));
             while (ack.hasRemaining()) {
-                channel.write(ack);
+                if (channel.write(ack) == 0) {
+                    Thread.sleep(1L);
+                }
             }
         } finally {
             channel.close();
@@ -362,7 +374,7 @@ public class NIOScenarioServer {
         try {
             for (int i = 0; i < clientCount; i++) {
                 SocketChannel channel = server.accept();
-                channel.configureBlocking(true);
+                channel.configureBlocking(false);
                 channels.add(channel);
             }
             System.out.println("Delayed-read accepted " + clientCount
@@ -398,41 +410,258 @@ public class NIOScenarioServer {
         }
     }
 
+    private static void runEchoFrames(String[] args) throws Exception {
+        if (args.length < 5) {
+            throw new IllegalArgumentException(
+                "Usage: NIOScenarioServer echoFrames <port> <requestSize> <responseSize> <frames> [bindHost]");
+        }
+
+        int port = Integer.parseInt(args[1]);
+        int requestSize = Integer.parseInt(args[2]);
+        int responseSize = Integer.parseInt(args[3]);
+        int frames = Integer.parseInt(args[4]);
+        if (requestSize < ECHO_FRAME_HEADER_SIZE || responseSize < ECHO_FRAME_HEADER_SIZE) {
+            throw new IllegalArgumentException("frame sizes must be at least "
+                + ECHO_FRAME_HEADER_SIZE);
+        }
+
+        ServerSocketChannel server = ServerSocketChannel.open();
+        Selector selector = Selector.open();
+        int completed = 0;
+        int openChannels = 0;
+        long start = System.currentTimeMillis();
+        long deadline = start + SELECTOR_TIMEOUT_MS;
+        try {
+            server.configureBlocking(false);
+            server.socket().setReuseAddress(true);
+            InetSocketAddress bindAddress = args.length >= 6
+                ? new InetSocketAddress(InetAddress.getByName(args[5]), port)
+                : new InetSocketAddress(port);
+            server.bind(bindAddress);
+            server.register(selector, SelectionKey.OP_ACCEPT);
+            System.out.println("Echo frame server listening on " + bindAddress);
+
+            while (completed < frames || openChannels > 0) {
+                int ready = selector.select(SELECTOR_TIMEOUT_MS);
+                if (ready == 0) {
+                    if (System.currentTimeMillis() > deadline) {
+                        throw new RuntimeException("Echo frame server timeout completed="
+                            + completed + "/" + frames);
+                    }
+                    continue;
+                }
+                deadline = System.currentTimeMillis() + SELECTOR_TIMEOUT_MS;
+
+                Set<SelectionKey> selectedKeys = selector.selectedKeys();
+                Iterator<SelectionKey> iterator = selectedKeys.iterator();
+                while (iterator.hasNext()) {
+                    SelectionKey key = iterator.next();
+                    iterator.remove();
+                    if (!key.isValid()) {
+                        continue;
+                    }
+                    if (key.isAcceptable()) {
+                        SocketChannel channel;
+                        while ((channel = server.accept()) != null) {
+                            channel.configureBlocking(false);
+                            EchoFrameState state =
+                                new EchoFrameState(requestSize, responseSize, frames);
+                            channel.register(selector, SelectionKey.OP_READ, state);
+                            openChannels++;
+                            System.out.println("Echo frame client accepted: "
+                                + channel.getRemoteAddress());
+                        }
+                    } else {
+                        if (key.isReadable()) {
+                            if (readEchoFrames(key)) {
+                                openChannels--;
+                                continue;
+                            }
+                        }
+                        if (key.isValid() && key.isWritable()) {
+                            completed += writeEchoFrames(key);
+                            if (!key.isValid()) {
+                                openChannels--;
+                            }
+                        }
+                    }
+                }
+            }
+            System.out.println("ECHO_SERVER_OK frames=" + completed
+                + " elapsedMs=" + (System.currentTimeMillis() - start));
+        } finally {
+            selector.close();
+            server.close();
+        }
+    }
+
+    private static void runAcceptHold(String[] args) throws Exception {
+        if (args.length < 4) {
+            throw new IllegalArgumentException(
+                "Usage: NIOScenarioServer acceptHold <port> <clientCount> <holdMillis>");
+        }
+
+        int port = Integer.parseInt(args[1]);
+        int clientCount = Integer.parseInt(args[2]);
+        long holdMillis = Long.parseLong(args[3]);
+        ServerSocketChannel server = ServerSocketChannel.open();
+        ArrayList<SocketChannel> channels = new ArrayList<SocketChannel>();
+        try {
+            server.configureBlocking(true);
+            server.socket().setReuseAddress(true);
+            server.bind(new InetSocketAddress(port));
+            for (int i = 0; i < clientCount; i++) {
+                SocketChannel channel = server.accept();
+                channel.configureBlocking(false);
+                channels.add(channel);
+            }
+            Thread.sleep(holdMillis);
+        } finally {
+            for (SocketChannel channel : channels) {
+                try {
+                    channel.close();
+                } catch (IOException ignore) {
+                }
+            }
+            server.close();
+        }
+
+        System.out.println("ACCEPT_HOLD_OK clients=" + clientCount);
+    }
+
+    private static boolean readEchoFrames(SelectionKey key) throws IOException {
+        SocketChannel channel = (SocketChannel)key.channel();
+        EchoFrameState state = (EchoFrameState)key.attachment();
+        int n = channel.read(state.input);
+        if (n < 0) {
+            closeKey(key);
+            return true;
+        }
+        if (n == 0) {
+            return false;
+        }
+
+        state.input.flip();
+        while (state.input.remaining() >= state.requestSize
+                && state.framesRead < state.expectedFrames) {
+            int frameStart = state.input.position();
+            long sequence = state.input.getLong();
+            if (sequence < 0L || sequence >= state.expectedFrames) {
+                throw new RuntimeException("invalid request sequence=" + sequence);
+            }
+            NIOScenarioClient.verifyEchoPayload(state.input, frameStart,
+                                                state.requestSize,
+                                                (int)sequence, true);
+            state.input.position(frameStart + state.requestSize);
+            state.responses.add(
+                NIOScenarioClient.makeEchoResponse((int)sequence, state.responseSize));
+            state.framesRead++;
+        }
+        state.input.compact();
+        key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
+        return false;
+    }
+
+    private static int writeEchoFrames(SelectionKey key) throws IOException {
+        SocketChannel channel = (SocketChannel)key.channel();
+        EchoFrameState state = (EchoFrameState)key.attachment();
+        int completed = 0;
+        while (!state.responses.isEmpty()) {
+            ByteBuffer head = state.responses.peek();
+            int n = channel.write(head);
+            if (n < 0) {
+                closeKey(key);
+                return completed;
+            }
+            if (n == 0) {
+                break;
+            }
+            if (!head.hasRemaining()) {
+                state.responses.remove();
+                state.framesWritten++;
+                completed++;
+            }
+        }
+        if (state.responses.isEmpty()) {
+            key.interestOps(key.interestOps() & ~SelectionKey.OP_WRITE);
+        }
+        return completed;
+    }
+
     private static void handleDelayedReadClient(SocketChannel channel, long expectedSize)
         throws Exception {
+        Selector selector = Selector.open();
         ByteBuffer readBuffer = ByteBuffer.allocate(SELECTOR_MAX_READ_SIZE);
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         long totalRead = 0L;
+        ByteBuffer ack = null;
+        long deadline = System.currentTimeMillis() + 120000L;
         try {
-            while (totalRead < expectedSize) {
-                readBuffer.clear();
-                int n = channel.read(readBuffer);
-                if (n < 0) {
-                    throw new RuntimeException("Delayed-read client closed early at "
-                        + totalRead + "/" + expectedSize);
+            channel.register(selector, SelectionKey.OP_READ);
+            while (true) {
+                int ready = selector.select(1000L);
+                if (ready == 0) {
+                    if (System.currentTimeMillis() > deadline) {
+                        throw new RuntimeException("Delayed-read timeout at "
+                            + totalRead + "/" + expectedSize);
+                    }
+                    continue;
                 }
-                if (n > 0) {
-                    readBuffer.flip();
-                    byte[] chunk = new byte[n];
-                    readBuffer.get(chunk);
-                    digest.update(chunk, 0, n);
-                    totalRead += n;
+                Iterator<SelectionKey> iterator = selector.selectedKeys().iterator();
+                while (iterator.hasNext()) {
+                    SelectionKey key = iterator.next();
+                    iterator.remove();
+                    if (!key.isValid()) {
+                        continue;
+                    }
+                    if (key.isReadable() && totalRead < expectedSize) {
+                        while (totalRead < expectedSize) {
+                            readBuffer.clear();
+                            int n = channel.read(readBuffer);
+                            if (n < 0) {
+                                throw new RuntimeException("Delayed-read client closed early at "
+                                    + totalRead + "/" + expectedSize);
+                            }
+                            if (n == 0) {
+                                break;
+                            }
+                            readBuffer.flip();
+                            byte[] chunk = new byte[n];
+                            readBuffer.get(chunk);
+                            digest.update(chunk, 0, n);
+                            totalRead += n;
+                            deadline = System.currentTimeMillis() + 120000L;
+                        }
+                        if (totalRead >= expectedSize) {
+                            byte[] hashBytes = digest.digest();
+                            StringBuilder hashStr = new StringBuilder(hashBytes.length * 2);
+                            for (byte b : hashBytes) {
+                                hashStr.append(String.format("%02x", b));
+                            }
+                            ack = ByteBuffer.wrap(
+                                ("ACK " + totalRead + " bytes received, hash "
+                                    + hashStr.toString()).getBytes(StandardCharsets.UTF_8));
+                            key.interestOps(SelectionKey.OP_WRITE);
+                        }
+                    }
+                    if (key.isWritable() && ack != null) {
+                        while (ack.hasRemaining()) {
+                            int n = channel.write(ack);
+                            if (n < 0) {
+                                throw new RuntimeException("Delayed-read ACK channel closed");
+                            }
+                            if (n == 0) {
+                                break;
+                            }
+                        }
+                        if (!ack.hasRemaining()) {
+                            return;
+                        }
+                    }
                 }
-            }
-
-            byte[] hashBytes = digest.digest();
-            StringBuilder hashStr = new StringBuilder(hashBytes.length * 2);
-            for (byte b : hashBytes) {
-                hashStr.append(String.format("%02x", b));
-            }
-
-            ByteBuffer ack = ByteBuffer.wrap(
-                ("ACK " + totalRead + " bytes received, hash " + hashStr.toString())
-                    .getBytes(StandardCharsets.UTF_8));
-            while (ack.hasRemaining()) {
-                channel.write(ack);
             }
         } finally {
+            selector.close();
             channel.close();
         }
     }
@@ -495,6 +724,23 @@ public class NIOScenarioServer {
             ackBuffer = ByteBuffer.wrap(
                 ("ACK " + totalReceived + " bytes received, hash " + hashValue)
                     .getBytes(StandardCharsets.UTF_8));
+        }
+    }
+
+    private static final class EchoFrameState {
+        final int requestSize;
+        final int responseSize;
+        final int expectedFrames;
+        final ByteBuffer input;
+        final ArrayDeque<ByteBuffer> responses = new ArrayDeque<ByteBuffer>();
+        int framesRead;
+        int framesWritten;
+
+        EchoFrameState(int requestSize, int responseSize, int expectedFrames) {
+            this.requestSize = requestSize;
+            this.responseSize = responseSize;
+            this.expectedFrames = expectedFrames;
+            this.input = ByteBuffer.allocate(Math.max(requestSize * 16, 4096));
         }
     }
 }

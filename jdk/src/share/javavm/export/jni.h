@@ -773,9 +773,15 @@ struct JNINativeInterface_ {
       (JNIEnv *env, jint fd);
     jboolean (JNICALL *IsUbSocketReady)
       (JNIEnv *env, jint fd);
-    jboolean (JNICALL *UbSocketRegister)
+    jboolean (JNICALL *UbSocketHasPendingData)
+      (JNIEnv *env, jint fd);
+    jint (JNICALL *UbSocketRegister)
       (JNIEnv *env, jint fd, jboolean isServer);
     jboolean (JNICALL *UbSocketClose)
+      (JNIEnv *env, jint fd);
+    jboolean (JNICALL *UbSocketDetach)
+      (JNIEnv *env, jint fd);
+    jboolean (JNICALL *UbSocketMarkControlClosed)
       (JNIEnv *env, jint fd);
     jlong (JNICALL *UbSocketRead)
       (JNIEnv *env, void* buf, jint fd, jlong len);
@@ -1891,11 +1897,20 @@ struct JNIEnv_ {
     jboolean IsUbSocketReady(jint fd) {
         return functions->IsUbSocketReady(this, fd);
     }
-    jboolean UbSocketRegister(jint fd, jboolean isServer) {
+    jboolean UbSocketHasPendingData(jint fd) {
+        return functions->UbSocketHasPendingData(this, fd);
+    }
+    jint UbSocketRegister(jint fd, jboolean isServer) {
         return functions->UbSocketRegister(this, fd, isServer);
     }
     jboolean UbSocketClose(jint fd) {
         return functions->UbSocketClose(this, fd);
+    }
+    jboolean UbSocketDetach(jint fd) {
+        return functions->UbSocketDetach(this, fd);
+    }
+    jboolean UbSocketMarkControlClosed(jint fd) {
+        return functions->UbSocketMarkControlClosed(this, fd);
     }
     jlong UbSocketRead(void* buf, jint fd, jlong len) {
         return functions->UbSocketRead(this, buf, fd, len);

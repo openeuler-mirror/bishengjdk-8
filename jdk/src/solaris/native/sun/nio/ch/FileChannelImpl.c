@@ -51,6 +51,12 @@
 
 static jfieldID chan_fd;        /* jobject 'fd' in sun.io.FileChannelImpl */
 
+static jboolean ub_socket_fd_nonblocking(jint fd)
+{
+    int flags = fcntl(fd, F_GETFL);
+    return (flags >= 0 && (flags & O_NONBLOCK) != 0) ? JNI_TRUE : JNI_FALSE;
+}
+
 JNIEXPORT jlong JNICALL
 Java_sun_nio_ch_FileChannelImpl_initIDs(JNIEnv *env, jclass clazz)
 {
@@ -143,8 +149,17 @@ Java_sun_nio_ch_FileChannelImpl_transferTo0(JNIEnv *env, jobject this,
 {
     jint srcFD = fdval(env, srcFDO);
     jint dstFD = fdval(env, dstFDO);
+    jboolean ub_attached = (*env)->IsUbSocket(env, dstFD);
 
-    if ((*env)->IsUbSocketReady(env, dstFD) == JNI_TRUE) {
+    if (ub_attached == JNI_TRUE) {
+        if ((*env)->IsUbSocketReady(env, dstFD) != JNI_TRUE) {
+            return IOS_UNAVAILABLE;
+        }
+        if (ub_socket_fd_nonblocking(dstFD) != JNI_TRUE) {
+            JNU_ThrowIOException(env,
+                "UBSocket attached SocketChannel only supports non-blocking transferTo");
+            return IOS_THROWN;
+        }
         jlong n = (*env)->UbSocketTransferFromFile(env, srcFD, dstFD,
                                                    position, count);
         if (n < 0) {

@@ -279,19 +279,6 @@ public class OptionsTest {
         mustNotContain(splitFileOutput, "[socket]");
         output.shouldHaveExitValue(0);
 
-        // UBSocket timeout
-        pb = ProcessTools.createJavaProcessBuilder(
-            true,
-            "-XX:+UnlockExperimentalVMOptions",
-            "-XX:+UseUBSocket",
-            "-XX:UBSocketConf=" + configPath,
-            "-XX:UBSocketPort=28772",
-            "-XX:UBSocketTimeout=1",
-            appClass[0]
-        );
-        output = new OutputAnalyzer(pb.start());
-        mustContain(output.getOutput(), "UBSocket timeout(1) invalid, set to");
-        output.shouldHaveExitValue(0);
     }
 
     private static String readText(Path path) throws Exception {

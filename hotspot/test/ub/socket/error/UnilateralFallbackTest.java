@@ -72,7 +72,7 @@ public class UnilateralFallbackTest {
                 configPath,
                 controlPort,
                 "NIOScenarioClient",
-                "basic",
+                "nonBlockingBasic",
                 "localhost",
                 String.valueOf(dataPort),
                 String.valueOf(DATA_SIZE),

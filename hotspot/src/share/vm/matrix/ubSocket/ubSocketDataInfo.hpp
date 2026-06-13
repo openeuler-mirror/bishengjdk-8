@@ -5,16 +5,6 @@
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
  * published by the Free Software Foundation.
- *
- * This code is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
- * version 2 for more details (a copy is included in the LICENSE file that
- * accompanied this code).
- *
- * You should have received a copy of the GNU General Public License version
- * 2 along with this work; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
 #ifndef SHARE_VM_MATRIX_UBSOCKETDATAINFO_HPP
@@ -24,122 +14,52 @@
 #include <stdint.h>
 
 #include "matrix/matrixUtils.hpp"
+#include "matrix/ubSocket/ubSocketMemMapping.hpp"
+#include "matrix/ubSocket/ubSocketRing.hpp"
+#include "memory/allocation.hpp"
+#include "runtime/mutexLocker.hpp"
 
 class Monitor;
-class UBSocketMemMapping;
-struct UBSocketDataFrame;
-
 static const int UB_SOCKET_FRAME_RESIDUE_BUF_LEN = 64;
-// same as UB_SOCKET_PARSE_BATCH_BUF_LEN in FileDispatcherImpl.c
-static const int UB_SOCKET_PARSE_BATCH_BUF_LEN = 4096;
+static const uint64_t UB_SOCKET_WAKEUP_THRESHOLD_BYTES = 64 * 1024;
 
-enum UBSocketFallbackMarkState {
-  FALLBACK_MARK_NOT_SENT,
-  FALLBACK_MARK_SENDING,
-  FALLBACK_MARK_SENT
-};
-
-class UBSocketFallbackState {
+// Per-fd UBSocket state. It is the sole owner of the local ring slot and the
+// remote mapping reference after attach publishes the connection.
+class UBSocketConnection : public CHeapObj<mtInternal> {
  public:
-  UBSocketFallbackState()
-      : _draining(false), _mark_state(FALLBACK_MARK_NOT_SENT),
-        _tcp_len(0), _tcp_pos(0) {}
+  UBSocketConnection(int fd, UBSocketMemMapping* mapping,
+                     uint32_t local_ring_slot, uint64_t remote_ring_offset);
+  ~UBSocketConnection();
 
-  bool append_tcp_tail(const char* src, size_t len);
-  size_t read_tcp_tail(void* dst, size_t len);
-  bool has_tcp_tail() const { return _tcp_pos < _tcp_len; }
-
-  bool draining() const { return _draining; }
-  bool mark_sent() const { return _mark_state == FALLBACK_MARK_SENT; }
-  // Fallback mark sending assumes one writer per fd. SENDING prevents duplicate
-  // DATA_FALLBACK frames; callers do not wait for another writer to finish.
-  bool begin_mark_send() {
-    if (!_draining || _mark_state != FALLBACK_MARK_NOT_SENT) { return false; }
-    _mark_state = FALLBACK_MARK_SENDING;
-    return true;
-  }
-  void complete_mark_send() { _mark_state = FALLBACK_MARK_SENT; }
-  void abort_mark_send() { _mark_state = FALLBACK_MARK_NOT_SENT; }
-  bool drained(bool has_pending_data) const {
-    return _draining && mark_sent() && !has_pending_data;
-  }
-  bool ready_for_ub_io(bool has_pending_data) const {
-    return !mark_sent() || has_pending_data;
-  }
-  void request() { _draining = true; }
-  void receive_mark() {
-    _draining = true;
-    _mark_state = FALLBACK_MARK_SENT;
-  }
-
- private:
-  bool _draining;
-  UBSocketFallbackMarkState _mark_state;
-  size_t _tcp_len;
-  size_t _tcp_pos;
-  char _tcp_buf[UB_SOCKET_PARSE_BATCH_BUF_LEN];
-};
-
-// Per-fd UBSocket data-path state. It owns the remote memory mapping reference,
-// queued descriptor ranges, fallback residue bytes, and drain-to-TCP state.
-// SocketDataInfoTable pins lifetime; same-fd read/write/parse calls are serialized.
-class UBSocketInfoList : public CHeapObj<mtInternal> {
- public:
-  explicit UBSocketInfoList(int fd, UBSocketMemMapping* mapping)
-      : _head(NULL), _tail(NULL), _cursor(NULL), _free_nodes(NULL),
-        _cur_loc(0), _socket_fd(fd),
-        _mem_mapping(mapping),
-        _closing(false), _active_count(0),
-        _frame_residue_len(0) {}
-  ~UBSocketInfoList() {
-    delete_nodes(_head, NULL);
-    delete_nodes(_free_nodes, NULL);
-  }
-
-  bool append_ranges(const UBSocketDataFrame* frames, int count, long* total_len);
-  long read_data(void* dst, size_t len);  // read len data of this fd to dst
+  long read_data(void* dst, size_t len);
+  long write_data(const void* src, size_t len, bool* need_wakeup);
+  void end_tx_wakeup();
+  void cancel_tx_wakeup();
+  bool mark_rx_wakeup();
+  void mark_error();
+  void mark_control_closed();
+  bool has_pending_data();
+  bool ready();
   bool take_frame_residue(char* dst, size_t dst_len, size_t* len);
   bool store_frame_residue(const char* src, size_t len);
 
-  bool append_fallback_tail(const char* src, size_t len);
-  bool has_pending_data() const {
-    return has_ub_pending_data() || _fallback.has_tcp_tail();
-  }
-  bool fallback_draining() const { return _fallback.draining(); }
-  bool fallback_drained() const { return _fallback.drained(has_pending_data()); }
-  bool ready_for_ub_io() const {
-    return _fallback.ready_for_ub_io(has_pending_data());
-  }
-  void request_fallback() { _fallback.request(); }
-  bool begin_fallback_mark_send() { return _fallback.begin_mark_send(); }
-  void complete_fallback_mark_send() { _fallback.complete_mark_send(); }
-  void abort_fallback_mark_send() { _fallback.abort_mark_send(); }
-  void receive_fallback_mark() { _fallback.receive_mark(); }
-
-  UBSocketMemMapping* mapping() { return _mem_mapping; }
-
  private:
-  friend class SocketDataInfoTable;
+  friend class UBSocketConnectionTable;
 
-  class SocketListNode : public CHeapObj<mtInternal> {
-   public:
-    SocketListNode(size_t off, size_t size, UBSocketInfoList::SocketListNode* n)
-        : offset(off), size(size), next(n) {}
-
-    size_t offset;
-    size_t size;
-    SocketListNode* next;
-  };
-  SocketListNode* _head;
-  SocketListNode* _tail;
-  SocketListNode* _cursor;  // current node
-  SocketListNode* _free_nodes;
-  size_t _cur_loc;          // current node location
-
-  int _socket_fd;     // one instance pre socket
-  UBSocketMemMapping* _mem_mapping;  // lifecycle owner for the remote mapping
-
-  UBSocketFallbackState _fallback;
+  int _socket_fd;
+  UBSocketMemMapping* _remote_mapping;
+  uint32_t _local_ring_slot;
+  Monitor* _lock;
+  UBSocketRing _rx_ring;
+  UBSocketRing _tx_ring;
+  bool _tx_wakeup_sending;
+  bool _tx_wakeup_pending;
+  bool _ring_error;
+  bool _control_closed;
+  uint64_t _tx_last_wakeup_offset;
+  bool _rx_ready;
+  uint64_t _rx_read_offset;
+  uint64_t _tx_write_offset;
   bool _closing;
   int _active_count;
   char _frame_residue_buf[UB_SOCKET_FRAME_RESIDUE_BUF_LEN];
@@ -147,52 +67,45 @@ class UBSocketInfoList : public CHeapObj<mtInternal> {
 
   bool closing() const { return _closing; }
   void set_closing() { _closing = true; }
+  void mark_error_locked();
+  bool refresh_rx_ready();
   void pin() { _active_count++; }
   bool unpin();
   bool has_active() const { return _active_count > 0; }
-
-  bool has_ub_pending_data() const {
-    return _cursor != NULL && (_cur_loc < _cursor->size || _cursor->next != NULL);
-  }
-  SocketListNode* alloc_node(size_t offset, size_t size);
-  void append(size_t offset, size_t size);
-  bool finish_current_range();
-  int recycle_nodes(SocketListNode* start, SocketListNode* end);
-  int delete_nodes(SocketListNode* start, SocketListNode* end);
 };
 
-// Global fd -> UBSocketInfoList registry. The table lock protects publish,
-// lookup, detach, and pin bookkeeping; the pinned info object carries the
-// per-fd state used by read/write/fallback paths.
-class SocketDataInfoTable : public AllStatic {
+// Thin fd -> connection registry. The table lock only protects registry and
+// lifetime bookkeeping; it must not perform ring IO or acquire connection locks.
+class UBSocketConnectionTable : public AllStatic {
  public:
   static void init();
-  static bool publish(int fd, UBSocketInfoList* info);
+  static bool publish(int fd, UBSocketConnection* conn);
   static bool contains(int fd);
-  static long append_ranges(int fd, const UBSocketDataFrame* frames, int count);
-  static long read_data(int fd, void* dst, size_t len);
-  static bool is_fallback_draining(int fd);
-  static bool can_send_frame(int fd);
-  static bool request_fallback(int fd, const char* reason);
-  static bool begin_fallback_mark_send(int fd);
-  static void complete_fallback_mark_send(int fd);
-  static void abort_fallback_mark_send(int fd);
-  static bool receive_fallback_mark(int fd, const char* src, size_t len);
-  static bool fallback_drained(int fd);
-  static bool has_pending_data(int fd);
-  static bool ready_for_ub_io(int fd);
-  static bool take_frame_residue(int fd, char* dst, size_t dst_len, size_t* len);
-  static bool store_frame_residue(int fd, const char* src, size_t len);
-  static UBSocketInfoList* pin_list(int fd);
-  static void unpin_list(UBSocketInfoList* info);
-  static UBSocketInfoList* detach(int fd);
-  static int unregister_abnormal_fds();  // unregister fds abnormal exit
+  static UBSocketConnection* pin(int fd);
+  static void unpin(UBSocketConnection* conn);
+  static void start_shutdown();
+  static UBSocketConnection* begin_close(int fd);
+  static void finish_close(int fd, UBSocketConnection* conn);
+  static int unregister_abnormal_fds();
 
  private:
-  static Monitor* _info_table_lock;
-  static PtrTable<int, UBSocketInfoList*, mtInternal> _table;
+  static Monitor* _table_lock;
+  static PtrTable<int, UBSocketConnection*, mtInternal> _table;
+  static bool _shutting_down;
+};
 
-  static UBSocketInfoList* pin_list_locked(int fd);
+class UBSocketConnectionHandle : public StackObj {
+ public:
+  explicit UBSocketConnectionHandle(int fd);
+  ~UBSocketConnectionHandle();
+
+  UBSocketConnection* get() const { return _conn; }
+
+ private:
+  UBSocketConnection* _conn;
+
+  UBSocketConnectionHandle(const UBSocketConnectionHandle&);
+  UBSocketConnectionHandle& operator=(const UBSocketConnectionHandle&);
 };
 
 #endif  // SHARE_VM_MATRIX_UBSOCKETDATAINFO_HPP

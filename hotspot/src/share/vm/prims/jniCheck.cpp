@@ -2020,9 +2020,17 @@ JNI_ENTRY_CHECKED(jboolean,
 JNI_END
 
 JNI_ENTRY_CHECKED(jboolean,
+  checked_jni_UbSocketHasPendingData(JNIEnv *env, jint fd))
+    functionEnter(thr);
+    jboolean result = UNCHECKED()->UbSocketHasPendingData(env, fd);
+    functionExit(thr);
+    return result;
+JNI_END
+
+JNI_ENTRY_CHECKED(jint,
   checked_jni_UbSocketRegister(JNIEnv *env, jint fd, jboolean isServer))
     functionEnter(thr);
-    jboolean result = UNCHECKED()->UbSocketRegister(env, fd, isServer);
+    jint result = UNCHECKED()->UbSocketRegister(env, fd, isServer);
     functionExit(thr);
     return result;
 JNI_END
@@ -2031,6 +2039,22 @@ JNI_ENTRY_CHECKED(jboolean,
   checked_jni_UbSocketClose(JNIEnv *env, jint fd))
     functionEnter(thr);
     jboolean result = UNCHECKED()->UbSocketClose(env, fd);
+    functionExit(thr);
+    return result;
+JNI_END
+
+JNI_ENTRY_CHECKED(jboolean,
+  checked_jni_UbSocketDetach(JNIEnv *env, jint fd))
+    functionEnter(thr);
+    jboolean result = UNCHECKED()->UbSocketDetach(env, fd);
+    functionExit(thr);
+    return result;
+JNI_END
+
+JNI_ENTRY_CHECKED(jboolean,
+  checked_jni_UbSocketMarkControlClosed(JNIEnv *env, jint fd))
+    functionEnter(thr);
+    jboolean result = UNCHECKED()->UbSocketMarkControlClosed(env, fd);
     functionExit(thr);
     return result;
 JNI_END
@@ -2383,8 +2407,11 @@ struct JNINativeInterface_  checked_jni_NativeInterface = {
     checked_jni_UbSocketCheckStack,
     checked_jni_IsUbSocket,
     checked_jni_IsUbSocketReady,
+    checked_jni_UbSocketHasPendingData,
     checked_jni_UbSocketRegister,
     checked_jni_UbSocketClose,
+    checked_jni_UbSocketDetach,
+    checked_jni_UbSocketMarkControlClosed,
     checked_jni_UbSocketRead,
     checked_jni_UbSocketWrite,
     checked_jni_UbSocketParse,

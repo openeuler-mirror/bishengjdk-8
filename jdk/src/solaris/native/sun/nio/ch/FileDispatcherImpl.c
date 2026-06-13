@@ -30,6 +30,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <fcntl.h>
+#include <errno.h>
 #include <sys/uio.h>
 #include <string.h>
 #include <unistd.h>
@@ -73,25 +74,24 @@
 static int preCloseFD = -1;     /* File descriptor to which we dup other fd's
                                    before closing them for real */
 
-// UB Matrix support: batch buffer length for parsing multiple frames
-static const jint UB_SOCKET_PARSE_BATCH_BUF_LEN = 4096;
 static jboolean ub_profile_enabled = JNI_FALSE;
 // Notice: same as UBSocketProfileEvent in ubSocketProfile.hpp
 enum {
+    UB_PROFILE_DETAIL = 2,
     UB_PROF_NIO_WRITE_TOTAL = 0,
-    UB_PROF_NIO_READ_TOTAL = 8,
-    UB_PROF_UB_FIRST_HIT = 9,
-    UB_PROF_UB_FIRST_MISS = 10,
-    UB_PROF_DESCRIPTOR_RECV_TOTAL = 11,
-    UB_PROF_DESCRIPTOR_RECV_SYSCALL = 12
+    UB_PROF_NIO_READ_TOTAL = 9,
+    UB_PROF_RING_READ_HIT = 10,
+    UB_PROF_RING_READ_EMPTY = 11
 };
+
+static const jlong UB_NANOS_PER_SECOND = 1000000000LL;
 
 static jlong
 ub_nio_profile_nanos(void)
 {
     struct timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) { return 0; }
-    return (jlong)ts.tv_sec * 1000000000LL + (jlong)ts.tv_nsec;
+    return (jlong)ts.tv_sec * UB_NANOS_PER_SECOND + (jlong)ts.tv_nsec;
 }
 
 #define UB_NIO_PROFILE_START(var)                                          \
@@ -115,12 +115,23 @@ ub_nio_profile_nanos(void)
         }                                                                   \
     } while (0)
 
+static jboolean ub_socket_registered(JNIEnv *env, jint fd)
+{
+    return (*env)->IsUbSocket(env, fd);
+}
+
+static jboolean ub_socket_ready(JNIEnv *env, jint fd)
+{
+    return (*env)->IsUbSocketReady(env, fd);
+}
+
 JNIEXPORT void JNICALL
 Java_sun_nio_ch_FileDispatcherImpl_init(JNIEnv *env, jclass cl)
 {
     // UB Matrix support: C wrapper profile events are detail-only.
     ub_profile_enabled =
-        (*env)->UbSocketProfileMode(env) >= 2 ? JNI_TRUE : JNI_FALSE;
+        (*env)->UbSocketProfileMode(env) >= UB_PROFILE_DETAIL
+            ? JNI_TRUE : JNI_FALSE;
 
     int sp[2];
     if (socketpair(PF_UNIX, SOCK_STREAM, 0, sp) < 0) {
@@ -137,64 +148,25 @@ ub_socket_read_one(JNIEnv *env, jint fd, void *buf, jlong len,
                    jboolean convert_errors)
 {
     jlong nread;
-    char ub_msg[UB_SOCKET_PARSE_BATCH_BUF_LEN];
-    int bytes_read;
-    jlong result;
-    jlong descriptor_recv_start;
-    jlong descriptor_syscall_start;
 
     nread = (*env)->UbSocketRead(env, buf, fd, len);
     if (nread > 0) {
-        UB_NIO_PROFILE_COUNT(env, UB_PROF_UB_FIRST_HIT, nread);
+        UB_NIO_PROFILE_COUNT(env, UB_PROF_RING_READ_HIT, nread);
         return nread;
     }
     if (nread < 0) {
+        if (errno == ESHUTDOWN) {
+            return convert_errors == JNI_TRUE
+                ? convertLongReturnVal(env, 0, JNI_TRUE) : 0;
+        }
         return convert_errors == JNI_TRUE
             ? convertLongReturnVal(env, nread, JNI_TRUE) : nread;
     }
-    // need to receive and parse new descriptors
-    UB_NIO_PROFILE_COUNT(env, UB_PROF_UB_FIRST_MISS, 0);
 
-    if ((*env)->IsUbSocketReady(env, fd) == JNI_FALSE) {
-        bytes_read = read(fd, buf, len);
-        result = convert_errors == JNI_TRUE
-            ? convertLongReturnVal(env, bytes_read, JNI_TRUE) : bytes_read;
-        return result;
-    }
-
-    UB_NIO_PROFILE_START(descriptor_recv_start);
-    UB_NIO_PROFILE_START(descriptor_syscall_start);
-    bytes_read = read(fd, ub_msg, UB_SOCKET_PARSE_BATCH_BUF_LEN);
-    UB_NIO_PROFILE_END(env, UB_PROF_DESCRIPTOR_RECV_SYSCALL,
-                       descriptor_syscall_start, bytes_read > 0 ? bytes_read : 0);
-    if (bytes_read <= 0) {
-        result = convert_errors == JNI_TRUE
-            ? convertLongReturnVal(env, bytes_read, JNI_TRUE) : bytes_read;
-        UB_NIO_PROFILE_END(env, UB_PROF_DESCRIPTOR_RECV_TOTAL,
-                           descriptor_recv_start, 0);
-        return result;
-    }
-    if ((*env)->UbSocketParse(env, fd, ub_msg, bytes_read) < 0) {
-        result = convert_errors == JNI_TRUE
-            ? convertLongReturnVal(env, -1, JNI_TRUE) : -1;
-        UB_NIO_PROFILE_END(env, UB_PROF_DESCRIPTOR_RECV_TOTAL,
-                           descriptor_recv_start, bytes_read);
-        return result;
-    }
-    UB_NIO_PROFILE_END(env, UB_PROF_DESCRIPTOR_RECV_TOTAL,
-                       descriptor_recv_start, bytes_read);
-    nread = (*env)->UbSocketRead(env, buf, fd, len);
-    if (nread < 0) {
-        return convert_errors == JNI_TRUE
-            ? convertLongReturnVal(env, nread, JNI_TRUE) : nread;
-    }
-    if (nread == 0 && (*env)->IsUbSocketReady(env, fd) == JNI_FALSE) {
-        bytes_read = read(fd, buf, len);
-        result = convert_errors == JNI_TRUE
-            ? convertLongReturnVal(env, bytes_read, JNI_TRUE) : bytes_read;
-        return result;
-    }
-    return nread;
+    UB_NIO_PROFILE_COUNT(env, UB_PROF_RING_READ_EMPTY, 0);
+    errno = EAGAIN;
+    return convert_errors == JNI_TRUE
+        ? convertLongReturnVal(env, -1, JNI_TRUE) : -1;
 }
 
 JNIEXPORT jint JNICALL
@@ -205,11 +177,15 @@ Java_sun_nio_ch_FileDispatcherImpl_read0(JNIEnv *env, jclass clazz,
     void *buf = (void *)jlong_to_ptr(address);
     jint result;
     jlong total_start;
-    jboolean ub_ready;
 
     UB_NIO_PROFILE_START(total_start);
-    ub_ready = (*env)->IsUbSocketReady(env, fd);
-    if (ub_ready == JNI_TRUE) {
+    if (ub_socket_registered(env, fd) == JNI_TRUE) {
+        if (ub_socket_ready(env, fd) == JNI_FALSE) {
+            errno = EAGAIN;
+            result = convertReturnVal(env, -1, JNI_TRUE);
+            UB_NIO_PROFILE_END(env, UB_PROF_NIO_READ_TOTAL, total_start, 0);
+            return result;
+        }
         result = (jint)ub_socket_read_one(env, fd, buf, len, JNI_TRUE);
         UB_NIO_PROFILE_END(env, UB_PROF_NIO_READ_TOTAL, total_start,
                            result > 0 ? result : 0);
@@ -239,10 +215,13 @@ Java_sun_nio_ch_FileDispatcherImpl_readv0(JNIEnv *env, jclass clazz,
 {
     jint fd = fdval(env, fdo);
     struct iovec *iov = (struct iovec *)jlong_to_ptr(address);
-    jboolean ub_ready = (*env)->IsUbSocketReady(env, fd);
-    if (ub_ready == JNI_TRUE) {
+    if (ub_socket_registered(env, fd) == JNI_TRUE) {
         jlong total = 0;
         int i;
+        if (ub_socket_ready(env, fd) == JNI_FALSE) {
+            errno = EAGAIN;
+            return convertLongReturnVal(env, -1, JNI_TRUE);
+        }
         for (i = 0; i < len; i++) {
             jlong nread;
             if (iov[i].iov_len == 0) { continue; }
@@ -266,12 +245,15 @@ Java_sun_nio_ch_FileDispatcherImpl_write0(JNIEnv *env, jclass clazz,
     void *buf = (void *)jlong_to_ptr(address);
     jint nwrite = 0;
     jlong total_start;
-    jboolean ub_ready_write;
 
     UB_NIO_PROFILE_START(total_start);
-    ub_ready_write = (*env)->IsUbSocketReady(env, fd);
-    if (ub_ready_write == JNI_TRUE) {
-        nwrite = (*env)->UbSocketWrite(env, buf, fd, len);
+    if (ub_socket_registered(env, fd) == JNI_TRUE) {
+        if (ub_socket_ready(env, fd) == JNI_TRUE) {
+            nwrite = (*env)->UbSocketWrite(env, buf, fd, len);
+        } else {
+            errno = EPIPE;
+            nwrite = -1;
+        }
     } else {
         nwrite = write(fd, buf, len);
     }
@@ -298,10 +280,13 @@ Java_sun_nio_ch_FileDispatcherImpl_writev0(JNIEnv *env, jclass clazz,
 {
     jint fd = fdval(env, fdo);
     struct iovec *iov = (struct iovec *)jlong_to_ptr(address);
-    jboolean ub_ready_write = (*env)->IsUbSocketReady(env, fd);
-    if (ub_ready_write == JNI_TRUE) {
+    if (ub_socket_registered(env, fd) == JNI_TRUE) {
         jlong total = 0;
         int i;
+        if (ub_socket_ready(env, fd) == JNI_FALSE) {
+            errno = EPIPE;
+            return convertLongReturnVal(env, -1, JNI_FALSE);
+        }
         for (i = 0; i < len; i++) {
             jlong nwrite;
             if (iov[i].iov_len == 0) { continue; }
@@ -490,6 +475,9 @@ JNIEXPORT void JNICALL
 Java_sun_nio_ch_FileDispatcherImpl_preClose0(JNIEnv *env, jclass clazz, jobject fdo)
 {
     jint fd = fdval(env, fdo);
+    if (isSocketFD(fd)) {
+        (*env)->UbSocketClose(env, fd);
+    }
     if (preCloseFD >= 0) {
         if (dup2(preCloseFD, fd) < 0)
             JNU_ThrowIOExceptionWithLastError(env, "dup2 failed");

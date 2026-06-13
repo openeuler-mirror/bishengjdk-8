@@ -234,7 +234,7 @@ class ServerSocketChannelImpl
                 throw new ClosedChannelException();
             if (!isBound())
                 throw new NotYetBoundException();
-            SocketChannel sc = null;
+            SocketChannelImpl sc = null;
 
             int n = 0;
             FileDescriptor newfd = new FileDescriptor();
@@ -273,6 +273,7 @@ class ServerSocketChannelImpl
                     throw x;
                 }
             }
+            sc.registerUbSocketIfNeeded();
             return sc;
 
         }

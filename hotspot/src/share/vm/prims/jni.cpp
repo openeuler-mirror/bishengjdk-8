@@ -4147,14 +4147,29 @@ JNI_ENTRY(jboolean, jni_IsUbSocketReady(JNIEnv *env, jint fd))
   return UBSocketManager::wait_fd_ready(fd) ? JNI_TRUE : JNI_FALSE;
 JNI_END
 
-JNI_ENTRY(jboolean, jni_UbSocketRegister(JNIEnv *env, jint fd, jboolean is_server))
+JNI_ENTRY(jboolean, jni_UbSocketHasPendingData(JNIEnv *env, jint fd))
+  JNIWrapper("jni_UbSocketHasPendingData");
+  return UBSocketManager::has_pending_data(fd) ? JNI_TRUE : JNI_FALSE;
+JNI_END
+
+JNI_ENTRY(jint, jni_UbSocketRegister(JNIEnv *env, jint fd, jboolean is_server))
   JNIWrapper("jni_UbSocketRegister");
-  return UBSocketManager::register_fd(fd, is_server) ? JNI_TRUE : JNI_FALSE;
+  return UBSocketManager::register_fd(fd, is_server);
 JNI_END
 
 JNI_ENTRY(jboolean, jni_UbSocketClose(JNIEnv *env, jint fd))
   JNIWrapper("jni_UbSocketClose");
   return UBSocketManager::unregister_fd(fd) ? JNI_TRUE : JNI_FALSE;
+JNI_END
+
+JNI_ENTRY(jboolean, jni_UbSocketDetach(JNIEnv *env, jint fd))
+  JNIWrapper("jni_UbSocketDetach");
+  return UBSocketManager::detach_fd(fd) ? JNI_TRUE : JNI_FALSE;
+JNI_END
+
+JNI_ENTRY(jboolean, jni_UbSocketMarkControlClosed(JNIEnv *env, jint fd))
+  JNIWrapper("jni_UbSocketMarkControlClosed");
+  return UBSocketManager::mark_control_closed(fd) ? JNI_TRUE : JNI_FALSE;
 JNI_END
 
 JNI_ENTRY(jlong, jni_UbSocketRead(JNIEnv *env, void* buf, jint fd, jlong len))
@@ -5020,8 +5035,11 @@ struct JNINativeInterface_ jni_NativeInterface = {
     jni_UbSocketCheckStack,
     jni_IsUbSocket,
     jni_IsUbSocketReady,
+    jni_UbSocketHasPendingData,
     jni_UbSocketRegister,
     jni_UbSocketClose,
+    jni_UbSocketDetach,
+    jni_UbSocketMarkControlClosed,
     jni_UbSocketRead,
     jni_UbSocketWrite,
     jni_UbSocketParse,

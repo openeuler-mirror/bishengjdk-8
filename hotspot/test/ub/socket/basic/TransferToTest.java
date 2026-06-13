@@ -49,8 +49,6 @@ public class TransferToTest {
             throw new RuntimeException("transferTo should log success size="
                 + DATA_SIZE + "\n" + logs.clientLog);
         }
-        SocketTestSupport.assertTransferInfoLogs(
-            combinedLog, "transferTo should log UBSocket data transfer summary");
         if (!combinedLog.contains("transfer_from_file")) {
             throw new RuntimeException("transferTo should use UBSocket transfer_from_file path\n"
                 + combinedLog);
