@@ -153,11 +153,13 @@ VtableStub* VtableStubs::create_itable_stub(int itable_index) {
   //  rscratch2: CompiledICHolder
   //  j_rarg0: Receiver
 
-  // Most registers are in use; we'll use r16, rmethod, r10, r11
+  // This stub is called from compiled code which has no callee-saved registers,
+  // so all registers except arguments are free at this point.
   const Register recv_klass_reg     = r10;
   const Register holder_klass_reg   = r16; // declaring interface klass (DECC)
-  const Register resolved_klass_reg = rmethod; // resolved interface klass (REFC)
+  const Register resolved_klass_reg = r17; // resolved interface klass (REFC)
   const Register temp_reg           = r11;
+  const Register temp_reg2          = r15;
   const Register icholder_reg       = rscratch2;
 
   __ ldr(resolved_klass_reg, Address(icholder_reg, CompiledICHolder::holder_klass_offset()));
@@ -171,21 +173,9 @@ VtableStub* VtableStubs::create_itable_stub(int itable_index) {
   __ load_klass(recv_klass_reg, j_rarg0);
 
   // Receiver subtype check against REFC.
-  // Destroys recv_klass_reg value.
-  __ lookup_interface_method(// inputs: rec. class, interface
-                             recv_klass_reg, resolved_klass_reg, noreg,
-                             // outputs:  scan temp. reg1, scan temp. reg2
-                             recv_klass_reg, temp_reg,
-                             L_no_such_interface,
-                             /*return_method=*/false);
-
   // Get selected method from declaring class and itable index
-  __ load_klass(recv_klass_reg, j_rarg0);   // restore recv_klass_reg
-  __ lookup_interface_method(// inputs: rec. class, interface, itable index
-                       recv_klass_reg, holder_klass_reg, itable_index,
-                       // outputs: method, scan temp. reg
-                       rmethod, temp_reg,
-                       L_no_such_interface);
+  __ lookup_interface_method_stub(recv_klass_reg, holder_klass_reg, resolved_klass_reg, rmethod,
+                                  temp_reg, temp_reg2, itable_index, L_no_such_interface);
 
   // method (rmethod): Method*
   // j_rarg0: receiver

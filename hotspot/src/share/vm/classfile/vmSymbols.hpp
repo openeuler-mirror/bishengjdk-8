@@ -108,6 +108,7 @@
   template(java_io_ByteArrayInputStream,              "java/io/ByteArrayInputStream")             \
   template(java_io_Serializable,                      "java/io/Serializable")                     \
   template(java_util_Arrays,                          "java/util/Arrays")                         \
+  template(jdk_internal_util_ArraysSupport,           "jdk/internal/util/ArraysSupport")          \
   template(java_util_Properties,                      "java/util/Properties")                     \
   template(java_util_Vector,                          "java/util/Vector")                         \
   template(java_util_AbstractList,                    "java/util/AbstractList")                   \
@@ -127,6 +128,7 @@
   template(sun_misc_Version,                          "sun/misc/Version")                         \
   template(java_runtime_name_name,                    "java_runtime_name")                        \
   template(java_runtime_version_name,                 "java_runtime_version")                     \
+  template(utf_conversion_intrinsics_name,            "UTF_CONVERSION_INTRINSICS")                \
                                                                                                   \
   /* class file format tags */                                                                    \
   template(tag_source_file,                           "SourceFile")                               \
@@ -471,6 +473,7 @@
   template(byte_array_signature,                      "[B")                                       \
   template(char_array_signature,                      "[C")                                       \
   template(int_array_signature,                       "[I")                                       \
+  template(object_int_int_int_int_signature,          "(Ljava/lang/Object;IIII)I")               \
   template(object_void_signature,                     "(Ljava/lang/Object;)V")                    \
   template(object_int_signature,                      "(Ljava/lang/Object;)I")                    \
   template(object_boolean_signature,                  "(Ljava/lang/Object;)Z")                    \
@@ -497,6 +500,7 @@
   template(classloader_string_long_signature,         "(Ljava/lang/ClassLoader;Ljava/lang/String;)J")             \
   template(byte_array_void_signature,                 "([B)V")                                                    \
   template(char_array_void_signature,                 "([C)V")                                                    \
+  template(char_array_int_signature,                  "([C)I")                                                    \
   template(int_int_void_signature,                    "(II)V")                                                    \
   template(long_long_void_signature,                  "(JJ)V")                                                    \
   template(void_classloader_signature,                "()Ljava/lang/ClassLoader;")                                \
@@ -524,6 +528,9 @@
   template(referencequeue_signature,                  "Ljava/lang/ref/ReferenceQueue;")                           \
   template(sun_misc_Cleaner_signature,                "Lsun/misc/Cleaner;")                                       \
   template(executable_signature,                      "Ljava/lang/reflect/Executable;")                           \
+  template(java_nio_Bits,                             "java/nio/Bits")                                            \
+  template(updateMaxMemory_name,                      "updateMaxMemory")                                          \
+  template(updateMaxMemory_signature,                 "(J)Ljava/lang/String;")                                    \
   template(concurrenthashmap_signature,               "Ljava/util/concurrent/ConcurrentHashMap;")                 \
   template(String_StringBuilder_signature,            "(Ljava/lang/String;)Ljava/lang/StringBuilder;")            \
   template(int_StringBuilder_signature,               "(I)Ljava/lang/StringBuilder;")                             \
@@ -803,6 +810,8 @@
   do_intrinsic(_indexOf,                  java_lang_String,       indexOf_name, string_int_signature,            F_R)   \
    do_name(     indexOf_name,                                    "indexOf")                                             \
   do_intrinsic(_equals,                   java_lang_String,       equals_name, object_boolean_signature,         F_R)   \
+  do_intrinsic(_vectorizedHashCode,       jdk_internal_util_ArraysSupport, vectorizedHashCode_name, object_int_int_int_int_signature, F_S) \
+   do_name(     vectorizedHashCode_name,                         "vectorizedHashCode")                                  \
                                                                                                                         \
   do_class(java_nio_Buffer,               "java/nio/Buffer")                                                            \
   do_intrinsic(_checkIndex,               java_nio_Buffer,        checkIndex_name, int_int_signature,            F_R)   \
@@ -812,6 +821,15 @@
   do_intrinsic(_encodeISOArray,     sun_nio_cs_iso8859_1_Encoder, encodeISOArray_name, encodeISOArray_signature, F_S)   \
    do_name(     encodeISOArray_name,                             "encodeISOArray")                                      \
    do_signature(encodeISOArray_signature,                        "([CI[BII)I")                                          \
+                                                                                                                        \
+  do_class(sun_nio_cs_utf_8_Decoder,       "sun/nio/cs/UTF_8$Decoder")                                                  \
+  do_intrinsic(_decodeUtf8ToUtf16,  sun_nio_cs_utf_8_Decoder, decodeUtf8ToUtf16_name, decodeUtf8ToUtf16_signature, F_S) \
+   do_name(     decodeUtf8ToUtf16_name,                         "implDecodeUtf8ToUtf16")                                \
+   do_signature(decodeUtf8ToUtf16_signature,                    "([BI[CII)I")                                          \
+                                                                                                                        \
+  do_class(sun_nio_cs_utf_8_Encoder,       "sun/nio/cs/UTF_8$Encoder")                                                  \
+  do_intrinsic(_encodeUtf8FromUtf16, sun_nio_cs_utf_8_Encoder, encodeUtf8FromUtf16_name, encodeISOArray_signature, F_S) \
+   do_name(     encodeUtf8FromUtf16_name,                       "implEncodeUtf8FromUtf16")                              \
                                                                                                                         \
   do_class(java_math_BigInteger,                      "java/math/BigInteger")                                           \
   do_intrinsic(_multiplyToLen,      java_math_BigInteger, multiplyToLen_name, multiplyToLen_signature, F_S)             \

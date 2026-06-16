@@ -556,6 +556,9 @@
   product(bool, SpecialEncodeISOArray, true,                                \
           "special version of ISO_8859_1$Encoder.encodeISOArray")           \
                                                                             \
+  product(bool, SpecialDecodeUtf8ToUtf16, true,                             \
+          "Use optimized UTF-8 to UTF-16 decode intrinsic")                 \
+                                                                            \
   develop(bool, BailoutToInterpreterForThrows, false,                       \
           "Compiled methods which throws/catches exceptions will be "       \
           "deopt and intp.")                                                \

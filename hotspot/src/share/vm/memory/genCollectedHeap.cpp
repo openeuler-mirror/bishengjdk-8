@@ -29,6 +29,7 @@
 #include "code/codeCache.hpp"
 #include "code/icBuffer.hpp"
 #include "gc_implementation/shared/collectorCounters.hpp"
+#include "gc_implementation/shared/dynamicMaxHeap.hpp"
 #include "gc_implementation/shared/gcTrace.hpp"
 #include "gc_implementation/shared/gcTraceTime.hpp"
 #include "gc_implementation/shared/vmGCOperations.hpp"
@@ -163,6 +164,13 @@ jint GenCollectedHeap::initialize() {
     if (!success) return JNI_ENOMEM;
   }
 #endif // INCLUDE_ALL_GCS
+
+  if (UseConcMarkSweepGC && Universe::is_dynamic_max_heap_enable()) {
+    Generation* young = _gens[0];
+    Generation* old   = _gens[1];
+    old->set_dynamic_max_heap_size(MaxHeapSize - young->dynamic_max_heap_size());
+    _current_max_heap_size = MaxHeapSize;
+  }
 
   return JNI_OK;
 }
@@ -1491,4 +1499,12 @@ void GenCollectedHeap::stop() {
 void GenCollectedHeap::run_task(AbstractGangTask *task)
 {
   workers()->run_task(task);
+}
+
+// Dynamic Max Heap
+bool GenCollectedHeap::change_max_heap(size_t new_size){
+  assert(!Heap_lock->owned_by_self(), "this thread should not own the Heap_lock");
+  Gen_ChangeMaxHeapOp op(new_size);
+  VMThread::execute(&op);
+  return op.resize_success();
 }

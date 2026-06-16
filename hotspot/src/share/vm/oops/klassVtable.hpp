@@ -174,6 +174,7 @@ class vtableEntry VALUE_OBJ_CLASS_SPEC {
   static int size() {
     return sizeof(vtableEntry) / sizeof(HeapWord);
   }
+  static int size_in_bytes() { return sizeof(vtableEntry); }
   static int method_offset_in_bytes() { return offset_of(vtableEntry, _method); }
   Method* method() const    { return _method; }
   Method** method_addr() { return &_method; }

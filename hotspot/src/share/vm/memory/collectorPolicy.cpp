@@ -69,7 +69,9 @@ void CollectorPolicy::assert_flags() {
 
 void CollectorPolicy::assert_size_info() {
   assert(InitialHeapSize == _initial_heap_byte_size, "Discrepancy between InitialHeapSize flag and local storage");
-  assert(MaxHeapSize == _max_heap_byte_size, "Discrepancy between MaxHeapSize flag and local storage");
+  if (!Universe::is_dynamic_max_heap_enable()) {
+    assert(MaxHeapSize == _max_heap_byte_size, "Discrepancy between MaxHeapSize flag and local storage");
+  }
   assert(_max_heap_byte_size >= _min_heap_byte_size, "Ergonomics decided on incompatible minimum and maximum heap sizes");
   assert(_initial_heap_byte_size >= _min_heap_byte_size, "Ergonomics decided on incompatible initial and minimum heap sizes");
   assert(_max_heap_byte_size >= _initial_heap_byte_size, "Ergonomics decided on incompatible initial and maximum heap sizes");
@@ -134,7 +136,11 @@ void CollectorPolicy::initialize_flags() {
   }
 
   _initial_heap_byte_size = InitialHeapSize;
-  _max_heap_byte_size = MaxHeapSize;
+  if (Universe::is_dynamic_max_heap_enable()) {
+    _max_heap_byte_size = DynamicMaxHeapSizeLimit;
+  } else {
+    _max_heap_byte_size = MaxHeapSize;
+  }
 
   FLAG_SET_ERGO(uintx, MinHeapDeltaBytes, align_size_up(MinHeapDeltaBytes, _space_alignment));
 
@@ -249,7 +255,11 @@ void TwoGenerationCollectorPolicy::assert_flags() {
 void GenCollectorPolicy::assert_size_info() {
   CollectorPolicy::assert_size_info();
   // GenCollectorPolicy::initialize_size_info may update the MaxNewSize
-  assert(MaxNewSize < MaxHeapSize, "Ergonomics decided on incompatible maximum young and heap sizes");
+  if (Universe::is_dynamic_max_heap_enable()) {
+    assert(MaxNewSize < DynamicMaxHeapSizeLimit, "Ergonomics decided on incompatible maximum young and heap sizes");
+  } else {
+    assert(MaxNewSize < MaxHeapSize, "Ergonomics decided on incompatible maximum young and heap sizes");
+  }
   assert(NewSize == _initial_gen0_size, "Discrepancy between NewSize flag and local storage");
   assert(MaxNewSize == _max_gen0_size, "Discrepancy between MaxNewSize flag and local storage");
   assert(_min_gen0_size <= _initial_gen0_size, "Ergonomics decided on incompatible minimum and initial young gen sizes");

@@ -1014,12 +1014,61 @@ public:
   virtual const Type* bottom_type() const { return TypeInt::BOOL; }
 };
 
+//------------------------------VectorizedHashCode----------------------------
+class VectorizedHashCodeNode: public Node {
+public:
+  VectorizedHashCodeNode(Node* control, Node* ary_mem,
+                         Node* ary, Node* cnt, Node* result, Node* basic_type):
+    Node(control, ary_mem, ary, cnt, result, basic_type) {}
+
+  virtual bool depends_only_on_test() const { return false; }
+  virtual const TypePtr* adr_type() const;
+  virtual uint match_edge(uint idx) const;
+  virtual uint ideal_reg() const { return Op_RegI; }
+  virtual Node* Ideal(PhaseGVN* phase, bool can_reshape);
+  virtual const Type* Value(PhaseTransform* phase) const;
+  virtual int Opcode() const;
+  virtual const Type* bottom_type() const { return TypeInt::INT; }
+};
+
 
 //------------------------------EncodeISOArray--------------------------------
 // encode char[] to byte[] in ISO_8859_1
 class EncodeISOArrayNode: public Node {
 public:
   EncodeISOArrayNode(Node *control, Node* arymem, Node* s1, Node* s2, Node* c): Node(control, arymem, s1, s2, c) {};
+  virtual int Opcode() const;
+  virtual bool depends_only_on_test() const { return false; }
+  virtual const Type* bottom_type() const { return TypeInt::INT; }
+  virtual const TypePtr* adr_type() const { return TypePtr::BOTTOM; }
+  virtual uint match_edge(uint idx) const;
+  virtual uint ideal_reg() const { return Op_RegI; }
+  virtual Node *Ideal(PhaseGVN *phase, bool can_reshape);
+  virtual const Type *Value(PhaseTransform *phase) const;
+};
+
+//------------------------------EncodeUtf8FromUtf16---------------------------
+// encode char[] to byte[] in UTF-8
+class EncodeUtf8FromUtf16Node: public Node {
+public:
+  EncodeUtf8FromUtf16Node(Node *control, Node* arymem, Node* s1, Node* s2, Node* c):
+    Node(control, arymem, s1, s2, c) {};
+  virtual int Opcode() const;
+  virtual bool depends_only_on_test() const { return false; }
+  virtual const Type* bottom_type() const { return TypeInt::INT; }
+  virtual const TypePtr* adr_type() const { return TypePtr::BOTTOM; }
+  virtual uint match_edge(uint idx) const;
+  virtual uint ideal_reg() const { return Op_RegI; }
+  virtual Node *Ideal(PhaseGVN *phase, bool can_reshape);
+  virtual const Type *Value(PhaseTransform *phase) const;
+};
+
+//------------------------------DecodeUtf8ToUtf16-----------------------------
+// decode byte[] in UTF-8 to char[]
+class DecodeUtf8ToUtf16Node: public Node {
+public:
+  DecodeUtf8ToUtf16Node(Node *control, Node* arymem, Node* s1, Node* s2, Node* c):
+    Node(control, arymem, s1, s2, c) {};
   virtual int Opcode() const;
   virtual bool depends_only_on_test() const { return false; }
   virtual const Type* bottom_type() const { return TypeInt::INT; }

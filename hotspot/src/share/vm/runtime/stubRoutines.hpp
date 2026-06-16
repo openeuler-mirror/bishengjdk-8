@@ -216,6 +216,10 @@ class StubRoutines: AllStatic {
 
   static address _updateBytesCRC32;
   static address _crc_table_adr;
+  static address _pack_1_2_3_utf8_bytes_adr;
+  static address _pack_1_2_utf8_bytes_adr;
+  static address _pack_shufutf8_adr;
+  static address _pack_utf8bigindex_adr;
 
   static address _BLAS_library;
   static address _ddotF2jBLAS;
@@ -388,6 +392,10 @@ class StubRoutines: AllStatic {
 
   static address updateBytesCRC32()    { return _updateBytesCRC32; }
   static address crc_table_addr()      { return _crc_table_adr; }
+  static address pack_1_2_3_utf8_bytes_adr() { return _pack_1_2_3_utf8_bytes_adr; }
+  static address pack_1_2_utf8_bytes_adr()   { return _pack_1_2_utf8_bytes_adr; }
+  static address utf8bigindex_adr()          { return _pack_utf8bigindex_adr; }
+  static address shufutf8_adr()              { return _pack_shufutf8_adr; }
 
   static address ddotF2jBLAS()         { return _ddotF2jBLAS; }
   static address dgemmDgemm()          { return _dgemmDgemm; }

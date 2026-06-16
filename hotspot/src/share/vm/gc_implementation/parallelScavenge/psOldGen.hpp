@@ -56,6 +56,8 @@ class PSOldGen : public CHeapObj<mtGC> {
   const size_t _init_gen_size;
   const size_t _min_gen_size;
   const size_t _max_gen_size;
+  // For Dynamic Max Heap
+  size_t       _cur_max_gen_size;
 
   // Block size for parallel iteration
   static const size_t IterateBlockSize = 1024 * 1024;
@@ -117,7 +119,13 @@ class PSOldGen : public CHeapObj<mtGC> {
   virtual void initialize_performance_counters(const char* perf_data_name, int level);
 
   MemRegion reserved() const                { return _reserved; }
-  virtual size_t max_gen_size()             { return _max_gen_size; }
+  virtual size_t max_gen_size()             {
+    if (Universe::is_dynamic_max_heap_enable()) {
+      guarantee(_cur_max_gen_size <= _max_gen_size && _cur_max_gen_size >= min_gen_size(), "must be");
+      return _cur_max_gen_size;
+    }
+    return _max_gen_size;
+  }
   size_t min_gen_size()                     { return _min_gen_size; }
 
   // Returns limit on the maximum size of the generation.  This
@@ -164,6 +172,15 @@ class PSOldGen : public CHeapObj<mtGC> {
 
   // Calculating new sizes
   void resize(size_t desired_free_space);
+  // Dynamic Max Heap
+  void set_cur_max_gen_size(size_t new_size) {
+    guarantee(Universe::is_dynamic_max_heap_enable(), "must be");
+    guarantee(new_size <= _max_gen_size && new_size >= min_gen_size(), "must be");
+    guarantee(_max_gen_size == _reserved.byte_size(), "must be");
+    _cur_max_gen_size = new_size;
+    virtual_space()->set_dynamic_max_heap_size(new_size);
+    _gen_counters->update_max_size(new_size);
+  }
 
   // Allocation. We report all successful allocations to the size policy
   // Note that the perm gen does not use this method, and should not!

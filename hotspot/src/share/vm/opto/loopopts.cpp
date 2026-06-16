@@ -799,8 +799,7 @@ Node* PhaseIdealLoop::try_move_store_before_loop(Node* n, Node *n_ctrl) {
 
 // Try moving a store out of a loop, right after the loop
 void PhaseIdealLoop::try_move_store_after_loop(Node* n) {
-  if (n->is_Store()) {
-    assert(n->in(0), "store should have control set");
+  if (n->is_Store() && n->in(0) != NULL) {
     Node *n_ctrl = get_ctrl(n);
     IdealLoopTree *n_loop = get_loop(n_ctrl);
     // Store must be in a loop
@@ -808,8 +807,10 @@ void PhaseIdealLoop::try_move_store_after_loop(Node* n) {
       Node* address = n->in(MemNode::Address);
       Node* value = n->in(MemNode::ValueIn);
       IdealLoopTree* address_loop = get_loop(get_ctrl(address));
-      // address must be loop invariant
-      if (!n_loop->is_member(address_loop)) {
+      IdealLoopTree* value_loop = get_loop(get_ctrl(value));
+      // Address and value must be loop invariant.
+      if (!n_loop->is_member(address_loop) &&
+          !n_loop->is_member(value_loop)) {
         // Store must be last on this memory slice in the loop and
         // nothing in the loop must observe it
         Node* phi = NULL;
@@ -860,6 +861,7 @@ void PhaseIdealLoop::try_move_store_after_loop(Node* n) {
               // Move the store out of the loop if the LCA of all
               // users (except for the phi) is outside the loop.
               Node* hook = new (C) Node(1);
+              hook->init_req(0, n_ctrl); // Add an input to prevent hook from being dead
               _igvn.rehash_node_delayed(phi);
               int count = phi->replace_edge(n, hook);
               assert(count > 0, "inconsistent phi");

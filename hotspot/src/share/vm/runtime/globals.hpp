@@ -753,6 +753,9 @@ class CommandLineFlags {
   diagnostic(bool, UseMD5Intrinsics, false,                                 \
           "Use intrinsics for MD5 crypto hash function")                    \
                                                                             \
+  diagnostic(bool, UseVectorizedHashCodeIntrinsic, false,                   \
+          "Enables intrinsification of ArraysSupport.vectorizedHashCode()") \
+                                                                            \
   product(bool, UseAESCTRIntrinsics, false,                                 \
           "Use intrinsics for the paralleled version of AES/CTR crypto")    \
                                                                             \
@@ -3294,6 +3297,12 @@ class CommandLineFlags {
   product_pd(intx, PreInflateSpin,                                          \
           "Number of times to spin wait before inflation")                  \
                                                                             \
+  product(bool, DisableMemNodeLoopOptimize, false,                          \
+          "Avoid potential dead loop in MemNode loop")                      \
+                                                                            \
+  product(intx, MemNodeLoopCount, 200,                                      \
+          "Number of times to iterate in MemNode loop")                     \
+                                                                            \
   /* gc parameters */                                                       \
   product(uintx, InitialHeapSize, 0,                                        \
           "Initial heap size (in bytes); zero means use ergonomics")        \
@@ -3306,6 +3315,24 @@ class CommandLineFlags {
                                                                             \
   product(bool, TraceDynamicMaxHeap, false,                                 \
           "Trace Dynamic Max Heap resizing log and cause of failure")       \
+                                                                            \
+  product(uintx, DynamicMaxHeapShrinkMinFreeRatio, 40,                      \
+          "The percentage of Dynamic Max Heap min free ratio after shrink") \
+                                                                            \
+  product(uintx, ElasticMaxHeapSize, ScaleForWordSize(96*M),                \
+          "The limit of Elastic maximum heap size (in bytes)")              \
+                                                                            \
+  product(bool, ElasticMaxHeap, false,                                      \
+          "Enable Elastic Max Heap")                                        \
+                                                                            \
+  product(bool, TraceElasticMaxHeap, false,                                 \
+          "Trace Elastic Max Heap resizing log and cause of failure")       \
+                                                                            \
+  product(uintx, ElasticMaxHeapShrinkMinFreeRatio, 40,                      \
+          "The percentage of Elastic Max Heap min free ratio after shrink") \
+                                                                            \
+  product(bool, ElasticMaxDirectMemory, false,                              \
+          "Allow change max direct memory size during runtime with jcmd")   \
                                                                             \
   product(uintx, OldSize, ScaleForWordSize(4*M),                            \
           "Initial tenured generation size (in bytes)")                     \

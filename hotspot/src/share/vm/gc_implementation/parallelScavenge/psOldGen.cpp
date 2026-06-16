@@ -43,7 +43,7 @@ PSOldGen::PSOldGen(ReservedSpace rs, size_t alignment,
                    size_t initial_size, size_t min_size, size_t max_size,
                    const char* perf_data_name, int level):
   _name(select_name()), _init_gen_size(initial_size), _min_gen_size(min_size),
-  _max_gen_size(max_size)
+  _max_gen_size(max_size), _cur_max_gen_size(max_size)
 {
   initialize(rs, alignment, perf_data_name, level);
 }
@@ -52,7 +52,7 @@ PSOldGen::PSOldGen(size_t initial_size,
                    size_t min_size, size_t max_size,
                    const char* perf_data_name, int level):
   _name(select_name()), _init_gen_size(initial_size), _min_gen_size(min_size),
-  _max_gen_size(max_size)
+  _max_gen_size(max_size), _cur_max_gen_size(max_size)
 {}
 
 void PSOldGen::initialize(ReservedSpace rs, size_t alignment,
@@ -378,7 +378,7 @@ void PSOldGen::resize(size_t desired_free_space) {
   // Adjust according to our min and max
   new_size = MAX2(MIN2(new_size, gen_size_limit()), min_gen_size());
 
-  assert(gen_size_limit() >= reserved().byte_size(), "max new size problem?");
+  assert(Universe::is_dynamic_max_heap_enable() || gen_size_limit() >= reserved().byte_size(), "max new size problem?");
   new_size = align_size_up(new_size, alignment);
 
   const size_t current_size = capacity_in_bytes();
@@ -442,6 +442,10 @@ void PSOldGen::post_resize() {
 }
 
 size_t PSOldGen::gen_size_limit() {
+  if (Universe::is_dynamic_max_heap_enable()) {
+    guarantee(_cur_max_gen_size <= _max_gen_size && _cur_max_gen_size >= min_gen_size(), "must be");
+    return _cur_max_gen_size;
+  }
   return _max_gen_size;
 }
 

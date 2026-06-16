@@ -114,6 +114,12 @@ class Generation: public CHeapObj<mtGC> {
   // Statistics for garbage collection
   GCStats* _gc_stats;
 
+  // expected DynamicMaxHeap size during full gc (temp value)
+  // 0 means do not adjust
+  // min_gen_size <= _expected_dynamic_max_heap_size  <= _reserved size.
+  // will be cleared after DynamicMaxHeap VM operation.
+  size_t _exp_dynamic_max_heap_size;
+
   // Returns the next generation in the configuration, or else NULL if this
   // is the highest generation.
   Generation* next_gen() const;
@@ -614,6 +620,24 @@ public:
   // Performance Counter support
   virtual void update_counters() = 0;
   virtual CollectorCounters* counters() { return _gc_counters; }
+
+  // DynamicMaxHeap
+  size_t dynamic_max_heap_size() const { return _virtual_space.dynamic_max_heap_size(); }
+  size_t exp_dynamic_max_heap_size() const { return _exp_dynamic_max_heap_size; }
+  void set_dynamic_max_heap_size(size_t size) {
+    guarantee(size <= _reserved.byte_size(), "must be");
+    _virtual_space.set_dynamic_max_heap_size(size);
+  }
+  void set_exp_dynamic_max_heap_size(size_t size) {
+    guarantee(size <= _reserved.byte_size(), "must be");
+    _exp_dynamic_max_heap_size = size;
+  }
+  size_t committed_size() const {
+    return _virtual_space.committed_size();
+  }
+  virtual void update_gen_max_counter(size_t size) {
+    guarantee(false, "NYI");
+  }
 };
 
 // Class CardGeneration is a generation that is covered by a card table,

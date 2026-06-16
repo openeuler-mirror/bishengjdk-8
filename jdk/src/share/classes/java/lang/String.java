@@ -28,6 +28,7 @@ package java.lang;
 import java.io.ObjectStreamField;
 import java.io.UnsupportedEncodingException;
 import java.nio.charset.Charset;
+import jdk.internal.util.ArraysSupport;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -1464,11 +1465,16 @@ public final class String
      */
     public int hashCode() {
         int h = hash;
-        if (h == 0 && value.length > 0) {
-            char val[] = value;
-
-            for (int i = 0; i < value.length; i++) {
-                h = 31 * h + val[i];
+        if (h == 0) {
+            switch (value.length) {
+            case 0:
+                return 0;
+            case 1:
+                h = (int) value[0];
+                break;
+            default:
+                h = ArraysSupport.vectorizedHashCode(value, 0, value.length, 0, ArraysSupport.T_CHAR);
+                break;
             }
             hash = h;
         }

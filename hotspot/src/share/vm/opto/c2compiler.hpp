@@ -50,6 +50,7 @@ public:
   static const char* retry_no_subsuming_loads();
   static const char* retry_no_escape_analysis();
   static const char* retry_class_loading_during_parsing();
+  static const char* may_dead_loop_in_stored_value();
 
   // Print compilation timers and statistics
   void print_timers();

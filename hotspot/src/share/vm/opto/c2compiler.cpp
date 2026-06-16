@@ -54,6 +54,9 @@ const char* C2Compiler::retry_no_escape_analysis() {
 const char* C2Compiler::retry_class_loading_during_parsing() {
   return "retry class loading during parsing";
 }
+const char* C2Compiler::may_dead_loop_in_stored_value() {
+  return "A dead loop may have occurred in can_see_stored_value";
+}
 bool C2Compiler::init_c2_runtime() {
 
   // Check assumptions used while running ADLC
@@ -203,6 +206,9 @@ bool C2Compiler::is_intrinsic_supported(methodHandle method, bool is_virtual) {
   case vmIntrinsics::_equals:
     if (!Matcher::match_rule_supported(Op_StrEquals)) return false;
     break;
+  case vmIntrinsics::_vectorizedHashCode:
+    if (!Matcher::match_rule_supported(Op_VectorizedHashCode)) return false;
+    break;
   case vmIntrinsics::_equalsC:
     if (!Matcher::match_rule_supported(Op_AryEq)) return false;
     break;
@@ -211,6 +217,12 @@ bool C2Compiler::is_intrinsic_supported(methodHandle method, bool is_virtual) {
     break;
   case vmIntrinsics::_encodeISOArray:
     if (!Matcher::match_rule_supported(Op_EncodeISOArray)) return false;
+    break;
+  case vmIntrinsics::_encodeUtf8FromUtf16:
+    if (!Matcher::match_rule_supported(Op_EncodeUtf8FromUtf16)) return false;
+    break;
+  case vmIntrinsics::_decodeUtf8ToUtf16:
+    if (!Matcher::match_rule_supported(Op_DecodeUtf8ToUtf16)) return false;
     break;
   case vmIntrinsics::_bitCount_i:
     if (!Matcher::match_rule_supported(Op_PopCountI)) return false;

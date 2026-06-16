@@ -56,6 +56,15 @@ import java.nio.charset.CodingErrorAction;
 
 class UTF_8 extends Unicode
 {
+    /**
+     * True if UTF conversion intrinsics are enabled in the VM by -XX:+UseUTFConversionIntrinsics.
+     */
+    private static final boolean UTF_CONVERSION_INTRINSICS;
+
+    static {
+        UTF_CONVERSION_INTRINSICS = false;
+    }
+
     public UTF_8() {
         super("UTF-8", StandardCharsets.aliases_UTF_8);
     }
@@ -430,6 +439,13 @@ class UTF_8 extends Unicode
             int dlASCII = Math.min(len, da.length);
             ByteBuffer bb = null;  // only necessary if malformed
 
+            if (UTF_CONVERSION_INTRINSICS && len >= 24) {
+                int ret = implDecodeUtf8ToUtf16(sa, sp, da, 0, len);
+                if (ret >= 0) {
+                    return ret;
+                }
+            }
+
             // ASCII only optimized loop
             while (dp < dlASCII && sa[sp] >= 0)
                 da[dp++] = (char) sa[sp++];
@@ -548,6 +564,49 @@ class UTF_8 extends Unicode
                 }
             }
             return dp;
+        }
+
+        // JVM may replace this method with intrinsic code.
+        // Returns a negative value to let the caller fall back to the
+        // full Java decoder for malformed or supplementary-code-point input.
+        private static int implDecodeUtf8ToUtf16(byte[] sa, int sp,
+                                                 char[] da, int dp, int len) {
+            int sl = sp + len;
+            int start = dp;
+            while (sp < sl) {
+                int b1 = sa[sp++];
+                if (b1 >= 0) {
+                    da[dp++] = (char)b1;
+                } else if ((b1 >> 5) == -2 && (b1 & 0x1e) != 0) {
+                    if (sp >= sl)
+                        return -1;
+                    int b2 = sa[sp++];
+                    if (isNotContinuation(b2))
+                        return -1;
+                    da[dp++] = (char)(((b1 << 6) ^ b2) ^
+                                   (((byte)0xC0 << 6) ^
+                                    ((byte)0x80 << 0)));
+                } else if ((b1 >> 4) == -2) {
+                    if (sp + 1 >= sl)
+                        return -1;
+                    int b2 = sa[sp++];
+                    int b3 = sa[sp++];
+                    if (isMalformed3(b1, b2, b3))
+                        return -1;
+                    char c = (char)((b1 << 12) ^
+                                    (b2 <<  6) ^
+                                    (b3 ^
+                                    (((byte)0xE0 << 12) ^
+                                     ((byte)0x80 <<  6) ^
+                                     ((byte)0x80 <<  0))));
+                    if (Character.isSurrogate(c))
+                        return -1;
+                    da[dp++] = c;
+                } else {
+                    return -1;
+                }
+            }
+            return dp - start;
         }
     }
 
@@ -701,6 +760,13 @@ class UTF_8 extends Unicode
         // returns -1 if there is malformed char(s) and the
         // "action" for malformed input is not REPLACE.
         public int encode(char[] sa, int sp, int len, byte[] da) {
+            if (UTF_CONVERSION_INTRINSICS && len >= 24) {
+                int ret = implEncodeUtf8FromUtf16(sa, sp, da, 0, len);
+                if (ret >= 0) {
+                    return ret;
+                }
+            }
+
             int sl = sp + len;
             int dp = 0;
             int dlASCII = dp + Math.min(len, da.length);
@@ -737,6 +803,30 @@ class UTF_8 extends Unicode
                     // 3 bytes, 16 bits
                     da[dp++] = (byte)(0xe0 | ((c >> 12)));
                     da[dp++] = (byte)(0x80 | ((c >>  6) & 0x3f));
+                    da[dp++] = (byte)(0x80 | (c & 0x3f));
+                }
+            }
+            return dp;
+        }
+
+        // JVM may replace this method with intrinsic code.
+        // Surrogates are left to the existing Java path so replacement and
+        // malformed-input policy stay exactly the same as before.
+        private static int implEncodeUtf8FromUtf16(char[] sa, int sp,
+                                                   byte[] da, int dp, int len) {
+            int sl = sp + len;
+            while (sp < sl) {
+                char c = sa[sp++];
+                if (c < 0x80) {
+                    da[dp++] = (byte)c;
+                } else if (c < 0x800) {
+                    da[dp++] = (byte)(0xc0 | (c >> 6));
+                    da[dp++] = (byte)(0x80 | (c & 0x3f));
+                } else if (Character.isSurrogate(c)) {
+                    return -1;
+                } else {
+                    da[dp++] = (byte)(0xe0 | (c >> 12));
+                    da[dp++] = (byte)(0x80 | ((c >> 6) & 0x3f));
                     da[dp++] = (byte)(0x80 | (c & 0x3f));
                 }
             }

@@ -163,6 +163,34 @@ void java_lang_String::compute_offsets() {
   initialized = true;
 }
 
+#ifdef AARCH64
+void sun_nio_cs_UTF_8::set_utf_conversion_intrinsics(bool value, TRAPS) {
+  TempNewSymbol utf8_sym = SymbolTable::new_symbol("sun/nio/cs/UTF_8", CHECK);
+  Klass* k = SystemDictionary::resolve_or_null(utf8_sym, Handle(), Handle(), CHECK);
+  if (k == NULL) {
+    tty->print_cr("sun.nio.cs.UTF_8 not found, skip UTF intrinsic injection");
+    return;
+  }
+
+  InstanceKlass* ik = InstanceKlass::cast(k);
+  ik->initialize(CHECK);
+
+  fieldDescriptor fd;
+  bool found = ik->find_local_field(
+      vmSymbols::utf_conversion_intrinsics_name(),
+      vmSymbols::bool_signature(),
+      &fd);
+  if (!found) {
+    tty->print_cr("UTF_8.UTF_CONVERSION_INTRINSICS not found");
+    return;
+  }
+
+  oop mirror = ik->java_mirror();
+  assert(mirror != NULL, "UTF_8 mirror must exist");
+  mirror->bool_field_put(fd.offset(), value);
+}
+#endif // AARCH64
+
 Handle java_lang_String::basic_create(int length, TRAPS) {
   assert(initialized, "Must be initialized");
   // Create the String object first, so there's a chance that the String

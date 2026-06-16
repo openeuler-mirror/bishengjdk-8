@@ -292,6 +292,7 @@ void HeapRedactor::read_redact_map_from_file(const char *path) {
             return;
         }
         size_t num_read = os::read(fd, (char *)buffer, MAX_MAP_FILE_LENGTH);
+        ::close(fd);
 
         _file_name_map_list = NEW_C_HEAP_ARRAY(char, num_read + 1, mtInternal);
         strncpy(_file_name_map_list, buffer, num_read + 1);
