@@ -7046,6 +7046,10 @@ bool os::is_headless_jre() {
     return true;
 }
 
+bool os::pd_free_heap_physical_memory(char *addr, size_t bytes) {
+    return madvise(addr, bytes, MADV_DONTNEED) == 0;
+}
+
 // Get the default path to the core file
 // Returns the length of the string
 int os::get_core_path(char* buffer, size_t bufferSize) {

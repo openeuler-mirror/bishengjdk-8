@@ -612,7 +612,10 @@ bool IdealLoopTree::policy_maximally_unroll( PhaseIdealLoop *phase ) const {
       case Op_StrComp:
       case Op_StrEquals:
       case Op_StrIndexOf:
+      case Op_VectorizedHashCode:
       case Op_EncodeISOArray:
+      case Op_EncodeUtf8FromUtf16:
+      case Op_DecodeUtf8ToUtf16:
       case Op_AryEq: {
         return false;
       }
@@ -724,7 +727,10 @@ bool IdealLoopTree::policy_unroll( PhaseIdealLoop *phase ) const {
       case Op_StrComp:
       case Op_StrEquals:
       case Op_StrIndexOf:
+      case Op_VectorizedHashCode:
       case Op_EncodeISOArray:
+      case Op_EncodeUtf8FromUtf16:
+      case Op_DecodeUtf8ToUtf16:
       case Op_AryEq: {
         // Do not unroll a loop with String intrinsics code.
         // String intrinsics are large and have loops.

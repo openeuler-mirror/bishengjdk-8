@@ -134,6 +134,9 @@ class VirtualSpace VALUE_OBJ_CLASS_SPEC {
   // os::commit_memory() or os::uncommit_memory().
   bool _special;
 
+  // Dynamic Max Heap
+  size_t _dynamic_max_heap_size;
+
   // Need to know if commit should be executable.
   bool   _executable;
 
@@ -196,6 +199,10 @@ class VirtualSpace VALUE_OBJ_CLASS_SPEC {
   size_t committed_size() const;
   // Memory left to use/expand in this virtual space
   size_t uncommitted_size() const;
+
+  // Dynamic Max Heap
+  void set_dynamic_max_heap_size(size_t new_size);
+  size_t dynamic_max_heap_size() const;
 
   bool   contains(const void* p) const;
 

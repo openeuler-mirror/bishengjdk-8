@@ -159,6 +159,8 @@ NarrowPtrStruct Universe::_narrow_oop = { NULL, 0, true };
 NarrowPtrStruct Universe::_narrow_klass = { NULL, 0, true };
 address Universe::_narrow_ptrs_base;
 bool Universe::_enable_dynamic_max_heap = false;
+bool Universe::_dynamic_max_heap_size_limit_set_on_cmdline = false;
+bool Universe::_elastic_max_heap_size_set_on_cmdline = false;
 
 void Universe::basic_type_classes_do(void f(Klass*)) {
   f(boolArrayKlassObj());

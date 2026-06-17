@@ -30,6 +30,7 @@
 #include "gc_implementation/shared/gcTraceTime.hpp"
 #include "gc_implementation/shared/isGCActiveMark.hpp"
 #include "memory/gcLocker.inline.hpp"
+#include "memory/generationSpec.hpp"
 #include "runtime/interfaceSupport.hpp"
 #include "runtime/os.hpp"
 #include "utilities/dtrace.hpp"
@@ -311,5 +312,155 @@ void VM_GenCollectFullConcurrent::doit_epilogue() {
   // Enable iCMS back if we disabled it earlier.
   if (_disabled_icms) {
     CMSCollector::enable_icms();
+  }
+}
+
+Gen_ChangeMaxHeapOp::Gen_ChangeMaxHeapOp(size_t new_max_heap) :
+  VM_ChangeMaxHeapOp(new_max_heap) {
+}
+/*
+ * 1. calculate desired new old and young gen limit with new size
+ * 2. trigger full gc and perform adjustion in Generation.compute_new_size
+ * 3. if step2 success, set new heap/old/young limit
+ */
+void Gen_ChangeMaxHeapOp::doit() {
+  GenCollectedHeap* heap = (GenCollectedHeap*)Universe::heap();
+  assert(heap->kind() == CollectedHeap::GenCollectedHeap, "must be a GenCollectedHeap");
+  assert(heap->n_gens() == 2, "must be");
+
+  Generation* young       = heap->get_gen(0);
+  Generation* old         = heap->get_gen(1);
+  CollectorPolicy* policy = heap->collector_policy();
+  size_t gen_alignment    = Generation::GenGrain;
+
+  // step1
+  // both current size is recorded dynamic max heap size, not actual reserved size
+  size_t cur_max_heap    = heap->current_max_heap_size();
+  size_t cur_old_limit   = old->dynamic_max_heap_size();
+  size_t cur_young_limit = young->dynamic_max_heap_size();
+
+  const size_t young_reserved_size = young->reserved().byte_size();
+  const size_t old_reserved_size = old->reserved().byte_size();
+  const size_t young_min_size = young->spec()->init_size();
+
+  guarantee(cur_old_limit + cur_young_limit == cur_max_heap, "must be");
+
+  bool is_shrink = _new_max_heap < cur_max_heap;
+  size_t new_young_limit = 0;
+  size_t new_old_limit   = 0;
+  size_t preferred_max_new_size_unaligned = 0;
+  if ((old->kind() != Generation::ConcurrentMarkSweep)) {
+    preferred_max_new_size_unaligned = _new_max_heap / (NewRatio + 1);
+    DMH_LOG("Gen_ElasticMaxHeapOp calculate new young limit with NewRatio");
+  } else {
+    const uintx parallel_gc_threads = (ParallelGCThreads == 0 ? 1 : ParallelGCThreads);
+    size_t young_gen_per_worker = CMSYoungGenPerWorker;
+    preferred_max_new_size_unaligned =
+      MIN2((size_t)(_new_max_heap / (NewRatio + 1)), ScaleForWordSize(young_gen_per_worker * parallel_gc_threads));
+    DMH_LOG("Gen_ElasticMaxHeapOp calculate new young limit with fixed CMSYoungGenPerWorker and NewRatio");
+  }
+  size_t preferred_max_new_size = align_size_up(preferred_max_new_size_unaligned, os::vm_page_size());
+  new_young_limit = align_size_down(preferred_max_new_size, gen_alignment);
+  // keep new limit aligned with shrink/expand direction
+  if ((is_shrink && (new_young_limit > cur_young_limit)) ||
+      (!is_shrink && (new_young_limit < cur_young_limit))) {
+    new_young_limit = cur_young_limit;
+  }
+  if (new_young_limit > young_reserved_size) {
+    new_young_limit = young_reserved_size;
+  }
+  new_young_limit = MAX2(new_young_limit, young_min_size);
+
+  new_old_limit = _new_max_heap - new_young_limit;
+  assert((new_old_limit % gen_alignment) == 0, "must be");
+
+  if (new_old_limit > old_reserved_size) {
+    new_old_limit = old_reserved_size;
+    new_young_limit = _new_max_heap - new_old_limit;
+  }
+
+  // keep the new_old_limit aligned with shrink/expand direction
+  if ((is_shrink && (new_old_limit > cur_old_limit)) ||
+      (!is_shrink && (new_old_limit < cur_old_limit))) {
+    new_old_limit = cur_old_limit;
+    new_young_limit = _new_max_heap - new_old_limit;
+  }
+
+  // After the final calcuation, check the leagle limit
+  if ((new_old_limit > old_reserved_size) ||
+      (new_young_limit > young_reserved_size)) {
+    DMH_LOG("Gen_ElasticMaxHeapOp abort: can not calculate new legal limit: "
+            " new_old_limit: "SIZE_FORMAT"K, old gen reserved size: "SIZE_FORMAT"K"
+            " new_young_limit: "SIZE_FORMAT"K, young gen reserved size: "SIZE_FORMAT"K",
+            (new_old_limit / K), (old_reserved_size / K),
+            (new_young_limit / K), (young_reserved_size / K));
+    return;
+  }
+
+  if (is_shrink) {
+    guarantee(new_old_limit <= cur_old_limit && new_young_limit <= cur_young_limit, "must be");
+  } else {
+    guarantee(new_old_limit >= cur_old_limit && new_young_limit >= cur_young_limit, "must be");
+  }
+
+  DMH_LOG("Gen_ElasticMaxHeapOp plan: "
+          "desired young gen size (" SIZE_FORMAT "K" "->" SIZE_FORMAT "K), "
+          "desired old gen size (" SIZE_FORMAT "K" "->" SIZE_FORMAT "K)",
+          (cur_young_limit / K),
+          (new_young_limit / K),
+          (cur_old_limit / K),
+          (new_old_limit / K));
+
+  // step2
+  if (is_shrink) {
+    if (new_young_limit < young->committed_size() || new_old_limit < old->committed_size()) {
+      // cannot shrink directly, trigger full gc
+      old->set_exp_dynamic_max_heap_size(new_old_limit);
+      young->set_exp_dynamic_max_heap_size(new_young_limit);
+      GCCauseSetter gccs(heap, _gc_cause);
+      heap->do_full_collection(true);
+      DMH_LOG("Gen_ElasticMaxHeapOp heap after Full GC");
+      if (TraceDynamicMaxHeap) {
+        heap->print_on(gclog_or_tty);
+      }
+      old->set_exp_dynamic_max_heap_size(0);
+      young->set_exp_dynamic_max_heap_size(0);
+    }
+  }
+
+  // step3 check and adjust heap/generation max capacity
+  size_t old_committed   = old->committed_size();
+  size_t young_committed = young->committed_size();
+  DMH_LOG("Gen_ElasticMaxHeapOp: [current limit, committed, desired limit]: "
+          "heap [" SIZE_FORMAT "K, " SIZE_FORMAT "K, " SIZE_FORMAT "K], "
+          "old [" SIZE_FORMAT "K, " SIZE_FORMAT "K, " SIZE_FORMAT "K], "
+          "young [" SIZE_FORMAT "K, " SIZE_FORMAT "K, " SIZE_FORMAT "K]",
+          cur_max_heap / K, (old_committed + young_committed) / K, _new_max_heap / K,
+          cur_old_limit / K, old_committed / K, new_old_limit / K,
+          cur_young_limit / K, young_committed / K, new_young_limit / K);
+
+  if (old_committed <= new_old_limit && young_committed <= new_young_limit) {
+    heap->set_current_max_heap_size(_new_max_heap);
+    old->set_dynamic_max_heap_size(new_old_limit);
+    old->update_gen_max_counter(new_old_limit);
+    young->set_dynamic_max_heap_size(new_young_limit);
+    young->update_gen_max_counter(new_young_limit);
+    if (is_shrink) {
+      // shrink is caused by dynamic max heap, free physical memory
+      char* base = (char*)young->reserved().start() + young_committed;
+      size_t shrink_bytes = (char*)young->reserved().end() - base;
+      if (shrink_bytes > 0) {
+        bool result = os::free_heap_physical_memory(base, shrink_bytes);
+        guarantee(result, "free heap physical memory should be successful");
+      }
+      base = (char*)old->reserved().start() + old_committed;
+      shrink_bytes = (char*)old->reserved().end() - base;
+      if (shrink_bytes > 0) {
+        bool result = os::free_heap_physical_memory(base, shrink_bytes);
+        guarantee(result, "free heap physical memory should be successful");
+      }
+    }
+    _resize_success = true;
+    DMH_LOG("Gen_ElasticMaxHeapOp success");
   }
 }

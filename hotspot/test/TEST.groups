@@ -166,6 +166,17 @@ needs_compact3 = \
   compiler/whitebox/IsMethodCompilableTest.java \
   gc/6581734/Test6581734.java \
   gc/7072527/TestFullGCCount.java \
+  gc/dynamicMaxHeap/DynamicMaxHeapArgumentTest.java \
+  gc/dynamicMaxHeap/DynamicMaxHeapBasicTest.java \
+  gc/dynamicMaxHeap/DynamicMaxHeapDCmdTest.java \
+  gc/dynamicMaxHeap/DynamicMaxHeapMemoryPoolTest.java \
+  gc/dynamicMaxHeap/DynamicMaxHeapRuntimeMemoryTest.java \
+  gc/dynamicMaxHeap/BasicTest.java \
+  gc/dynamicMaxHeap/DirectMemoryBasicTest.java \
+  gc/dynamicMaxHeap/LimitDirectMemoryTest.java \
+  gc/dynamicMaxHeap/MemoryPoolTest.java \
+  gc/dynamicMaxHeap/OptionsCheck.java \
+  gc/dynamicMaxHeap/RuntimeMemoryTest.java \
   gc/TestGCLogRotationViaJcmd.java \
   gc/g1/TestHumongousAllocInitialMark.java \
   gc/g1/TestHumongousShrinkHeap.java \

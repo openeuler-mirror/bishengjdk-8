@@ -70,6 +70,8 @@ void DCmdRegistrant::register_dcmds(){
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<HeapInfoDCmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<FinalizerInfoDCmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<ChangeMaxHeapDCmd>(full_export, true, false));
+  DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<ElasticMaxHeapDCmd>(full_export, true, false));
+  DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<ElasticMaxDirectMemoryDCmd>(full_export, true, false));
 #if INCLUDE_SERVICES // Heap dumping/inspection supported
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<HeapDumpDCmd>(DCmd_Source_Internal | DCmd_Source_AttachAPI, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<DynamicCDSDumpDCmd>(DCmd_Source_Internal | DCmd_Source_AttachAPI, true, false));
@@ -394,9 +396,7 @@ ChangeMaxHeapDCmd::ChangeMaxHeapDCmd(outputStream* output, bool heap) :
   _dcmdparser.add_dcmd_argument(&_new_max_heap_size);
 }
 
-int ChangeMaxHeapDCmd::num_arguments() {
-  ResourceMark rm;
-  ChangeMaxHeapDCmd* dcmd = new ChangeMaxHeapDCmd(NULL, false);
+int ChangeMaxHeapDCmd::num_arguments(ChangeMaxHeapDCmd* dcmd) {
   if (dcmd != NULL) {
     DCmdMark mark(dcmd);
     return dcmd->_dcmdparser.num_arguments();
@@ -405,32 +405,94 @@ int ChangeMaxHeapDCmd::num_arguments() {
   }
 }
 
+int ChangeMaxHeapDCmd::num_arguments() {
+  ResourceMark rm;
+  ChangeMaxHeapDCmd* dcmd = new ChangeMaxHeapDCmd(NULL, false);
+  return ChangeMaxHeapDCmd::num_arguments(dcmd);
+}
+
 void ChangeMaxHeapDCmd::execute(DCmdSource source, TRAPS) {
   if (!Universe::is_dynamic_max_heap_enable()) {
-    output()->print_cr("not supported because -XX:DynamicMaxHeapSizeLimit was not specified");
+    output()->print_cr("not supported because -XX:DynamicMaxHeapSizeLimit/-XX:ElasticMaxHeapSize was not specified");
     return;
   }
   jlong input_max_heap_size = _new_max_heap_size.value()._size;
   size_t heap_alignment = Universe::heap()->collector_policy()->heap_alignment();
   jlong new_max_heap_size = align_size_up((size_t)input_max_heap_size, heap_alignment);
-  output()->print_cr("align the given value " SIZE_FORMAT " up to "SIZE_FORMAT "K for heap alignment "SIZE_FORMAT "K",
-                    input_max_heap_size,
-                    (new_max_heap_size / K),
-                    (heap_alignment / K));
+  if (new_max_heap_size != input_max_heap_size) {
+    output()->print_cr("align the given value " SIZE_FORMAT " up to "SIZE_FORMAT "K for heap alignment "SIZE_FORMAT "K",
+                       input_max_heap_size, (new_max_heap_size / K), (heap_alignment / K));
+  }
   bool is_validate = Universe::heap()->check_new_max_heap_validity(new_max_heap_size, output());
   if (!is_validate) {
-    output()->print_cr("GC.change_max_heap fail");
+    output()->print_cr(/* GC.change_max_heap/GC.elastic_max_heap */"%s fail", Universe::dynamic_max_heap_dcmd_name());
     return;
   }
-  output()->print_cr("GC.change_max_heap (" SIZE_FORMAT "K" "->" SIZE_FORMAT "K)(" SIZE_FORMAT "K)",
-                    (Universe::heap()->current_max_heap_size() / K),
-                    (new_max_heap_size / K),
-                    (Universe::heap()->collector_policy()->max_heap_byte_size_limit() / K));
+  output()->print_cr(/* GC.change_max_heap/GC.elastic_max_heap */"%s (" SIZE_FORMAT "K" "->" SIZE_FORMAT "K)(" SIZE_FORMAT "K)",
+                     Universe::dynamic_max_heap_dcmd_name(),
+                     (Universe::heap()->current_max_heap_size() / K),
+                     (new_max_heap_size / K),
+                     (Universe::heap()->collector_policy()->max_heap_byte_size_limit() / K));
   bool success = Universe::heap()->change_max_heap(new_max_heap_size);
   if (success) {
-    output()->print_cr("GC.change_max_heap success");
+    output()->print_cr(/* GC.change_max_heap/GC.elastic_max_heap */"%s success", Universe::dynamic_max_heap_dcmd_name());
   } else {
-    output()->print_cr("GC.change_max_heap fail");
+    output()->print_cr(/* GC.change_max_heap/GC.elastic_max_heap */"%s fail", Universe::dynamic_max_heap_dcmd_name());
+  }
+}
+
+ElasticMaxHeapDCmd::ElasticMaxHeapDCmd(outputStream* output, bool heap) :
+  ChangeMaxHeapDCmd(output, heap) {
+}
+
+int ElasticMaxHeapDCmd::num_arguments() {
+  ResourceMark rm;
+  ElasticMaxHeapDCmd* dcmd = new ElasticMaxHeapDCmd(NULL, false);
+  return ChangeMaxHeapDCmd::num_arguments(dcmd);
+}
+
+ElasticMaxDirectMemoryDCmd::ElasticMaxDirectMemoryDCmd(outputStream* output, bool heap) :
+  DCmdWithParser(output, heap),
+  _new_max_direct_memory("elastic_max_direct_memory", "New max size of direct memory", "MEMORY SIZE", true) {
+  _dcmdparser.add_dcmd_argument(&_new_max_direct_memory);
+}
+
+int ElasticMaxDirectMemoryDCmd::num_arguments() {
+  ResourceMark rm;
+  ElasticMaxDirectMemoryDCmd* dcmd = new ElasticMaxDirectMemoryDCmd(NULL, false);
+  if (dcmd != NULL) {
+    DCmdMark mark(dcmd);
+    return dcmd->_dcmdparser.num_arguments();
+  } else {
+    return 0;
+  }
+}
+
+void ElasticMaxDirectMemoryDCmd::execute(DCmdSource source, TRAPS) {
+  if (!ElasticMaxDirectMemory) {
+    output()->print_cr("not supported because -XX:+ElasticMaxDirectMemory was not specified");
+    return;
+  }
+
+  jlong new_max_direct_memory = _new_max_direct_memory.value()._size;
+  Symbol* klass = vmSymbols::java_nio_Bits();
+  Klass* k = SystemDictionary::resolve_or_fail(klass, true, CHECK);
+
+  JavaValue result(T_OBJECT);
+  JavaCallArguments args;
+  args.push_long(new_max_direct_memory);
+  JavaCalls::call_static(&result,
+                         k,
+                         vmSymbols::updateMaxMemory_name(),
+                         vmSymbols::updateMaxMemory_signature(),
+                         &args,
+                         CHECK);
+  oop msg = (oop)result.get_jobject();
+  if (msg != NULL) {
+    char* text = java_lang_String::as_utf8_string(msg);
+    if (text != NULL) {
+      output()->print_cr("%s", text);
+    }
   }
 }
 

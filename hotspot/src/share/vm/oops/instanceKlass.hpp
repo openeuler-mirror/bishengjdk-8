@@ -185,7 +185,7 @@ class InstanceKlass: public Klass {
   // Annotations for this class
   Annotations*    _annotations;
   // Array classes holding elements of this class.
-  Klass*          _array_klasses;
+  Klass* volatile _array_klasses;
   // Constant pool for this class.
   ConstantPool* _constants;
   // The InnerClasses attribute and EnclosingMethod attribute. The
@@ -262,7 +262,7 @@ class InstanceKlass: public Klass {
   OopMapCache*    volatile _oop_map_cache;   // OopMapCache for all methods in the klass (allocated lazily)
   MemberNameTable* _member_names;        // Member names
   JNIid*          _jni_ids;              // First JNI identifier for static fields in this class
-  jmethodID*      _methods_jmethod_ids;  // jmethodIDs corresponding to method_idnum, or NULL if none
+  jmethodID*      volatile _methods_jmethod_ids;  // jmethodIDs corresponding to method_idnum, or NULL if none
   intptr_t        _dep_context;          // packed DependencyContext structure
   nmethod*        _osr_nmethods_head;    // Head of list of on-stack replacement nmethods for this class
   BreakpointInfo* _breakpoints;          // bpt lists, managed by Method*
@@ -368,7 +368,11 @@ class InstanceKlass: public Klass {
 
   // array klasses
   Klass* array_klasses() const             { return _array_klasses; }
+  Klass* array_klasses_acquire() const
+         { return (Klass*)OrderAccess::load_ptr_acquire(&_array_klasses); }
   void set_array_klasses(Klass* k)         { _array_klasses = k; }
+  void release_set_array_klasses(Klass* k)
+         { OrderAccess::release_store_ptr(&_array_klasses, k); }
 
   // methods
   Array<Method*>* methods() const          { return _methods; }

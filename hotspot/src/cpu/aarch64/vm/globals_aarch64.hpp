@@ -92,6 +92,8 @@ define_pd_global(intx, InlineSmallCode,          1000);
           "Use CRC32 instructions for CRC32 computation")               \
   experimental(bool, UseLSE, false,                                     \
           "Use LSE instructions")                                       \
+  product(bool, UseLSEPrefetch, false,                                  \
+          "Prefetch before lock-related LSE instructions (CAS)")        \
   product(bool, UseSIMDForMemoryOps, false,                             \
           "Use SIMD instructions in generated memory move code")        \
   product(bool, AvoidUnalignedAccesses, false,                          \
@@ -105,7 +107,9 @@ define_pd_global(intx, InlineSmallCode,          1000);
           "Auto enable the AppCDS feature"                              \
           "the path save classlist and jsa file")                       \
   product(bool, PrintAutoAppCDS, false,                                 \
-          "Print some information about AutoSharedArchivePath")          \
+          "Print some information about AutoSharedArchivePath")         \
+  product(bool, UseUTFConversionIntrinsics, false,                      \
+          "Use intrinsics for conversion between UTF8 and UTF16")       \
                                                                          \
   experimental(bool, ExitVMProfileCacheFlush, false,                    \
           "Flush JProfileCache on VM exit")                             \

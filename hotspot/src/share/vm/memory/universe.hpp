@@ -253,6 +253,8 @@ class Universe: AllStatic {
 
   // Dynamic Max Heap
   static bool _enable_dynamic_max_heap;
+  static bool _dynamic_max_heap_size_limit_set_on_cmdline;
+  static bool _elastic_max_heap_size_set_on_cmdline;
 
  public:
   // Known classes in the VM
@@ -491,6 +493,45 @@ class Universe: AllStatic {
   // Dynamic Max Heap
   static bool is_dynamic_max_heap_enable() {return _enable_dynamic_max_heap; }
   static void set_dynamic_max_heap_enable(bool a) { _enable_dynamic_max_heap = a; }
+  static void set_dynamic_max_heap_size_limit_set_on_cmdline(bool a) {
+    _dynamic_max_heap_size_limit_set_on_cmdline = a;
+  }
+  static void set_elastic_max_heap_size_set_on_cmdline(bool a) {
+    _elastic_max_heap_size_set_on_cmdline = a;
+  }
+  static bool dynamic_max_heap_size_limit_set_on_cmdline() {
+    return _dynamic_max_heap_size_limit_set_on_cmdline;
+  }
+  static bool elastic_max_heap_size_set_on_cmdline() {
+    return _elastic_max_heap_size_set_on_cmdline;
+  }
+  static const char* dynamic_max_heap_dcmd_name() {
+    if (FLAG_IS_CMDLINE(ElasticMaxHeapSize) || _elastic_max_heap_size_set_on_cmdline) {
+      return "GC.elastic_max_heap";
+    }
+    if (FLAG_IS_CMDLINE(DynamicMaxHeapSizeLimit) || _dynamic_max_heap_size_limit_set_on_cmdline) {
+      return "GC.change_max_heap";
+    }
+    return "GC.elastic_max_heap";
+  }
+  static const char* dynamic_max_heap_option_name() {
+    if (FLAG_IS_CMDLINE(ElasticMaxHeapSize) || _elastic_max_heap_size_set_on_cmdline) {
+      return "ElasticMaxHeap";
+    }
+    if (FLAG_IS_CMDLINE(DynamicMaxHeapSizeLimit) || _dynamic_max_heap_size_limit_set_on_cmdline) {
+      return "DynamicMaxHeap";
+    }
+    return "ElasticMaxHeap";
+  }
+  static const char* dynamic_max_heap_size_limit_option_name() {
+    if (FLAG_IS_CMDLINE(ElasticMaxHeapSize) || _elastic_max_heap_size_set_on_cmdline) {
+      return "ElasticMaxHeapSize";
+    }
+    if (FLAG_IS_CMDLINE(DynamicMaxHeapSizeLimit) || _dynamic_max_heap_size_limit_set_on_cmdline) {
+      return "DynamicMaxHeapSizeLimit";
+    }
+    return "+ElasticMaxHeap";
+  }
 };
 
 class DeferredObjAllocEvent : public CHeapObj<mtInternal> {

@@ -973,27 +973,23 @@ void MacroAssembler::lookup_interface_method(Register recv_klass,
   // }
   Label search, found_method;
 
-  for (int peel = 1; peel >= 0; peel--) {
-    ldr(method_result, Address(scan_temp, itableOffsetEntry::interface_offset_in_bytes()));
-    cmp(intf_klass, method_result);
-
-    if (peel) {
-      br(Assembler::EQ, found_method);
-    } else {
-      br(Assembler::NE, search);
-      // (invert the test to fall through to found_method...)
-    }
-
-    if (!peel)  break;
-
-    bind(search);
-
-    // Check that the previous entry is non-null.  A null entry means that
-    // the receiver class doesn't implement the interface, and wasn't the
-    // same as when the caller was compiled.
-    cbz(method_result, L_no_such_interface);
+  ldr(method_result, Address(scan_temp, itableOffsetEntry::interface_offset_in_bytes()));
+  cmp(intf_klass, method_result);
+  br(Assembler::EQ, found_method);
+  bind(search);
+  // Check that the previous entry is non-null.  A null entry means that
+  // the receiver class doesn't implement the interface, and wasn't the
+  // same as when the caller was compiled.
+  cbz(method_result, L_no_such_interface);
+  if (itableOffsetEntry::interface_offset_in_bytes() != 0) {
     add(scan_temp, scan_temp, scan_step);
+    ldr(method_result, Address(scan_temp, itableOffsetEntry::interface_offset_in_bytes()));
+  } else {
+    ldr(method_result, Address(pre(scan_temp, scan_step)));
   }
+
+  cmp(intf_klass, method_result);
+  br(Assembler::NE, search);
 
   bind(found_method);
 
@@ -1002,6 +998,111 @@ void MacroAssembler::lookup_interface_method(Register recv_klass,
     ldrw(scan_temp, Address(scan_temp, itableOffsetEntry::offset_offset_in_bytes()));
     ldr(method_result, Address(recv_klass, scan_temp, Address::uxtw(0)));
   }
+}
+
+
+// Look up the method for a megamorphic invokeinterface call in a single pass over itable:
+// - check recv_klass (actual object class) is a subtype of resolved_klass from CompiledICHolder
+// - find a holder_klass (class that implements the method) vtable offset and get the method from vtable by index
+// The target method is determined by <holder_klass, itable_index>.
+// The receiver klass is in recv_klass.
+// On success, the result will be in method_result, and execution falls through.
+// On failure, execution transfers to the given label.
+void MacroAssembler::lookup_interface_method_stub(Register recv_klass,
+                                                  Register holder_klass,
+                                                  Register resolved_klass,
+                                                  Register method_result,
+                                                  Register temp_itbl_klass,
+                                                  Register scan_temp,
+                                                  int itable_index,
+                                                  Label& L_no_such_interface) {
+  // 'method_result' is only used as output register at the very end of this method.
+  // Until then we can reuse it as 'holder_offset'.
+  Register holder_offset = method_result;
+  assert_different_registers(resolved_klass, recv_klass, holder_klass, temp_itbl_klass, scan_temp, holder_offset);
+
+  int vtable_start_offset = InstanceKlass::vtable_start_offset() * wordSize;
+  int itable_offset_entry_size = itableOffsetEntry::size() * wordSize;
+  int ioffset = itableOffsetEntry::interface_offset_in_bytes();
+  int ooffset = itableOffsetEntry::offset_offset_in_bytes();
+
+  Label L_loop_search_resolved_entry, L_resolved_found, L_holder_found;
+
+  ldrw(scan_temp, Address(recv_klass, InstanceKlass::vtable_length_offset() * wordSize));
+  add(recv_klass, recv_klass, vtable_start_offset + ioffset);
+  // itableOffsetEntry[] itable = recv_klass + Klass::vtable_start_offset() + sizeof(vtableEntry) * recv_klass->_vtable_len;
+  // temp_itbl_klass = itable[0]._interface;
+  int vtblEntrySize = vtableEntry::size_in_bytes();
+  assert(vtblEntrySize == wordSize, "ldr lsl shift amount must be 3");
+  ldr(temp_itbl_klass, Address(recv_klass, scan_temp, Address::lsl(exact_log2(vtblEntrySize))));
+  mov(holder_offset, zr);
+  // scan_temp = &(itable[0]._interface)
+  lea(scan_temp, Address(recv_klass, scan_temp, Address::lsl(exact_log2(vtblEntrySize))));
+
+  // Initial checks:
+  //   - if (holder_klass != resolved_klass), go to "scan for resolved"
+  //   - if (itable[0] == holder_klass), shortcut to "holder found"
+  //   - if (itable[0] == 0), no such interface
+  cmp(resolved_klass, holder_klass);
+  br(Assembler::NE, L_loop_search_resolved_entry);
+  cmp(holder_klass, temp_itbl_klass);
+  br(Assembler::EQ, L_holder_found);
+  cbz(temp_itbl_klass, L_no_such_interface);
+
+  // Loop: Look for holder_klass record in itable
+  //   do {
+  //     temp_itbl_klass = *(scan_temp += itable_offset_entry_size);
+  //     if (temp_itbl_klass == holder_klass) {
+  //       goto L_holder_found; // Found!
+  //     }
+  //   } while (temp_itbl_klass != 0);
+  //   goto L_no_such_interface // Not found.
+  Label L_search_holder;
+  bind(L_search_holder);
+    ldr(temp_itbl_klass, Address(pre(scan_temp, itable_offset_entry_size)));
+    cmp(holder_klass, temp_itbl_klass);
+    br(Assembler::EQ, L_holder_found);
+    cbnz(temp_itbl_klass, L_search_holder);
+
+  b(L_no_such_interface);
+
+  // Loop: Look for resolved_class record in itable
+  //   while (true) {
+  //     temp_itbl_klass = *(scan_temp += itable_offset_entry_size);
+  //     if (temp_itbl_klass == 0) {
+  //       goto L_no_such_interface;
+  //     }
+  //     if (temp_itbl_klass == resolved_klass) {
+  //        goto L_resolved_found;  // Found!
+  //     }
+  //     if (temp_itbl_klass == holder_klass) {
+  //        holder_offset = scan_temp;
+  //     }
+  //   }
+  //
+  Label L_loop_search_resolved;
+  bind(L_loop_search_resolved);
+    ldr(temp_itbl_klass, Address(pre(scan_temp, itable_offset_entry_size)));
+  bind(L_loop_search_resolved_entry);
+    cbz(temp_itbl_klass, L_no_such_interface);
+    cmp(resolved_klass, temp_itbl_klass);
+    br(Assembler::EQ, L_resolved_found);
+    cmp(holder_klass, temp_itbl_klass);
+    br(Assembler::NE, L_loop_search_resolved);
+    mov(holder_offset, scan_temp);
+    b(L_loop_search_resolved);
+
+  // See if we already have a holder klass. If not, go and scan for it.
+  bind(L_resolved_found);
+  cbz(holder_offset, L_search_holder);
+  mov(scan_temp, holder_offset);
+
+  // Finally, scan_temp contains holder_klass vtable offset
+  bind(L_holder_found);
+  ldrw(method_result, Address(scan_temp, ooffset - ioffset));
+  add(recv_klass, recv_klass, itable_index * wordSize + itableMethodEntry::method_offset_in_bytes()
+    - vtable_start_offset - ioffset); // substract offsets to restore the original value of recv_klass
+  ldr(method_result, Address(recv_klass, method_result, Address::uxtw(0)));
 }
 
 // virtual method calling
@@ -2139,6 +2240,9 @@ void MacroAssembler::cmpxchgptr(Register oldv, Register newv, Register addr, Reg
   // newv holds value to write in exchange
   // addr identifies memory word to compare against/update
   if (UseLSE) {
+    if (UseLSEPrefetch) {
+      prfm(Address(addr), PSTL1STRM);
+    }
     mov(tmp, oldv);
     casal(Assembler::xword, oldv, newv, addr);
     cmp(tmp, oldv);
@@ -2176,6 +2280,9 @@ void MacroAssembler::cmpxchgw(Register oldv, Register newv, Register addr, Regis
   // addr identifies memory word to compare against/update
   // tmp returns 0/1 for success/failure
   if (UseLSE) {
+    if (UseLSEPrefetch) {
+      prfm(Address(addr), PSTL1STRM);
+    }
     mov(tmp, oldv);
     casal(Assembler::word, oldv, newv, addr);
     cmp(tmp, oldv);
@@ -2213,6 +2320,9 @@ void MacroAssembler::cmpxchg(Register addr, Register expected,
                              bool acquire, bool release,
                              Register tmp) {
   if (UseLSE) {
+    if (UseLSEPrefetch) {
+      prfm(Address(addr), PSTL1STRM);
+    }
     mov(tmp, expected);
     lse_cas(tmp, new_val, addr, size, acquire, release, /*not_pair*/ true);
     cmp(tmp, expected);
@@ -4910,6 +5020,94 @@ void MacroAssembler::string_equals(Register str1, Register str2,
   BLOCK_COMMENT("} string_equals");
 }
 
+address MacroAssembler::arrays_hashcode(Register ary, Register cnt, Register result,
+                                        FloatRegister vdata0, FloatRegister vdata1,
+                                        FloatRegister vdata2, FloatRegister vdata3,
+                                        FloatRegister vmul0, FloatRegister vmul1,
+                                        FloatRegister vmul2, FloatRegister vmul3,
+                                        FloatRegister vpow, FloatRegister vpowm,
+                                        BasicType eltype) {
+  ARRAYS_HASHCODE_REGISTERS;
+
+  Register tmp1 = rscratch1, tmp2 = rscratch2;
+  const bool a53mac = (VM_Version::cpu_cpuFeatures() & VM_Version::CPU_A53MAC) != 0;
+
+  Label TAIL, LOOP, BR_BASE, LARGE, DONE;
+
+  const size_t vf = eltype == T_BOOLEAN || eltype == T_BYTE ? 8
+                    : eltype == T_CHAR || eltype == T_SHORT ? 8
+                    : eltype == T_INT                       ? 4
+                                                            : 0;
+  guarantee(vf, "unsupported eltype");
+
+  const size_t unroll_factor = 4;
+
+  switch (eltype) {
+  case T_BOOLEAN:
+    BLOCK_COMMENT("arrays_hashcode(unsigned byte) {");
+    break;
+  case T_CHAR:
+    BLOCK_COMMENT("arrays_hashcode(char) {");
+    break;
+  case T_BYTE:
+    BLOCK_COMMENT("arrays_hashcode(byte) {");
+    break;
+  case T_SHORT:
+    BLOCK_COMMENT("arrays_hashcode(short) {");
+    break;
+  case T_INT:
+    BLOCK_COMMENT("arrays_hashcode(int) {");
+    break;
+  default:
+    ShouldNotReachHere();
+  }
+
+  const size_t large_threshold = eltype == T_INT ? vf * 2 : vf;
+  cmpw(cnt, large_threshold);
+  br(Assembler::HS, LARGE);
+
+  bind(TAIL);
+
+  assert(is_power_of_2(unroll_factor), "can't use this value to calculate the jump target PC");
+  andr(tmp2, cnt, unroll_factor - 1);
+  adr(tmp1, BR_BASE);
+  sub(tmp1, tmp1, tmp2, ext::sxtw, a53mac ? 4 : 3);
+  movw(tmp2, 0x1f);
+  br(tmp1);
+
+  bind(LOOP);
+  for (size_t i = 0; i < unroll_factor; ++i) {
+    load_sized_value(tmp1, Address(post(ary, type2aelembytes(eltype))),
+                     type2aelembytes(eltype), is_signed_subword_type(eltype));
+    maddw(result, result, tmp2, tmp1);
+    if (a53mac) {
+      nop();
+    }
+  }
+  bind(BR_BASE);
+  subsw(cnt, cnt, unroll_factor);
+  br(Assembler::HS, LOOP);
+
+  b(DONE);
+
+  bind(LARGE);
+
+  RuntimeAddress stub = RuntimeAddress(StubRoutines::aarch64::large_arrays_hashcode(eltype));
+  assert(stub.target() != NULL, "array_hashcode stub has not been generated");
+  address tpc = trampoline_call(stub);
+  if (tpc == NULL) {
+    postcond(pc() == badAddress);
+    return NULL;
+  }
+
+  bind(DONE);
+
+  BLOCK_COMMENT("} // arrays_hashcode");
+
+  postcond(pc() != badAddress);
+  return pc();
+}
+
 // Compare char[] arrays aligned to 4 bytes
 void MacroAssembler::char_arrays_equals(Register ary1, Register ary2,
                                         Register result, Register tmp1)
@@ -5038,4 +5236,653 @@ void MacroAssembler::encode_iso_array(Register src, Register dst,
 
     BIND(DONE);
       sub(result, result, len); // Return index where we stopped
+}
+
+// Clobbers: src, dst, res, rscratch1, rscratch2, rflags
+void MacroAssembler::encode_utf8_from_utf16(Register src, Register dst,
+                                      Register len, Register res,
+                                      FloatRegister vtmp0, FloatRegister vtmp1,
+                                      FloatRegister vtmp2, FloatRegister vtmp3,
+                                      FloatRegister vtmp4, FloatRegister vtmp5,
+                                      FloatRegister vtmp6, FloatRegister vtmp7,
+                                      FloatRegister vtmp8, FloatRegister vtmp9)
+{
+  RegSet saved_regs = RegSet::range(r10, r15);
+  push(saved_regs, sp);
+
+  Register max = rscratch1;
+  Register chk = rscratch2;
+  Register mask0 = r10;
+  Register mask1 = r11;
+  Register row0 = r12;
+  Register row1 = r13;
+  Register lookAddr = r14;
+  Register staSrcLen = r15;
+
+  FloatRegister vIn = vtmp0;
+  FloatRegister vCalcJohn = vtmp1;
+  FloatRegister vCalcSuzie = vtmp2;
+  FloatRegister vCalcBob = vtmp3;
+  FloatRegister vCalcMartha = vtmp4;
+  FloatRegister vCalcStanley = vtmp5;
+  FloatRegister vCalcViki = vtmp6;
+  FloatRegister vCalcJack = vtmp7;
+  FloatRegister vDupEven = vtmp8;
+  FloatRegister v3BShuffle = vtmp9;
+
+  uint64_t offset;
+
+  prfm(Address(src), PLDL1STRM);
+  Label LOOP_8, DONE, LOOP_8_TAIL;
+
+  mov(staSrcLen, len);
+  mov(res, 0);
+  cmpw(len, 8);
+  br(LT, LOOP_8_TAIL);
+
+  // fill helper registers to avoid multiple loads in converting loop
+  // https://github.com/simdutf/simdutf/blob/dfaaa29b9855b04127ad12171e719db04d048318/src/arm64/arm_convert_utf16_to_utf8.cpp#L156
+  mov(chk, 0x0606040402020000);
+  fmovd(vDupEven, chk);
+  mov(chk, 0x0e0e0c0c0a0a0808);
+  fmovd(vCalcSuzie, chk);
+  ins(vDupEven, D, vCalcSuzie, 1, 0);
+
+  // https://github.com/simdutf/simdutf/blob/dfaaa29b9855b04127ad12171e719db04d048318/src/arm64/arm_convert_utf16_to_utf8.cpp#L237
+  mov(chk, 0x0B0A050706010302);
+  fmovd(v3BShuffle, chk);
+  mov(chk, 0x000000000D0F0E09);
+  fmovd(vCalcSuzie, chk);
+  ins(v3BShuffle, D, vCalcSuzie, 1, 0);
+
+  BIND(LOOP_8);
+  {
+    Label LOOP_8_7FF, LOOP_8_GT7F, LOOP_8_GT7FF, NO_CHINA_FAST, LOOP_8_SCALAR;
+    cmpw(len, 8);
+    br(LT, LOOP_8_TAIL);
+    ld1(vIn, T8H, post(src, 16));
+    umaxv(vCalcSuzie, T8H, vIn);
+    umov(max, vCalcSuzie, H, 0);
+
+    cmpw(max, 0x7F);
+    br(Assembler::GT, LOOP_8_7FF);
+    // path for ascii characters only
+    xtn(vCalcSuzie, T8B, vIn, T8H);   // take lower of each 16 bit element
+    st1(vCalcSuzie, T8B, Address(post(dst, 8))); // store in memory
+    subw(len, len, 8);
+    addw(res, res, 8);
+    b(LOOP_8);
+
+    BIND(LOOP_8_7FF);
+    cmpw(max, 0x7FF);
+    br(Assembler::GT, LOOP_8_GT7FF);
+    // path for 1 and 2 byte characters (utf-8 0x110xxxxx 0x10xxxxxx)
+    // https://github.com/simdutf/simdutf/blob/dfaaa29b9855b04127ad12171e719db04d048318/src/arm64/arm_convert_utf16_to_utf8.cpp#L101
+    // prepare 2 bytes
+    movi(vCalcJohn, T8H, 0x1f, 8);
+    movi(vCalcBob, T8H, 0x3F);
+
+    shl(vCalcSuzie, T8H, vIn, 2);
+
+    andr(vCalcJohn, T16B, vCalcSuzie, vCalcJohn);
+    andr(vCalcBob, T16B, vIn, vCalcBob);
+
+    orr(vCalcJohn, T16B, vCalcJohn, vCalcBob);
+
+    mov(chk, 0xc080);
+    dup(vCalcSuzie, T8H, chk);
+    orr(vCalcBob, T16B, vCalcJohn, vCalcSuzie);
+
+    // find 1 bytes and merge with 2 bytes
+    movi(vCalcSuzie, T8H, 0x7F); // 0x007F
+
+    cm(HS, vCalcMartha, T8H, vCalcSuzie, vIn); // one_byte_bytemask (ASCII)
+
+    bit(vCalcBob, T16B, vIn, vCalcMartha); //
+
+    // bitmask preparation for 8 bit lookup
+    mov(chk, 0x0040001000040001);
+    fmovd(vCalcJohn, chk);
+    mov(chk, 0x0080002000080002);
+    fmovd(vCalcSuzie, chk);
+    ins(vCalcJohn, D, vCalcSuzie, 1, 0);
+
+    andr(vCalcJohn, T16B, vCalcMartha, vCalcJohn);
+    addv(vCalcJohn, T8H, vCalcJohn);
+    umov(mask0, vCalcJohn, H, 0);
+
+    uint64_t offset;
+    adrp(lookAddr, ExternalAddress(StubRoutines::pack_1_2_utf8_bytes_adr()), offset);
+    add(lookAddr, lookAddr, offset);
+    // calculate address
+    mov(chk, 17);
+    mul(row0, mask0, chk);
+    add(row0, lookAddr, row0);
+    add(row0, row0, 1);
+    // load from pack_1_2_utf8_bytes lookup table
+    ld1(vCalcMartha, T8H, row0);
+    tbl(vCalcBob, T16B, vCalcBob, 1, vCalcMartha); // perform lookup
+
+    sub(row0, row0, 1);
+    ldrb(row0, row0);
+
+    st1(vCalcBob, T16B, dst);
+    add(dst, dst, row0);
+
+    subw(len, len, 8);
+    addw(res, res, row0);
+
+    b(LOOP_8); // continue
+
+    BIND(LOOP_8_GT7FF);
+
+    // check for existence 4 byte code units
+    movi(vCalcSuzie, T8H, 0xF8, 8); // 0xf800
+    andr(vCalcSuzie, T16B, vCalcSuzie, vIn);
+
+    movi(vCalcJohn, T8H, 0xD8, 8); // 0xd800
+    cm(EQ, vCalcSuzie, T8H, vCalcSuzie, vCalcJohn);
+    umaxv(vCalcSuzie, T8H, vCalcSuzie);
+    umov(chk, vCalcSuzie, H, 0);
+
+    cbnz(chk, LOOP_8_SCALAR);  // if there are 4 bytes go to scalar solution
+    // https://github.com/simdutf/simdutf/blob/dfaaa29b9855b04127ad12171e719db04d048318/src/arm64/arm_convert_utf16_to_utf8.cpp#L151
+    // case: code units from register produce either 1, 2 or 3 UTF-8 bytes
+    tbl(vCalcJohn, T16B, vIn, 1, vDupEven);
+
+    mov(chk, 0b0011111101111111);
+    dup(vCalcSuzie, T8H, chk);
+    andr(vCalcJohn, T16B, vCalcJohn, vCalcSuzie);
+
+    movi(vCalcSuzie, T8H, 0x80, 8); // 0b1000000000000000
+    orr(vCalcJohn, T16B, vCalcJohn, vCalcSuzie);
+
+    ushr(vCalcBob, T8H, vIn, 4);     // ushr jdk8/jdk21 result unification
+    movi(vCalcSuzie, T8H, 0x0F); 
+    andr(vCalcBob, T8H, vCalcBob, vCalcSuzie);
+
+    mov(chk, 0b0000111111000000);
+    dup(vCalcSuzie, T8H, chk);
+    andr(vCalcMartha, T16B, vIn, vCalcSuzie);
+
+    shl(vCalcMartha, T8H, vCalcMartha, 2);
+
+    orr(vCalcBob, T16B, vCalcBob, vCalcMartha);
+
+    mov(chk, 0b1100000011100000);
+    dup(vCalcSuzie, T8H, chk);
+    orr(vCalcBob, T16B, vCalcBob, vCalcSuzie);
+
+    mvni(vCalcSuzie, T8H, 0xF8, 8); // 0x07FF
+
+    cm(HS, vCalcMartha, T8H, vCalcSuzie, vIn);
+
+    movi(vCalcSuzie, T8H, 0x40, 8); // 0b0100000000000000
+    bic(vCalcSuzie, T16B, vCalcSuzie, vCalcMartha);
+    eor(vCalcBob, T16B, vCalcBob, vCalcSuzie);
+
+    zip1(vCalcStanley, T8H, vCalcJohn, vCalcBob);
+    zip2(vCalcJohn, T8H, vCalcJohn, vCalcBob);
+
+    movi(vCalcSuzie, T8H, 0x7F);
+    cm(HS, vCalcBob, T8H, vCalcSuzie, vIn);
+
+    mov(chk, 0x0040001000040001);
+    fmovd(vCalcViki, chk);
+    mov(chk, 0x4000100004000100);
+    fmovd(vCalcSuzie, chk);
+    ins(vCalcViki, D, vCalcSuzie, 1, 0);
+
+    mov(chk, 0x0080002000080002);
+    fmovd(vCalcJack, chk);
+    mov(chk, 0x8000200008000200);
+    fmovd(vCalcSuzie, chk);
+    ins(vCalcJack, D, vCalcSuzie, 1, 0);
+
+    andr(vCalcBob, T16B, vCalcBob, vCalcViki);
+    andr(vCalcMartha, T16B, vCalcMartha, vCalcJack);
+    orr(vCalcBob, T16B, vCalcBob, vCalcMartha);
+
+    addv(vCalcBob, T8H, vCalcBob);
+    umov(mask0, vCalcBob, H, 0);
+
+    cbnz(mask0, NO_CHINA_FAST);
+
+    // We only have three-byte code units. Use fast path.
+    tbl(vCalcStanley, T16B, vCalcStanley, 1, v3BShuffle);
+    tbl(vCalcJohn, T16B, vCalcJohn, 1, v3BShuffle);
+
+    st1(vCalcStanley, T16B, dst);
+    add(dst, dst, 12);
+    st1(vCalcJohn, T16B, dst);
+    add(dst, dst, 12);
+
+    subw(len, len, 8);
+    addw(res, res, 24);
+    b(LOOP_8);
+
+    BIND(NO_CHINA_FAST);
+
+    lsr(mask1, mask0, 8);
+    andr(mask1, mask1, 0xff);
+    andr(mask0, mask0, 0xff);  
+
+    adrp(lookAddr, ExternalAddress(StubRoutines::pack_1_2_3_utf8_bytes_adr()), offset);
+    add(lookAddr, lookAddr, offset);
+
+    mov(chk, 17);
+    mul(row0, mask0, chk);
+    add(row0, lookAddr, row0);
+    mul(row1, mask1, chk);
+    add(row1, lookAddr, row1);
+    add(row0, row0, 1);
+    add(row1, row1, 1);
+
+    ld1(vCalcBob, T8H, row0);
+    ld1(vCalcMartha, T8H, row1);
+
+    tbl(vCalcStanley, T16B, vCalcStanley, 1, vCalcBob);
+    tbl(vCalcJohn, T16B, vCalcJohn, 1, vCalcMartha);
+
+    sub(row0, row0, 1);
+    sub(row1, row1, 1);
+    ldrb(row0, row0);
+    ldrb(row1, row1);
+
+    st1(vCalcStanley, T16B, dst);
+    add(dst, dst, row0);
+    st1(vCalcJohn, T16B, dst);
+    add(dst, dst, row1);
+
+    subw(len, len, 8);
+    addw(row0, row0, row1);
+    addw(res, res, row0);
+    b(LOOP_8);
+
+    BIND(LOOP_8_SCALAR);
+      sub(src, src, 16); // it was unable to convert using vector solution so get back to begining
+    BIND(LOOP_8_TAIL);
+    {
+      // rename for easy reading
+      Register in = chk;
+      Register iftmp = mask0;
+      Register tgtLen =mask1;
+      Register iftmp1 = row0;
+      Register iftmp2 = row1;
+
+      Label SCALAR_LOOP, CHK_2BYTES, CHK_3BYTES, SCALAR_SURROGATE_PAIR, SCALAR_SURROGATE_ERR, SCALAR_OUT;
+
+      cbz(len, DONE);
+
+      subw(tgtLen, len, 8);
+      cmpw(len, 8);
+      br(GT, SCALAR_LOOP);
+      mov(tgtLen, 0);
+
+      BIND(SCALAR_LOOP);
+      cmpw(len, tgtLen);
+      br(LE, LOOP_8);
+
+      ldrh(in, post(src, 2));
+      subw(len, len, 1);
+      andw(iftmp, in, 0xFF80);
+      cbnz(iftmp, CHK_2BYTES);
+
+      strb(in, post(dst, 1)); // store 1 ascii character
+      addw(res, res, 1);
+      b(SCALAR_LOOP);
+
+      BIND(CHK_2BYTES);
+      andw(iftmp, in, 0xF800);
+      cbnz(iftmp, CHK_3BYTES);
+      lsr(iftmp, in, 6);
+      orr(iftmp, iftmp, 0b11000000);
+      andw(in, in, 0b111111);
+      orr(in, in, 0b10000000);
+      lsl(in, in, 8);
+      orr(iftmp, iftmp, in);
+
+      strh(iftmp, post(dst, 2));
+      addw(res, res, 2);
+      b(SCALAR_LOOP);
+
+      BIND(CHK_3BYTES);
+      andw(iftmp, in, 0xF800);
+      subw(iftmp, iftmp, 0xD800);
+      cbz(iftmp, SCALAR_SURROGATE_PAIR);
+      lsr(iftmp, in, 12);
+      orr(iftmp, iftmp, 0b11100000);
+      lsr(iftmp1, in, 6);
+      andw(iftmp1, iftmp1, 0b111111);
+      orr(iftmp1, iftmp1, 0b10000000);
+      lsl(iftmp1, iftmp1, 8);
+      orr(iftmp, iftmp, iftmp1);
+
+      strh(iftmp, post(dst, 2));
+      andw(in, in, 0b111111);
+      orr(in, in, 0b10000000);
+
+      strb(in, post(dst, 1));
+      addw(res, res, 3);
+      b(SCALAR_LOOP);
+
+      BIND(SCALAR_SURROGATE_PAIR);
+
+      cbz(len, SCALAR_SURROGATE_ERR);
+      ldrh(iftmp, post(src, 2));
+      subw(len, len, 1);
+      subw(in, in, 0xD800);
+      subw(iftmp, iftmp, 0xDC00);
+      orr(iftmp1, in, iftmp);
+      cmpw(iftmp1, 0x3FF);
+      br(Assembler::HI, SCALAR_SURROGATE_ERR);
+
+      lsl(in, in, 10);
+      addw(in, in, iftmp);
+      addw(in, in, 0x10000);
+
+      lsr(iftmp, in, 18);
+      orr(iftmp, iftmp, 0b11110000);
+
+      lsr(iftmp1, in, 12);
+      andw(iftmp1, iftmp1, 0b111111);
+      orr(iftmp1, iftmp1, 0b10000000);
+
+      lsr(iftmp2, in, 6);
+      andw(iftmp2, iftmp2, 0b111111);
+      orr(iftmp2, iftmp2, 0b10000000);
+
+      andw(in, in, 0b111111);
+      orr(in, in, 0b10000000);
+
+      lsl(iftmp1, iftmp1, 8);
+      lsl(iftmp2, iftmp2, 16);
+      lsl(in, in, 24);
+
+      orr(iftmp, iftmp, iftmp1);
+      orr(iftmp, iftmp, iftmp2);
+      orr(iftmp, iftmp, in);
+      strw(iftmp, post(dst, 4));
+      addw(res, res, 4);
+      b(SCALAR_LOOP);
+
+      BIND(SCALAR_SURROGATE_ERR);
+      sub(staSrcLen, staSrcLen, len);
+      negw(res, staSrcLen); // index of unmappable is returned as negative val
+      b(DONE);
+
+    b(DONE);
+    }
+  }
+
+  BIND(DONE);
+
+  pop(saved_regs, sp);
+ // res is updated in the loops already
+}
+
+void MacroAssembler::decode_utf8_to_utf16(Register src, Register dst,
+  Register len, Register res,
+  FloatRegister vtmp0, FloatRegister vtmp1,
+  FloatRegister vtmp2, FloatRegister vtmp3,
+  FloatRegister vtmp4, FloatRegister vtmp5,
+  FloatRegister vtmp6, FloatRegister vtmp7,
+  FloatRegister vtmp8, FloatRegister vtmp9, FloatRegister vtmp10)
+{
+  RegSet saved_regs = RegSet::range(r10, r16);
+  push(saved_regs, sp);
+
+  Register maxSrc = r10;
+  Register maxPos = r15;       // order of registers can not be changed !!!
+  Register rTemp = rscratch1;
+  Register cMask = r11;
+  Register cnvTemp = r12;
+  Register maxStaPos = r13;
+  Register lookAddr = r14;
+  Register idx = rscratch2;
+  Register errInfo = r16;
+
+  FloatRegister vIn0 = vtmp0;
+  FloatRegister vCalcJohn = vtmp1;
+  FloatRegister vIn1 = vtmp2;
+  FloatRegister vIn2  = vtmp3;
+  FloatRegister vIn3 = vtmp4;
+  FloatRegister vCalcJack = vtmp5;
+  FloatRegister vCalcSuzie = vtmp6;
+
+  FloatRegister vCalcMartha = vtmp7;
+  FloatRegister vCalcGreg = vtmp8;
+  FloatRegister vCalcViki = vtmp9;
+  FloatRegister vErrors = vtmp10;
+
+  prfm(Address(src), PLDL1STRM);
+  Label LOOP_64, ST_SCALAR, DONE, ERROR_OCCURED, SUBR_CHECK_UTF8_BYTS;
+
+  mov(errInfo, 0);
+  movi(vErrors, T16B, 0);
+  mov(res, 0);
+  add(maxSrc, src, len);
+  cmpw(len, 65);
+  br(LT, ST_SCALAR);
+
+  {
+    // moving back by 8 characters as described here:
+    // https://github.com/simdutf/simdutf/blob/dfaaa29b9855b04127ad12171e719db04d048318/src/generic/utf8_to_utf16/utf8_to_utf16.h#L133
+    Label LD_CNT_LOOP, LOOP_OUT;
+
+    Register margin = r15;
+    Register leadingByte = rscratch2;
+    Register in = rscratch1;
+    Register index = r11;
+    mov(leadingByte, 0);
+    mov(margin, len);
+
+    BIND(LD_CNT_LOOP);
+      cbz(margin, LOOP_OUT);
+      cmpw(leadingByte, 7);
+      br(GT, LOOP_OUT);
+      subw(index, margin, 1);
+      ldrb(in, Address(src, index));
+      subw(margin, margin, 1);
+      sxtb(in, in);
+      cmnw(in, 0x40);
+      br(LT, LD_CNT_LOOP);
+      addw(leadingByte, leadingByte, 1);
+      b(LD_CNT_LOOP);
+    BIND(LOOP_OUT);
+  }
+
+  cmpw(maxPos, 65);
+  br(LT, ST_SCALAR);
+
+  sub(maxPos, maxPos, 65);
+  add(maxPos, src, maxPos);
+  BIND(LOOP_64);
+  {
+    Label NON_ASCII, CMASK_OK, CONV_LOOP;
+    cmp(src, maxPos);
+    br(GT, ST_SCALAR);
+      
+      ld1(vIn0, T16B, post(src, 16));
+
+      umov(rTemp, vIn0, D, 0);
+      andr(rTemp, rTemp, 0x8080808080808080);
+      cbnz(rTemp, NON_ASCII);
+      umov(rTemp, vIn0, D, 1);
+      andr(rTemp, rTemp, 0x8080808080808080);
+      cbnz(rTemp, NON_ASCII);
+        
+        movi(vCalcJohn, T16B, 0);
+        st2(vIn0, vCalcJohn, T16B, post(dst, 32)); // For ASCII chars just store in memory
+                                                   // putting 0 after every data byte
+        addw(res, res, 16);       // update number of chars converted
+
+      b(LOOP_64);
+
+      BIND(NON_ASCII);
+
+        ld1(vIn1, vIn2, vIn3, T16B, post(src, 48));
+
+        movi(vCalcViki, T16B, 0);  // check if utf8 bytes are valid for all 4 chunks
+        mov(vCalcGreg, T16B, vIn0);
+        bl(SUBR_CHECK_UTF8_BYTS);
+
+        mov(vCalcViki, T16B, vIn0);
+        mov(vCalcGreg, T16B, vIn1);
+        bl(SUBR_CHECK_UTF8_BYTS);
+
+        mov(vCalcViki, T16B, vIn1);
+        mov(vCalcGreg, T16B, vIn2);
+        bl(SUBR_CHECK_UTF8_BYTS);
+
+        mov(vCalcViki, T16B, vIn2);
+        mov(vCalcGreg, T16B, vIn3);
+        bl(SUBR_CHECK_UTF8_BYTS);
+
+        // calculate continuation mask by compare with -64 (8bit 0xC0)
+        // https://github.com/simdutf/simdutf/blob/dfaaa29b9855b04127ad12171e719db04d048318/src/generic/utf8_to_utf16/utf8_to_utf16.h#L170
+        movi(vCalcJohn, T16B, 0xC0);
+        cm(GT, vCalcSuzie, T16B, vCalcJohn, vIn0);
+        cm(GT, vCalcJack, T16B, vCalcJohn, vIn1);
+        cm(GT, vCalcMartha, T16B, vCalcJohn, vIn2);
+        cm(GT, vCalcGreg, T16B, vCalcJohn, vIn3);
+
+        mov(rTemp, 0x8040201008040201); // {0x01, 0x02, 0x4, 0x8, 0x10, 0x20, 0x40, 0x80, 0x01, 0x02, 0x4, 0x8, 0x10, 0x20, 0x40, 0x80};
+        fmovd(vCalcJohn, rTemp);
+        ins(vCalcJohn, D, vCalcJohn, 1, 0);
+
+        andr(vCalcSuzie, T16B, vCalcSuzie, vCalcJohn); // use vCalcJohn filled above to present bytes as bitmask
+        andr(vCalcJack, T16B, vCalcJack, vCalcJohn);   // where bit=1 for byte>0 and bit=0 for byte=0
+        addpv(vCalcSuzie, T16B, vCalcSuzie, vCalcJack);
+
+        andr(vCalcMartha, T16B, vCalcMartha, vCalcJohn);
+        andr(vCalcGreg, T16B, vCalcGreg, vCalcJohn);
+        addpv(vCalcMartha, T16B, vCalcMartha, vCalcGreg);
+
+        addpv(vCalcSuzie, T16B, vCalcSuzie, vCalcMartha);
+        addpv(vCalcSuzie, T16B, vCalcSuzie, vCalcSuzie); 
+
+        umov(cMask, vCalcSuzie, D, 0); 
+
+        andr(rTemp, cMask, 1);
+        cbz(rTemp, CMASK_OK);
+
+        mov(errInfo, -1);
+        b(ERROR_OCCURED);
+
+        BIND(CMASK_OK);
+        orn(cMask, zr, cMask);
+        lsr(cMask, cMask, 1);
+
+        sub(src, src, 64);
+        add(maxStaPos, src, 52);
+        BIND(CONV_LOOP);
+          cmp(src, maxStaPos);
+          br(GE, LOOP_64);
+
+          RuntimeAddress conv_u8_u18 = RuntimeAddress(StubRoutines::aarch64::convert_masked_utf8_to_utf16());
+          assert(conv_u8_u18.target() != NULL, "convert_masked_utf8_to_utf16 stub has not been generated");
+          address tpc1 = trampoline_call(conv_u8_u18);
+          if (tpc1 == NULL) {
+            postcond(pc() == badAddress);
+            mov(errInfo, -2);
+            b(ERROR_OCCURED);
+          } // dst and res are updated in the stub using post, but "consumed" is in cnvTemp
+
+          mov(errInfo, cnvTemp);
+          sxtb(errInfo, errInfo);
+          cmpw(errInfo, 0);
+          br(Assembler::LT, ERROR_OCCURED);
+
+          add(src, src, cnvTemp); 
+          lsrv(cMask, cMask, cnvTemp);
+
+        b(CONV_LOOP);
+        
+        b(DONE);
+    b(LOOP_64);
+  }
+
+  BIND(SUBR_CHECK_UTF8_BYTS);
+    // input is in vCalcGreg, prev_input is in vCalcViki, result put to vErrors
+
+    ext(vCalcSuzie, T16B, vCalcViki, vCalcGreg, 15);
+    // checking special cases
+    // https://github.com/simdutf/simdutf/blob/dfaaa29b9855b04127ad12171e719db04d048318/src/generic/utf8_to_utf16/utf8_to_utf16.h#L8
+    ushrnw(vCalcMartha, T16B, vCalcSuzie, 4);
+    mov(rTemp, 0x0202020202020202); // 8xTOO_LONG
+    fmovd(vCalcJohn, rTemp);
+    mov(rTemp, 0x4915012180808080); // 4xTWO_CONTS, TOO_SHORT | OVERLONG_2, etc...
+    fmovd(vCalcJack, rTemp);
+    ins(vCalcJohn, D, vCalcJack, 1, 0);
+    tbl(vCalcJohn, T16B, vCalcJohn, 1, vCalcMartha); // now vCalcJohn is byte_1_high
+
+    mov(rTemp, 0xCBCBCB8B8383A3E7); // CARRY | OVERLONG_3 | OVERLONG_2 | OVERLONG_4 etc...
+    fmovd(vCalcJack, rTemp);
+    mov(rTemp, 0xCBCBDBCBCBCBCBCB);
+    fmovd(vCalcMartha, rTemp);
+    ins(vCalcJack, D, vCalcMartha, 1, 0);
+
+    movi(vCalcMartha,T16B, 0x0F);
+    andr(vCalcMartha, T16B, vCalcSuzie, vCalcMartha);
+    tbl(vCalcJack, T16B, vCalcJack, 1, vCalcMartha); //now vCalcJack is byte_1_low
+
+    andr(vCalcJohn, T16B, vCalcJohn, vCalcJack);
+
+    mov(rTemp, 0x0101010101010101); // TOO_SHORT, TOO_SHORT etc...
+    fmovd(vCalcJack, rTemp);
+    mov(rTemp, 0x01010101BABAAEE6);
+    fmovd(vCalcMartha, rTemp);
+    ins(vCalcJack, D, vCalcMartha, 1, 0);
+    ushrnw(vCalcMartha, T16B, vCalcGreg, 4);
+    tbl(vCalcJack, T16B, vCalcJack, 1, vCalcMartha); // byte_2_high in vCalcJack
+
+    andr(vCalcJohn, T16B, vCalcJohn, vCalcJack); // result in vCalcJohn
+
+    // checking multibyte lengths
+    // https://github.com/simdutf/simdutf/blob/dfaaa29b9855b04127ad12171e719db04d048318/src/generic/utf8_to_utf16/utf8_to_utf16.h#L99
+    ext(vCalcSuzie, T16B, vCalcViki, vCalcGreg, 14);
+    ext(vCalcMartha, T16B, vCalcViki, vCalcGreg, 13);
+
+    movi(vCalcJack, T16B, 0b11100000);
+    cm(HS, vCalcSuzie, T16B, vCalcSuzie, vCalcJack);
+
+    movi(vCalcJack, T16B, 0b11110000);
+    cm(HS, vCalcMartha, T16B, vCalcMartha, vCalcJack);
+
+    eor(vCalcSuzie, T16B, vCalcSuzie, vCalcMartha);
+
+    movi(vCalcJack, T16B, 0x80);
+    andr(vCalcSuzie, T16B, vCalcSuzie, vCalcJack);
+    eor(vCalcSuzie, T16B, vCalcSuzie, vCalcJohn);
+    orr(vErrors, T16B, vErrors, vCalcSuzie); // mark in vErrors when special cases not qeual to multibyte length
+  ret(lr);
+
+  BIND(ST_SCALAR);
+
+  mov(errInfo, -4); // return -4 when error in vErrors is noted
+  umaxv(vErrors, T16B, vErrors);
+  umov(rTemp, vErrors, B, 0);
+  cbnz(rTemp, ERROR_OCCURED);
+  mov(errInfo, 0); 
+
+  {
+    RuntimeAddress conv_u8_u18 = RuntimeAddress(StubRoutines::aarch64::scalar_convert_utf8_to_utf16());
+    assert(conv_u8_u18.target() != NULL, "scalar_convert_utf8_to_utf16 stub has not been generated");
+    address tpc1 = trampoline_call(conv_u8_u18);
+    if (tpc1 == NULL) {
+      postcond(pc() == badAddress);
+      mov(errInfo, -6);
+      b(ERROR_OCCURED);
+    }
+
+    cbz(errInfo, DONE);
+  }
+
+  BIND(ERROR_OCCURED);
+  sxtb(errInfo, errInfo);
+  mov(res, errInfo);
+
+  BIND(DONE);
+  pop(saved_regs, sp);
 }

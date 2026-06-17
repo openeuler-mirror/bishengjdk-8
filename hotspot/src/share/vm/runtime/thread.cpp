@@ -3584,6 +3584,13 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
     initialize_class(vmSymbols::java_lang_ref_Finalizer(),  CHECK_0);
     call_initializeSystemClass(CHECK_0);
 
+#ifdef AARCH64
+    // Inject UseUTFConversionIntrinsics(AARCH64) value after the static initializers for sun.nio.cs.UTF_8 ran.
+    if (UseUTFConversionIntrinsics) {
+      sun_nio_cs_UTF_8::set_utf_conversion_intrinsics(UseUTFConversionIntrinsics, CHECK_0);
+    }
+#endif // AARCH64
+
     // get the Java runtime name after java.lang.System is initialized
     JDK_Version::set_runtime_name(get_java_runtime_name(THREAD));
     JDK_Version::set_runtime_version(get_java_runtime_version(THREAD));

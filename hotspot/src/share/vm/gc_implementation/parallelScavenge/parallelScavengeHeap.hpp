@@ -252,10 +252,7 @@ class ParallelScavengeHeap : public CollectedHeap {
   };
 
   // Dynamic Max Heap
-  bool change_max_heap(size_t new_size) {
-    // Not Implement yet
-    return false;
-  };
+  virtual bool change_max_heap(size_t new_size);
 };
 
 #endif // SHARE_VM_GC_IMPLEMENTATION_PARALLELSCAVENGE_PARALLELSCAVENGEHEAP_HPP
