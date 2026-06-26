@@ -30,7 +30,8 @@ import com.oracle.java.testlibrary.OutputAnalyzer;
 
 public class RingBoundaryPolicyTest {
     private static final int CLIENT_COUNT = 1;
-    private static final int PRESSURE_DATA_SIZE = 34 * 1024 * 1024;
+    private static final int SMALL_RING_MEMORY_SIZE = 4 * 1024 * 1024;
+    private static final int PRESSURE_DATA_SIZE = 5 * 1024 * 1024;
     private static final long PRESSURE_READ_DELAY_MS = 1000L;
 
     public static void main(String[] args) throws Exception {
@@ -59,6 +60,18 @@ public class RingBoundaryPolicyTest {
         SocketTestSupport.assertProfileCountAtLeast(
             combinedLog, "ring_write_partial", 1,
             "Payload larger than one inbound ring slot should produce partial ring writes");
+        SocketTestSupport.assertProfileMaxBytesAtLeast(
+            combinedLog, "ring_write_max_used_bytes", SMALL_RING_MEMORY_SIZE / 2,
+            "Ring write high-watermark should reflect small-ring pressure");
+        SocketTestSupport.assertProfileMaxBytesLessThan(
+            combinedLog, "ring_write_max_used_bytes", SMALL_RING_MEMORY_SIZE,
+            "Ring write high-watermark should stay within one configured ring");
+        SocketTestSupport.assertProfileMaxBytesAtLeast(
+            combinedLog, "ring_read_max_used_bytes", SMALL_RING_MEMORY_SIZE / 2,
+            "Ring read high-watermark should reflect delayed receiver pressure");
+        SocketTestSupport.assertProfileMaxBytesLessThan(
+            combinedLog, "ring_read_max_used_bytes", SMALL_RING_MEMORY_SIZE,
+            "Ring read high-watermark should stay within one configured ring");
     }
 
     private static SocketTestSupport.ScenarioLogs runDelayedReadScenario(
@@ -69,7 +82,11 @@ public class RingBoundaryPolicyTest {
             String clientSuccessToken) throws Exception {
         int dataPort = SocketTestSupport.findFreePort();
         int controlPort = SocketTestSupport.findFreePort();
-        String[] profileOptions = new String[] { "-XX:UBSocketProfile=2" };
+        String[] profileOptions = new String[] {
+            "-XX:UBSocketProfile=2",
+            "-XX:UBSocketMemorySize=" + SMALL_RING_MEMORY_SIZE,
+            "-XX:UBSocketRingCount=1"
+        };
 
         Process server = null;
         try {

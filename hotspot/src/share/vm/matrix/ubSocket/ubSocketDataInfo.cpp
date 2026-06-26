@@ -26,17 +26,20 @@ bool UBSocketConnectionTable::_shutting_down = false;
 
 UBSocketConnection::UBSocketConnection(int fd, UBSocketMemMapping* mapping,
                                        uint32_t local_ring_slot,
-                                       uint64_t remote_ring_offset)
+                                       uint64_t local_ring_size,
+                                       uint64_t remote_ring_offset,
+                                       uint64_t remote_ring_size)
     : _socket_fd(fd),
       _remote_mapping(mapping),
       _local_ring_slot(local_ring_slot),
       _lock(new Monitor(Mutex::leaf, "UBSocketConnection_lock")),
-      _rx_ring(UBSocketRingSlots::slot_addr(local_ring_slot)),
-      _tx_ring((char*)mapping->addr() + remote_ring_offset),
+      _rx_ring(UBSocketRingSlots::slot_addr(local_ring_slot), local_ring_size),
+      _tx_ring((char*)mapping->addr() + remote_ring_offset, remote_ring_size),
       _tx_wakeup_sending(false),
       _tx_wakeup_pending(false),
       _ring_error(false),
-      _control_closed(false),
+      _rx_closed(false),
+      _tx_closed(false),
       _tx_last_wakeup_offset(0),
       _rx_ready(false),
       _rx_read_offset(0),
@@ -117,7 +120,7 @@ long UBSocketConnection::read_data(void* dst, size_t len) {
   } else {
     refresh_rx_ready();
   }
-  if (result == 0 && _control_closed) {
+  if (result == 0 && _rx_closed) {
     errno = ESHUTDOWN;
     return -1;
   }
@@ -132,7 +135,7 @@ long UBSocketConnection::write_data(const void* src, size_t len, bool* need_wake
     errno = EINVAL;
     return -1;
   }
-  if (_control_closed) {
+  if (_tx_closed) {
     errno = ESHUTDOWN;
     return -1;
   }
@@ -156,11 +159,9 @@ long UBSocketConnection::write_data(const void* src, size_t len, bool* need_wake
   if (_tx_wakeup_pending) {
     UBSocketProfiler::count(UB_PROF_WAKEUP_REQUEST_RETRY, (uint64_t)result);
     should_wakeup = true;
-  } else if (UBSocketAggressiveWakeup) {
-    should_wakeup = true;
   } else if (peer_read_ack_offset == old_write_offset ||
              (new_write_offset - _tx_last_wakeup_offset) >=
-                 UB_SOCKET_WAKEUP_THRESHOLD_BYTES) {
+                 (uint64_t)UBSocketWakeupThresholdBytes) {
     should_wakeup = true;
     if (peer_read_ack_offset != old_write_offset) {
       UBSocketProfiler::count(UB_PROF_WAKEUP_REQUEST_THRESHOLD,
@@ -204,7 +205,13 @@ bool UBSocketConnection::mark_rx_wakeup() {
 
 void UBSocketConnection::mark_control_closed() {
   MonitorLockerEx locker(_lock, Mutex::_no_safepoint_check_flag);
-  _control_closed = true;
+  _rx_closed = true;
+}
+
+void UBSocketConnection::mark_peer_closed() {
+  MonitorLockerEx locker(_lock, Mutex::_no_safepoint_check_flag);
+  _rx_closed = true;
+  _tx_closed = true;
   _tx_wakeup_sending = false;
   _tx_wakeup_pending = false;
 }
@@ -213,7 +220,7 @@ bool UBSocketConnection::has_pending_data() {
   MonitorLockerEx locker(_lock, Mutex::_no_safepoint_check_flag);
   if (_ring_error) { return false; }
   if (_rx_ready) { return true; }
-  return refresh_rx_ready() || _control_closed;
+  return refresh_rx_ready() || _rx_closed;
 }
 
 bool UBSocketConnection::take_frame_residue(char* dst, size_t dst_len, size_t* len) {

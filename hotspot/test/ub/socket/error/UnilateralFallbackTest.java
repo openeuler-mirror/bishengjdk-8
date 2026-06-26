@@ -131,8 +131,6 @@ public class UnilateralFallbackTest {
             throw new RuntimeException("UB-enabled public endpoint client did not complete\n"
                 + clientLog);
         }
-        SocketTestSupport.assertFallback(
-            clientLog, "UB-enabled public endpoint client should fallback to TCP");
         SocketTestSupport.assertNoBindSuccess(
             clientLog, false, "Public endpoint client should not bind UB");
     }

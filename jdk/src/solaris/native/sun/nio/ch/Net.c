@@ -353,7 +353,6 @@ Java_sun_nio_ch_Net_connect0(JNIEnv *env, jclass clazz, jboolean preferIPv6,
         }
         return handleSocketError(env, errno);
     }
-
     return 1;
 }
 

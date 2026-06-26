@@ -126,6 +126,5 @@ Java_sun_nio_ch_ServerSocketChannelImpl_accept0(JNIEnv *env, jobject this,
     isa = (*env)->NewObject(env, isa_class, isa_ctorID, remote_ia, remote_port);
     CHECK_NULL_RETURN(isa, IOS_THROWN);
     (*env)->SetObjectArrayElement(env, isaa, 0, isa);
-
     return 1;
 }

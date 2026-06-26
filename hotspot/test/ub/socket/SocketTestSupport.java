@@ -105,16 +105,30 @@ public final class SocketTestSupport {
                                              String serverSuccessToken,
                                              String[] serverCommand,
                                              String[] clientCommand) throws Exception {
+        return runUbScenarioWithVmOptions(
+            configPath, controlPort, new String[0], startupDelayMs,
+            clientSuccessToken, serverSuccessToken, serverCommand, clientCommand);
+    }
+
+    public static ScenarioLogs runUbScenarioWithVmOptions(String configPath,
+                                                          int controlPort,
+                                                          String[] vmOptions,
+                                                          long startupDelayMs,
+                                                          String clientSuccessToken,
+                                                          String serverSuccessToken,
+                                                          String[] serverCommand,
+                                                          String[] clientCommand)
+        throws Exception {
         Process server = null;
         try {
-            ProcessBuilder serverPb = createUbProcessBuilder(configPath, controlPort,
-                serverCommand[0], tail(serverCommand));
+            ProcessBuilder serverPb = createUbProcessBuilderWithVmOptions(
+                configPath, controlPort, vmOptions, serverCommand[0], tail(serverCommand));
             String serverUbLogPath = getUbLogPath(serverPb);
             server = serverPb.start();
             Thread.sleep(startupDelayMs);
 
-            ProcessBuilder clientPb = createUbProcessBuilder(configPath, controlPort,
-                clientCommand[0], tail(clientCommand));
+            ProcessBuilder clientPb = createUbProcessBuilderWithVmOptions(
+                configPath, controlPort, vmOptions, clientCommand[0], tail(clientCommand));
             String clientUbLogPath = getUbLogPath(clientPb);
             OutputAnalyzer clientOutput = new OutputAnalyzer(clientPb.start());
             clientOutput.shouldHaveExitValue(0);
@@ -364,6 +378,47 @@ public final class SocketTestSupport {
         return count;
     }
 
+    public static long profileBytes(String text, String event) {
+        long bytes = 0L;
+        for (String line : text.split("\\R")) {
+            String prefix = "UBSocketProfile ";
+            if (!line.startsWith(prefix)) {
+                continue;
+            }
+            String rest = line.substring(prefix.length()).trim();
+            if (!rest.startsWith(event + " ")) {
+                continue;
+            }
+            String[] fields = rest.split("\\s+");
+            if (fields.length >= 6) {
+                bytes += Long.parseLong(fields[5]);
+            }
+        }
+        return bytes;
+    }
+
+    public static long profileMaxBytes(String text, String event) {
+        long maxBytes = 0L;
+        for (String line : text.split("\\R")) {
+            String prefix = "UBSocketProfile ";
+            if (!line.startsWith(prefix)) {
+                continue;
+            }
+            String rest = line.substring(prefix.length()).trim();
+            if (!rest.startsWith(event + " ")) {
+                continue;
+            }
+            String[] fields = rest.split("\\s+");
+            if (fields.length >= 6) {
+                long bytes = Long.parseLong(fields[5]);
+                if (bytes > maxBytes) {
+                    maxBytes = bytes;
+                }
+            }
+        }
+        return maxBytes;
+    }
+
     public static void assertProfileCountAtLeast(String text, String event,
                                                  long expected, String message) {
         long actual = profileCount(text, event);
@@ -380,6 +435,24 @@ public final class SocketTestSupport {
         if (left >= right) {
             throw new RuntimeException(message + ": expected " + leftEvent + " < "
                 + rightEvent + ", actual " + left + " >= " + right + "\n" + text);
+        }
+    }
+
+    public static void assertProfileMaxBytesAtLeast(String text, String event,
+                                                    long expected, String message) {
+        long actual = profileMaxBytes(text, event);
+        if (actual < expected) {
+            throw new RuntimeException(message + ": event=" + event
+                + ", expected max bytes>=" + expected + ", actual=" + actual + "\n" + text);
+        }
+    }
+
+    public static void assertProfileMaxBytesLessThan(String text, String event,
+                                                     long expected, String message) {
+        long actual = profileMaxBytes(text, event);
+        if (actual >= expected) {
+            throw new RuntimeException(message + ": event=" + event
+                + ", expected max bytes<" + expected + ", actual=" + actual + "\n" + text);
         }
     }
 

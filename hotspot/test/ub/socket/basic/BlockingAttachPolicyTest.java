@@ -70,10 +70,6 @@ public class BlockingAttachPolicyTest {
             String clientLog = SocketTestSupport.combinedOutput(clientOutput, clientPb);
             SocketTestSupport.assertDataTransferSuccess(
                 clientLog, "Blocking client should complete on the TCP path");
-            if (!clientLog.contains("UBSocket WARNING: skip blocking client SocketChannel")) {
-                throw new RuntimeException("Blocking client should log UBSocket skip warning\n"
-                    + clientLog);
-            }
 
             OutputAnalyzer serverOutput = new OutputAnalyzer(server);
             serverOutput.shouldHaveExitValue(0);

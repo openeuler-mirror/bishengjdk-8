@@ -68,6 +68,8 @@ public class NIOScenarioClient {
             runPeerClose(args);
         } else if ("writeAfterPeerClose".equals(mode)) {
             runWriteAfterPeerClose(args);
+        } else if ("halfCloseThenReadAck".equals(mode)) {
+            runHalfCloseThenReadAck(args);
         } else if ("sequential".equals(mode)) {
             runSequential(args);
         } else if ("restartAware".equals(mode)) {
@@ -94,6 +96,8 @@ public class NIOScenarioClient {
             runEchoFrames(args);
         } else if ("switchBlockingAfterAttach".equals(mode)) {
             runSwitchBlockingAfterAttach(args);
+        } else if ("sendAndHold".equals(mode)) {
+            runSendAndHold(args);
         } else if ("holdConnections".equals(mode)) {
             runHoldConnections(args);
         } else {
@@ -364,9 +368,9 @@ public class NIOScenarioClient {
 
         try (SocketChannel channel = SocketChannel.open();
              Selector selector = Selector.open()) {
-            channel.configureBlocking(false);
-            channel.connect(new InetSocketAddress(host, port));
-            channel.register(selector, SelectionKey.OP_CONNECT);
+            registerBeforeConnect(channel, selector, host, port,
+                                  SelectionKey.OP_READ | SelectionKey.OP_WRITE);
+            connected = channel.isConnected();
 
             while (!eofSeen) {
                 int ready = selector.select(1000L);
@@ -450,6 +454,102 @@ public class NIOScenarioClient {
         }
 
         System.out.println("WRITE_AFTER_PEER_CLOSE_OK");
+    }
+
+    private static void runHalfCloseThenReadAck(String[] args) throws Exception {
+        if (args.length < 5) {
+            throw new IllegalArgumentException(
+                "Usage: NIOScenarioClient halfCloseThenReadAck <host> <port> <dataSize> <clientId>");
+        }
+
+        String host = args[1];
+        int port = Integer.parseInt(args[2]);
+        int dataSize = Integer.parseInt(args[3]);
+        String clientId = args[4];
+        byte[] payload = SocketTestData.upperAlphabetData(dataSize);
+        String expectedHash = SocketTestData.sha256Hex(payload);
+        ByteBuffer writeBuffer = ByteBuffer.wrap(payload);
+        ByteBuffer responseBuffer = ByteBuffer.allocate(1024);
+        StringBuilder ack = new StringBuilder();
+        long deadline = System.currentTimeMillis() + ACK_DEADLINE_MS;
+        boolean ackReceived = false;
+        boolean eofReceived = false;
+
+        try (SocketChannel channel = SocketChannel.open();
+             Selector selector = Selector.open()) {
+            registerBeforeConnect(channel, selector, host, port,
+                                  SelectionKey.OP_READ | SelectionKey.OP_WRITE);
+
+            while (!eofReceived) {
+                int ready = selector.select(1000L);
+                if (ready == 0) {
+                    if (System.currentTimeMillis() > deadline) {
+                        String phase = ackReceived ? "final EOF" : "half-close ACK";
+                        throw new RuntimeException("[" + clientId + "] timeout waiting "
+                            + phase + ", written=" + writeBuffer.position()
+                            + "/" + writeBuffer.limit() + " ack=" + ack);
+                    }
+                    continue;
+                }
+
+                Set<SelectionKey> selectedKeys = selector.selectedKeys();
+                Iterator<SelectionKey> iterator = selectedKeys.iterator();
+                while (iterator.hasNext()) {
+                    SelectionKey key = iterator.next();
+                    iterator.remove();
+                    if (!key.isValid()) {
+                        continue;
+                    }
+                    if (key.isConnectable()) {
+                        SocketChannel selected = (SocketChannel)key.channel();
+                        if (selected.finishConnect()) {
+                            key.interestOps(SelectionKey.OP_WRITE | SelectionKey.OP_READ);
+                            deadline = System.currentTimeMillis() + ACK_DEADLINE_MS;
+                        }
+                    }
+                    if (key.isWritable() && writeBuffer.hasRemaining()) {
+                        int n = channel.write(writeBuffer);
+                        if (n < 0) {
+                            throw new EOFException("[" + clientId
+                                + "] peer closed during half-close payload write");
+                        }
+                        if (n > 0) {
+                            deadline = System.currentTimeMillis() + ACK_DEADLINE_MS;
+                        }
+                    }
+                    if (!writeBuffer.hasRemaining()
+                            && (key.interestOps() & SelectionKey.OP_WRITE) != 0) {
+                        channel.socket().shutdownOutput();
+                        key.interestOps(SelectionKey.OP_READ);
+                    }
+                    if (key.isReadable()) {
+                        responseBuffer.clear();
+                        int n = channel.read(responseBuffer);
+                        if (n < 0) {
+                            if (!ackReceived) {
+                                throw new EOFException("[" + clientId
+                                    + "] peer closed before half-close ACK, ack=" + ack);
+                            }
+                            eofReceived = true;
+                            key.cancel();
+                            break;
+                        }
+                        if (n > 0) {
+                            responseBuffer.flip();
+                            byte[] bytes = new byte[responseBuffer.remaining()];
+                            responseBuffer.get(bytes);
+                            ack.append(new String(bytes, StandardCharsets.UTF_8));
+                            if (ack.indexOf("hash " + expectedHash) >= 0) {
+                                ackReceived = true;
+                            }
+                            deadline = System.currentTimeMillis() + ACK_DEADLINE_MS;
+                        }
+                    }
+                }
+            }
+        }
+
+        System.out.println("HALF_CLOSE_CLIENT_EOF_OK");
     }
 
     private static void runSequential(String[] args) throws Exception {
@@ -905,9 +1005,9 @@ public class NIOScenarioClient {
         SocketChannel channel = SocketChannel.open();
         Selector selector = Selector.open();
         try {
-            channel.configureBlocking(false);
-            channel.connect(new InetSocketAddress(host, port));
-            channel.register(selector, SelectionKey.OP_CONNECT);
+            registerBeforeConnect(channel, selector, host, port,
+                                  SelectionKey.OP_READ
+                                      | (writeDone ? 0 : SelectionKey.OP_WRITE));
 
             while (!ack.contains("hash " + expectedHash)) {
                 int ready = selector.select(1000L);
@@ -1167,9 +1267,8 @@ public class NIOScenarioClient {
             try (FileChannel fileChannel = FileChannel.open(file);
                  SocketChannel channel = SocketChannel.open();
                  Selector selector = Selector.open()) {
-                channel.configureBlocking(false);
-                channel.connect(new InetSocketAddress(host, port));
-                channel.register(selector, SelectionKey.OP_CONNECT);
+                registerBeforeConnect(channel, selector, host, port,
+                                      SelectionKey.OP_READ | SelectionKey.OP_WRITE);
 
                 long transferred = 0L;
                 ByteBuffer responseBuffer = ByteBuffer.allocate(1024);
@@ -1287,9 +1386,8 @@ public class NIOScenarioClient {
         SocketChannel channel = SocketChannel.open();
         Selector selector = Selector.open();
         try {
-            channel.configureBlocking(false);
-            channel.connect(new InetSocketAddress(host, port));
-            SelectionKey key = channel.register(selector, SelectionKey.OP_CONNECT);
+            SelectionKey key = registerBeforeConnect(channel, selector, host, port,
+                                                     SelectionKey.OP_READ | SelectionKey.OP_WRITE);
 
             while (completed < frames) {
                 int ready = selector.select(1000L);
@@ -1407,18 +1505,10 @@ public class NIOScenarioClient {
         long holdMillis = Long.parseLong(args[4]);
         String clientId = args[5];
         ArrayList<SocketChannel> channels = new ArrayList<SocketChannel>();
-        try {
+        try (Selector selector = Selector.open()) {
             for (int i = 0; i < clientCount; i++) {
                 SocketChannel channel = SocketChannel.open();
-                channel.configureBlocking(false);
-                channel.connect(new InetSocketAddress(host, port));
-                long deadline = System.currentTimeMillis() + CONNECT_DEADLINE_MS;
-                while (!channel.finishConnect()) {
-                    if (System.currentTimeMillis() >= deadline) {
-                        throw new ConnectException("connect timeout to " + host + ":" + port);
-                    }
-                    Thread.sleep(RETRY_INTERVAL_MS);
-                }
+                connectRegistered(channel, selector, host, port);
                 channels.add(channel);
             }
             Thread.sleep(holdMillis);
@@ -1435,6 +1525,50 @@ public class NIOScenarioClient {
             + " clients=" + clientCount);
     }
 
+    private static void runSendAndHold(String[] args) throws Exception {
+        if (args.length < 6) {
+            throw new IllegalArgumentException(
+                "Usage: NIOScenarioClient sendAndHold <host> <port> <dataSize> <holdMillis> <clientId>");
+        }
+
+        String host = args[1];
+        int port = Integer.parseInt(args[2]);
+        int dataSize = Integer.parseInt(args[3]);
+        long holdMillis = Long.parseLong(args[4]);
+        String clientId = args[5];
+        byte[] payload = SocketTestData.upperAlphabetData(dataSize);
+        ByteBuffer writeBuffer = ByteBuffer.wrap(payload);
+        long totalWritten = 0L;
+
+        try (SocketChannel channel = SocketChannel.open();
+             Selector selector = Selector.open()) {
+            connectRegistered(channel, selector, host, port);
+
+            long deadline = System.currentTimeMillis() + ACK_DEADLINE_MS;
+            while (writeBuffer.hasRemaining()) {
+                int n = channel.write(writeBuffer);
+                if (n < 0) {
+                    throw new EOFException("[" + clientId + "] channel closed during send");
+                }
+                if (n == 0) {
+                    if (System.currentTimeMillis() >= deadline) {
+                        throw new RuntimeException("[" + clientId + "] send timeout at "
+                            + totalWritten + "/" + dataSize);
+                    }
+                    Thread.sleep(1L);
+                    continue;
+                }
+                totalWritten += n;
+                deadline = System.currentTimeMillis() + ACK_DEADLINE_MS;
+            }
+            Thread.sleep(holdMillis);
+        }
+
+        System.out.println("SEND_AND_HOLD_OK id=" + clientId
+            + " bytesWritten=" + totalWritten
+            + " holdMillis=" + holdMillis);
+    }
+
     private static void runSwitchBlockingAfterAttach(String[] args) throws Exception {
         if (args.length < 5) {
             throw new IllegalArgumentException(
@@ -1448,14 +1582,10 @@ public class NIOScenarioClient {
 
         SocketChannel channel = SocketChannel.open();
         try {
-            channel.configureBlocking(false);
-            channel.connect(new InetSocketAddress(host, port));
-            long deadline = System.currentTimeMillis() + CONNECT_DEADLINE_MS;
-            while (!channel.finishConnect()) {
-                if (System.currentTimeMillis() >= deadline) {
-                    throw new ConnectException("connect timeout to " + host + ":" + port);
-                }
-                Thread.sleep(1L);
+            try (Selector selector = Selector.open()) {
+                SelectionKey key = connectRegistered(channel, selector, host, port);
+                key.cancel();
+                selector.selectNow();
             }
 
             channel.configureBlocking(true);
@@ -1466,6 +1596,32 @@ public class NIOScenarioClient {
         } finally {
             channel.close();
         }
+    }
+
+    private static SelectionKey connectRegistered(SocketChannel channel, Selector selector,
+                                                  String host, int port) throws Exception {
+        SelectionKey key = registerBeforeConnect(channel, selector, host, port, 0);
+        long deadline = System.currentTimeMillis() + CONNECT_DEADLINE_MS;
+        while (!channel.finishConnect()) {
+            if (System.currentTimeMillis() >= deadline) {
+                throw new ConnectException("connect timeout to " + host + ":" + port);
+            }
+            selector.select(1L);
+            selector.selectedKeys().clear();
+        }
+        key.interestOps(0);
+        return key;
+    }
+
+    private static SelectionKey registerBeforeConnect(SocketChannel channel, Selector selector,
+                                                      String host, int port,
+                                                      int connectedOps) throws Exception {
+        channel.configureBlocking(false);
+        SelectionKey key = channel.register(selector, SelectionKey.OP_CONNECT);
+        if (channel.connect(new InetSocketAddress(host, port))) {
+            key.interestOps(connectedOps);
+        }
+        return key;
     }
 
     static ByteBuffer makeEchoRequest(int sequence, int size) {
@@ -1551,11 +1707,8 @@ public class NIOScenarioClient {
         String ack = "";
 
         try (Selector selector = Selector.open()) {
-            channel.configureBlocking(false);
-            boolean connected = channel.connect(new InetSocketAddress(host, port));
-            channel.register(selector, connected
-                ? SelectionKey.OP_READ | SelectionKey.OP_WRITE
-                : SelectionKey.OP_CONNECT);
+            registerBeforeConnect(channel, selector, host, port,
+                                  SelectionKey.OP_READ | SelectionKey.OP_WRITE);
 
             while (!ack.contains("hash " + expectedHash)) {
                 int ready = selector.select(1000L);

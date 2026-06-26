@@ -28,9 +28,8 @@ public final class SocketTestConfig {
     private static final String FILE_NAME = "UBSocket.conf";
     private static final String FILE_CONTENT =
         "#stack\n" +
-        "sun/nio/ch/SocketChannelImpl.registerUbSocket\n" +
         "sun/nio/ch/SocketChannelImpl.connect\n" +
-        "sun/nio/ch/SocketChannelImpl.checkConnect\n" +
+        "sun/nio/ch/SocketChannelImpl.finishConnect\n" +
         "sun/nio/ch/ServerSocketChannelImpl.accept\n";
 
     private SocketTestConfig() {

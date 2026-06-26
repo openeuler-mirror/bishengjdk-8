@@ -27,6 +27,7 @@
 
 import com.oracle.java.testlibrary.OutputAnalyzer;
 import com.oracle.java.testlibrary.ProcessTools;
+import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -96,7 +97,7 @@ public class OptionsTest {
         String validConfOutput = output.getOutput() + readText(validConfLog);
         mustContain(validConfOutput, "[socket][INFO] Load conf file");
         mustContain(validConfOutput, "Load allow method: sun/nio/ch/SocketChannelImpl.connect");
-        mustContain(validConfOutput, "Load allow method: sun/nio/ch/SocketChannelImpl.checkConnect");
+        mustContain(validConfOutput, "Load allow method: sun/nio/ch/SocketChannelImpl.finishConnect");
         mustContain(validConfOutput, "Load allow method: sun/nio/ch/ServerSocketChannelImpl.accept");
         output.shouldHaveExitValue(0);
 
@@ -127,7 +128,7 @@ public class OptionsTest {
             "UBSocketMapped.conf",
             "#stack\n" +
             "sun/nio/ch/SocketChannelImpl.connect\n" +
-            "sun/nio/ch/SocketChannelImpl.checkConnect\n" +
+            "sun/nio/ch/SocketChannelImpl.finishConnect\n" +
             "sun/nio/ch/ServerSocketChannelImpl.accept\n" +
             "#address\n" +
             "self.ip=192.168.231.44 -> *\n" +
@@ -166,6 +167,30 @@ public class OptionsTest {
         mustContain(output.getOutput(), "UBSocket port(0) invalid, UBSocket is disabled.");
         output.shouldHaveExitValue(0);
 
+        // UBSocket ring count
+        pb = ProcessTools.createJavaProcessBuilder(
+            true,
+            "-XX:+UnlockExperimentalVMOptions",
+            "-XX:UBSocketRingCount=2",
+            appClass[0]
+        );
+        output = new OutputAnalyzer(pb.start());
+        mustContain(output.getOutput(), "UBSocket is disabled, but ring count is set.");
+        output.shouldHaveExitValue(0);
+
+        pb = ProcessTools.createJavaProcessBuilder(
+            true,
+            "-XX:+UnlockExperimentalVMOptions",
+            "-XX:+UseUBSocket",
+            "-XX:UBSocketConf=" + configPath,
+            "-XX:UBSocketPort=" + freePort(),
+            "-XX:UBSocketRingCount=0",
+            appClass[0]
+        );
+        output = new OutputAnalyzer(pb.start());
+        mustContain(output.getOutput(), "UBSocket ring count(0) invalid");
+        output.shouldHaveExitValue(0);
+
         pb = ProcessTools.createJavaProcessBuilder(
             true,
             "-XX:+UnlockExperimentalVMOptions",
@@ -189,6 +214,31 @@ public class OptionsTest {
         output = new OutputAnalyzer(pb.start());
         mustContain(output.getOutput(), "UBSocket port(65536) invalid, UBSocket is disabled.");
         output.shouldHaveExitValue(0);
+
+        // UBSocket wakeup threshold
+        pb = ProcessTools.createJavaProcessBuilder(
+            true,
+            "-XX:+UnlockExperimentalVMOptions",
+            "-XX:+UseUBSocket",
+            "-XX:UBSocketConf=" + configPath,
+            "-XX:UBSocketWakeupThresholdBytes=1024",
+            appClass[0]
+        );
+        output = new OutputAnalyzer(pb.start());
+        mustContain(output.getOutput(), "UBSocket port(0) invalid, UBSocket is disabled.");
+        output.shouldHaveExitValue(0);
+
+        pb = ProcessTools.createJavaProcessBuilder(
+            true,
+            "-XX:+UnlockExperimentalVMOptions",
+            "-XX:+UseUBSocket",
+            "-XX:UBSocketConf=" + configPath,
+            "-XX:+UBSocketAggressiveWakeup",
+            appClass[0]
+        );
+        output = new OutputAnalyzer(pb.start());
+        mustContain(output.getOutput(), "Unrecognized VM option 'UBSocketAggressiveWakeup'");
+        output.shouldHaveExitValue(1);
 
         // UBSocket Log
         Path socketOnlyLog = Files.createTempFile("ubsocket-options-socketonly-", ".log");
@@ -283,6 +333,12 @@ public class OptionsTest {
 
     private static String readText(Path path) throws Exception {
         return new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
+    }
+
+    private static int freePort() throws Exception {
+        try (ServerSocket socket = new ServerSocket(0)) {
+            return socket.getLocalPort();
+        }
     }
 
     private static void mustContain(String text, String token) {

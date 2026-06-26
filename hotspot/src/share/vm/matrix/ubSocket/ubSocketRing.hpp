@@ -16,10 +16,10 @@
 #include "memory/allocation.hpp"
 #include "memory/padded.hpp"
 
+class Monitor;
+
 enum {
-  UB_SOCKET_RING_SLOT_COUNT = 8,
-  UB_SOCKET_RING_SLOT_SIZE = 32 * 1024 * 1024,
-  UB_SOCKET_RING_INVALID_SLOT = 0xffffffffu
+  UB_SOCKET_RING_INVALID_SLOT = UINT32_MAX
 };
 
 struct UBSocketRingOffset {
@@ -35,9 +35,9 @@ struct UBSocketRingHeader {
 class UBSocketRing {
  public:
   UBSocketRing() : _header(NULL), _data(NULL), _capacity(0) {}
-  explicit UBSocketRing(void* slot_addr) { bind(slot_addr); }
+  UBSocketRing(void* slot_addr, uint64_t slot_size) { bind(slot_addr, slot_size); }
 
-  void bind(void* slot_addr);
+  void bind(void* slot_addr, uint64_t slot_size);
   bool valid() const { return _header != NULL && _capacity > 0; }
   bool empty(uint64_t read_offset, bool* valid = NULL) const;
 
@@ -69,15 +69,20 @@ class UBSocketRing {
 
 class UBSocketRingSlots : public AllStatic {
  public:
-  static void init(void* base, size_t size);
+  static bool init(void* base, size_t size, uint32_t slot_count);
   static uint32_t alloc(uint64_t* offset, uint64_t* size);
   static void release(uint32_t slot);
   static void* slot_addr(uint32_t slot);
+  static uint32_t slot_count() { return _slot_count; }
+  static uint64_t slot_size() { return _slot_size; }
 
  private:
   static void* _base;
   static size_t _size;
-  static volatile uint32_t _used_mask;
+  static Monitor* _lock;
+  static uint32_t _slot_count;
+  static uint64_t _slot_size;
+  static uint8_t* _used_slots;
 };
 
 #endif // SHARE_VM_MATRIX_UBSOCKET_UBSOCKETRING_HPP

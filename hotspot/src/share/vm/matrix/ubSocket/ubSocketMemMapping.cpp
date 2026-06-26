@@ -108,13 +108,7 @@ UBSocketMemMapping* UBSocketMemMapping::acquire(const char* remote_name_str, siz
   }
 
   UBSocketMemMapping* created =
-      new (std::nothrow) UBSocketMemMapping(remote_name, remote_size, mapped_addr);
-  if (created == NULL) {
-    os::Linux::ub_munmap(mapped_addr, remote_size);
-    remote_name->decrement_refcount();
-    errno = ENOMEM;
-    return NULL;
-  }
+      new UBSocketMemMapping(remote_name, remote_size, mapped_addr);
 
   {
     MutexLocker locker(_registry_lock);

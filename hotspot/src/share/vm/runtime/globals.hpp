@@ -4235,11 +4235,14 @@ class CommandLineFlags {
   experimental(uintx, UBSocketMemorySize, 256*M,                            \
           "UB Socket shared memory size in bytes")                          \
                                                                             \
+  experimental(uintx, UBSocketRingCount, 8,                                  \
+          "UB Socket receiver ring slot count")                              \
+                                                                            \
   experimental(uintx, UBSocketProfile, 0,                                   \
           "UB Socket profile: 0=off, 1=summary, 2=detail")                  \
                                                                             \
-  experimental(bool, UBSocketAggressiveWakeup, false,                       \
-          "UB Socket sends a wakeup for each committed ring write")          \
+  experimental(uintx, UBSocketWakeupThresholdBytes, 64*K,                   \
+          "UB Socket threshold in bytes for non-empty-ring wakeups")         \
 /*
  *  Macros for factoring of globals
  */
