@@ -122,7 +122,7 @@ class EPollSelectorImpl
             if (ski != null) {
                 int rOps = pollWrapper.getEventOps(i);
                 if (selectedKeys.contains(ski)) {
-                    if (ski.channel.translateAndUpdateReadyOps(rOps, ski)) {
+                    if (ski.channel.translateAndSetReadyOps(rOps, ski)) {
                         numKeysUpdated++;
                     }
                 } else {

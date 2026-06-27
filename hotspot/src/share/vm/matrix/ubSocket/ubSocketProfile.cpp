@@ -64,7 +64,9 @@ static const UBSocketProfileEventDef ub_socket_profile_events[UB_PROF_COUNT] = {
     { "selector_probe_check", UB_PROFILE_DETAIL, UB_PROFILE_COUNTER },
     { "selector_probe_ready", UB_PROFILE_DETAIL, UB_PROFILE_COUNTER },
     { "selector_probe_empty", UB_PROFILE_DETAIL, UB_PROFILE_COUNTER },
-    { "selector_ready_inject", UB_PROFILE_DETAIL, UB_PROFILE_COUNTER }
+    { "selector_ready_inject", UB_PROFILE_DETAIL, UB_PROFILE_COUNTER },
+    { "ring_write_max_used_bytes", UB_PROFILE_DETAIL, UB_PROFILE_COUNTER },
+    { "ring_read_max_used_bytes", UB_PROFILE_DETAIL, UB_PROFILE_COUNTER }
 };
 
 static const uint32_t UB_PROFILE_SUMMARY_TIMING_SAMPLE_RATE = 16;
@@ -124,6 +126,18 @@ void UBSocketProfiler::count(UBSocketProfileEvent event, uint64_t bytes) {
   counter->count++;
   if (bytes != 0) {
     counter->bytes += (jlong)bytes;
+  }
+}
+
+void UBSocketProfiler::max_bytes(UBSocketProfileEvent event, uint64_t bytes) {
+  if (!enabled(event) ||
+      ub_socket_profile_events[event].kind != UB_PROFILE_COUNTER) {
+    return;
+  }
+  UBSocketProfileCounter* counter = &ub_socket_profile_counters[event];
+  counter->count++;
+  if ((jlong)bytes > counter->bytes) {
+    counter->bytes = (jlong)bytes;
   }
 }
 

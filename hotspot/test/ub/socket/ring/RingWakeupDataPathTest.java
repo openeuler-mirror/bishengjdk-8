@@ -20,7 +20,7 @@
 /*
  * @test
  * @summary Test the receiver-owned ring data path, sparse wakeup selector
- *          integration, aggressive wakeup mode, and ring-slot fallback.
+ *          integration, and configurable wakeup threshold.
  * @library /testlibrary
  * @compile ../SocketTestSupport.java ../SocketTestConfig.java ../test-classes/SocketTestData.java ../test-classes/NIOScenarioServer.java ../test-classes/NIOScenarioClient.java
  * @run main/othervm/timeout=240 RingWakeupDataPathTest
@@ -33,15 +33,12 @@ public class RingWakeupDataPathTest {
     private static final int RESPONSE_2K = 2048;
     private static final int SPARSE_INFLIGHT = 32;
     private static final int SPARSE_FRAMES = 2000;
-    private static final int AGGRESSIVE_INFLIGHT = 8;
-    private static final int AGGRESSIVE_FRAMES = 512;
-    private static final int SLOT_LIMIT_CLIENTS = 9;
-    private static final int SLOT_LIMIT_HOLD_MS = 1000;
+    private static final int LOW_THRESHOLD_INFLIGHT = 8;
+    private static final int LOW_THRESHOLD_FRAMES = 16;
 
     public static void main(String[] args) throws Exception {
         testSparseWakeupFrameEcho();
-        testAggressiveWakeupFrameEcho();
-        testRingSlotLimitFallback();
+        testLowThresholdWakeupFrameEcho();
     }
 
     private static void testSparseWakeupFrameEcho() throws Exception {
@@ -59,93 +56,24 @@ public class RingWakeupDataPathTest {
             combinedLog, "wakeup_send_total", "ring_write_total",
             "Sparse wakeup should send fewer TCP wakeups than ring writes");
         SocketTestSupport.assertProfileCountAtLeast(
-            combinedLog, "selector_probe_ready", 1,
-            "Selector should observe pending UB ring data");
+            combinedLog, "selector_ready_inject", 1,
+            "Selector should inject pending UB ring readiness");
     }
 
-    private static void testAggressiveWakeupFrameEcho() throws Exception {
+    private static void testLowThresholdWakeupFrameEcho() throws Exception {
         String combinedLog = runEchoFrameScenario(
-            "AggressiveWakeupEcho",
-            new String[] { "-XX:UBSocketProfile=2", "-XX:+UBSocketAggressiveWakeup" },
-            AGGRESSIVE_INFLIGHT,
-            AGGRESSIVE_FRAMES);
+            "LowThresholdWakeupEcho",
+            new String[] {
+                "-XX:UBSocketProfile=2",
+                "-XX:UBSocketWakeupThresholdBytes=1"
+            },
+            LOW_THRESHOLD_INFLIGHT,
+            LOW_THRESHOLD_FRAMES);
 
-        assertRingDataPath(combinedLog, "Aggressive wakeup echo should use ring data path");
+        assertRingDataPath(combinedLog, "Low-threshold wakeup echo should use ring data path");
         SocketTestSupport.assertProfileCountAtLeast(
-            combinedLog, "wakeup_request_total", 1,
-            "Aggressive wakeup mode should request TCP wakeups");
-        SocketTestSupport.assertProfileCountAtLeast(
-            combinedLog, "wakeup_send_total", 1,
-            "Aggressive wakeup mode should send TCP wakeup frames");
-    }
-
-    private static void testRingSlotLimitFallback() throws Exception {
-        String configPath = SocketTestConfig.ensureSharedConfig();
-        int dataPort = SocketTestSupport.findFreePort();
-        int controlPort = SocketTestSupport.findFreePort();
-        String[] profileOptions = new String[] { "-XX:UBSocketProfile=2" };
-
-        Process server = null;
-        try {
-            ProcessBuilder serverPb =
-                SocketTestSupport.createUbProcessBuilderWithVmOptions(
-                    configPath,
-                    controlPort,
-                    profileOptions,
-                    "NIOScenarioServer",
-                    "acceptHold",
-                    String.valueOf(dataPort),
-                    String.valueOf(SLOT_LIMIT_CLIENTS),
-                    String.valueOf(SLOT_LIMIT_HOLD_MS));
-            server = serverPb.start();
-            Thread.sleep(1000L);
-
-            ProcessBuilder clientPb =
-                SocketTestSupport.createUbProcessBuilderWithVmOptions(
-                    configPath,
-                    controlPort,
-                    profileOptions,
-                    "NIOScenarioClient",
-                    "holdConnections",
-                    "localhost",
-                    String.valueOf(dataPort),
-                    String.valueOf(SLOT_LIMIT_CLIENTS),
-                    String.valueOf(SLOT_LIMIT_HOLD_MS),
-                    "RingSlotLimitClient");
-
-            OutputAnalyzer clientOutput = new OutputAnalyzer(clientPb.start());
-            clientOutput.shouldHaveExitValue(0);
-            String clientLog = SocketTestSupport.combinedOutput(clientOutput, clientPb);
-            if (!clientLog.contains("HOLD_CONNECTIONS_OK")) {
-                throw new RuntimeException("Ring-slot fallback clients did not complete\n"
-                    + clientLog);
-            }
-
-            OutputAnalyzer serverOutput = new OutputAnalyzer(server);
-            serverOutput.shouldHaveExitValue(0);
-            String serverLog = SocketTestSupport.combinedOutput(serverOutput, serverPb);
-            if (!serverLog.contains("ACCEPT_HOLD_OK clients=" + SLOT_LIMIT_CLIENTS)) {
-                throw new RuntimeException("Ring-slot fallback server did not complete\n"
-                    + serverLog);
-            }
-
-            String combinedLog = clientLog + "\n" + serverLog;
-            SocketTestSupport.assertProfileCountAtLeast(
-                combinedLog, "ub_attach_success", 1,
-                "At least one connection should attach before slot exhaustion");
-            SocketTestSupport.assertProfileCountAtLeast(
-                combinedLog, "ring_attach_no_slot", 1,
-                "The ninth concurrent connection should exhaust fixed ring slots");
-            SocketTestSupport.assertProfileCountAtLeast(
-                combinedLog, "ub_attach_fallback", 1,
-                "Slot exhaustion should fallback to TCP");
-            SocketTestSupport.assertNoLegacyControlFrames(
-                combinedLog, "Slot fallback should not use legacy data fallback frames");
-            SocketTestSupport.assertNoVmCrash(
-                combinedLog, "Ring-slot fallback should not crash VM");
-        } finally {
-            SocketTestSupport.destroyIfAlive(server);
-        }
+            combinedLog, "wakeup_request_threshold", 1,
+            "Low wakeup threshold should request threshold-driven TCP wakeups");
     }
 
     private static String runEchoFrameScenario(String caseName, String[] vmOptions,

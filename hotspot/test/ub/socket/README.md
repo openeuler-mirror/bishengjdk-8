@@ -20,27 +20,49 @@ descriptor/unread-list/heartbeat/DATA_FALLBACK behavior.
 
 ## Current Ring Semantics
 
-- Each JVM owns a fixed 256 MiB shared memory region split into eight 32 MiB
-  inbound ring slots.
+- Each JVM owns a shared memory region controlled by `-XX:UBSocketMemorySize`
+  and split into `-XX:UBSocketRingCount` inbound ring slots. The default is
+  256 MiB total memory and eight 32 MiB slots.
+- The ring slot size is `UBSocketMemorySize / UBSocketRingCount`; the total
+  memory must divide evenly by the ring count and the slot size must be a
+  multiple of the UB block size.
 - Each attached fd consumes one local inbound slot. If no slot is available,
   attach fails and the connection falls back to TCP.
 - A writer copies payload bytes into the peer's receiver-owned ring and then
   may send a 2-byte TCP WAKEUP frame.
 - Sparse wakeup mode coalesces writes while the peer ring is non-empty, with
   empty-to-nonempty and threshold-driven wakeups.
-- `-XX:+UBSocketAggressiveWakeup` requests a wakeup for each committed ring
-  write and is kept as a diagnostic/performance comparison mode.
+- `-XX:UBSocketWakeupThresholdBytes=N` controls the non-empty-ring threshold
+  for threshold-driven wakeups. The default is 64 KiB; small values can be used
+  as a diagnostic/performance comparison mode.
 - Selector readiness is driven by TCP wakeups plus `has_pending_data(fd)` /
   probe checks against ring state. Wakeup frames are not payload and must not
   be returned through Java reads.
+
+## Known TODO
+
+- `MultiServerTopologyTest` has exposed a rare fd reuse window in same-process
+  multi-server selector scenarios. A closed channel may leave cancelled-key /
+  UB selector state (`registered`, `ubProbe`, or `ubClosePending`) pending until
+  the selector drains its deregistration queue, while the OS can already reuse
+  the same integer fd for a new accepted channel. The new server-side channel
+  currently attempts UB attach during `ServerSocketChannelImpl.accept()`, before
+  the application registers it with the selector, so a fix placed only in
+  `EPollArrayWrapper.add(fd)` is too late for that connection. A future fix
+  should keep native `has_registered(fd)` idempotent, add an identity guard so
+  old `SelectionKey` deregistration cannot remove a newer fd mapping, and
+  consider a one-shot "skip next UB attach for this fd" marker when old selector
+  UB state has not fully drained. The fallback must be clean TCP for that
+  connection, with no mixed TCP/UB state.
 
 ## Shared Helpers
 
 - `SocketTestSupport.java` creates child JVMs, allocates free ports, configures
   `UBLog=path=...,socket=debug`, merges child output with UB logs, and provides
   common assertions.
-- `SocketTestSupport.profileCount()` and the profile assertion helpers parse
-  `UBSocketProfile` output across client and server logs.
+- `SocketTestSupport.profileCount()`, `profileBytes()`, `profileMaxBytes()`,
+  and the profile assertion helpers parse `UBSocketProfile` output across
+  client and server logs.
 - `SocketTestConfig.java` writes the socket allow-list used by
   `-XX:UBSocketConf`.
 - `NIOScenarioServer` and `NIOScenarioClient` provide selector, non-blocking,
@@ -58,23 +80,28 @@ This is the primary jtreg coverage for the current implementation.
   20-byte requests, 2 KiB responses, single connection, and 32 outstanding
   frames. It verifies sequence correctness, ring read/write profile events,
   wakeup parsing, sparse wakeup coalescing, and selector readiness injection.
-- `testAggressiveWakeupFrameEcho`: runs the same frame echo style with
-  `-XX:+UBSocketAggressiveWakeup` and verifies the aggressive wakeup profile
-  path.
-- `testRingSlotLimitFallback`: opens nine concurrent connections against the
-  fixed eight-slot ring pool. It verifies at least one attach succeeds, slot
-  exhaustion is profiled, and the excess connection falls back to TCP without
-  using legacy DATA_FALLBACK frames.
-
+- `testLowThresholdWakeupFrameEcho`: runs the same frame echo style with a
+  small `-XX:UBSocketWakeupThresholdBytes` value and verifies the threshold
+  wakeup profile path.
 ### `ring/RingBoundaryPolicyTest.java`
 
 This covers current ring edge policies that should not be asserted with legacy
 DATA_FALLBACK behavior.
 
 - `testRingPressurePartialWrite`: writes a payload larger than one inbound ring
-  slot through a non-blocking channel while the receiver delays reads. It
-  verifies successful delivery and `ring_write_partial` instead of runtime
-  DATA_FALLBACK.
+  slot through a non-blocking channel while the receiver delays reads. It uses
+  a small configured ring to verify successful delivery, `ring_write_partial`,
+  and the `ring_write_max_used_bytes` / `ring_read_max_used_bytes` profile
+  high-water marks instead of runtime DATA_FALLBACK.
+
+### `ring/RingSlotLimitTest.java`
+
+This covers configurable ring slot count behavior.
+
+- `testRingSlotLimitFallback`: opens more concurrent connections than the
+  configured ring count. It verifies enough attach successes to consume the
+  configured slots, profiles `ring_attach_no_slot`, and keeps the excess
+  connection on clean TCP without legacy DATA_FALLBACK frames.
 
 ## Basic API Tests
 

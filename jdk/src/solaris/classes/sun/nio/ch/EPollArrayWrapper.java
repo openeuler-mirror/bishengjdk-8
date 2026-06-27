@@ -76,12 +76,24 @@ class EPollArrayWrapper {
     private static final int FD_OFFSET        = DATA_OFFSET;
     private static final int OPEN_MAX         = IOUtil.fdLimit();
     private static final int NUM_EPOLLEVENTS  = Math.min(OPEN_MAX, 8192);
+
+    // UB selector probe tuning. A zero-timeout spin is used briefly after a
+    // control wakeup, then the selector falls back to 1 ms polling to avoid
+    // burning CPU when the peer wakeup arrives before ring data is visible.
     private static final int UB_PROBE_POLL_MS = 1;
     private static final int UB_PROBE_SPIN_LIMIT = 8;
+
+    // Keep a control-fd close pending long enough to drain tail ring data and
+    // deliver EOF through EPOLLIN after the ring becomes empty.
     private static final long UB_NANOS_PER_MILLI = 1000L * 1000L;
     private static final long UB_CLOSE_PENDING_NANOS = UB_NANOS_PER_MILLI;
+
+    // Native drainUbSocketWakeups return codes. Non-negative values are the
+    // number of parsed wakeup frames.
     private static final int UB_DRAIN_ERROR = -1;
     private static final int UB_DRAIN_EOF = -2;
+
+    // Profile mode and event ids must stay in sync with ubSocketProfile.hpp.
     private static final int UB_PROFILE_DETAIL = 2;
     private static final int UB_PROF_SELECTOR_PROBE_CHECK = 27;
     private static final int UB_PROF_SELECTOR_PROBE_READY = 28;
@@ -305,12 +317,25 @@ class EPollArrayWrapper {
                 break;
             }
 
-            long waitTimeout = ubProbe.nextSetBit(0) >= 0
-                ? ubProbeWaitTimeout(timeout, deadlineNs)
-                : remainingUserTimeout(timeout, deadlineNs);
-            if (timeout > 0 && waitTimeout == 0) {
-                updated = 0;
-                break;
+            boolean hasUbProbe = ubProbe.nextSetBit(0) >= 0;
+            long waitTimeout;
+            if (hasUbProbe) {
+                if (timeout > 0) {
+                    long remaining = remainingUserTimeout(timeout, deadlineNs);
+                    if (remaining == 0) {
+                        updated = 0;
+                        break;
+                    }
+                    waitTimeout = ubProbeWaitTimeout(timeout, remaining);
+                } else {
+                    waitTimeout = ubProbeWaitTimeout(timeout, 0L);
+                }
+            } else {
+                waitTimeout = remainingUserTimeout(timeout, deadlineNs);
+                if (timeout > 0 && waitTimeout == 0) {
+                    updated = 0;
+                    break;
+                }
             }
 
             updated = epollWait(pollArrayAddress, NUM_EPOLLEVENTS, waitTimeout, epfd);
@@ -341,7 +366,7 @@ class EPollArrayWrapper {
         return remainingMs == 0 ? 1 : remainingMs;
     }
 
-    private long ubProbeWaitTimeout(long timeout, long deadlineNs) {
+    private long ubProbeWaitTimeout(long timeout, long remainingTimeoutMs) {
         if (timeout == 0) {
             return 0;
         }
@@ -351,8 +376,8 @@ class EPollArrayWrapper {
         if (timeout < 0) {
             return UB_PROBE_POLL_MS;
         }
-        long remaining = remainingUserTimeout(timeout, deadlineNs);
-        return remaining < UB_PROBE_POLL_MS ? remaining : UB_PROBE_POLL_MS;
+        return remainingTimeoutMs < UB_PROBE_POLL_MS
+            ? remainingTimeoutMs : UB_PROBE_POLL_MS;
     }
 
     private int injectUbReadyEvents() {

@@ -14,21 +14,21 @@
 #include <stdint.h>
 
 #include "matrix/matrixUtils.hpp"
+#include "matrix/ubSocket/ubSocketFrame.hpp"
 #include "matrix/ubSocket/ubSocketMemMapping.hpp"
 #include "matrix/ubSocket/ubSocketRing.hpp"
 #include "memory/allocation.hpp"
 #include "runtime/mutexLocker.hpp"
 
 class Monitor;
-static const int UB_SOCKET_FRAME_RESIDUE_BUF_LEN = 64;
-static const uint64_t UB_SOCKET_WAKEUP_THRESHOLD_BYTES = 64 * 1024;
 
 // Per-fd UBSocket state. It is the sole owner of the local ring slot and the
 // remote mapping reference after attach publishes the connection.
 class UBSocketConnection : public CHeapObj<mtInternal> {
  public:
   UBSocketConnection(int fd, UBSocketMemMapping* mapping,
-                     uint32_t local_ring_slot, uint64_t remote_ring_offset);
+                     uint32_t local_ring_slot, uint64_t local_ring_size,
+                     uint64_t remote_ring_offset, uint64_t remote_ring_size);
   ~UBSocketConnection();
 
   long read_data(void* dst, size_t len);
@@ -38,6 +38,7 @@ class UBSocketConnection : public CHeapObj<mtInternal> {
   bool mark_rx_wakeup();
   void mark_error();
   void mark_control_closed();
+  void mark_peer_closed();
   bool has_pending_data();
   bool ready();
   bool take_frame_residue(char* dst, size_t dst_len, size_t* len);
@@ -55,14 +56,15 @@ class UBSocketConnection : public CHeapObj<mtInternal> {
   bool _tx_wakeup_sending;
   bool _tx_wakeup_pending;
   bool _ring_error;
-  bool _control_closed;
+  bool _rx_closed;
+  bool _tx_closed;
   uint64_t _tx_last_wakeup_offset;
   bool _rx_ready;
   uint64_t _rx_read_offset;
   uint64_t _tx_write_offset;
   bool _closing;
   int _active_count;
-  char _frame_residue_buf[UB_SOCKET_FRAME_RESIDUE_BUF_LEN];
+  char _frame_residue_buf[UB_SOCKET_WAKEUP_FRAME_WIRE_SIZE];
   size_t _frame_residue_len;
 
   bool closing() const { return _closing; }

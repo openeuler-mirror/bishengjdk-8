@@ -95,8 +95,6 @@ class UBSocketManager : public AllStatic {
   static AllowListTable* _allow_list_table;
 
   static bool _initialized;
-  static uint32_t _blk_size;
-  static uint32_t _blk_count;
   static size_t memory_size();
   static bool unregister_fd(int socket_fd, bool send_close);
 };

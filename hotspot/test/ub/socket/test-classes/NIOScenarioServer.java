@@ -59,6 +59,10 @@ public class NIOScenarioServer {
             runDelayedRead(args);
         } else if ("earlyClose".equals(mode)) {
             runEarlyClose(args);
+        } else if ("halfCloseAck".equals(mode)) {
+            runHalfCloseAck(args);
+        } else if ("selectTimeoutAfterDrain".equals(mode)) {
+            runSelectTimeoutAfterDrain(args);
         } else if ("echoFrames".equals(mode)) {
             runEchoFrames(args);
         } else if ("acceptHold".equals(mode)) {
@@ -350,6 +354,201 @@ public class NIOScenarioServer {
             server.close();
         }
         System.out.println("Server closed connection intentionally");
+    }
+
+    private static void runHalfCloseAck(String[] args) throws Exception {
+        if (args.length < 3) {
+            throw new IllegalArgumentException(
+                "Usage: NIOScenarioServer halfCloseAck <port> <expectedSize>");
+        }
+
+        int port = Integer.parseInt(args[1]);
+        long expectedSize = Long.parseLong(args[2]);
+        ServerSocketChannel server = ServerSocketChannel.open();
+        Selector selector = Selector.open();
+        ByteBuffer readBuffer = ByteBuffer.allocate(SELECTOR_MAX_READ_SIZE);
+        boolean completed = false;
+        long deadline = System.currentTimeMillis() + 30000L;
+        try {
+            server.configureBlocking(false);
+            server.socket().setReuseAddress(true);
+            server.bind(new InetSocketAddress(port));
+            server.register(selector, SelectionKey.OP_ACCEPT);
+            System.out.println("Half-close ACK server listening on port " + port);
+
+            while (!completed) {
+                int ready = selector.select(1000L);
+                if (ready == 0) {
+                    if (System.currentTimeMillis() > deadline) {
+                        throw new RuntimeException("Half-close ACK server timeout");
+                    }
+                    continue;
+                }
+                deadline = System.currentTimeMillis() + 30000L;
+
+                Iterator<SelectionKey> iterator = selector.selectedKeys().iterator();
+                while (iterator.hasNext()) {
+                    SelectionKey key = iterator.next();
+                    iterator.remove();
+                    if (!key.isValid()) {
+                        continue;
+                    }
+                    if (key.isAcceptable()) {
+                        SocketChannel channel = server.accept();
+                        if (channel != null) {
+                            channel.configureBlocking(false);
+                            channel.register(selector, SelectionKey.OP_READ,
+                                             new ConnectionState("HalfCloseClient", expectedSize));
+                        }
+                    } else {
+                        if (key.isReadable()) {
+                            readHalfCloseClient(key, readBuffer);
+                        }
+                        if (key.isValid() && key.isWritable()) {
+                            completed = writeHalfCloseAck(key);
+                        }
+                    }
+                }
+            }
+        } finally {
+            selector.close();
+            server.close();
+        }
+        System.out.println("HALF_CLOSE_SERVER_ACK_OK");
+    }
+
+    private static void readHalfCloseClient(SelectionKey key, ByteBuffer readBuffer)
+        throws IOException {
+        SocketChannel channel = (SocketChannel)key.channel();
+        ConnectionState state = (ConnectionState)key.attachment();
+        while (true) {
+            readBuffer.clear();
+            int n = channel.read(readBuffer);
+            if (n < 0) {
+                if (state.totalReceived != state.expectedSize) {
+                    throw new EOFException("half-close before expected payload: "
+                        + state.totalReceived + "/" + state.expectedSize);
+                }
+                state.markComplete();
+                state.ackBuffer = ByteBuffer.wrap(
+                    ("HALF_CLOSE_ACK " + state.totalReceived
+                        + " bytes received, hash " + state.hashValue)
+                        .getBytes(StandardCharsets.UTF_8));
+                key.interestOps(SelectionKey.OP_WRITE);
+                return;
+            }
+            if (n == 0) {
+                return;
+            }
+            readBuffer.flip();
+            state.addData(readBuffer, 0, n);
+        }
+    }
+
+    private static boolean writeHalfCloseAck(SelectionKey key) throws IOException {
+        SocketChannel channel = (SocketChannel)key.channel();
+        ConnectionState state = (ConnectionState)key.attachment();
+        while (state.ackBuffer.hasRemaining()) {
+            int n = channel.write(state.ackBuffer);
+            if (n < 0) {
+                throw new EOFException("half-close ACK write saw closed channel");
+            }
+            if (n == 0) {
+                return false;
+            }
+        }
+        closeKey(key);
+        return true;
+    }
+
+    private static void runSelectTimeoutAfterDrain(String[] args) throws Exception {
+        if (args.length < 5) {
+            throw new IllegalArgumentException(
+                "Usage: NIOScenarioServer selectTimeoutAfterDrain <port> <expectedSize> <selectTimeoutMs> <minElapsedMs>");
+        }
+
+        int port = Integer.parseInt(args[1]);
+        long expectedSize = Long.parseLong(args[2]);
+        long selectTimeoutMs = Long.parseLong(args[3]);
+        long minElapsedMs = Long.parseLong(args[4]);
+        ServerSocketChannel server = ServerSocketChannel.open();
+        Selector selector = Selector.open();
+        ByteBuffer readBuffer = ByteBuffer.allocate(SELECTOR_MAX_READ_SIZE);
+        ConnectionState state = new ConnectionState("SelectTimeoutClient", expectedSize);
+        long deadline = System.currentTimeMillis() + 30000L;
+        try {
+            server.configureBlocking(false);
+            server.socket().setReuseAddress(true);
+            server.bind(new InetSocketAddress(port));
+            server.register(selector, SelectionKey.OP_ACCEPT);
+            System.out.println("Select-timeout server listening on port " + port);
+
+            while (state.totalReceived < expectedSize) {
+                int ready = selector.select(1000L);
+                if (ready == 0) {
+                    if (System.currentTimeMillis() > deadline) {
+                        throw new RuntimeException("Select-timeout server read timeout at "
+                            + state.totalReceived + "/" + expectedSize);
+                    }
+                    continue;
+                }
+                Iterator<SelectionKey> iterator = selector.selectedKeys().iterator();
+                while (iterator.hasNext()) {
+                    SelectionKey key = iterator.next();
+                    iterator.remove();
+                    if (!key.isValid()) {
+                        continue;
+                    }
+                    if (key.isAcceptable()) {
+                        SocketChannel channel = server.accept();
+                        if (channel != null) {
+                            channel.configureBlocking(false);
+                            channel.register(selector, SelectionKey.OP_READ, state);
+                        }
+                    } else if (key.isReadable()) {
+                        readSelectorTimeoutClient(key, readBuffer, state);
+                        deadline = System.currentTimeMillis() + 30000L;
+                    }
+                }
+            }
+
+            state.markComplete();
+            long startNs = System.nanoTime();
+            int ready = selector.select(selectTimeoutMs);
+            long elapsedMs = (System.nanoTime() - startNs) / 1000000L;
+            if (ready != 0) {
+                throw new RuntimeException("select(timeout) should have no new events after drain, ready="
+                    + ready + " elapsedMs=" + elapsedMs);
+            }
+            if (elapsedMs < minElapsedMs) {
+                throw new RuntimeException("select(timeout) returned before timeout after UB probe, elapsedMs="
+                    + elapsedMs + " minElapsedMs=" + minElapsedMs);
+            }
+            System.out.println("SELECT_TIMEOUT_AFTER_DRAIN_OK elapsedMs=" + elapsedMs
+                + " timeoutMs=" + selectTimeoutMs);
+        } finally {
+            selector.close();
+            server.close();
+        }
+    }
+
+    private static void readSelectorTimeoutClient(SelectionKey key, ByteBuffer readBuffer,
+                                                  ConnectionState state)
+        throws IOException {
+        SocketChannel channel = (SocketChannel)key.channel();
+        while (state.totalReceived < state.expectedSize) {
+            readBuffer.clear();
+            int n = channel.read(readBuffer);
+            if (n < 0) {
+                throw new EOFException("select-timeout client closed early at "
+                    + state.totalReceived + "/" + state.expectedSize);
+            }
+            if (n == 0) {
+                return;
+            }
+            readBuffer.flip();
+            state.addData(readBuffer, 0, n);
+        }
     }
 
     private static void runDelayedRead(String[] args) throws Exception {

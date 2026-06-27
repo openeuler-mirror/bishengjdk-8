@@ -567,9 +567,8 @@ class SocketChannelImpl
             if (!isOpen() || state != ST_CONNECTED || ubRegistrationStarted)
                 return;
             serverSide = ubServerSide;
-            if (!serverSide && isBlocking()) {
-                System.err.println("UBSocket WARNING: skip blocking client SocketChannel fd="
-                    + fdVal);
+            // Client channels without selector wakeups stay on TCP.
+            if (!serverSide && (isBlocking() || !isRegistered())) {
                 return;
             }
             ubRegistrationStarted = true;

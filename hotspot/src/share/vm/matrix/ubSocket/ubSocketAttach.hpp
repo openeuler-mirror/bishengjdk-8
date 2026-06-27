@@ -49,7 +49,9 @@ class UBSocketAttach : public CHeapObj<mtInternal> {
   int32_t attach_server();
   bool publish_server_mapping(const char* client_mem_name,
                               uint32_t* local_ring_slot,
-                              uint64_t client_ring_offset);
+                              uint64_t local_ring_size,
+                              uint64_t client_ring_offset,
+                              uint64_t client_ring_size);
   int32_t attach_client_once(int control_fd, const UBSocketEndpoint& request_local_ep,
                              const UBSocketEndpoint& request_remote_ep,
                              uint32_t request_id, uint64_t ddl_ns,
