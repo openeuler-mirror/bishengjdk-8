@@ -219,6 +219,14 @@ static char* get_java_executable_path() {
   return os::strdup("java");
 }
 
+static char* get_complete_classpath() {
+  const char* env_cp = Arguments::get_property("env.class.path");
+  if (env_cp == NULL || env_cp[0] == '\0') {
+    env_cp = Arguments::get_property("java.class.path");
+  }
+  return (char *)env_cp;
+}
+
 static bool can_read_classlist(const char* class_list_path) {
   int fd = open(class_list_path, O_RDONLY);
   if (fd >= 0) {
@@ -248,7 +256,7 @@ static void create_jsa_with_coop_option(const char* class_list_path, const char*
     // child process running on background
     setsid();
     signal(SIGHUP, SIG_IGN);
-    const char* classpath = Arguments::get_appclasspath();
+    const char* classpath = get_complete_classpath();
     if (classpath == NULL) {
       classpath = ".";
     }
