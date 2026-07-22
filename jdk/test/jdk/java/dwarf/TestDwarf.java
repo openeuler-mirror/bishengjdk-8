@@ -25,7 +25,7 @@
 /*
  * @test
  * @bug 8242181
- * @library /lib/testlibrary /test/lib
+ * @library ../../../lib/ ../../../lib/testlibrary
  * @summary Test DWARF parser with various crashes if debug symbols are available. If the libjvm debug symbols are not
  *          in the same directory as the libjvm.so file, in a subdirectory called .debug, or in the path specified
  *          by the environment variable _JVM_DWARF_PATH, then no verification of the hs_err_file is done for libjvm.so.
@@ -146,9 +146,9 @@ public class TestDwarf {
      * There are some valid cases where we cannot find source information. Check these.
      */
     private static void checkNoSourceLine(String crashOutputString, String line) {
-        Pattern pattern = Pattern.compile("[CV][\\s\\t]+\\[([a-zA-Z0-9_.-]+)\\+0x.+]");
+        Pattern pattern = Pattern.compile("[CV][\\s\\t]+\\[([a-zA-Z0-9_.]+)\\+0x.+][\\s\\t]+.*\\+0x");
         Matcher matcher = pattern.matcher(line);
-        Asserts.assertTrue(matcher.find(), "Must find library name in \"" + line + "\"");
+        Asserts.assertTrue(matcher.find(), "Must find library in \"" + line + "\"");
         // Check if there are symbols available for library. If not, then we cannot find any source information for this library.
         // This can happen if this test is run without any JDK debug symbols at all but also for some libraries like libpthread.so
         // which usually has no symbols available.
