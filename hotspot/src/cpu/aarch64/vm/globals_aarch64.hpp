@@ -106,6 +106,8 @@ define_pd_global(intx, InlineSmallCode,          1000);
   product(ccstr, AutoSharedArchivePath, NULL,                           \
           "Auto enable the AppCDS feature"                              \
           "the path save classlist and jsa file")                       \
+  product(bool, UseAutoAppCDSIdentity, false,                           \
+          "Name Auto AppCDS files with effective user and launch target") \
   product(bool, PrintAutoAppCDS, false,                                 \
           "Print some information about AutoSharedArchivePath")         \
   product(bool, UseUTFConversionIntrinsics, false,                      \
