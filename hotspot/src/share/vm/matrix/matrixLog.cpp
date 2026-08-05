@@ -253,16 +253,5 @@ PRAGMA_FORMAT_NONLITERAL_IGNORED_INTERNAL
   stream->vprint(format, ap);
 PRAGMA_DIAG_POP
   va_end(ap);
-}
-
-void MatrixLog::flush() {
-  if (_default_log_file != NULL && _default_log_file != tty) {
-    _default_log_file->flush();
-  }
-  for (int i = 0; i < UB_FEATURE_COUNT; i++) {
-    if (_log_files[i] != NULL && _log_files[i] != tty &&
-        _log_files[i] != _default_log_file) {
-      _log_files[i]->flush();
-    }
-  }
+  stream->flush();
 }

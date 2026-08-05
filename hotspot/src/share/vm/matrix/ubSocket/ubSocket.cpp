@@ -18,6 +18,7 @@
  */
 
 #include <errno.h>
+#include <limits.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -170,7 +171,7 @@ void UBSocketManager::init() {
   memcpy(mem_name_pos, UB_SOCKET_MEM_PREFIX, UB_SOCKET_MEM_PREFIX_LEN);
   mem_name_pos += UB_SOCKET_MEM_PREFIX_LEN;
 
-  char hostname[UB_SOCKET_MEM_NAME_BUF_LEN] = {0};
+  char hostname[HOST_NAME_MAX + 1] = {0};
   if (gethostname(hostname, sizeof(hostname)) != 0) {
     UB_LOG(UB_SOCKET, UB_LOG_WARNING, "gethostname failed, UBSocket disabled\n");
     return;

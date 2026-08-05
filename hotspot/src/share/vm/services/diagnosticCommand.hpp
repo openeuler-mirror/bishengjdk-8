@@ -172,6 +172,18 @@ public:
   virtual void execute(DCmdSource source, TRAPS);
 };
 
+class UBSocketProfileDCmd : public DCmd {
+public:
+  UBSocketProfileDCmd(outputStream* output, bool heap) : DCmd(output, heap) { }
+  static const char* name() { return "UBSocket.profile"; }
+  static const char* description() {
+    return "Print current UBSocket profile information.";
+  }
+  static const char* impact() { return "Low"; }
+  static int num_arguments() { return 0; }
+  virtual void execute(DCmdSource source, TRAPS);
+};
+
 #ifdef AARCH64
 class JProfileCacheDumpDCmd : public DCmd {
 public:

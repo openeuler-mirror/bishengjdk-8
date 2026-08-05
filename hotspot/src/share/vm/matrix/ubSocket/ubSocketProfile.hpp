@@ -14,6 +14,8 @@
 
 #include "memory/allocation.hpp"
 
+class outputStream;
+
 enum UBSocketProfileMode {
   UB_PROFILE_OFF = 0,
   UB_PROFILE_SUMMARY = 1,
@@ -107,7 +109,7 @@ class UBSocketProfiler : public AllStatic {
   static void max_bytes(UBSocketProfileEvent event, uint64_t bytes);
   static void record(UBSocketProfileEvent event, uint64_t elapsed_ns,
                      uint64_t bytes, uint64_t count);
-  static void print_summary();
+  static void print_summary(outputStream* force_output);
 };
 
 class UBSocketProfileScope {

@@ -71,12 +71,11 @@ bool MatrixGlobal::check_stack(UBFeature feature) {
 
 void MatrixGlobal::before_exit() {
   // now for performance analysis
-  UBSocketProfiler::print_summary();
+  UBSocketProfiler::print_summary(NULL);
   
   if (!_initialized) { return; }
   if (UseUBSocket) {
     UBSocketManager::before_exit();
   }
   os::Linux::ub_finalize_env();
-  MatrixLog::flush();
 }
