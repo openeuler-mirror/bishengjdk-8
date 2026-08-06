@@ -30,6 +30,8 @@
 #ifdef AARCH64
 #include "jprofilecache/jitProfileCache.hpp"
 #endif
+#include "matrix/ubSocket/ubSocketProfile.hpp"
+#include "runtime/globals.hpp"
 #include "runtime/javaCalls.hpp"
 #include "runtime/os.hpp"
 #include "services/diagnosticArgument.hpp"
@@ -62,6 +64,8 @@ void DCmdRegistrant::register_dcmds(){
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<PrintVMFlagsDCmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<VMDynamicLibrariesDCmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<VMUptimeDCmd>(full_export, true, false));
+  DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<UBSocketProfileDCmd>(
+      DCmd_Source_Internal | DCmd_Source_AttachAPI, true, false));
 #ifdef AARCH64
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<JProfileCacheDumpDCmd>(full_export, true, false));
 #endif
@@ -108,6 +112,16 @@ void DCmdRegistrant::register_dcmds_ext(){
    // Do nothing here
 }
 #endif
+
+void UBSocketProfileDCmd::execute(DCmdSource source, TRAPS) {
+  if (UBSocketProfile == UB_PROFILE_OFF) {
+    output()->print_cr("UBSocket profile is disabled. "
+                       "Enable it with -XX:UBSocketProfile=1 or 2.");
+    return;
+  }
+
+  UBSocketProfiler::print_summary(output());
+}
 
 
 HelpDCmd::HelpDCmd(outputStream* output, bool heap) : DCmdWithParser(output, heap),

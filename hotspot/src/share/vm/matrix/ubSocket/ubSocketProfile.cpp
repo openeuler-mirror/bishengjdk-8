@@ -160,9 +160,10 @@ void UBSocketProfiler::record(UBSocketProfileEvent event, uint64_t elapsed_ns,
   }
 }
 
-void UBSocketProfiler::print_summary() {
+void UBSocketProfiler::print_summary(outputStream* force_output) {
   if (UBSocketProfile == UB_PROFILE_OFF) { return; }
-  outputStream* st = MatrixLog::stream(UB_SOCKET);
+  outputStream* st = force_output != NULL
+      ? force_output : MatrixLog::stream(UB_SOCKET);
   if (UBSocketProfile >= UB_PROFILE_DETAIL) {
     st->print_cr("UBSocketProfile mode=detail timing=all");
   } else {

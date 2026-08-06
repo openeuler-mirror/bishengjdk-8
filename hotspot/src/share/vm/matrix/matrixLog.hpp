@@ -39,7 +39,6 @@ class MatrixLog : public AllStatic {
   static const char* log_path() { return _default_log_path; }
   static bool enabled(UBFeature feature);
   static outputStream* stream(UBFeature feature);
-  static void flush();
 
  private:
   static bool _initialized;
