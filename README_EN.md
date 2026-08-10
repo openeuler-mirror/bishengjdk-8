@@ -1,4 +1,5 @@
 # BiSheng JDK 8
+English | [简体中文](./README.md)
 
 The BiSheng JDK is the open-source edition of the Huawei JDK. It is a high-performance OpenJDK distribution designed for production environments. The BiSheng JDK runs on more than 500 Huawei products, accumulating extensive application scenarios and feedback from Java developers to address various challenges encountered during service running. Additionally, it has been optimized specifically for the Arm architecture, delivering better performance in big data scenarios. The BiSheng JDK 8 is compatible with Java SE specifications, and currently supports AArch64 Linux and x86_64 Linux. As a downstream distribution of OpenJDK, the BiSheng JDK is contributing and will continuously contribute to the OpenJDK community.
 
