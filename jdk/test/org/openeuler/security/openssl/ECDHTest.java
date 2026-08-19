@@ -29,6 +29,7 @@ import javax.crypto.KeyAgreement;
 import java.math.BigInteger;
 import java.security.*;
 import java.security.spec.ECFieldFp;
+import java.security.spec.ECGenParameterSpec;
 import java.security.spec.ECParameterSpec;
 import java.security.spec.ECPoint;
 import java.security.spec.EllipticCurve;
@@ -38,7 +39,7 @@ import java.util.Arrays;
  * @test
  * @summary Basic test for ECDH
  * @requires os.arch=="aarch64"
- * @run main ECDHTest
+ * @run main/othervm -Djdk.sunec.disableNative=false ECDHTest
  */
 
 public class ECDHTest {
@@ -71,6 +72,7 @@ public class ECDHTest {
         KAEECPublicKeyImpl ecPublicKey = new KAEECPublicKeyImpl(ecPoint, PARAMS);
         testKeyAgreement(ecPrivKey, ecPublicKey, new byte[]{-88, -65, 43, -84, 26, 43, 46, 106, 20, 39, -76, 30, -71, 72, -102, 120, 108, -92, -86, -14, -96, -42, 93, -40, -43, -25, 15, -62});
 
+        testUnsupportedCurveFallback();
     }
 
     public static void testKeyPairByParam(ECParameterSpec PARAMS) throws Exception {
@@ -97,5 +99,34 @@ public class ECDHTest {
         if (!Arrays.equals(res, expectRes)) {
             throw new RuntimeException("keyagreement failed");
         }
+    }
+
+    private static void testUnsupportedCurveFallback() throws Exception {
+        KeyPairGenerator generator =
+                KeyPairGenerator.getInstance("EC", "SunEC");
+        generator.initialize(new ECGenParameterSpec("sect283r1"));
+        KeyPair first = generator.generateKeyPair();
+        KeyPair second = generator.generateKeyPair();
+
+        byte[] firstSecret =
+                generateSecret(first.getPrivate(), second.getPublic());
+        byte[] secondSecret =
+                generateSecret(second.getPrivate(), first.getPublic());
+        if (!Arrays.equals(firstSecret, secondSecret)) {
+            throw new RuntimeException("Fallback keyagreement failed");
+        }
+    }
+
+    private static byte[] generateSecret(PrivateKey privateKey,
+            PublicKey publicKey) throws Exception {
+        KeyAgreement keyAgreement = KeyAgreement.getInstance("ECDH");
+        keyAgreement.init(privateKey);
+        Provider provider = keyAgreement.getProvider();
+        if (!"SunEC".equals(provider.getName())) {
+            throw new RuntimeException("Expected SunEC fallback, got " +
+                    provider.getName());
+        }
+        keyAgreement.doPhase(publicKey, true);
+        return keyAgreement.generateSecret();
     }
 }

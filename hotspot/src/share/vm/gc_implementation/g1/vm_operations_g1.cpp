@@ -374,6 +374,10 @@ void G1_ChangeMaxHeapOp::g1_shrink_without_full_gc(size_t _new_max_heap) {
   }
   // Capacity too large, compute shrinking size and shrink
   size_t shrink_bytes = capacity_before_shrink - _new_max_heap;
+  // Concurrent cleanup may still be adding regions to the secondary free list.
+  // Drain it before rebuilding the master free list.
+  heap->wait_while_free_regions_coming();
+  heap->append_secondary_free_list_if_not_empty_with_lock();
   heap->verify_region_sets_optional();
   heap->tear_down_region_sets(true /* free_list_only */);
   heap->shrink_helper(shrink_bytes);
@@ -381,6 +385,7 @@ void G1_ChangeMaxHeapOp::g1_shrink_without_full_gc(size_t _new_max_heap) {
   heap->_hrm.verify_optional();
   heap->verify_region_sets_optional();
   heap->verify_after_gc();
+  heap->g1mm()->update_sizes();
 
   DMH_LOG("G1_ElasticMaxHeapOp: attempt heap shrinking for dynamic max heap %s "
           "origin capacity " SIZE_FORMAT "K "

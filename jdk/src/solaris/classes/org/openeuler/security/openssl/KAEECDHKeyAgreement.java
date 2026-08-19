@@ -31,7 +31,6 @@ import sun.security.util.NamedCurve;
 
 import java.math.BigInteger;
 import java.security.InvalidAlgorithmParameterException;
-import java.security.InvalidParameterException;
 import java.security.InvalidKeyException;
 import java.security.Key;
 import java.security.NoSuchAlgorithmException;
@@ -60,8 +59,16 @@ public class KAEECDHKeyAgreement extends KeyAgreementSpi {
         if (!(key instanceof PrivateKey)) {
             throw new InvalidKeyException("Key must be instance of PrivateKey");
         }
-        privateKey = (ECPrivateKey) ECKeyFactory.toECKey(key);
+
+        ECPrivateKey newPrivateKey = (ECPrivateKey) ECKeyFactory.toECKey(key);
+        String newCurveName = getCurveName(newPrivateKey.getParams());
+        if (newCurveName == null) {
+            throw new InvalidKeyException("Unsupported EC curve");
+        }
+
+        privateKey = newPrivateKey;
         publicKey = null;
+        curveName = newCurveName;
     }
 
     @Override
@@ -90,29 +97,44 @@ public class KAEECDHKeyAgreement extends KeyAgreementSpi {
                 ("Key must be a PublicKey with algorithm EC");
         }
 
-        publicKey = (ECPublicKey) key;
-        ECParameterSpec params = publicKey.getParams();
+        ECPublicKey newPublicKey = (ECPublicKey) key;
+        ECParameterSpec params = newPublicKey.getParams();
+        String publicCurveName = getCurveName(params);
+        if (publicCurveName == null) {
+            throw new InvalidKeyException("Unsupported EC curve");
+        }
+        if (!curveName.equals(publicCurveName)) {
+            throw new InvalidKeyException(
+                    "Public and private keys must use the same EC parameters");
+        }
+
         int keyLenBits = params.getCurve().getField().getFieldSize();
         // Bits to bytes.
         expectedSecretLen = (keyLenBits + 7) >> 3;
-
-        // Using KAENamedCurve.name can be inaccurate. need ObjectId
-        if (params instanceof KAENamedCurve) {
-            curveName = KAEUtils.getCurveByAlias(((KAENamedCurve) params).getObjectId());
-        }else if (params instanceof NamedCurve) {
-            curveName = KAEUtils.getCurveByAlias(((NamedCurve) params).getObjectId());
-        }else {
-            KAENamedCurve curve = KAECurveDB.lookup(params);
-            curveName = KAEUtils.getCurveByAlias(curve.getObjectId());
-        }
-
-        if (curveName == null) {
-            throw new InvalidParameterException("unknown keyLenBits " + keyLenBits);
-        }
-        if (KAEUtils.getCurveByAlias(curveName) != null) {
-            curveName = KAEUtils.getCurveByAlias(curveName);
-        }
+        publicKey = newPublicKey;
         return null;
+    }
+
+    private static String getCurveName(ECParameterSpec params) {
+        if (params == null) {
+            return null;
+        }
+
+        String oid;
+        // Using KAENamedCurve.name can be inaccurate. Use the object ID.
+        if (params instanceof KAENamedCurve) {
+            oid = ((KAENamedCurve) params).getObjectId();
+        } else if (params instanceof NamedCurve) {
+            oid = ((NamedCurve) params).getObjectId();
+        } else {
+            KAENamedCurve curve = KAECurveDB.lookup(params);
+            if (curve == null) {
+                return null;
+            }
+            oid = curve.getObjectId();
+        }
+
+        return KAEUtils.getCurveByAlias(oid);
     }
 
     @Override
