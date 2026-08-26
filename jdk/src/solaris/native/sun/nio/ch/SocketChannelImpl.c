@@ -86,17 +86,20 @@ Java_sun_nio_ch_SocketChannelImpl_checkConnect(JNIEnv *env, jobject this,
     return 0;
 }
 
-#define UB_SOCKET_REGISTER_FALLBACK 0
-
 JNIEXPORT jint JNICALL
 Java_sun_nio_ch_SocketChannelImpl_registerUbSocket(JNIEnv *env, jclass this,
                                                    jobject fdo,
                                                    jboolean serverSide)
 {
-    if ((*env)->UbSocketCheckStack(env) != JNI_TRUE) {
-        return UB_SOCKET_REGISTER_FALLBACK;
-    }
     return (*env)->UbSocketRegister(env, fdval(env, fdo), serverSide);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_sun_nio_ch_SocketChannelImpl_shutdownUbSocketOutput(JNIEnv *env,
+                                                         jclass this,
+                                                         jobject fdo)
+{
+    return (*env)->UbSocketShutdownOutput(env, fdval(env, fdo));
 }
 
 JNIEXPORT jint JNICALL

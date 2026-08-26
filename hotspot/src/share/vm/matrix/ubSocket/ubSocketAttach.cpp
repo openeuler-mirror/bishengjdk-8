@@ -18,6 +18,7 @@
  */
 
 #include "matrix/ubSocket/ubSocketAttach.hpp"
+#include "matrix/ubSocket/ubSocketConfig.hpp"
 #include "matrix/ubSocket/ubSocketAttachSession.hpp"
 #include "matrix/ubSocket/ubSocketDataInfo.hpp"
 #include "matrix/ubSocket/ubSocketFrame.hpp"
@@ -34,22 +35,45 @@
 
 #include "matrix/matrixLog.hpp"
 
-UBSocketAttach::UBSocketAttach(int fd, bool is_server, Symbol* local_mem_name, size_t mem_size)
+UBSocketAttachHandshake::UBSocketAttachHandshake(int fd, bool is_server,
+                                                 Symbol* local_mem_name,
+                                                 size_t mem_size,
+                                                 const UBSocketConfig* config)
   : _socket_fd(fd),
     _is_server(is_server),
     _local_mem_name(local_mem_name),
-    _mem_size(mem_size) {}
+    _mem_size(mem_size),
+    _protocol(ub_socket_protocol_info((uint64_t)mem_size,
+                                      (uint64_t)UBSocketMemorySize,
+                                      (uint32_t)UBSocketRingCount,
+                                      (uint64_t)UBSocketSpinNanos)),
+    _config(config) {}
 
 static void ub_socket_abort_committed_attach(int fd, bool bind_ok) {
   if (bind_ok) { UBSocketManager::detach_fd(fd); }
   os::socket_shutdown(fd, SHUT_RDWR);
 }
 
-int32_t UBSocketAttach::do_attach() {
+static bool ub_socket_mapping_compatible(
+    UBSocketMemMapping* mapping, const UBSocketAttachFrame& frame) {
+  if (mapping == NULL || mapping->size() != (size_t)frame.mapping_size) {
+    return false;
+  }
+  const UBSocketProcessHeader* header =
+      reinterpret_cast<const UBSocketProcessHeader*>(mapping->addr());
+  return header->version == UB_SOCKET_PROTOCOL_VERSION &&
+         header->capabilities == frame.capabilities &&
+         header->ring_count == frame.ring_count &&
+         header->mapping_size == frame.mapping_size &&
+         header->ring_memory_size == frame.ring_memory_size;
+}
+
+int32_t UBSocketAttachHandshake::do_attach() {
+  ResourceMark rm;
   return _is_server ? attach_server() : attach_client();
 }
 
-int32_t UBSocketAttach::attach_server() {
+int32_t UBSocketAttachHandshake::attach_server() {
   if (!UBSocketAttachAgent::start()) {
     UB_LOG(UB_SOCKET, UB_LOG_WARNING, "Start agent failed: %s\n", strerror(errno));
     return UB_SOCKET_REGISTER_FALLBACK;
@@ -66,7 +90,9 @@ int32_t UBSocketAttach::attach_server() {
   ResourceMark rm;
   uint64_t local_ring_offset = 0;
   uint64_t local_ring_size = 0;
-  uint32_t local_ring_slot = UBSocketRingSlots::alloc(&local_ring_offset, &local_ring_size);
+  uint32_t local_connection_generation = 0;
+  uint32_t local_ring_slot = UBSocketRingSlots::alloc(
+      &local_ring_offset, &local_ring_size, &local_connection_generation);
   if (local_ring_slot == UB_SOCKET_RING_INVALID_SLOT) {
     UB_PROFILE_COUNT(UB_PROF_RING_ATTACH_NO_SLOT, 0);
     UB_LOG(UB_SOCKET, UB_LOG_WARNING, "fd=%d attach server no local ring slot\n", _socket_fd);
@@ -74,7 +100,8 @@ int32_t UBSocketAttach::attach_server() {
   }
   UBSocketAttachSession* session =
       new UBSocketAttachSession(&local_ep, &remote_ep, _local_mem_name->as_C_string(),
-                                local_ring_slot, local_ring_offset, local_ring_size);
+                                local_ring_slot, local_connection_generation,
+                                local_ring_offset, local_ring_size, _protocol, _config);
   UBSocketSessionCaches::add(session);
 
   uint64_t now_ns = (uint64_t)os::javaTimeNanos();
@@ -82,17 +109,13 @@ int32_t UBSocketAttach::attach_server() {
                          (uint64_t)UB_ATTACH_REQUEST_WAIT_MS * NANOSECS_PER_MILLISEC;
   uint64_t ddl_ns = now_ns + (uint64_t)UB_ATTACH_TIMEOUT_MS * NANOSECS_PER_MILLISEC;
   int32_t result = UB_SOCKET_REGISTER_FALLBACK;
-  char client_mem_name[UB_SOCKET_MEM_NAME_BUF_LEN] = {0};
-  uint32_t client_ring_slot = 0;
-  uint64_t client_ring_offset = 0;
-  uint64_t client_ring_size = 0;
+  UBSocketAttachFrame client_request;
+  memset(&client_request, 0, sizeof(client_request));
 
-  if (session->wait_for_request(request_ddl_ns, client_mem_name,
-                                &client_ring_slot, &client_ring_offset,
-                                &client_ring_size)) {
-    bool published = publish_server_mapping(client_mem_name, &local_ring_slot,
-                                            local_ring_size, client_ring_offset,
-                                            client_ring_size);
+  if (session->wait_for_request(request_ddl_ns, &client_request)) {
+    bool published = publish_server_mapping(
+        client_request, &local_ring_slot, local_connection_generation,
+        local_ring_size);
     result = session->finish_server_attach(published, ddl_ns);
     if (published && result != UB_SOCKET_REGISTER_SUCCESS) {
       UBSocketManager::detach_fd(_socket_fd);
@@ -107,25 +130,35 @@ int32_t UBSocketAttach::attach_server() {
   UB_LOG(UB_SOCKET, success ? UB_LOG_INFO : UB_LOG_WARNING,
          "fd=%d peer=%s attach server finished remote=%s %s\n",
          _socket_fd, peer,
-         client_mem_name[0] == '\0' ? "<none>" : client_mem_name,
+         client_request.mem_name[0] == '\0' ? "<none>" :
+                                               client_request.mem_name,
          success ? "bind success" :
              (result == UB_SOCKET_REGISTER_ABORT ? "abort" : "fallback to TCP"));
   return result;
 }
 
-bool UBSocketAttach::publish_server_mapping(const char* client_mem_name,
-                                            uint32_t* local_ring_slot,
-                                            uint64_t local_ring_size,
-                                            uint64_t client_ring_offset,
-                                            uint64_t client_ring_size) {
-  UBSocketMemMapping* remote_mapping = UBSocketMemMapping::acquire(client_mem_name, _mem_size);
+bool UBSocketAttachHandshake::publish_server_mapping(
+    const UBSocketAttachFrame& client_request,
+    uint32_t* local_ring_slot,
+    uint32_t local_connection_generation,
+    uint64_t local_ring_size) {
+  UBSocketMemMapping* remote_mapping = UBSocketMemMapping::acquire(
+      client_request.mem_name, (size_t)client_request.mapping_size);
   if (remote_mapping == NULL) { return false; }
+  if (!ub_socket_mapping_compatible(remote_mapping, client_request)) {
+    UBSocketMemMapping::release_mapping(remote_mapping);
+    errno = EBADMSG;
+    return false;
+  }
 
   UBSocketConnection* conn = new UBSocketConnection(_socket_fd, remote_mapping,
-                                                   *local_ring_slot,
-                                                   local_ring_size,
-                                                   client_ring_offset,
-                                                   client_ring_size);
+                                                    *local_ring_slot,
+                                                    local_connection_generation,
+                                                    local_ring_size,
+                                                    client_request.ring_slot,
+                                                    client_request.connection_generation,
+                                                    client_request.ring_offset,
+                                                    client_request.ring_size);
   *local_ring_slot = UB_SOCKET_RING_INVALID_SLOT;
   if (!UBSocketConnectionTable::publish(_socket_fd, conn)) {
     delete conn;
@@ -134,13 +167,12 @@ bool UBSocketAttach::publish_server_mapping(const char* client_mem_name,
   return true;
 }
 
-int32_t UBSocketAttach::attach_client_once(int control_fd, const UBSocketEndpoint& request_local_ep,
-                                           const UBSocketEndpoint& request_remote_ep,
-                                           uint32_t request_id, uint64_t ddl_ns,
-                                           uint32_t* local_ring_slot,
-                                           uint64_t local_ring_offset,
-                                           uint64_t local_ring_size,
-                                           char* remote_mem_name, bool* retry) {
+int32_t UBSocketAttachHandshake::attach_client_once(
+    int control_fd, const UBSocketEndpoint& request_local_ep,
+    const UBSocketEndpoint& request_remote_ep, uint32_t request_id,
+    uint64_t ddl_ns, uint32_t* local_ring_slot,
+    uint32_t local_connection_generation, uint64_t local_ring_offset,
+    uint64_t local_ring_size, char* remote_mem_name, bool* retry) {
   *retry = false;
   remote_mem_name[0] = '\0';
 
@@ -148,6 +180,7 @@ int32_t UBSocketAttach::attach_client_once(int control_fd, const UBSocketEndpoin
       ub_socket_attach_frame(UB_SOCKET_ATTACH_REQ, request_id, UB_SOCKET_OK_CODE,
                              &request_local_ep, &request_remote_ep,
                              _local_mem_name->as_C_string(),
+                             _protocol, local_connection_generation,
                              *local_ring_slot, local_ring_offset, local_ring_size);
   if (!ub_socket_attach_send(control_fd, attach_req, ddl_ns)) {
     *retry = UBSocketIO::is_retryable_error(errno);
@@ -166,7 +199,8 @@ int32_t UBSocketAttach::attach_client_once(int control_fd, const UBSocketEndpoin
   if (attach_rsp.request_id != request_id ||
       !ub_socket_endpoint_equals(&attach_rsp.local_endpoint, &request_local_ep) ||
       !ub_socket_endpoint_equals(&attach_rsp.remote_endpoint, &request_remote_ep) ||
-      attach_rsp.error_code != UB_SOCKET_OK_CODE) {
+      attach_rsp.error_code != UB_SOCKET_OK_CODE ||
+      !ub_socket_attach_compatible(attach_rsp, _protocol, true)) {
     UB_LOG(UB_SOCKET, UB_LOG_WARNING, "fd=%d invalid attach rsp error=%u\n",
            _socket_fd, attach_rsp.error_code);
     return UB_SOCKET_REGISTER_FALLBACK;
@@ -174,26 +208,34 @@ int32_t UBSocketAttach::attach_client_once(int control_fd, const UBSocketEndpoin
   strncpy(remote_mem_name, attach_rsp.mem_name, UB_SOCKET_MEM_NAME_LEN);
   remote_mem_name[UB_SOCKET_MEM_NAME_LEN] = '\0';
 
-  UBSocketMemMapping* remote_mapping = UBSocketMemMapping::acquire(remote_mem_name, _mem_size);
+  UBSocketMemMapping* remote_mapping = UBSocketMemMapping::acquire(
+      remote_mem_name, (size_t)attach_rsp.mapping_size);
   bool bind_ok = false;
-  if (remote_mapping != NULL) {
+  if (ub_socket_mapping_compatible(remote_mapping, attach_rsp)) {
     UBSocketConnection* conn = new UBSocketConnection(_socket_fd, remote_mapping,
-                                                     *local_ring_slot,
-                                                     local_ring_size,
-                                                     attach_rsp.ring_offset,
-                                                     attach_rsp.ring_size);
+                                                      *local_ring_slot,
+                                                      local_connection_generation,
+                                                      local_ring_size,
+                                                      attach_rsp.ring_slot,
+                                                      attach_rsp.connection_generation,
+                                                      attach_rsp.ring_offset,
+                                                      attach_rsp.ring_size);
     *local_ring_slot = UB_SOCKET_RING_INVALID_SLOT;
     if (UBSocketConnectionTable::publish(_socket_fd, conn)) {
       bind_ok = true;
     } else {
       delete conn;
     }
+  } else if (remote_mapping != NULL) {
+    UBSocketMemMapping::release_mapping(remote_mapping);
+    errno = EBADMSG;
   }
 
   UBSocketAttachFrame attach_commit =
       ub_socket_attach_frame(UB_SOCKET_ATTACH_COMMIT, request_id,
                              bind_ok ? UB_SOCKET_OK_CODE : UB_SOCKET_ERROR_CODE,
-                             &request_local_ep, &request_remote_ep, "");
+                             &request_local_ep, &request_remote_ep, "",
+                             _protocol, attach_rsp.connection_generation);
   if (!ub_socket_attach_send(control_fd, attach_commit, ddl_ns)) {
     UB_LOG(UB_SOCKET, UB_LOG_WARNING, "fd=%d send attach commit failed: %s\n",
            _socket_fd, strerror(errno));
@@ -212,7 +254,9 @@ int32_t UBSocketAttach::attach_client_once(int control_fd, const UBSocketEndpoin
   if (attach_ack.request_id != request_id ||
       !ub_socket_endpoint_equals(&attach_ack.local_endpoint, &request_local_ep) ||
       !ub_socket_endpoint_equals(&attach_ack.remote_endpoint, &request_remote_ep) ||
-      attach_ack.error_code != UB_SOCKET_OK_CODE) {
+      attach_ack.error_code != UB_SOCKET_OK_CODE ||
+      attach_ack.connection_generation != local_connection_generation ||
+      !ub_socket_attach_compatible(attach_ack, _protocol, false)) {
     UB_LOG(UB_SOCKET, UB_LOG_WARNING, "fd=%d invalid attach ack error=%u bind=%d\n",
            _socket_fd, attach_ack.error_code, bind_ok ? 1 : 0);
     ub_socket_abort_committed_attach(_socket_fd, bind_ok);
@@ -221,7 +265,7 @@ int32_t UBSocketAttach::attach_client_once(int control_fd, const UBSocketEndpoin
   return UB_SOCKET_REGISTER_SUCCESS;
 }
 
-int32_t UBSocketAttach::attach_client() {
+int32_t UBSocketAttachHandshake::attach_client() {
   UBSocketEndpoint local_ep;
   UBSocketEndpoint remote_ep;
   if (!ub_socket_endpoint_get(_socket_fd, &local_ep, &remote_ep)) {
@@ -231,7 +275,7 @@ int32_t UBSocketAttach::attach_client() {
   }
 
   UBSocketEndpoint peer_ctrl;
-  if (!UBSocketEndpointMap::control_endpoint_for_data(&remote_ep, &peer_ctrl)) {
+  if (!_config->control_endpoint_for_data(&remote_ep, &peer_ctrl)) {
     peer_ctrl = remote_ep;
     peer_ctrl.port = (uint16_t)UBSocketPort;
   }
@@ -248,7 +292,9 @@ int32_t UBSocketAttach::attach_client() {
   const uint32_t request_id = (uint32_t)os::javaTimeNanos();
   uint64_t local_ring_offset = 0;
   uint64_t local_ring_size = 0;
-  uint32_t local_ring_slot = UBSocketRingSlots::alloc(&local_ring_offset, &local_ring_size);
+  uint32_t local_connection_generation = 0;
+  uint32_t local_ring_slot = UBSocketRingSlots::alloc(
+      &local_ring_offset, &local_ring_size, &local_connection_generation);
   if (local_ring_slot == UB_SOCKET_RING_INVALID_SLOT) {
     UB_PROFILE_COUNT(UB_PROF_RING_ATTACH_NO_SLOT, 0);
     UB_LOG(UB_SOCKET, UB_LOG_WARNING, "fd=%d attach client no local ring slot\n", _socket_fd);
@@ -271,8 +317,10 @@ int32_t UBSocketAttach::attach_client() {
 
     bool retry = false;
     result = attach_client_once(control_fd, remote_ep, local_ep, request_id,
-                                ddl_ns, &local_ring_slot, local_ring_offset,
-                                local_ring_size, remote_mem_name, &retry);
+                                ddl_ns, &local_ring_slot,
+                                local_connection_generation, local_ring_offset,
+                                local_ring_size,
+                                remote_mem_name, &retry);
     close(control_fd);
     if (retry) { continue; }
     if (result != UB_SOCKET_REGISTER_SUCCESS) { break; }

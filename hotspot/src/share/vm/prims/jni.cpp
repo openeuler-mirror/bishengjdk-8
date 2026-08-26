@@ -72,6 +72,7 @@
 #include "runtime/jfieldIDWorkaround.hpp"
 #include "matrix/matrixManager.hpp"
 #include "matrix/ubSocket/ubSocket.hpp"
+#include "matrix/ubSocket/ubSocketSelectorNotifier.hpp"
 #include "runtime/orderAccess.inline.hpp"
 #include "runtime/reflection.hpp"
 #include "runtime/sharedRuntime.hpp"
@@ -4182,9 +4183,10 @@ JNI_ENTRY(jlong, jni_UbSocketWrite(JNIEnv *env, void* buf, jint fd, jlong len))
   return len <= 0 ? 0 : UBSocketManager::write_data(buf, fd, (size_t)len);
 JNI_END
 
-JNI_ENTRY(jlong, jni_UbSocketParse(JNIEnv *env, jint fd, char *msg, jint msg_len))
-  JNIWrapper("jni_UbSocketParse");
-  return UBSocketManager::parse_msg(fd, msg, msg_len);
+JNI_ENTRY(jlong, jni_UbSocketParseControl(JNIEnv *env, jint fd, char *msg,
+                                          jint msg_len))
+  JNIWrapper("jni_UbSocketParseControl");
+  return UBSocketManager::parse_control(fd, msg, msg_len);
 JNI_END
 
 JNI_ENTRY(jlong, jni_UbSocketTransferFromFile(JNIEnv *env, jint src_fd,
@@ -4205,6 +4207,81 @@ JNI_ENTRY(void, jni_UbSocketProfileRecord(JNIEnv *env, jint event,
   JNIWrapper("jni_UbSocketProfileRecord");
   UBSocketProfiler::record((UBSocketProfileEvent)event, (uint64_t)elapsed_ns,
                            (uint64_t)bytes, (uint64_t)count);
+JNI_END
+
+JNI_ENTRY(void, jni_UbSocketProfileSelectorInjected(JNIEnv *env, jint event_fd))
+  JNIWrapper("jni_UbSocketProfileSelectorInjected");
+  // Retained at its existing JNI table position for ABI compatibility.
+  (void)event_fd;
+JNI_END
+
+JNI_ENTRY(jboolean, jni_UbSocketPollingNotifyEnabled(JNIEnv *env))
+  JNIWrapper("jni_UbSocketPollingNotifyEnabled");
+  return UBSocketManager::polling_notify_enabled() ? JNI_TRUE : JNI_FALSE;
+JNI_END
+
+JNI_ENTRY(jboolean, jni_UbSocketRegisterSelectorNotifier(JNIEnv *env, jint fd))
+  JNIWrapper("jni_UbSocketRegisterSelectorNotifier");
+  return UBSocketManager::register_selector_notifier(fd) ? JNI_TRUE : JNI_FALSE;
+JNI_END
+
+JNI_ENTRY(void, jni_UbSocketUnregisterSelectorNotifier(JNIEnv *env, jint fd))
+  JNIWrapper("jni_UbSocketUnregisterSelectorNotifier");
+  UBSocketManager::unregister_selector_notifier(fd);
+JNI_END
+
+JNI_ENTRY(jlong, jni_UbSocketSubscribeSelector(JNIEnv *env, jint data_fd,
+                                               jint event_fd))
+  JNIWrapper("jni_UbSocketSubscribeSelector");
+  return UBSocketManager::subscribe_selector(data_fd, event_fd);
+JNI_END
+
+JNI_ENTRY(void, jni_UbSocketUnsubscribeSelector(JNIEnv *env,
+                                                jlong subscription_id))
+  JNIWrapper("jni_UbSocketUnsubscribeSelector");
+  UBSocketManager::unsubscribe_selector(subscription_id);
+JNI_END
+
+JNI_ENTRY(jint, jni_UbSocketDrainSelectorReady(JNIEnv *env, jint event_fd,
+                                               void* events, jint capacity,
+                                               jlong* profile_complete_ns))
+  JNIWrapper("jni_UbSocketDrainSelectorReady");
+  return UBSocketManager::drain_selector_ready(
+      event_fd, (UBSocketSelectorReadyEvent*)events, (int32_t)capacity,
+      profile_complete_ns);
+JNI_END
+
+JNI_ENTRY(void, jni_UbSocketCompleteSelectorNotification(JNIEnv *env,
+                                                         jlong complete_ns,
+                                                         jboolean injected))
+  JNIWrapper("jni_UbSocketCompleteSelectorNotification");
+  UBSocketManager::complete_selector_notification(
+      complete_ns, injected == JNI_TRUE);
+JNI_END
+
+JNI_ENTRY(jboolean, jni_UbSocketSpinEnabled(JNIEnv *env))
+  JNIWrapper("jni_UbSocketSpinEnabled");
+  return UBSocketManager::spin_enabled() ? JNI_TRUE : JNI_FALSE;
+JNI_END
+
+JNI_ENTRY(jboolean, jni_UbSocketSpinWait(JNIEnv *env, jint data_fd))
+  JNIWrapper("jni_UbSocketSpinWait");
+  return UBSocketManager::spin_wait_data(data_fd) ? JNI_TRUE : JNI_FALSE;
+JNI_END
+
+JNI_ENTRY(jboolean, jni_UbSocketShutdownOutput(JNIEnv *env, jint data_fd))
+  JNIWrapper("jni_UbSocketShutdownOutput");
+  return UBSocketManager::shutdown_output(data_fd) ? JNI_TRUE : JNI_FALSE;
+JNI_END
+
+JNI_ENTRY(jboolean, jni_UbSocketPeerCloseReady(JNIEnv *env, jint data_fd))
+  JNIWrapper("jni_UbSocketPeerCloseReady");
+  return UBSocketManager::peer_close_ready(data_fd) ? JNI_TRUE : JNI_FALSE;
+JNI_END
+
+JNI_ENTRY(jboolean, jni_UbSocketFailClose(JNIEnv *env, jint data_fd))
+  JNIWrapper("jni_UbSocketFailClose");
+  return UBSocketManager::fail_close(data_fd) ? JNI_TRUE : JNI_FALSE;
 JNI_END
 
 //
@@ -5042,10 +5119,23 @@ struct JNINativeInterface_ jni_NativeInterface = {
     jni_UbSocketMarkControlClosed,
     jni_UbSocketRead,
     jni_UbSocketWrite,
-    jni_UbSocketParse,
+    jni_UbSocketParseControl,
     jni_UbSocketTransferFromFile,
     jni_UbSocketProfileMode,
-    jni_UbSocketProfileRecord
+    jni_UbSocketProfileRecord,
+    jni_UbSocketProfileSelectorInjected,
+    jni_UbSocketPollingNotifyEnabled,
+    jni_UbSocketRegisterSelectorNotifier,
+    jni_UbSocketUnregisterSelectorNotifier,
+    jni_UbSocketSubscribeSelector,
+    jni_UbSocketUnsubscribeSelector,
+    jni_UbSocketDrainSelectorReady,
+    jni_UbSocketCompleteSelectorNotification,
+    jni_UbSocketSpinEnabled,
+    jni_UbSocketSpinWait,
+    jni_UbSocketShutdownOutput,
+    jni_UbSocketPeerCloseReady,
+    jni_UbSocketFailClose
 };
 
 

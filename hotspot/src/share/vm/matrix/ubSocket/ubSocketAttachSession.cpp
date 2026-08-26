@@ -22,6 +22,7 @@
 #include <string.h>
 
 #include "matrix/ubSocket/ubSocket.hpp"
+#include "matrix/ubSocket/ubSocketConfig.hpp"
 #include "matrix/ubSocket/ubSocketFrame.hpp"
 #include "matrix/ubSocket/ubSocketIO.hpp"
 #include "matrix/ubSocket/ubSocketUtils.hpp"
@@ -34,25 +35,28 @@ UBSocketAttachSession::UBSocketAttachSession(const UBSocketEndpoint* local_ep,
                                              const UBSocketEndpoint* remote_ep,
                                              const char* local_mem_name,
                                              uint32_t local_ring_slot,
+                                             uint32_t local_connection_generation,
                                              uint64_t local_ring_offset,
-                                             uint64_t local_ring_size)
+                                             uint64_t local_ring_size,
+                                             const UBSocketProtocolInfo& protocol,
+                                             const UBSocketConfig* config)
   : _monitor(new Monitor(Mutex::leaf, "UBSocketAttachSession_lock")),
     _local_endpoint(*local_ep),
     _remote_endpoint(*remote_ep),
     _request_id(0),
+    _protocol(protocol),
     _local_ring_slot(local_ring_slot),
+    _local_connection_generation(local_connection_generation),
     _local_ring_offset(local_ring_offset),
     _local_ring_size(local_ring_size),
-    _client_ring_slot(0),
-    _client_ring_offset(0),
-    _client_ring_size(0),
     _phase(ATTACH_REQUESTED),
     _next(NULL),
     _closing(false),
-    _active_count(0) {
+    _active_count(0),
+    _config(config) {
   strncpy(_local_mem_name, local_mem_name, UB_SOCKET_MEM_NAME_LEN);
   _local_mem_name[UB_SOCKET_MEM_NAME_LEN] = '\0';
-  _client_mem_name[0] = '\0';
+  memset(&_client_request, 0, sizeof(_client_request));
 }
 
 UBSocketAttachSession::~UBSocketAttachSession() {
@@ -86,9 +90,9 @@ bool UBSocketAttachSession::matches(const UBSocketEndpoint* local_ep,
 
 bool UBSocketAttachSession::matches_request(const UBSocketAttachFrame* request) const {
   bool local_match = false;
-  if (UBSocketEndpointMap::has_mapping_for_data(&request->local_endpoint)) {
+  if (_config->has_mapping_for_data(&request->local_endpoint)) {
     local_match =
-        UBSocketEndpointMap::matches_local_data(&request->local_endpoint, &_local_endpoint);
+        _config->matches_local_data(&request->local_endpoint, &_local_endpoint);
   } else {
     local_match = ub_socket_endpoint_equals(&request->local_endpoint, &_local_endpoint);
   }
@@ -123,10 +127,8 @@ void UBSocketAttachSession::close_and_wait() {
   }
 }
 
-bool UBSocketAttachSession::wait_for_request(uint64_t ddl_ns, char* client_mem_name,
-                                             uint32_t* client_ring_slot,
-                                             uint64_t* client_ring_offset,
-                                             uint64_t* client_ring_size) {
+bool UBSocketAttachSession::wait_for_request(
+    uint64_t ddl_ns, UBSocketAttachFrame* client_request) {
   MonitorLockerEx locker(_monitor, Mutex::_no_safepoint_check_flag);
   while (_phase == ATTACH_REQUESTED) {
     if (!wait_until(ddl_ns)) {
@@ -138,11 +140,7 @@ bool UBSocketAttachSession::wait_for_request(uint64_t ddl_ns, char* client_mem_n
   }
   if (failed()) { return false; }
 
-  strncpy(client_mem_name, _client_mem_name, UB_SOCKET_MEM_NAME_LEN);
-  client_mem_name[UB_SOCKET_MEM_NAME_LEN] = '\0';
-  *client_ring_slot = _client_ring_slot;
-  *client_ring_offset = _client_ring_offset;
-  *client_ring_size = _client_ring_size;
+  *client_request = _client_request;
   return true;
 }
 
@@ -158,11 +156,7 @@ bool UBSocketAttachSession::accept_request(const UBSocketAttachFrame* request) {
     return false;
   }
   _request_id = request->request_id;
-  strncpy(_client_mem_name, request->mem_name, UB_SOCKET_MEM_NAME_LEN);
-  _client_mem_name[UB_SOCKET_MEM_NAME_LEN] = '\0';
-  _client_ring_slot = request->ring_slot;
-  _client_ring_offset = request->ring_offset;
-  _client_ring_size = request->ring_size;
+  _client_request = *request;
   _phase = ATTACH_PREPARED;
   UB_LOG(UB_SOCKET, UB_LOG_INFO, "session local_port=%u remote_port=%u req accepted\n",
          _local_endpoint.port, _remote_endpoint.port);
@@ -265,6 +259,22 @@ bool UBSocketAttachSession::drive_server_handshake(int control_fd,
   if (!matches_request(request)) {
     return false;
   }
+  if (!ub_socket_attach_compatible(*request, _protocol, true)) {
+    UB_LOG(UB_SOCKET, UB_LOG_WARNING,
+           "control fd=%d reject incompatible protocol options\n", control_fd);
+    UBSocketAttachFrame response =
+        ub_socket_attach_frame(UB_SOCKET_ATTACH_RSP, request->request_id,
+                               UB_SOCKET_ERROR_CODE,
+                               &request->local_endpoint,
+                               &request->remote_endpoint, "", _protocol);
+    if (!ub_socket_attach_send(control_fd, response, ddl_ns)) {
+      UB_LOG(UB_SOCKET, UB_LOG_WARNING,
+             "control fd=%d send incompatible attach rsp failed: %s\n",
+             control_fd, strerror(errno));
+    }
+    finish_control(false);
+    return false;
+  }
   if (_request_id != 0 && _request_id != request->request_id) {
     return false;
   }
@@ -281,6 +291,7 @@ bool UBSocketAttachSession::drive_server_handshake(int control_fd,
                              is_prepared() ? UB_SOCKET_OK_CODE : UB_SOCKET_ERROR_CODE,
                              &request->local_endpoint, &request->remote_endpoint,
                              is_prepared() ? _local_mem_name : "",
+                             _protocol, _local_connection_generation,
                              _local_ring_slot, _local_ring_offset,
                              _local_ring_size);
   if (!ub_socket_attach_send(control_fd, response, ddl_ns)) {
@@ -303,7 +314,9 @@ bool UBSocketAttachSession::drive_server_handshake(int control_fd,
   }
   if (commit.request_id != _request_id ||
       !ub_socket_endpoint_equals(&commit.local_endpoint, &request->local_endpoint) ||
-      !ub_socket_endpoint_equals(&commit.remote_endpoint, &request->remote_endpoint)) {
+      !ub_socket_endpoint_equals(&commit.remote_endpoint, &request->remote_endpoint) ||
+      commit.connection_generation != _local_connection_generation ||
+      !ub_socket_attach_compatible(commit, _protocol, false)) {
     finish_control(false);
     return false;
   }
@@ -317,7 +330,8 @@ bool UBSocketAttachSession::drive_server_handshake(int control_fd,
   UBSocketAttachFrame ack =
       ub_socket_attach_frame(UB_SOCKET_ATTACH_ACK, _request_id,
                              is_finalized_ok() ? UB_SOCKET_OK_CODE : UB_SOCKET_ERROR_CODE,
-                             &request->local_endpoint, &request->remote_endpoint, "");
+                             &request->local_endpoint, &request->remote_endpoint, "",
+                             _protocol, request->connection_generation);
   bool send_ok = ub_socket_attach_send(control_fd, ack, ddl_ns);
   if (!send_ok) {
     UB_LOG(UB_SOCKET, UB_LOG_WARNING, "control fd=%d send attach ack failed: %s\n",

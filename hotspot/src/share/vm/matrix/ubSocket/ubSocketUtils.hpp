@@ -52,18 +52,6 @@ class UBSocketSessionCaches : public AllStatic {
   static UBSocketAttachSession* _cache_head;
 };
 
-class UBSocketEndpointMap : public AllStatic {
- public:
-  static void init();
-  static int load_from_file(const char* conf_path);
-  static void cleanup();
-  static bool control_endpoint_for_data(const UBSocketEndpoint* data_ep,
-                                        UBSocketEndpoint* control_ep);
-  static bool has_mapping_for_data(const UBSocketEndpoint* data_ep);
-  static bool matches_local_data(const UBSocketEndpoint* request_ep,
-                                 const UBSocketEndpoint* session_ep);
-};
-
 class UBSocketEarlyReqQueue : public AllStatic {
  public:
   static void init() {_head = _tail = NULL; }

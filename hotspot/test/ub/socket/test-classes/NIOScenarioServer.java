@@ -521,7 +521,7 @@ public class NIOScenarioServer {
                     + ready + " elapsedMs=" + elapsedMs);
             }
             if (elapsedMs < minElapsedMs) {
-                throw new RuntimeException("select(timeout) returned before timeout after UB probe, elapsedMs="
+                throw new RuntimeException("select(timeout) returned before timeout after Ring drain, elapsedMs="
                     + elapsedMs + " minElapsedMs=" + minElapsedMs);
             }
             System.out.println("SELECT_TIMEOUT_AFTER_DRAIN_OK elapsedMs=" + elapsedMs

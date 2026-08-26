@@ -95,7 +95,7 @@ public final class SocketTestSupport {
 
         ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(
             true, command.toArray(new String[command.size()]));
-        pb.environment().put("UBSOCKET_LOG_PATH", extractUbLogPath(command.get(4)));
+        pb.environment().put("UBSOCKET_LOG_PATH", extractUbLogPath(command.get(5)));
         return pb;
     }
 
@@ -154,7 +154,7 @@ public final class SocketTestSupport {
         String ubLogPath = null;
         if (enableUb) {
             command.addAll(createUbOptions(configPath, controlPort, mainClass));
-            ubLogPath = extractUbLogPath(command.get(4));
+            ubLogPath = extractUbLogPath(command.get(5));
         }
 
         command.add(mainClass);
@@ -211,13 +211,6 @@ public final class SocketTestSupport {
             return ((Number)value).longValue();
         }
         throw new IllegalStateException("Unexpected pid field: " + value);
-    }
-
-    public static long countOpenFileDescriptors(long pid) throws IOException {
-        Path fdDir = Paths.get("/proc", Long.toString(pid), "fd");
-        try (Stream<Path> paths = Files.list(fdDir)) {
-            return paths.count();
-        }
     }
 
     public static long countOpenTcpSockets(long pid) throws IOException {
@@ -314,51 +307,6 @@ public final class SocketTestSupport {
         }
     }
 
-    public static boolean containsDataFallback(String text) {
-        return text.contains("send DATA_FALLBACK frame")
-            || text.contains("recv DATA_FALLBACK frame");
-    }
-
-    public static boolean containsHeartbeat(String text) {
-        return text.contains("send HEARTBEAT frame")
-            || text.contains("recv HEARTBEAT frame");
-    }
-
-    public static void assertDataFallback(String text, String message) {
-        if (!containsDataFallback(text)) {
-            throw new RuntimeException(message + "\n" + text);
-        }
-    }
-
-    public static void assertHeartbeat(String text, String message) {
-        if (!containsHeartbeat(text)) {
-            throw new RuntimeException(message + "\n" + text);
-        }
-    }
-
-    public static void assertNoHeartbeat(String text, String message) {
-        if (containsHeartbeat(text)) {
-            throw new RuntimeException(message + "\n" + text);
-        }
-    }
-
-    public static void assertTransferInfoLogs(String text, String message) {
-        if (!text.contains("write_data success")) {
-            throw new RuntimeException(message + ": missing write_data info log\n" + text);
-        }
-        if (!text.contains("read_data requested=")) {
-            throw new RuntimeException(message + ": missing read_data info log\n" + text);
-        }
-    }
-
-    public static void assertDescriptorFrameBytes(String text, int expectedBytes,
-                                                  String message) {
-        String token = "descriptor_sent=" + expectedBytes;
-        if (!text.contains(token)) {
-            throw new RuntimeException(message + ": missing " + token + "\n" + text);
-        }
-    }
-
     public static long profileCount(String text, String event) {
         long count = 0L;
         for (String line : text.split("\\R")) {
@@ -428,16 +376,6 @@ public final class SocketTestSupport {
         }
     }
 
-    public static void assertProfileCountLessThan(String text, String leftEvent,
-                                                  String rightEvent, String message) {
-        long left = profileCount(text, leftEvent);
-        long right = profileCount(text, rightEvent);
-        if (left >= right) {
-            throw new RuntimeException(message + ": expected " + leftEvent + " < "
-                + rightEvent + ", actual " + left + " >= " + right + "\n" + text);
-        }
-    }
-
     public static void assertProfileMaxBytesAtLeast(String text, String event,
                                                     long expected, String message) {
         long actual = profileMaxBytes(text, event);
@@ -457,15 +395,11 @@ public final class SocketTestSupport {
     }
 
     public static void assertNoLegacyControlFrames(String text, String message) {
-        if (containsDataFallback(text) || containsHeartbeat(text)
+        if (text.contains("send DATA_FALLBACK frame")
+                || text.contains("recv DATA_FALLBACK frame")
+                || text.contains("send HEARTBEAT frame")
+                || text.contains("recv HEARTBEAT frame")
                 || text.contains("descriptor_sent=")) {
-            throw new RuntimeException(message + "\n" + text);
-        }
-    }
-
-    public static void assertNoPayloadPrefixLog(String text, String message) {
-        String token = "payload_prefix=";
-        if (text.contains(token)) {
             throw new RuntimeException(message + "\n" + text);
         }
     }
@@ -551,6 +485,7 @@ public final class SocketTestSupport {
         List<String> command = new ArrayList<String>();
         command.add("-XX:+UnlockExperimentalVMOptions");
         command.add("-XX:+UseUBSocket");
+        command.add("-XX:UBSocketAttach=all");
         command.add("-XX:UBSocketConf=" + configPath);
         command.add("-XX:UBSocketPort=" + controlPort);
         command.add("-XX:UBLog=path=" + ubLogPath + ",socket=debug");

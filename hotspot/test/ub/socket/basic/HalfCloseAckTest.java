@@ -73,5 +73,11 @@ public class HalfCloseAckTest {
         SocketTestSupport.assertProfileCountAtLeast(
             combinedLog, "ring_read_total", 1,
             "HalfCloseAckTest: ring read profile");
+        if (SocketTestSupport.profileCount(
+                combinedLog, "close_failure_timeout") != 0L) {
+            throw new RuntimeException(
+                "HalfCloseAckTest: graceful final-offset close timed out\n"
+                + combinedLog);
+        }
     }
 }

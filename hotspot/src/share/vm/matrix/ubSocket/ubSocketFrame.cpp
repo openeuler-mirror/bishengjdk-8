@@ -20,7 +20,7 @@
 #include "matrix/ubSocket/ubSocketFrame.hpp"
 #include "matrix/matrixLog.hpp"
 #include "matrix/ubSocket/ubSocketIO.hpp"
-#include "matrix/ubSocket/ubSocketProfile.hpp"
+#include "matrix/ubSocket/ubSocketRing.hpp"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -39,10 +39,6 @@ static bool ub_socket_is_attach_kind(uint16_t kind) {
          kind == UB_SOCKET_ATTACH_ACK;
 }
 
-static bool ub_socket_is_wakeup_kind(uint16_t kind) {
-  return kind == UB_SOCKET_WAKEUP || kind == UB_SOCKET_CLOSE;
-}
-
 static void ub_socket_copy_mem_name(char* dst, const char* src) {
   memset(dst, 0, UB_SOCKET_MEM_NAME_BUF_LEN);
   if (src != NULL) {
@@ -50,12 +46,14 @@ static void ub_socket_copy_mem_name(char* dst, const char* src) {
   }
 }
 
-static void ub_socket_encode_wakeup_frame(const UBSocketWakeupFrame& frame, void* raw) {
-  memcpy(raw, &frame, UB_SOCKET_WAKEUP_FRAME_WIRE_SIZE);
+static void ub_socket_encode_control_frame(const UBSocketControlFrame& frame,
+                                           void* raw) {
+  memcpy(raw, &frame, UB_SOCKET_CONTROL_FRAME_WIRE_SIZE);
 }
 
-static void ub_socket_decode_wakeup_frame(const void* raw, UBSocketWakeupFrame* frame) {
-  memcpy(frame, raw, UB_SOCKET_WAKEUP_FRAME_WIRE_SIZE);
+static void ub_socket_decode_control_frame(const void* raw,
+                                           UBSocketControlFrame* frame) {
+  memcpy(frame, raw, UB_SOCKET_CONTROL_FRAME_WIRE_SIZE);
 }
 
 static bool ub_socket_verify_attach_frame(UBSocketAttachFrame* frame,
@@ -70,8 +68,11 @@ static bool ub_socket_verify_attach_frame(UBSocketAttachFrame* frame,
   return true;
 }
 
-static bool ub_socket_verify_wakeup_frame(UBSocketWakeupFrame* frame) {
-  if (!ub_socket_is_wakeup_kind(frame->kind)) {
+static bool ub_socket_verify_control_frame(UBSocketControlFrame* frame) {
+  if (frame->version != UB_SOCKET_PROTOCOL_VERSION ||
+      (frame->kind != UB_SOCKET_SHUTDOWN_OUTPUT &&
+       frame->kind != UB_SOCKET_CLOSE) ||
+      frame->connection_generation == 0) {
     errno = EBADMSG;
     return false;
   }
@@ -195,6 +196,8 @@ UBSocketAttachFrame ub_socket_attach_frame(uint16_t kind,
                                            const UBSocketEndpoint* local_ep,
                                            const UBSocketEndpoint* remote_ep,
                                            const char* mem_name,
+                                           const UBSocketProtocolInfo& protocol,
+                                           uint32_t connection_generation,
                                            uint32_t ring_slot,
                                            uint64_t ring_offset,
                                            uint64_t ring_size) {
@@ -204,7 +207,13 @@ UBSocketAttachFrame ub_socket_attach_frame(uint16_t kind,
   frame.kind = kind;
   frame.request_id = request_id;
   frame.error_code = error_code;
+  frame.capabilities = protocol.capabilities;
+  frame.ring_count = protocol.ring_count;
+  frame.connection_generation = connection_generation;
   frame.ring_slot = ring_slot;
+  frame.mapping_size = protocol.mapping_size;
+  frame.ring_memory_size = protocol.ring_memory_size;
+  frame.spin_nanos = protocol.spin_nanos;
   frame.ring_offset = ring_offset;
   frame.ring_size = ring_size;
   if (local_ep != NULL) {
@@ -217,10 +226,61 @@ UBSocketAttachFrame ub_socket_attach_frame(uint16_t kind,
   return frame;
 }
 
-UBSocketWakeupFrame ub_socket_wakeup_frame(uint16_t kind) {
-  UBSocketWakeupFrame frame;
+UBSocketProtocolInfo ub_socket_protocol_info(uint64_t mapping_size,
+                                             uint64_t ring_memory_size,
+                                             uint32_t ring_count,
+                                             uint64_t spin_nanos) {
+  UBSocketProtocolInfo protocol;
+  protocol.capabilities = UB_SOCKET_CAP_GENERATION_READY;
+  if (spin_nanos > 0) {
+    protocol.capabilities |= UB_SOCKET_CAP_SPIN_COALESCE;
+  }
+  protocol.ring_count = ring_count;
+  protocol.mapping_size = mapping_size;
+  protocol.ring_memory_size = ring_memory_size;
+  protocol.spin_nanos = spin_nanos;
+  return protocol;
+}
+
+bool ub_socket_attach_compatible(const UBSocketAttachFrame& frame,
+                                 const UBSocketProtocolInfo& protocol,
+                                 bool require_ring) {
+  if (frame.capabilities != protocol.capabilities ||
+      frame.ring_count != protocol.ring_count ||
+      frame.mapping_size != protocol.mapping_size ||
+      frame.ring_memory_size != protocol.ring_memory_size ||
+      frame.spin_nanos != protocol.spin_nanos) {
+    errno = EPROTONOSUPPORT;
+    return false;
+  }
+  if (!require_ring) { return true; }
+  if (frame.connection_generation == 0 ||
+      frame.ring_slot >= frame.ring_count ||
+      frame.ring_size == 0 ||
+      frame.ring_offset > frame.mapping_size ||
+      frame.ring_size > frame.mapping_size - frame.ring_offset) {
+    errno = EBADMSG;
+    return false;
+  }
+  uint64_t expected_size = UBSocketRingSlots::payload_size();
+  uint64_t expected_offset =
+      UBSocketRingSlots::payload_mapping_offset(frame.ring_slot);
+  if (frame.ring_size != expected_size || frame.ring_offset != expected_offset) {
+    errno = EBADMSG;
+    return false;
+  }
+  return true;
+}
+
+UBSocketControlFrame ub_socket_control_frame(uint16_t kind,
+                                             uint32_t connection_generation,
+                                             uint64_t final_write_offset) {
+  UBSocketControlFrame frame;
   memset(&frame, 0, sizeof(frame));
+  frame.version = UB_SOCKET_PROTOCOL_VERSION;
   frame.kind = kind;
+  frame.connection_generation = connection_generation;
+  frame.final_write_offset = final_write_offset;
   return frame;
 }
 
@@ -239,20 +299,19 @@ bool ub_socket_attach_recv(int fd, UBSocketAttachFrame* frame,
   return ub_socket_verify_attach_frame(frame, expected_kind);
 }
 
-ssize_t ub_socket_wakeup_send(int fd, const UBSocketWakeupFrame& frame,
-                              size_t* bytes_sent) {
-  size_t bytes = UB_SOCKET_WAKEUP_FRAME_WIRE_SIZE;
-  UBSocketProfileScope total_profile(UB_PROF_WAKEUP_SEND_TOTAL, bytes);
+ssize_t ub_socket_control_send(int fd, const UBSocketControlFrame& frame,
+                               size_t* bytes_sent) {
+  size_t bytes = UB_SOCKET_CONTROL_FRAME_WIRE_SIZE;
   uint64_t ddl_ns = (uint64_t)os::javaTimeNanos() +
-                    UB_WAKEUP_SEND_TIMEOUT_MS * NANOSECS_PER_MILLISEC;
-  char wire_frame[UB_SOCKET_WAKEUP_FRAME_WIRE_SIZE];
-  ub_socket_encode_wakeup_frame(frame, wire_frame);
+                    UB_CONTROL_SEND_TIMEOUT_MS * NANOSECS_PER_MILLISEC;
+  char wire_frame[UB_SOCKET_CONTROL_FRAME_WIRE_SIZE];
+  ub_socket_encode_control_frame(frame, wire_frame);
   return UBSocketIO::send_all(fd, wire_frame, bytes, ddl_ns, MSG_NOSIGNAL,
-                              bytes_sent, UB_PROF_WAKEUP_SEND_SYSCALL);
+                              bytes_sent, -1);
 }
 
-bool ub_socket_wakeup_parse(const void* raw, UBSocketWakeupFrame* frame) {
+bool ub_socket_control_parse(const void* raw, UBSocketControlFrame* frame) {
   memset(frame, 0, sizeof(*frame));
-  ub_socket_decode_wakeup_frame(raw, frame);
-  return ub_socket_verify_wakeup_frame(frame);
+  ub_socket_decode_control_frame(raw, frame);
+  return ub_socket_verify_control_frame(frame);
 }

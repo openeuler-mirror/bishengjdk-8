@@ -5942,8 +5942,16 @@ bool os::distribute_processes(uint length, uint* distribution) {
 }
 
 bool os::bind_to_processor(uint processor_id) {
-  // Not yet implemented.
-  return false;
+  if (processor_id >= CPU_SETSIZE) {
+    errno = EINVAL;
+    return false;
+  }
+
+  cpu_set_t cpus;
+  CPU_ZERO(&cpus);
+  CPU_SET(processor_id, &cpus);
+  // pid 0 applies the affinity to the calling Linux thread.
+  return sched_setaffinity(0, sizeof(cpus), &cpus) == 0;
 }
 
 ///

@@ -38,10 +38,42 @@ public class OptionsTest {
 
         ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(
             true,
+            "-XX:+UnlockExperimentalVMOptions",
+            "-XX:+PrintFlagsFinal",
+            "-version"
+        );
+        OutputAnalyzer output = new OutputAnalyzer(pb.start());
+        output.shouldMatch("(?m)^\\s*uintx UBSocketMemorySize\\s+[:]?= 268431360\\s+\\{experimental\\}$");
+        output.shouldMatch("(?m)^\\s*uintx UBSocketSpinNanos\\s+[:]?= 0\\s+\\{experimental\\}$");
+        output.shouldHaveExitValue(0);
+
+        pb = ProcessTools.createJavaProcessBuilder(
+            true,
+            "-XX:+UnlockExperimentalVMOptions",
+            "-XX:UBSocketSpinNanos=10000",
+            appClass[0]
+        );
+        output = new OutputAnalyzer(pb.start());
+        mustContain(output.getOutput(), "UBSocket is disabled, but spin nanos is set.");
+        output.shouldHaveExitValue(0);
+
+        pb = ProcessTools.createJavaProcessBuilder(
+            true,
+            "-XX:+UnlockExperimentalVMOptions",
+            "-XX:UBSocketSpinNanos=-1",
+            appClass[0]
+        );
+        output = new OutputAnalyzer(pb.start());
+        mustContain(output.getOutput(),
+                    "Improperly specified VM option 'UBSocketSpinNanos=-1'");
+        output.shouldHaveExitValue(1);
+
+        pb = ProcessTools.createJavaProcessBuilder(
+            true,
             "-XX:+UseUBSocket",
             appClass[0]
         );
-        OutputAnalyzer output = new OutputAnalyzer(pb.start());
+        output = new OutputAnalyzer(pb.start());
         output.shouldContain("must be enabled via -XX:+UnlockExperimentalVMOptions");
         output.shouldHaveExitValue(1);
 
@@ -78,7 +110,7 @@ public class OptionsTest {
         );
         output = new OutputAnalyzer(pb.start());
         String missingConfOutput = output.getOutput() + readText(missingConfLog);
-        if (!missingConfOutput.contains("UBSocket load allow-list failed or empty: no_exist_file")) {
+        if (!missingConfOutput.contains("UBSocket load configuration failed or empty: no_exist_file")) {
             throw new RuntimeException("Expected missing socket config warning\n" + missingConfOutput);
         }
         output.shouldHaveExitValue(0);
@@ -101,6 +133,31 @@ public class OptionsTest {
         mustContain(validConfOutput, "Load allow method: sun/nio/ch/ServerSocketChannelImpl.accept");
         output.shouldHaveExitValue(0);
 
+        // Attach policy accepts the supported values and rejects unknown values.
+        pb = ProcessTools.createJavaProcessBuilder(
+            true,
+            "-XX:+UnlockExperimentalVMOptions",
+            "-XX:+UseUBSocket",
+            "-XX:UBSocketAttach=all",
+            "-XX:UBSocketConf=" + configPath,
+            "-XX:UBSocketPort=" + freePort(),
+            appClass[0]
+        );
+        output = new OutputAnalyzer(pb.start());
+        output.shouldHaveExitValue(0);
+
+        pb = ProcessTools.createJavaProcessBuilder(
+            true,
+            "-XX:+UnlockExperimentalVMOptions",
+            "-XX:+UseUBSocket",
+            "-XX:UBSocketAttach=invalid",
+            "-XX:UBSocketConf=" + configPath,
+            appClass[0]
+        );
+        output = new OutputAnalyzer(pb.start());
+        mustContain(output.getOutput(), "UBSocket attach policy(invalid) invalid");
+        output.shouldHaveExitValue(0);
+
         String invalidConfig = SocketTestConfig.writeConfig(
             "UBSocketInvalid.conf",
             "#stack\n" +
@@ -120,7 +177,7 @@ public class OptionsTest {
         String invalidConfOutput = output.getOutput() + readText(invalidConfLog);
         mustContain(invalidConfOutput, "[socket][INFO] Load conf file");
         mustContain(invalidConfOutput, "Load allow method: sun/nio/ch/SocketChannelImpl.connect");
-        mustContain(invalidConfOutput, "Ignore invalid allow-list entry");
+        mustContain(invalidConfOutput, "Ignore invalid configuration");
         mustContain(invalidConfOutput, "sun/nio/ch/SocketChannelImpl.invalid-method!");
         output.shouldHaveExitValue(0);
 
@@ -152,7 +209,7 @@ public class OptionsTest {
         mustContain(mappedConfOutput, "Load self port map public_port=23081 local_port=20880");
         mustContain(mappedConfOutput, "Load self port map public_port=24081 local_port=33081");
         mustContain(mappedConfOutput, "Load remote endpoint map data_port=23091 control_port=24091");
-        mustNotContain(mappedConfOutput, "Ignore invalid allow-list entry");
+        mustNotContain(mappedConfOutput, "Ignore invalid configuration");
         output.shouldHaveExitValue(0);
 
         // UBSocket Port
@@ -196,6 +253,76 @@ public class OptionsTest {
             "-XX:+UnlockExperimentalVMOptions",
             "-XX:+UseUBSocket",
             "-XX:UBSocketConf=" + configPath,
+            "-XX:UBSocketPort=" + freePort(),
+            "-XX:UBSocketMemorySize=526336",
+            "-XX:UBSocketRingCount=257",
+            appClass[0]
+        );
+        output = new OutputAnalyzer(pb.start());
+        output.shouldHaveExitValue(0);
+
+        pb = ProcessTools.createJavaProcessBuilder(
+            true,
+            "-XX:+UnlockExperimentalVMOptions",
+            "-XX:+UseUBSocket",
+            "-XX:UBSocketConf=" + configPath,
+            "-XX:UBSocketPort=" + freePort(),
+            "-XX:UBSocketMemorySize=524288",
+            "-XX:UBSocketRingCount=4096",
+            appClass[0]
+        );
+        output = new OutputAnalyzer(pb.start());
+        mustContain(output.getOutput(), "UBSocket ring count(4096) invalid");
+        output.shouldHaveExitValue(0);
+
+        // UBSocket poller CPU
+        pb = ProcessTools.createJavaProcessBuilder(
+            true,
+            "-XX:+UnlockExperimentalVMOptions",
+            "-XX:UBSocketPollerCpu=0",
+            appClass[0]
+        );
+        output = new OutputAnalyzer(pb.start());
+        mustContain(output.getOutput(), "UBSocket is disabled, but poller CPU is set.");
+        output.shouldHaveExitValue(0);
+
+        pb = ProcessTools.createJavaProcessBuilder(
+            true,
+            "-XX:+UnlockExperimentalVMOptions",
+            "-XX:+UseUBSocket",
+            "-XX:UBSocketConf=" + configPath,
+            "-XX:UBSocketPort=" + freePort(),
+            "-XX:UBSocketPollerCpu=-2",
+            appClass[0]
+        );
+        output = new OutputAnalyzer(pb.start());
+        mustContain(output.getOutput(), "UBSocket poller CPU(-2) invalid, UBSocket is disabled.");
+        output.shouldHaveExitValue(0);
+
+        int pollerCpu = firstAllowedCpu();
+        Path pollerCpuLog = Files.createTempFile("ubsocket-options-poller-cpu-", ".log");
+        pb = ProcessTools.createJavaProcessBuilder(
+            true,
+            "-XX:+UnlockExperimentalVMOptions",
+            "-XX:+UseUBSocket",
+            "-XX:UBSocketConf=" + configPath,
+            "-XX:UBSocketPort=" + freePort(),
+            "-XX:UBSocketMemorySize=1048576",
+            "-XX:UBSocketPollerCpu=" + pollerCpu,
+            "-XX:UBLog=path=" + pollerCpuLog + ",socket=debug",
+            appClass[0]
+        );
+        output = new OutputAnalyzer(pb.start());
+        String pollerCpuOutput = output.getOutput() + readText(pollerCpuLog);
+        mustContain(pollerCpuOutput, "process poller bound cpu=" + pollerCpu);
+        mustContain(pollerCpuOutput, "size=4194304 ring_count=8");
+        output.shouldHaveExitValue(0);
+
+        pb = ProcessTools.createJavaProcessBuilder(
+            true,
+            "-XX:+UnlockExperimentalVMOptions",
+            "-XX:+UseUBSocket",
+            "-XX:UBSocketConf=" + configPath,
             "-XX:UBSocketPort=-1",
             appClass[0]
         );
@@ -214,31 +341,6 @@ public class OptionsTest {
         output = new OutputAnalyzer(pb.start());
         mustContain(output.getOutput(), "UBSocket port(65536) invalid, UBSocket is disabled.");
         output.shouldHaveExitValue(0);
-
-        // UBSocket wakeup threshold
-        pb = ProcessTools.createJavaProcessBuilder(
-            true,
-            "-XX:+UnlockExperimentalVMOptions",
-            "-XX:+UseUBSocket",
-            "-XX:UBSocketConf=" + configPath,
-            "-XX:UBSocketWakeupThresholdBytes=1024",
-            appClass[0]
-        );
-        output = new OutputAnalyzer(pb.start());
-        mustContain(output.getOutput(), "UBSocket port(0) invalid, UBSocket is disabled.");
-        output.shouldHaveExitValue(0);
-
-        pb = ProcessTools.createJavaProcessBuilder(
-            true,
-            "-XX:+UnlockExperimentalVMOptions",
-            "-XX:+UseUBSocket",
-            "-XX:UBSocketConf=" + configPath,
-            "-XX:+UBSocketAggressiveWakeup",
-            appClass[0]
-        );
-        output = new OutputAnalyzer(pb.start());
-        mustContain(output.getOutput(), "Unrecognized VM option 'UBSocketAggressiveWakeup'");
-        output.shouldHaveExitValue(1);
 
         // UBSocket Log
         Path socketOnlyLog = Files.createTempFile("ubsocket-options-socketonly-", ".log");
@@ -339,6 +441,19 @@ public class OptionsTest {
         try (ServerSocket socket = new ServerSocket(0)) {
             return socket.getLocalPort();
         }
+    }
+
+    private static int firstAllowedCpu() throws Exception {
+        for (String line : Files.readAllLines(java.nio.file.Paths.get("/proc/self/status"),
+                                              StandardCharsets.UTF_8)) {
+            if (!line.startsWith("Cpus_allowed_list:")) {
+                continue;
+            }
+            String firstRange = line.substring(line.indexOf(':') + 1).trim().split(",")[0];
+            String firstCpu = firstRange.split("-")[0];
+            return Integer.parseInt(firstCpu);
+        }
+        throw new RuntimeException("Cpus_allowed_list missing from /proc/self/status");
     }
 
     private static void mustContain(String text, String token) {

@@ -30,7 +30,6 @@ import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.MessageDigest;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -58,8 +57,6 @@ public class NIOScenarioClient {
             runNonBlockingBasic(args);
         } else if ("nonBlockingDirect".equals(mode)) {
             runNonBlockingDirect(args);
-        } else if ("chunked".equals(mode)) {
-            runChunked(args);
         } else if ("nonBlockingChunked".equals(mode)) {
             runNonBlockingChunked(args);
         } else if ("parallel".equals(mode)) {
@@ -76,18 +73,6 @@ public class NIOScenarioClient {
             runRestartAware(args);
         } else if ("refCount".equals(mode)) {
             runRefCount(args);
-        } else if ("waitSendTimeout".equals(mode)) {
-            runWaitSendTimeout(args);
-        } else if ("multiWrite".equals(mode)) {
-            runMultiWrite(args);
-        } else if ("pacedMultiWrite".equals(mode)) {
-            runPacedMultiWrite(args);
-        } else if ("nonBlockingPacedMultiWrite".equals(mode)) {
-            runNonBlockingPacedMultiWrite(args);
-        } else if ("parallelMultiWrite".equals(mode)) {
-            runParallelMultiWrite(args);
-        } else if ("gatherScatter".equals(mode)) {
-            runGatherScatter(args);
         } else if ("nonBlockingGatherScatter".equals(mode)) {
             runNonBlockingGatherScatter(args);
         } else if ("transferTo".equals(mode)) {
@@ -168,8 +153,7 @@ public class NIOScenarioClient {
             expectedHash,
             clientId,
             false,
-            false,
-            0L);
+            false);
         printNonBlockingOk(clientId, "basic", result);
     }
 
@@ -196,51 +180,8 @@ public class NIOScenarioClient {
             expectedHash,
             clientId,
             false,
-            false,
-            0L);
+            false);
         printNonBlockingOk(clientId, "direct", result);
-    }
-
-    private static void runChunked(String[] args) throws Exception {
-        if (args.length < 6) {
-            throw new IllegalArgumentException(
-                "Usage: NIOScenarioClient chunked <host> <port> <dataSize> <chunkSize> <clientId>");
-        }
-
-        String host = args[1];
-        int port = Integer.parseInt(args[2]);
-        int dataSize = Integer.parseInt(args[3]);
-        int chunkSize = Integer.parseInt(args[4]);
-        String clientId = args[5];
-        if (chunkSize <= 0) {
-            throw new IllegalArgumentException("chunkSize must be positive");
-        }
-
-        byte[] payload = SocketTestData.upperAlphabetData(dataSize);
-        String expectedHash = SocketTestData.sha256Hex(payload);
-        long totalWritten = 0L;
-
-        try (SocketChannel channel = SocketChannel.open()) {
-            channel.configureBlocking(true);
-            channel.connect(new InetSocketAddress(host, port));
-            System.out.println("[" + clientId + "] Connected to server");
-
-            for (int offset = 0; offset < payload.length; ) {
-                int len = Math.min(chunkSize, payload.length - offset);
-                ByteBuffer writeBuffer = ByteBuffer.wrap(payload, offset, len);
-                while (writeBuffer.hasRemaining()) {
-                    totalWritten += channel.write(writeBuffer);
-                }
-                offset += len;
-            }
-
-            String ack = readAck(channel, expectedHash, clientId);
-            if (!ack.contains("hash " + expectedHash)) {
-                throw new RuntimeException("[" + clientId + "] HASH_MISMATCH expected=" + expectedHash + " ack=" + ack);
-            }
-            System.out.println("[" + clientId + "] Sent " + totalWritten
-                + " bytes in chunks of " + chunkSize + ", hash verified");
-        }
     }
 
     private static void runNonBlockingChunked(String[] args) throws Exception {
@@ -267,8 +208,7 @@ public class NIOScenarioClient {
             expectedHash,
             clientId,
             false,
-            false,
-            0L);
+            false);
         printNonBlockingOk(clientId, "chunked", result);
     }
 
@@ -627,268 +567,6 @@ public class NIOScenarioClient {
         }
     }
 
-    private static void runWaitSendTimeout(String[] args) throws Exception {
-        if (args.length < 7) {
-            throw new IllegalArgumentException(
-                "Usage: NIOScenarioClient waitSendTimeout <host> <port> <firstSize> <secondSize> <pauseMs> <clientId>");
-        }
-
-        String host = args[1];
-        int port = Integer.parseInt(args[2]);
-        int firstSize = Integer.parseInt(args[3]);
-        int secondSize = Integer.parseInt(args[4]);
-        long pauseMs = Long.parseLong(args[5]);
-        String clientId = args[6];
-
-        byte[] firstPayload = SocketTestData.upperAlphabetData(firstSize);
-        byte[] secondPayload = SocketTestData.lowerAlphabetData(secondSize);
-        byte[] expectedPayload = new byte[firstSize + secondSize];
-        System.arraycopy(firstPayload, 0, expectedPayload, 0, firstSize);
-        System.arraycopy(secondPayload, 0, expectedPayload, firstSize, secondSize);
-        String expectedHash = SocketTestData.sha256Hex(expectedPayload);
-
-        try (SocketChannel channel = SocketChannel.open()) {
-            channel.configureBlocking(true);
-            channel.connect(new InetSocketAddress(host, port));
-            System.out.println("[" + clientId + "] Connected to server");
-
-            ByteBuffer firstBuffer = ByteBuffer.wrap(firstPayload);
-            while (firstBuffer.hasRemaining()) {
-                channel.write(firstBuffer);
-            }
-            System.out.println("[" + clientId + "] First payload sent: " + firstSize);
-
-            Thread.sleep(pauseMs);
-
-            ByteBuffer secondBuffer = ByteBuffer.wrap(secondPayload);
-            while (secondBuffer.hasRemaining()) {
-                channel.write(secondBuffer);
-            }
-            System.out.println("[" + clientId + "] Second payload sent: " + secondSize);
-
-            String ack = readAck(channel, expectedHash, clientId);
-            if (!ack.contains("hash " + expectedHash)) {
-                throw new RuntimeException("[" + clientId + "] HASH_MISMATCH expected="
-                    + expectedHash + " ack=" + ack);
-            }
-            System.out.println("[" + clientId + "] Data sent successfully, hash verified");
-        }
-    }
-
-    private static void runMultiWrite(String[] args) throws Exception {
-        if (args.length < 6) {
-            throw new IllegalArgumentException(
-                "Usage: NIOScenarioClient multiWrite <host> <port> <chunkSize> <chunkCount> <clientId>");
-        }
-
-        String host = args[1];
-        int port = Integer.parseInt(args[2]);
-        int chunkSize = Integer.parseInt(args[3]);
-        int chunkCount = Integer.parseInt(args[4]);
-        String clientId = args[5];
-        runMultiWrite0(host, port, chunkSize, chunkCount, 0L, clientId);
-    }
-
-    private static void runPacedMultiWrite(String[] args) throws Exception {
-        if (args.length < 7) {
-            throw new IllegalArgumentException(
-                "Usage: NIOScenarioClient pacedMultiWrite <host> <port> <chunkSize> <chunkCount> <pauseMillis> <clientId>");
-        }
-
-        String host = args[1];
-        int port = Integer.parseInt(args[2]);
-        int chunkSize = Integer.parseInt(args[3]);
-        int chunkCount = Integer.parseInt(args[4]);
-        long pauseMillis = Long.parseLong(args[5]);
-        String clientId = args[6];
-        runMultiWrite0(host, port, chunkSize, chunkCount, pauseMillis, clientId);
-    }
-
-    private static void runNonBlockingPacedMultiWrite(String[] args) throws Exception {
-        if (args.length < 7) {
-            throw new IllegalArgumentException(
-                "Usage: NIOScenarioClient nonBlockingPacedMultiWrite <host> <port> <chunkSize> <chunkCount> <pauseMillis> <clientId>");
-        }
-
-        String host = args[1];
-        int port = Integer.parseInt(args[2]);
-        int chunkSize = Integer.parseInt(args[3]);
-        int chunkCount = Integer.parseInt(args[4]);
-        long pauseMillis = Long.parseLong(args[5]);
-        String clientId = args[6];
-        if (chunkSize <= 0 || chunkCount <= 0) {
-            throw new IllegalArgumentException("chunkSize and chunkCount must be positive");
-        }
-        if (pauseMillis < 0L) {
-            throw new IllegalArgumentException("pauseMillis must not be negative");
-        }
-
-        MessageDigest expectedDigest = MessageDigest.getInstance("SHA-256");
-        ByteBuffer[] buffers = new ByteBuffer[chunkCount];
-        for (int chunk = 0; chunk < chunkCount; chunk++) {
-            byte[] payload = SocketTestData.scopedUpperAlphabetData(chunk, 0, chunkSize);
-            expectedDigest.update(payload);
-            buffers[chunk] = ByteBuffer.wrap(payload);
-        }
-
-        String expectedHash = toHex(expectedDigest.digest());
-        NonBlockingIoResult result = runNonBlockingBuffers(
-            host,
-            port,
-            buffers,
-            expectedHash,
-            clientId,
-            false,
-            false,
-            pauseMillis);
-        printNonBlockingOk(clientId, "pacedMultiWrite", result);
-    }
-
-    private static void runMultiWrite0(String host, int port, int chunkSize,
-                                       int chunkCount, long pauseMillis,
-                                       String clientId) throws Exception {
-        if (chunkSize <= 0 || chunkCount <= 0) {
-            throw new IllegalArgumentException("chunkSize and chunkCount must be positive");
-        }
-        if (pauseMillis < 0L) {
-            throw new IllegalArgumentException("pauseMillis must not be negative");
-        }
-
-        MessageDigest expectedDigest = MessageDigest.getInstance("SHA-256");
-        long totalWritten = 0L;
-
-        try (SocketChannel channel = SocketChannel.open()) {
-            channel.configureBlocking(true);
-            channel.connect(new InetSocketAddress(host, port));
-            System.out.println("[" + clientId + "] Connected to server");
-
-            for (int chunk = 0; chunk < chunkCount; chunk++) {
-                byte[] payload = SocketTestData.scopedUpperAlphabetData(chunk, 0, chunkSize);
-                expectedDigest.update(payload);
-                ByteBuffer writeBuffer = ByteBuffer.wrap(payload);
-                long chunkWritten = 0L;
-                while (writeBuffer.hasRemaining()) {
-                    int n = channel.write(writeBuffer);
-                    totalWritten += n;
-                    chunkWritten += n;
-                }
-                System.out.println("[" + clientId + "] chunk " + chunk
-                    + " sent: " + chunkWritten + " bytes");
-                if (pauseMillis > 0L && chunk + 1 < chunkCount) {
-                    Thread.sleep(pauseMillis);
-                }
-            }
-
-            String expectedHash = toHex(expectedDigest.digest());
-            String ack = readAck(channel, expectedHash, clientId);
-            if (!ack.contains("hash " + expectedHash)) {
-                throw new RuntimeException("[" + clientId + "] HASH_MISMATCH expected="
-                    + expectedHash + " ack=" + ack);
-            }
-            System.out.println("[" + clientId + "] Sent " + totalWritten
-                + " bytes in " + chunkCount + " chunks, hash verified");
-        }
-    }
-
-    private static void runParallelMultiWrite(String[] args) throws Exception {
-        if (args.length < 7) {
-            throw new IllegalArgumentException(
-                "Usage: NIOScenarioClient parallelMultiWrite <host> <port> <chunkSize> <chunkCount> <clientCount> <clientIdPrefix>");
-        }
-
-        final String host = args[1];
-        final int port = Integer.parseInt(args[2]);
-        final int chunkSize = Integer.parseInt(args[3]);
-        final int chunkCount = Integer.parseInt(args[4]);
-        int clientCount = Integer.parseInt(args[5]);
-        final String clientIdPrefix = args[6];
-        if (clientCount <= 0) {
-            throw new IllegalArgumentException("clientCount must be positive");
-        }
-
-        final CountDownLatch startGate = new CountDownLatch(1);
-        CountDownLatch doneGate = new CountDownLatch(clientCount);
-        List<Throwable> errors = Collections.synchronizedList(new ArrayList<Throwable>());
-        for (int i = 0; i < clientCount; i++) {
-            final int clientIndex = i;
-            Thread thread = new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    try {
-                        startGate.await();
-                        runMultiWrite(new String[] {
-                            "multiWrite",
-                            host,
-                            String.valueOf(port),
-                            String.valueOf(chunkSize),
-                            String.valueOf(chunkCount),
-                            clientIdPrefix + "-" + clientIndex
-                        });
-                    } catch (Throwable t) {
-                        errors.add(t);
-                    } finally {
-                        doneGate.countDown();
-                    }
-                }
-            }, "parallel-multi-write-client-" + i);
-            thread.start();
-        }
-
-        startGate.countDown();
-        doneGate.await();
-        if (!errors.isEmpty()) {
-            throw new RuntimeException("Parallel multi-write client failed, total errors="
-                + errors.size(), errors.get(0));
-        }
-        System.out.println("PARALLEL_MULTI_WRITE_OK");
-    }
-
-    private static void runGatherScatter(String[] args) throws Exception {
-        if (args.length < 6) {
-            throw new IllegalArgumentException(
-                "Usage: NIOScenarioClient gatherScatter <host> <port> <dataSize> <segmentSize> <clientId>");
-        }
-
-        String host = args[1];
-        int port = Integer.parseInt(args[2]);
-        int dataSize = Integer.parseInt(args[3]);
-        int segmentSize = Integer.parseInt(args[4]);
-        String clientId = args[5];
-        if (segmentSize <= 0) {
-            throw new IllegalArgumentException("segmentSize must be positive");
-        }
-
-        byte[] payload = SocketTestData.upperAlphabetData(dataSize);
-        String expectedHash = SocketTestData.sha256Hex(payload);
-
-        try (SocketChannel channel = SocketChannel.open()) {
-            channel.configureBlocking(true);
-            channel.connect(new InetSocketAddress(host, port));
-            System.out.println("[" + clientId + "] Connected to server");
-
-            ByteBuffer[] writeBuffers = splitBuffers(payload, segmentSize);
-            long totalWritten = 0L;
-            while (totalWritten < payload.length) {
-                long n = channel.write(writeBuffers);
-                if (n <= 0L) {
-                    throw new RuntimeException("[" + clientId + "] gather write stalled at "
-                        + totalWritten + "/" + payload.length);
-                }
-                totalWritten += n;
-            }
-
-            ByteBuffer[] ackBuffers = newAckBuffers();
-            String ack = readScatterAck(channel, ackBuffers, expectedHash, clientId);
-            long totalRead = totalPosition(ackBuffers);
-            if (!ack.contains("hash " + expectedHash)) {
-                throw new RuntimeException("[" + clientId + "] HASH_MISMATCH expected="
-                    + expectedHash + " ack=" + ack);
-            }
-            System.out.println("[" + clientId + "] gather write sent " + totalWritten
-                + " bytes, scatter read " + totalRead + " bytes, hash verified");
-        }
-    }
-
     private static void runNonBlockingGatherScatter(String[] args) throws Exception {
         if (args.length < 6) {
             throw new IllegalArgumentException(
@@ -913,8 +591,7 @@ public class NIOScenarioClient {
             expectedHash,
             clientId,
             true,
-            true,
-            0L);
+            true);
         printNonBlockingOk(clientId, "gatherScatter", result);
     }
 
@@ -955,35 +632,6 @@ public class NIOScenarioClient {
         };
     }
 
-    private static String readScatterAck(SocketChannel channel, ByteBuffer[] ackBuffers,
-                                         String expectedHash, String clientId)
-        throws Exception {
-        String ack = "";
-        long deadline = System.currentTimeMillis() + ACK_DEADLINE_MS;
-        while (!ack.contains("hash " + expectedHash)) {
-            long n = channel.read(ackBuffers);
-            if (n < 0L) {
-                throw new RuntimeException("[" + clientId
-                    + "] peer closed before complete ACK: " + ack);
-            }
-            if (n == 0L) {
-                if (System.currentTimeMillis() > deadline) {
-                    throw new RuntimeException("[" + clientId
-                        + "] timeout waiting for scatter ACK: " + ack);
-                }
-                Thread.sleep(10L);
-                continue;
-            }
-            ack = readBuffersAsString(ackBuffers);
-            deadline = System.currentTimeMillis() + ACK_DEADLINE_MS;
-            if (!hasRemaining(ackBuffers) && !ack.contains("hash " + expectedHash)) {
-                throw new RuntimeException("[" + clientId
-                    + "] ACK exceeded scatter buffers: " + ack);
-            }
-        }
-        return ack;
-    }
-
     private static NonBlockingIoResult runNonBlockingBuffers(
             String host,
             int port,
@@ -991,8 +639,7 @@ public class NIOScenarioClient {
             String expectedHash,
             String clientId,
             boolean gatheringWrite,
-            boolean scatterAck,
-            long pauseMillis) throws Exception {
+            boolean scatterAck) throws Exception {
         NonBlockingIoResult result = new NonBlockingIoResult();
         ByteBuffer responseBuffer = scatterAck ? null : ByteBuffer.allocate(1024);
         ByteBuffer[] ackBuffers = scatterAck ? newAckBuffers() : null;
@@ -1092,10 +739,6 @@ public class NIOScenarioClient {
                                     break;
                                 }
                                 writeIndex++;
-                                if (pauseMillis > 0L && writeIndex < writeBuffers.length) {
-                                    Thread.sleep(pauseMillis);
-                                    break;
-                                }
                             }
                             writeDone = writeIndex >= writeBuffers.length;
                         }
@@ -1171,18 +814,6 @@ public class NIOScenarioClient {
         System.out.println("[" + clientId + "] Data sent successfully, hash verified");
     }
 
-    private static long totalPosition(ByteBuffer[] buffers) {
-        long total = 0L;
-        for (ByteBuffer buffer : buffers) {
-            total += buffer.position();
-        }
-        return total;
-    }
-
-    private static long totalRemaining(ByteBuffer[] buffers) {
-        return totalRemaining(buffers, 0, buffers.length);
-    }
-
     private static long totalRemaining(ByteBuffer[] buffers, int offset, int length) {
         long total = 0L;
         int end = offset + length;
@@ -1227,14 +858,6 @@ public class NIOScenarioClient {
             offset += position;
         }
         return new String(data, StandardCharsets.UTF_8);
-    }
-
-    private static String toHex(byte[] bytes) {
-        StringBuilder sb = new StringBuilder(bytes.length * 2);
-        for (byte b : bytes) {
-            sb.append(String.format("%02x", b));
-        }
-        return sb.toString();
     }
 
     private static final class NonBlockingIoResult {
@@ -1353,7 +976,8 @@ public class NIOScenarioClient {
     private static void runEchoFrames(String[] args) throws Exception {
         if (args.length < 8) {
             throw new IllegalArgumentException(
-                "Usage: NIOScenarioClient echoFrames <host> <port> <requestSize> <responseSize> <inflight> <frames> <clientId>");
+                "Usage: NIOScenarioClient echoFrames <host> <port> <requestSize>"
+                    + " <responseSize> <inflight> <frames> <clientId> [readChunkSize]");
         }
 
         String host = args[1];
@@ -1375,6 +999,12 @@ public class NIOScenarioClient {
         ArrayDeque<ByteBuffer> pendingWrites = new ArrayDeque<ByteBuffer>();
         ByteBuffer readBuffer = ByteBuffer.allocate(Math.max(responseSize * Math.min(inflight, 16),
                                                             responseSize * 2));
+        int readChunkSize = args.length >= 9
+            ? Integer.parseInt(args[8]) : readBuffer.capacity();
+        if (readChunkSize <= 0) {
+            throw new IllegalArgumentException("readChunkSize must be positive");
+        }
+        long readCalls = 0L;
 
         int nextSequence = 0;
         int outstanding = 0;
@@ -1440,7 +1070,16 @@ public class NIOScenarioClient {
                         }
                     }
                     if (selected.isReadable()) {
-                        int n = channel.read(readBuffer);
+                        int oldLimit = readBuffer.limit();
+                        readBuffer.limit(Math.min(oldLimit,
+                            readBuffer.position() + readChunkSize));
+                        int n;
+                        try {
+                            n = channel.read(readBuffer);
+                        } finally {
+                            readBuffer.limit(oldLimit);
+                        }
+                        readCalls++;
                         if (n < 0) {
                             throw new RuntimeException("[" + clientId
                                 + "] channel closed during read completed="
@@ -1490,7 +1129,8 @@ public class NIOScenarioClient {
             + " frames=" + frames
             + " bytesWritten=" + bytesWritten
             + " bytesRead=" + bytesRead
-            + " inflight=" + inflight);
+            + " inflight=" + inflight
+            + " readCalls=" + readCalls);
     }
 
     private static void runHoldConnections(String[] args) throws Exception {

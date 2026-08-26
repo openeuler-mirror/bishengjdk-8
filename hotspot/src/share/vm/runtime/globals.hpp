@@ -4229,20 +4229,27 @@ class CommandLineFlags {
   experimental(ccstr, UBSocketConf, "",                                     \
           "UB socket allow-list path")                                      \
                                                                             \
+  experimental(ccstr, UBSocketAttach, "limit",                            \
+          "UB Socket attach policy: limit or all")                         \
+                                                                            \
   experimental(uintx, UBSocketPort, 0,                                      \
           "UB Socket attach control port")                                  \
                                                                             \
-  experimental(uintx, UBSocketMemorySize, 256*M,                            \
-          "UB Socket shared memory size in bytes")                          \
+  experimental(uintx, UBSocketMemorySize, 256*M - 4*K,                     \
+          "UB Socket receiver Ring memory budget in bytes")                 \
                                                                             \
-  experimental(uintx, UBSocketRingCount, 8,                                  \
-          "UB Socket receiver ring slot count")                              \
+  experimental(uintx, UBSocketRingCount, 8,                                 \
+          "UB Socket receiver ring slot count")                             \
+                                                                            \
+  experimental(intx, UBSocketPollerCpu, -1,                                 \
+          "CPU for UB Socket polling thread; -1 leaves it unbound")         \
+                                                                            \
+  experimental(uintx, UBSocketSpinNanos, 0,                                 \
+          "Nanoseconds to spin before clearing retained UB readiness; "     \
+          "0 disables read-ack coalescing and spin")                        \
                                                                             \
   experimental(uintx, UBSocketProfile, 0,                                   \
           "UB Socket profile: 0=off, 1=summary, 2=detail")                  \
-                                                                            \
-  experimental(uintx, UBSocketWakeupThresholdBytes, 64*K,                   \
-          "UB Socket threshold in bytes for non-empty-ring wakeups")         \
 /*
  *  Macros for factoring of globals
  */

@@ -787,7 +787,7 @@ struct JNINativeInterface_ {
       (JNIEnv *env, void* buf, jint fd, jlong len);
     jlong (JNICALL *UbSocketWrite)
       (JNIEnv *env, void* buf, jint fd, jlong len);
-    jlong (JNICALL *UbSocketParse)
+    jlong (JNICALL *UbSocketParseControl)
       (JNIEnv *env, jint fd, char* msg, jint msg_len);
     jlong (JNICALL *UbSocketTransferFromFile)
       (JNIEnv *env, jint src_fd, jint socket_fd, jlong offset, jlong count);
@@ -795,6 +795,33 @@ struct JNINativeInterface_ {
       (JNIEnv *env);
     void (JNICALL *UbSocketProfileRecord)
       (JNIEnv *env, jint event, jlong elapsed_ns, jlong bytes, jlong count);
+    void (JNICALL *UbSocketProfileSelectorInjected)
+      (JNIEnv *env, jint event_fd);
+    jboolean (JNICALL *UbSocketPollingNotifyEnabled)
+      (JNIEnv *env);
+    jboolean (JNICALL *UbSocketRegisterSelectorNotifier)
+      (JNIEnv *env, jint fd);
+    void (JNICALL *UbSocketUnregisterSelectorNotifier)
+      (JNIEnv *env, jint fd);
+    jlong (JNICALL *UbSocketSubscribeSelector)
+      (JNIEnv *env, jint data_fd, jint event_fd);
+    void (JNICALL *UbSocketUnsubscribeSelector)
+      (JNIEnv *env, jlong subscription_id);
+    jint (JNICALL *UbSocketDrainSelectorReady)
+      (JNIEnv *env, jint event_fd, void* events, jint capacity,
+       jlong* profile_complete_ns);
+    void (JNICALL *UbSocketCompleteSelectorNotification)
+      (JNIEnv *env, jlong complete_ns, jboolean injected);
+    jboolean (JNICALL *UbSocketSpinEnabled)
+      (JNIEnv *env);
+    jboolean (JNICALL *UbSocketSpinWait)
+      (JNIEnv *env, jint data_fd);
+    jboolean (JNICALL *UbSocketShutdownOutput)
+      (JNIEnv *env, jint data_fd);
+    jboolean (JNICALL *UbSocketPeerCloseReady)
+      (JNIEnv *env, jint data_fd);
+    jboolean (JNICALL *UbSocketFailClose)
+      (JNIEnv *env, jint data_fd);
 };
 
 /*
@@ -1918,8 +1945,8 @@ struct JNIEnv_ {
     jlong UbSocketWrite(void* buf, jint fd, jlong len) {
         return functions->UbSocketWrite(this, buf, fd, len);
     }
-    jlong UbSocketParse(jint fd, char* msg, jint msg_len) {
-        return functions->UbSocketParse(this, fd, msg, msg_len);
+    jlong UbSocketParseControl(jint fd, char* msg, jint msg_len) {
+        return functions->UbSocketParseControl(this, fd, msg, msg_len);
     }
     jlong UbSocketTransferFromFile(jint src_fd, jint socket_fd,
                                    jlong offset, jlong count) {
@@ -1931,6 +1958,49 @@ struct JNIEnv_ {
     }
     void UbSocketProfileRecord(jint event, jlong elapsed_ns, jlong bytes, jlong count) {
         functions->UbSocketProfileRecord(this, event, elapsed_ns, bytes, count);
+    }
+    void UbSocketProfileSelectorInjected(jint event_fd) {
+        functions->UbSocketProfileSelectorInjected(this, event_fd);
+    }
+    jboolean UbSocketPollingNotifyEnabled() {
+        return functions->UbSocketPollingNotifyEnabled(this);
+    }
+    jboolean UbSocketRegisterSelectorNotifier(jint fd) {
+        return functions->UbSocketRegisterSelectorNotifier(this, fd);
+    }
+    void UbSocketUnregisterSelectorNotifier(jint fd) {
+        functions->UbSocketUnregisterSelectorNotifier(this, fd);
+    }
+    jlong UbSocketSubscribeSelector(jint data_fd, jint event_fd) {
+        return functions->UbSocketSubscribeSelector(this, data_fd, event_fd);
+    }
+    void UbSocketUnsubscribeSelector(jlong subscription_id) {
+        functions->UbSocketUnsubscribeSelector(this, subscription_id);
+    }
+    jint UbSocketDrainSelectorReady(jint event_fd, void* events, jint capacity,
+                                    jlong* profile_complete_ns) {
+        return functions->UbSocketDrainSelectorReady(
+            this, event_fd, events, capacity, profile_complete_ns);
+    }
+    void UbSocketCompleteSelectorNotification(jlong complete_ns,
+                                               jboolean injected) {
+        functions->UbSocketCompleteSelectorNotification(
+            this, complete_ns, injected);
+    }
+    jboolean UbSocketSpinEnabled() {
+        return functions->UbSocketSpinEnabled(this);
+    }
+    jboolean UbSocketSpinWait(jint data_fd) {
+        return functions->UbSocketSpinWait(this, data_fd);
+    }
+    jboolean UbSocketShutdownOutput(jint data_fd) {
+        return functions->UbSocketShutdownOutput(this, data_fd);
+    }
+    jboolean UbSocketPeerCloseReady(jint data_fd) {
+        return functions->UbSocketPeerCloseReady(this, data_fd);
+    }
+    jboolean UbSocketFailClose(jint data_fd) {
+        return functions->UbSocketFailClose(this, data_fd);
     }
 
 #endif /* __cplusplus */

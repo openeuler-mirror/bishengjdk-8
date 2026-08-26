@@ -117,6 +117,7 @@ public class TransferToTest {
         List<String> command = new ArrayList<String>();
         command.add("-XX:+UnlockExperimentalVMOptions");
         command.add("-XX:+UseUBSocket");
+        command.add("-XX:UBSocketAttach=all");
         command.add("-XX:UBSocketConf=" + socketConfigPath);
         command.add("-XX:UBSocketPort=" + controlPort);
         command.add("-XX:UBLog=path=" + ubLogPath + ",socket=debug");

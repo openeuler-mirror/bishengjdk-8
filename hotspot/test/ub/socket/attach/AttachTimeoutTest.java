@@ -98,7 +98,7 @@ public class AttachTimeoutTest {
             Thread.sleep(500L);
 
             long serverPid = SocketTestSupport.getPid(server);
-            long baselineTcpSockets = SocketTestSupport.countOpenTcpSockets(serverPid);
+            long baselineTcpSockets = waitForTcpListener(serverPid, server);
 
             ProcessBuilder clientPb = SocketTestSupport.createUbProcessBuilder(
                 configPath,
@@ -148,5 +148,21 @@ public class AttachTimeoutTest {
         } finally {
             SocketTestSupport.destroyIfAlive(server);
         }
+    }
+
+    private static long waitForTcpListener(long pid, Process server) throws Exception {
+        long deadline = System.currentTimeMillis() + 5000L;
+        long count = 0L;
+        while (System.currentTimeMillis() < deadline) {
+            if (!server.isAlive()) {
+                throw new RuntimeException("Server exited before opening its data listener");
+            }
+            count = SocketTestSupport.countOpenTcpSockets(pid);
+            if (count > 0) {
+                return count;
+            }
+            Thread.sleep(50L);
+        }
+        throw new RuntimeException("Server did not open its data listener, tcpSockets=" + count);
     }
 }

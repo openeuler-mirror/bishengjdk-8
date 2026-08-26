@@ -16,13 +16,13 @@
 
 /*
  * @test
- * @summary Test UBSocket selector probe does not make select(timeout) return before the user timeout
+ * @summary Test an attached UBSocket select(timeout) waits for the user timeout after Ring drain
  * @library /testlibrary
  * @compile ../SocketTestSupport.java ../SocketTestConfig.java ../test-classes/SocketTestData.java ../test-classes/NIOScenarioServer.java ../test-classes/NIOScenarioClient.java
- * @run main/othervm SelectorTimeoutProbeTest
+ * @run main/othervm SelectorTimeoutAfterDrainTest
  */
 
-public class SelectorTimeoutProbeTest {
+public class SelectorTimeoutAfterDrainTest {
     private static final int DATA_SIZE = 2048;
     private static final int SELECT_TIMEOUT_MS = 200;
     private static final int MIN_ELAPSED_MS = SELECT_TIMEOUT_MS - 20;
@@ -52,16 +52,16 @@ public class SelectorTimeoutProbeTest {
                 String.valueOf(dataPort),
                 String.valueOf(DATA_SIZE),
                 String.valueOf(CLIENT_HOLD_MS),
-                "SelectorTimeoutProbe-Client"
+                "SelectorTimeoutAfterDrain-Client"
             }
         );
 
         SocketTestSupport.assertBindSuccesses(
-            logs.clientLog, false, 1, "SelectorTimeoutProbeTest: client should attach");
+            logs.clientLog, false, 1, "SelectorTimeoutAfterDrainTest: client should attach");
         SocketTestSupport.assertBindSuccesses(
-            logs.serverLog, true, 1, "SelectorTimeoutProbeTest: server should attach");
+            logs.serverLog, true, 1, "SelectorTimeoutAfterDrainTest: server should attach");
         SocketTestSupport.assertNoFallback(
             logs.clientLog + "\n" + logs.serverLog,
-            "SelectorTimeoutProbeTest: should not fallback");
+            "SelectorTimeoutAfterDrainTest: should not fallback");
     }
 }

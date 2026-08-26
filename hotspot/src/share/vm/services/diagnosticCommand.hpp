@@ -184,6 +184,21 @@ public:
   virtual void execute(DCmdSource source, TRAPS);
 };
 
+class UBSocketConfDCmd : public DCmdWithParser {
+ private:
+  DCmdArgument<char*> _filepath;
+
+ public:
+  UBSocketConfDCmd(outputStream* output, bool heap);
+  static const char* name() { return "UBSocket.conf"; }
+  static const char* description() {
+    return "Reload UBSocket stack and endpoint configuration for future connections.";
+  }
+  static const char* impact() { return "Low"; }
+  static int num_arguments();
+  virtual void execute(DCmdSource source, TRAPS);
+};
+
 #ifdef AARCH64
 class JProfileCacheDumpDCmd : public DCmd {
 public:
