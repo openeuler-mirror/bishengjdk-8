@@ -85,6 +85,11 @@ public:
 
   Method* resolved_method() const                       { return _resolved_method; }
   void set_resolved_method(Method* m)                   { _resolved_method = m; }
+  void clear_resolved_method(Method* method) {
+    if (_resolved_method == method) {
+      _resolved_method = NULL;
+    }
+  }
 
   GrowableArray<BytecodeProfileRecord*>* profile_list()         const { return _profile_list; }
   void set_profile_list(GrowableArray<BytecodeProfileRecord*>* value) { _profile_list = value; }
