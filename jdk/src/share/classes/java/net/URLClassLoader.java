@@ -348,19 +348,32 @@ public class URLClassLoader extends SecureClassLoader implements Closeable {
      * Retrieve protection domain using the specified class name.
      * Called from the VM to support AppCDS
      */
-    protected ProtectionDomain getProtectionDomainInternal(String name) {
-        String path = name.replace('.', '/').concat(".class");
-        Resource res = ucp.getResource(path, false);
+    protected ProtectionDomain getProtectionDomainInternal(final String name) {
+        return AccessController.doPrivileged(
+                new GetProtectionDomainAction(name), acc);
+    }
 
-        if(res == null)
-        {
-            // Should never happen
-            throw new AssertionError("Cannot find resource fpr path  " + path);
+    private final class GetProtectionDomainAction
+            implements PrivilegedAction<ProtectionDomain> {
+        private final String name;
+
+        GetProtectionDomainAction(String name) {
+            this.name = name;
         }
-        URL url = res.getCodeSourceURL();
-        CodeSigner[] signers = res.getCodeSigners();
-        CodeSource cs = new CodeSource(url, signers);
-        return getProtectionDomain(cs);
+
+        public ProtectionDomain run() {
+            String path = name.replace('.', '/').concat(".class");
+            Resource res = ucp.getResource(path, false);
+
+            if (res == null) {
+                // Should never happen
+                throw new AssertionError("Cannot find resource for path " + path);
+            }
+            URL url = res.getCodeSourceURL();
+            CodeSigner[] signers = res.getCodeSigners();
+            CodeSource cs = new CodeSource(url, signers);
+            return getProtectionDomain(cs);
+        }
     }
     
     /**
