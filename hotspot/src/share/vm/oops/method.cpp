@@ -127,6 +127,13 @@ Method::Method(ConstMethod* xconst, AccessFlags access_flags, int size) {
 // Release Method*.  The nmethod will be gone when we get here because
 // we've walked the code cache.
 void Method::deallocate_contents(ClassLoaderData* loader_data) {
+#ifdef AARCH64
+  ProfileCacheMethodHold* holder = jpc_method_holder();
+  if (holder != NULL) {
+    holder->clear_resolved_method(this);
+    set_jpc_method_holder(NULL);
+  }
+#endif
   clear_jmethod_id(loader_data);
   MetadataFactory::free_metadata(loader_data, constMethod());
   set_constMethod(NULL);
