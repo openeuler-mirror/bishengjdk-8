@@ -79,9 +79,9 @@ static jboolean ub_profile_enabled = JNI_FALSE;
 enum {
     UB_PROFILE_DETAIL = 2,
     UB_PROF_NIO_WRITE_TOTAL = 0,
-    UB_PROF_NIO_READ_TOTAL = 9,
-    UB_PROF_RING_READ_HIT = 10,
-    UB_PROF_RING_READ_EMPTY = 11
+    UB_PROF_NIO_READ_TOTAL = 5,
+    UB_PROF_RING_READ_HIT = 6,
+    UB_PROF_RING_READ_EMPTY = 7
 };
 
 static const jlong UB_NANOS_PER_SECOND = 1000000000LL;
@@ -118,11 +118,6 @@ ub_nio_profile_nanos(void)
 static jboolean ub_socket_registered(JNIEnv *env, jint fd)
 {
     return (*env)->IsUbSocket(env, fd);
-}
-
-static jboolean ub_socket_ready(JNIEnv *env, jint fd)
-{
-    return (*env)->IsUbSocketReady(env, fd);
 }
 
 JNIEXPORT void JNICALL
@@ -180,12 +175,6 @@ Java_sun_nio_ch_FileDispatcherImpl_read0(JNIEnv *env, jclass clazz,
 
     UB_NIO_PROFILE_START(total_start);
     if (ub_socket_registered(env, fd) == JNI_TRUE) {
-        if (ub_socket_ready(env, fd) == JNI_FALSE) {
-            errno = EAGAIN;
-            result = convertReturnVal(env, -1, JNI_TRUE);
-            UB_NIO_PROFILE_END(env, UB_PROF_NIO_READ_TOTAL, total_start, 0);
-            return result;
-        }
         result = (jint)ub_socket_read_one(env, fd, buf, len, JNI_TRUE);
         UB_NIO_PROFILE_END(env, UB_PROF_NIO_READ_TOTAL, total_start,
                            result > 0 ? result : 0);
@@ -218,10 +207,6 @@ Java_sun_nio_ch_FileDispatcherImpl_readv0(JNIEnv *env, jclass clazz,
     if (ub_socket_registered(env, fd) == JNI_TRUE) {
         jlong total = 0;
         int i;
-        if (ub_socket_ready(env, fd) == JNI_FALSE) {
-            errno = EAGAIN;
-            return convertLongReturnVal(env, -1, JNI_TRUE);
-        }
         for (i = 0; i < len; i++) {
             jlong nread;
             if (iov[i].iov_len == 0) { continue; }
@@ -248,12 +233,7 @@ Java_sun_nio_ch_FileDispatcherImpl_write0(JNIEnv *env, jclass clazz,
 
     UB_NIO_PROFILE_START(total_start);
     if (ub_socket_registered(env, fd) == JNI_TRUE) {
-        if (ub_socket_ready(env, fd) == JNI_TRUE) {
-            nwrite = (*env)->UbSocketWrite(env, buf, fd, len);
-        } else {
-            errno = EPIPE;
-            nwrite = -1;
-        }
+        nwrite = (*env)->UbSocketWrite(env, buf, fd, len);
     } else {
         nwrite = write(fd, buf, len);
     }
@@ -283,10 +263,6 @@ Java_sun_nio_ch_FileDispatcherImpl_writev0(JNIEnv *env, jclass clazz,
     if (ub_socket_registered(env, fd) == JNI_TRUE) {
         jlong total = 0;
         int i;
-        if (ub_socket_ready(env, fd) == JNI_FALSE) {
-            errno = EPIPE;
-            return convertLongReturnVal(env, -1, JNI_FALSE);
-        }
         for (i = 0; i < len; i++) {
             jlong nwrite;
             if (iov[i].iov_len == 0) { continue; }

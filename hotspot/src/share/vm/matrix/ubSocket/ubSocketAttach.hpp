@@ -21,8 +21,10 @@
 #define SHARE_VM_MATRIX_UBSOCKETATTACH_HPP
 
 #include "matrix/ubSocket/ubSocket.hpp"
+#include "matrix/ubSocket/ubSocketFrame.hpp"
 
 struct UBSocketEndpoint;
+class UBSocketConfig;
 
 //   client side                               server side
 //     attach_client()                           attach_server()
@@ -32,30 +34,33 @@ struct UBSocketEndpoint;
 //        acquire and publish remote mapping
 //     -> ATTACH_COMMIT ---------------------->  finalize and publish mapping
 //     <- ATTACH_ACK <-------------------------  finish session
-class UBSocketAttach : public CHeapObj<mtInternal> {
+class UBSocketAttachHandshake : public CHeapObj<mtInternal> {
  private:
   int _socket_fd;
   bool _is_server;
   Symbol* _local_mem_name;
   size_t _mem_size;
+  UBSocketProtocolInfo _protocol;
+  const UBSocketConfig* _config;
 
  public:
-  UBSocketAttach(int fd, bool is_server, Symbol* local_mem_name, size_t mem_size);
+  UBSocketAttachHandshake(int fd, bool is_server, Symbol* local_mem_name,
+                          size_t mem_size, const UBSocketConfig* config);
 
   int32_t do_attach();
 
  private:
   int32_t attach_client();
   int32_t attach_server();
-  bool publish_server_mapping(const char* client_mem_name,
+  bool publish_server_mapping(const UBSocketAttachFrame& client_request,
                               uint32_t* local_ring_slot,
-                              uint64_t local_ring_size,
-                              uint64_t client_ring_offset,
-                              uint64_t client_ring_size);
+                              uint32_t local_connection_generation,
+                              uint64_t local_ring_size);
   int32_t attach_client_once(int control_fd, const UBSocketEndpoint& request_local_ep,
                              const UBSocketEndpoint& request_remote_ep,
                              uint32_t request_id, uint64_t ddl_ns,
                              uint32_t* local_ring_slot,
+                             uint32_t local_connection_generation,
                              uint64_t local_ring_offset,
                              uint64_t local_ring_size,
                              char* remote_mem_name, bool* retry);

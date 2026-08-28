@@ -30,6 +30,7 @@ import java.io.OutputStream;
 import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -39,14 +40,24 @@ public class ReconnectTest {
     private static final int RESTART_ROUNDS = 2;
     private static final int LIFECYCLE_EARLY_REQUESTS = 8;
     private static final int LIFECYCLE_HOLD_MS = 1500;
-    private static final int ATTACH_FRAME_SIZE = 88;
+    private static final int ATTACH_FRAME_SIZE = 144;
     private static final int ENDPOINT_SIZE = 20;
     private static final int MEM_NAME_SIZE = 32;
-    private static final int CHECKSUM_OFFSET = 8;
     private static final int AF_INET = 2;
-    private static final int UB_SOCKET_PROTOCOL_VERSION = 800;
+    private static final int UB_SOCKET_PROTOCOL_VERSION = 803;
     private static final int UB_SOCKET_ATTACH_REQ = 1;
     private static final int UB_SOCKET_ATTACH_OK = 0;
+    private static final int UB_SOCKET_CAP_GENERATION_READY = 1;
+    private static final int UB_SOCKET_RING_COUNT = 8;
+    private static final long UB_SOCKET_RING_MEMORY_SIZE =
+        256L * 1024L * 1024L - 4L * 1024L;
+    private static final long UB_SOCKET_MAPPING_SIZE = 256L * 1024L * 1024L;
+    private static final long UB_SOCKET_RING_STATE_SIZE = 128L;
+    private static final long UB_SOCKET_RING_PAYLOAD_OFFSET =
+        64L + UB_SOCKET_RING_COUNT * UB_SOCKET_RING_STATE_SIZE;
+    private static final long UB_SOCKET_RING_PAYLOAD_SIZE =
+        UB_SOCKET_RING_MEMORY_SIZE / UB_SOCKET_RING_COUNT -
+        UB_SOCKET_RING_STATE_SIZE;
 
     public static void main(String[] args) throws Exception {
         testSequentialReconnect();
@@ -306,20 +317,26 @@ public class ReconnectTest {
         frame.putShort((short)UB_SOCKET_PROTOCOL_VERSION);
         frame.putShort((short)UB_SOCKET_ATTACH_REQ);
         frame.putInt(requestId);
-        frame.putInt(0);
         frame.putInt(UB_SOCKET_ATTACH_OK);
+        frame.putInt(UB_SOCKET_CAP_GENERATION_READY);
+        frame.putInt(UB_SOCKET_RING_COUNT);
+        frame.putInt(requestId);
+        frame.putInt(0);
+        frame.putInt(0); // Native uint64_t alignment padding.
+        frame.putLong(UB_SOCKET_MAPPING_SIZE);
+        frame.putLong(UB_SOCKET_RING_MEMORY_SIZE);
+        frame.putLong(0L);
+        frame.putLong(UB_SOCKET_RING_PAYLOAD_OFFSET);
+        frame.putLong(UB_SOCKET_RING_PAYLOAD_SIZE);
         putEndpoint(frame, 30000 + requestId);
         putEndpoint(frame, 40000 + requestId);
-        byte[] memName = ("SOCK-LIFE-" + requestId).getBytes();
+        byte[] memName = ("SOCK-LIFE-" + requestId)
+            .getBytes(StandardCharsets.US_ASCII);
         frame.put(memName, 0, Math.min(memName.length, MEM_NAME_SIZE - 1));
         while (frame.position() < ATTACH_FRAME_SIZE) {
             frame.put((byte)0);
         }
-        byte[] bytes = frame.array();
-        int checksum = fnv1a(bytes);
-        ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
-            .putInt(CHECKSUM_OFFSET, checksum);
-        return bytes;
+        return frame.array();
     }
 
     private static void putEndpoint(ByteBuffer frame, int port) {
@@ -334,12 +351,4 @@ public class ReconnectTest {
         }
     }
 
-    private static int fnv1a(byte[] bytes) {
-        int hash = 0x811c9dc5;
-        for (byte value : bytes) {
-            hash ^= (value & 0xff);
-            hash *= 0x01000193;
-        }
-        return hash;
-    }
 }

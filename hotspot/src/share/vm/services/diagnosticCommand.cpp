@@ -30,6 +30,7 @@
 #ifdef AARCH64
 #include "jprofilecache/jitProfileCache.hpp"
 #endif
+#include "matrix/ubSocket/ubSocket.hpp"
 #include "matrix/ubSocket/ubSocketProfile.hpp"
 #include "runtime/globals.hpp"
 #include "runtime/javaCalls.hpp"
@@ -65,6 +66,8 @@ void DCmdRegistrant::register_dcmds(){
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<VMDynamicLibrariesDCmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<VMUptimeDCmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<UBSocketProfileDCmd>(
+      DCmd_Source_Internal | DCmd_Source_AttachAPI, true, false));
+  DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<UBSocketConfDCmd>(
       DCmd_Source_Internal | DCmd_Source_AttachAPI, true, false));
 #ifdef AARCH64
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<JProfileCacheDumpDCmd>(full_export, true, false));
@@ -121,6 +124,24 @@ void UBSocketProfileDCmd::execute(DCmdSource source, TRAPS) {
   }
 
   UBSocketProfiler::print_summary(output());
+}
+
+UBSocketConfDCmd::UBSocketConfDCmd(outputStream* output, bool heap)
+    : DCmdWithParser(output, heap),
+      _filepath("filepath", "Path to the replacement UBSocket.conf", "STRING", true) {
+  _dcmdparser.add_dcmd_argument(&_filepath);
+}
+
+int UBSocketConfDCmd::num_arguments() {
+  ResourceMark rm;
+  UBSocketConfDCmd* dcmd = new UBSocketConfDCmd(NULL, false);
+  if (dcmd == NULL) { return 0; }
+  DCmdMark mark(dcmd);
+  return dcmd->_dcmdparser.num_arguments();
+}
+
+void UBSocketConfDCmd::execute(DCmdSource source, TRAPS) {
+  UBSocketManager::reload_config(_filepath.value(), output());
 }
 
 

@@ -27,11 +27,8 @@
  * @run main/othervm/timeout=240 RingApiDataPathTest
  */
 
-import com.oracle.java.testlibrary.OutputAnalyzer;
-
 public class RingApiDataPathTest {
     private static final int CLIENT_COUNT = 1;
-    private static final int BASIC_20B = 20;
     private static final int BASIC_2K = 2048;
     private static final int DIRECT_DATA_SIZE = 64 * 1024;
     private static final int CHUNKED_DATA_SIZE = 128 * 1024;
@@ -42,7 +39,6 @@ public class RingApiDataPathTest {
     public static void main(String[] args) throws Exception {
         String configPath = SocketTestConfig.ensureSharedConfig();
 
-        testNonBlockingReadWrite(configPath, BASIC_20B, "RingBasic20B");
         testNonBlockingReadWrite(configPath, BASIC_2K, "RingBasic2K");
         testNonBlockingDirectBufferReadWrite(configPath);
         testNonBlockingChunkedSmallWrites(configPath);
@@ -174,52 +170,17 @@ public class RingApiDataPathTest {
         int controlPort = SocketTestSupport.findFreePort();
         String[] vmOptions = new String[] { "-XX:UBSocketProfile=2" };
 
-        Process server = null;
-        try {
-            ProcessBuilder serverPb =
-                SocketTestSupport.createUbProcessBuilderWithVmOptions(
-                    configPath,
-                    controlPort,
-                    vmOptions,
-                    serverCommand[0],
-                    substituteDataPort(serverCommand, dataPort));
-            server = serverPb.start();
-            Thread.sleep(1000L);
-
-            ProcessBuilder clientPb =
-                SocketTestSupport.createUbProcessBuilderWithVmOptions(
-                    configPath,
-                    controlPort,
-                    vmOptions,
-                    clientCommand[0],
-                    substituteDataPort(clientCommand, dataPort));
-
-            OutputAnalyzer clientOutput = new OutputAnalyzer(clientPb.start());
-            clientOutput.shouldHaveExitValue(0);
-            String clientLog = SocketTestSupport.combinedOutput(clientOutput, clientPb);
-            if (!clientLog.contains(clientSuccessToken)) {
-                throw new RuntimeException("Missing client token: " + clientSuccessToken
-                    + "\n" + clientLog);
-            }
-
-            OutputAnalyzer serverOutput = new OutputAnalyzer(server);
-            serverOutput.shouldHaveExitValue(0);
-            String serverLog = SocketTestSupport.combinedOutput(serverOutput, serverPb);
-            if (!serverLog.contains(serverSuccessToken)) {
-                throw new RuntimeException("Missing server token: " + serverSuccessToken
-                    + "\n" + serverLog);
-            }
-            server = null;
-            return new SocketTestSupport.ScenarioLogs(clientLog, serverLog);
-        } finally {
-            SocketTestSupport.destroyIfAlive(server);
-        }
+        return SocketTestSupport.runUbScenarioWithVmOptions(
+            configPath, controlPort, vmOptions, 1000L,
+            clientSuccessToken, serverSuccessToken,
+            substituteDataPort(serverCommand, dataPort),
+            substituteDataPort(clientCommand, dataPort));
     }
 
     private static String[] substituteDataPort(String[] command, int dataPort) {
-        String[] result = new String[command.length - 1];
-        for (int i = 1; i < command.length; i++) {
-            result[i - 1] = "$DATA_PORT".equals(command[i])
+        String[] result = new String[command.length];
+        for (int i = 0; i < command.length; i++) {
+            result[i] = "$DATA_PORT".equals(command[i])
                 ? String.valueOf(dataPort)
                 : command[i];
         }

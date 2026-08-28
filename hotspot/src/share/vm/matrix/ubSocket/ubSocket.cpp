@@ -30,11 +30,12 @@
 #include "matrix/ubSocket/ubSocketFrame.hpp"
 #include "matrix/ubSocket/ubSocketIO.hpp"
 #include "matrix/ubSocket/ubSocketMemMapping.hpp"
+#include "matrix/ubSocket/ubSocketPoller.hpp"
 #include "matrix/ubSocket/ubSocketProfile.hpp"
 #include "matrix/ubSocket/ubSocketRing.hpp"
+#include "matrix/ubSocket/ubSocketSelectorNotifier.hpp"
 #include "matrix/ubSocket/ubSocketUtils.hpp"
 #include "memory/resourceArea.hpp"
-#include "runtime/orderAccess.inline.hpp"
 #include "runtime/globals_extension.hpp"
 #include "runtime/thread.hpp"
 #include "utilities/growableArray.hpp"
@@ -51,91 +52,97 @@ enum UBSocketControlSendResult {
   UB_SOCKET_CONTROL_SEND_ABORT
 };
 
-static bool ub_socket_wakeup_send_aborts_fd(int error_code, size_t bytes_sent) {
+static bool ub_socket_control_send_aborts_fd(int error_code,
+                                             size_t bytes_sent) {
   return bytes_sent > 0 || error_code == ECONNRESET || error_code == EPIPE ||
          error_code == ECONNABORTED || error_code == ENOTCONN;
 }
 
-static UBSocketControlSendResult ub_socket_send_control_frame(int socket_fd,
-                                                              uint16_t kind,
-                                                              const char* name) {
-  UBSocketWakeupFrame frame = ub_socket_wakeup_frame(kind);
+static UBSocketControlSendResult ub_socket_send_control_frame(
+    int socket_fd, const UBSocketControlFrame& frame) {
   size_t bytes_sent = 0;
-  if (kind == UB_SOCKET_WAKEUP) {
-    OrderAccess::fence();
-  }
-  ssize_t nsend = ub_socket_wakeup_send(socket_fd, frame, &bytes_sent);
+  ssize_t nsend = ub_socket_control_send(socket_fd, frame, &bytes_sent);
   int send_errno = errno;
-  if (nsend == UB_SOCKET_WAKEUP_FRAME_WIRE_SIZE) {
+  if (nsend == UB_SOCKET_CONTROL_FRAME_WIRE_SIZE) {
     return UB_SOCKET_CONTROL_SEND_OK;
   }
 
   UB_LOG(UB_SOCKET, UB_LOG_WARNING,
-         "fd=%d send %s frame failed rc=%ld err=%d bytes_sent=" SIZE_FORMAT "\n",
-         socket_fd, name, (long)nsend, send_errno, bytes_sent);
+         "fd=%d send control kind=%u failed rc=%ld err=%d bytes_sent="
+         SIZE_FORMAT "\n",
+         socket_fd, frame.kind, (long)nsend, send_errno, bytes_sent);
   errno = send_errno;
-  return ub_socket_wakeup_send_aborts_fd(send_errno, bytes_sent)
+  return ub_socket_control_send_aborts_fd(send_errno, bytes_sent)
       ? UB_SOCKET_CONTROL_SEND_ABORT : UB_SOCKET_CONTROL_SEND_RETRYABLE;
-}
-
-static void ub_socket_abort_fd_after_wakeup_failure(int socket_fd) {
-  (void)shutdown(socket_fd, SHUT_RDWR);
-  UBSocketManager::unregister_fd(socket_fd);
-}
-
-static UBSocketControlSendResult ub_socket_send_wakeup_with_retry(
-    int socket_fd, UBSocketConnection* conn, uint64_t bytes) {
-  UBSocketControlSendResult send_result =
-      ub_socket_send_control_frame(socket_fd, UB_SOCKET_WAKEUP, "WAKEUP");
-  if (send_result == UB_SOCKET_CONTROL_SEND_OK) {
-    conn->end_tx_wakeup();
-    return send_result;
-  }
-
-  conn->cancel_tx_wakeup();
-  if (send_result == UB_SOCKET_CONTROL_SEND_ABORT) {
-    return send_result;
-  }
-
-  int first_errno = errno;
-  UBSocketProfiler::count(UB_PROF_WAKEUP_REQUEST_RETRY, bytes);
-  send_result = ub_socket_send_control_frame(socket_fd, UB_SOCKET_WAKEUP, "WAKEUP");
-  if (send_result == UB_SOCKET_CONTROL_SEND_OK) {
-    conn->end_tx_wakeup();
-  } else if (send_result == UB_SOCKET_CONTROL_SEND_RETRYABLE) {
-    errno = first_errno;
-  }
-  return send_result;
 }
 
 Symbol *UBSocketManager::shared_memory_name = NULL;
 void *UBSocketManager::shared_memory_addr = NULL;
 bool UBSocketManager::_initialized = false;
+UBSocketConfig* UBSocketManager::_config = NULL;
+Monitor* UBSocketManager::_config_lock = NULL;
+int UBSocketManager::_config_readers = 0;
+bool UBSocketManager::_config_reloading = false;
 
-AllowListTable* UBSocketManager::_allow_list_table = NULL;
-
-size_t UBSocketManager::memory_size() {
+size_t UBSocketManager::ring_memory_size() {
   return (size_t)UBSocketMemorySize;
 }
 
+size_t UBSocketManager::mapping_size() {
+  UBSocketMemoryLayout layout;
+  if (!UBSocketMemoryLayout::create((uint64_t)ring_memory_size(),
+                                    (uint32_t)UBSocketRingCount,
+                                    &layout)) {
+    return 0;
+  }
+  return (size_t)layout.mapping_size;
+}
+
+UBSocketProcessHeader* UBSocketManager::process_header() {
+  return reinterpret_cast<UBSocketProcessHeader*>(shared_memory_addr);
+}
+
 void UBSocketManager::init() {
+  STATIC_ASSERT(sizeof(UBSocketProcessHeader) == DEFAULT_CACHE_LINE_SIZE);
+  STATIC_ASSERT(sizeof(UBSocketRingWriteState) == DEFAULT_CACHE_LINE_SIZE);
+  STATIC_ASSERT(sizeof(UBSocketRingPeerState) == DEFAULT_CACHE_LINE_SIZE);
   if (!UseUBSocket) { return; }
   if (ub_option_blank(UBSocketConf)) {
     tty->print_cr("UBSocketConf path is NULL, UBSocket is disabled.");
     return;
   }
 
-  _allow_list_table = new AllowListTable(UB_SOCKET);
-  if (_allow_list_table->load_from_file(UBSocketConf) == 0) {
-    tty->print_cr("UBSocket load allow-list failed or empty: %s\n", UBSocketConf);
+  if (UBSocketAttach == NULL ||
+      (strcmp(UBSocketAttach, "limit") != 0 && strcmp(UBSocketAttach, "all") != 0)) {
+    tty->print_cr("UBSocket attach policy(%s) invalid, expected limit or all; UBSocket is disabled.",
+                  UBSocketAttach == NULL ? "<null>" : UBSocketAttach);
     return;
   }
-  UBSocketEndpointMap::init();
-  UBSocketEndpointMap::load_from_file(UBSocketConf);
+
+  char config_error[512] = {0};
+  _config = UBSocketConfig::load(UBSocketConf, false,
+                                 config_error, sizeof(config_error));
+  if (_config == NULL || _config->stack_count() == 0) {
+    tty->print_cr("UBSocket load configuration failed or empty: %s (%s)\n",
+                  UBSocketConf, config_error[0] == '\0' ? "no stack entries" : config_error);
+    delete _config;
+    _config = NULL;
+    return;
+  }
+  _config_lock = new Monitor(Mutex::leaf, "UBSocketConfig_lock");
+  _config_readers = 0;
+  _config_reloading = false;
 
   if (UBSocketPort <= 0 || UBSocketPort > UB_SOCKET_PORT_MAX) {
     tty->print_cr("UBSocket port(" UINTX_FORMAT ") invalid, UBSocket is disabled.",
                   UBSocketPort);
+    return;
+  }
+
+  if (UBSocketPollerCpu < -1 ||
+      (UBSocketPollerCpu >= 0 && (uintx)UBSocketPollerCpu > max_juint)) {
+    tty->print_cr("UBSocket poller CPU(" INTX_FORMAT
+                  ") invalid, UBSocket is disabled.", UBSocketPollerCpu);
     return;
   }
 
@@ -146,23 +153,26 @@ void UBSocketManager::init() {
     return;
   }
 
-  uint64_t memory_bytes = (uint64_t)memory_size();
+  uint64_t memory_bytes = (uint64_t)ring_memory_size();
+  uint32_t max_ring_count =
+      UBSocketMemoryLayout::max_ring_count(memory_bytes);
   if ((uint64_t)UBSocketRingCount == 0 ||
-      (uint64_t)UBSocketRingCount > (uint64_t)UINT32_MAX ||
-      memory_bytes % (uint64_t)UBSocketRingCount != 0) {
+      (uint64_t)UBSocketRingCount > max_ring_count) {
     tty->print_cr("UBSocket ring count(" UINTX_FORMAT
-                  ") invalid for memory size(" SIZE_FORMAT
+                  ") invalid, maximum=%u for memory size(" SIZE_FORMAT
                   "), UBSocket is disabled.",
-                  UBSocketRingCount, memory_size());
+                  UBSocketRingCount, max_ring_count, ring_memory_size());
     return;
   }
-  uint64_t ring_slot_size = memory_bytes / (uint64_t)UBSocketRingCount;
-  if (ring_slot_size <= sizeof(UBSocketRingHeader) ||
-      ring_slot_size > (uint64_t)UINT32_MAX) {
+  UBSocketMemoryLayout layout;
+  if (!UBSocketMemoryLayout::create(memory_bytes,
+                                    (uint32_t)UBSocketRingCount,
+                                    &layout)) {
+    uint64_t ring_slot_size = memory_bytes / (uint64_t)UBSocketRingCount;
     tty->print_cr("UBSocket ring size(" UINT64_FORMAT
                   ") invalid for memory size(" SIZE_FORMAT
                   ") ring count(" UINTX_FORMAT "), UBSocket is disabled.",
-                  ring_slot_size, memory_size(), UBSocketRingCount);
+                  ring_slot_size, ring_memory_size(), UBSocketRingCount);
     return;
   }
 
@@ -200,7 +210,7 @@ void UBSocketManager::init() {
   }
 
   jlong malloc_start_ns = os::javaTimeNanos();
-  int error_code = os::Linux::ub_malloc(mem_name, memory_size());
+  int error_code = os::Linux::ub_malloc(mem_name, mapping_size());
   uint64_t malloc_cost_ns = os::javaTimeNanos() - malloc_start_ns;
   if (error_code != 0) {
     UB_LOG(UB_SOCKET, UB_LOG_WARNING,
@@ -209,12 +219,13 @@ void UBSocketManager::init() {
   }
   UB_LOG(UB_SOCKET, UB_LOG_DEBUG,
          "init malloc success name=%s size=" SIZE_FORMAT
-         " ring_count=" UINTX_FORMAT " ring_size=" UINT64_FORMAT
+         " ring_count=" UINTX_FORMAT " payload_size=" UINT64_FORMAT
          " cost=" UINT64_FORMAT " ns\n",
-         mem_name, memory_size(), UBSocketRingCount, ring_slot_size, malloc_cost_ns);
+         mem_name, mapping_size(), UBSocketRingCount, layout.payload_size,
+         malloc_cost_ns);
   shared_memory_name = SymbolTable::new_symbol(mem_name, JavaThread::current());
   jlong mmap_start_ns = os::javaTimeNanos();
-  shared_memory_addr = os::Linux::ub_mmap(mem_name, memory_size(), &error_code);
+  shared_memory_addr = os::Linux::ub_mmap(mem_name, mapping_size(), &error_code);
   uint64_t mmap_cost_ns = os::javaTimeNanos() - mmap_start_ns;
   if (shared_memory_addr == NULL) {
     UB_LOG(UB_SOCKET, UB_LOG_WARNING,
@@ -225,23 +236,42 @@ void UBSocketManager::init() {
   UB_LOG(UB_SOCKET, UB_LOG_DEBUG,
          "init mmap success name=%s addr=%p size=" SIZE_FORMAT
          " cost=" UINT64_FORMAT " ns\n",
-         mem_name, shared_memory_addr, memory_size(), mmap_cost_ns);
+         mem_name, shared_memory_addr, mapping_size(), mmap_cost_ns);
 
-  if (!UBSocketRingSlots::init(shared_memory_addr, memory_size(),
-                               (uint32_t)UBSocketRingCount)) {
+  memset(shared_memory_addr, 0, (size_t)layout.payload_base_offset);
+  UBSocketProtocolInfo protocol = ub_socket_protocol_info(
+      layout.mapping_size, layout.ring_memory_size, layout.ring_count,
+      (uint64_t)UBSocketSpinNanos);
+  UBSocketProcessHeader* header = process_header();
+  header->version = UB_SOCKET_PROTOCOL_VERSION;
+  header->capabilities = protocol.capabilities;
+  header->ring_count = layout.ring_count;
+  header->reserved = 0;
+  header->mapping_size = layout.mapping_size;
+  header->ring_memory_size = layout.ring_memory_size;
+  header->notify_generation = 0;
+  if (!UBSocketRingSlots::init(shared_memory_addr, layout)) {
     UB_LOG(UB_SOCKET, UB_LOG_WARNING,
            "init ring slots failed size=" SIZE_FORMAT
            " ring_count=" UINTX_FORMAT ", UBSocket disabled\n",
-           memory_size(), UBSocketRingCount);
+           ring_memory_size(), UBSocketRingCount);
     clean_ub_resources();
     return;
   }
   UBSocketMemMapping::init();
-  UBSocketConnectionTable::init();
+  UBSocketConnectionTable::init((uint32_t)UBSocketRingCount);
+  UBSocketSelectorNotifiers::init();
+  UBSocketPoller::init(&header->notify_generation);
   UBSocketAttachAgent::init();
   UBSocketSessionCaches::init();
   UBSocketEarlyReqQueue::init();
 
+  if (!UBSocketPoller::start()) {
+    UB_LOG(UB_SOCKET, UB_LOG_WARNING,
+           "start process poller failed, UBSocket disabled\n");
+    clean_ub_resources();
+    return;
+  }
   _initialized = true;
 }
 
@@ -250,7 +280,7 @@ void UBSocketManager::clean_ub_resources() {
   jlong start_time = os::javaTimeNanos();
   const char* mem_name = "<none>";
   if (shared_memory_addr != NULL) {
-    int error_code = os::Linux::ub_munmap(shared_memory_addr, memory_size());
+    int error_code = os::Linux::ub_munmap(shared_memory_addr, mapping_size());
     if (error_code != 0) {
       UB_LOG(UB_SOCKET, UB_LOG_WARNING, "cleanup munmap failed addr=%p err=%d\n",
              shared_memory_addr, error_code);
@@ -274,24 +304,114 @@ void UBSocketManager::clean_ub_resources() {
 void UBSocketManager::before_exit() {
   if (!_initialized) return;
   UBSocketConnectionTable::start_shutdown();
+  UBSocketPoller::shutdown();
   UBSocketAttachAgent::shutdown();
   UBSocketEarlyReqQueue::cleanup();
-  UBSocketEndpointMap::cleanup();
+  UBSocketSelectorNotifiers::shutdown();
   int abnormal_fds = UBSocketConnectionTable::unregister_abnormal_fds();
   if (abnormal_fds > 0) {
     UB_LOG(UB_SOCKET, UB_LOG_WARNING, "shutdown cleaned %d abnormal fds\n", abnormal_fds);
   }
   clean_ub_resources();
+  UBSocketConfig* old_config = NULL;
+  if (_config_lock != NULL) {
+    MonitorLockerEx locker(_config_lock, Mutex::_no_safepoint_check_flag);
+    while (_config_readers != 0) {
+      locker.wait(Mutex::_no_safepoint_check_flag);
+    }
+    old_config = _config;
+    _config = NULL;
+  }
+  delete old_config;
+}
+
+UBSocketConfig* UBSocketManager::acquire_config(bool* reloading) {
+  *reloading = false;
+  if (_config_lock == NULL) { return NULL; }
+  MonitorLockerEx locker(_config_lock, Mutex::_no_safepoint_check_flag);
+  if (_config_reloading) {
+    *reloading = true;
+    return NULL;
+  }
+  if (_config != NULL) { _config_readers++; }
+  return _config;
+}
+
+void UBSocketManager::release_config(UBSocketConfig* config) {
+  if (config == NULL || _config_lock == NULL) { return; }
+  MonitorLockerEx locker(_config_lock, Mutex::_no_safepoint_check_flag);
+  _config_readers--;
+  if (_config_readers == 0) { locker.notify_all(); }
 }
 
 bool UBSocketManager::check_stack() {
   if (!_initialized) return false;
-  return _allow_list_table->check_stack();
+  bool reloading = false;
+  UBSocketConfig* config = acquire_config(&reloading);
+  bool allowed = config != NULL && config->check_stack();
+  release_config(config);
+  return allowed;
+}
+
+bool UBSocketManager::reload_config(const char* path, outputStream* out) {
+  if (!_initialized || _config_lock == NULL) {
+    out->print_cr("ERROR: UBSocket is not initialized; current configuration unchanged");
+    return false;
+  }
+  {
+    MonitorLockerEx locker(_config_lock, Mutex::_no_safepoint_check_flag);
+    if (_config_reloading) {
+      out->print_cr("ERROR: UBSocket configuration reload already in progress; current configuration unchanged");
+      return false;
+    }
+    _config_reloading = true;
+  }
+  UB_LOG(UB_SOCKET, UB_LOG_INFO,
+         "configuration reload begin path=%s\n", path == NULL ? "<null>" : path);
+
+  char error[512] = {0};
+  UBSocketConfig* replacement = UBSocketConfig::load(path, true, error, sizeof(error));
+  if (replacement == NULL) {
+    MonitorLockerEx locker(_config_lock, Mutex::_no_safepoint_check_flag);
+    _config_reloading = false;
+    locker.notify_all();
+    out->print_cr("ERROR: UBSocket configuration reload failed");
+    out->print_cr("path=%s", path == NULL ? "<null>" : path);
+    out->print_cr("reason=%s", error[0] == '\0' ? "invalid configuration" : error);
+    out->print_cr("current configuration unchanged");
+    UB_LOG(UB_SOCKET, UB_LOG_WARNING,
+           "configuration reload failed path=%s reason=%s current unchanged\n",
+           path == NULL ? "<null>" : path,
+           error[0] == '\0' ? "invalid configuration" : error);
+    return false;
+  }
+
+  UBSocketConfig* old_config = NULL;
+  {
+    MonitorLockerEx locker(_config_lock, Mutex::_no_safepoint_check_flag);
+    while (_config_readers != 0) {
+      locker.wait(Mutex::_no_safepoint_check_flag);
+    }
+    old_config = _config;
+    _config = replacement;
+    _config_reloading = false;
+    locker.notify_all();
+  }
+  delete old_config;
+  out->print_cr("UBSocket configuration reloaded successfully");
+  out->print_cr("path=%s", path);
+  replacement->print_on(out);
+  UB_LOG(UB_SOCKET, UB_LOG_INFO,
+         "configuration reload success path=%s\n", path);
+  return true;
 }
 
 void UBSocketManager::check_options() {
   if (UBSocketConf != NULL && UBSocketConf[0] != '\0') {
     tty->print_cr("UBSocket is disabled, but conf path is set.");
+  }
+  if (!FLAG_IS_DEFAULT(UBSocketAttach)) {
+    tty->print_cr("UBSocket is disabled, but attach policy is set.");
   }
   if (UBSocketPort != 0) {
     tty->print_cr("UBSocket is disabled, but control port is set.");
@@ -302,6 +422,12 @@ void UBSocketManager::check_options() {
   if (!FLAG_IS_DEFAULT(UBSocketRingCount)) {
     tty->print_cr("UBSocket is disabled, but ring count is set.");
   }
+  if (!FLAG_IS_DEFAULT(UBSocketPollerCpu)) {
+    tty->print_cr("UBSocket is disabled, but poller CPU is set.");
+  }
+  if (!FLAG_IS_DEFAULT(UBSocketSpinNanos)) {
+    tty->print_cr("UBSocket is disabled, but spin nanos is set.");
+  }
 }
 
 long UBSocketManager::write_data(void *buf, int socket_fd, size_t len) {
@@ -309,11 +435,8 @@ long UBSocketManager::write_data(void *buf, int socket_fd, size_t len) {
     return 0;
   }
 
-  bool need_wakeup = false;
   long ring_write = 0;
-  bool abort_fd = false;
-  bool detach_error = false;
-  int abort_errno = 0;
+  bool io_error = false;
   int detach_errno = 0;
   {
     UBSocketConnectionHandle conn(socket_fd);
@@ -322,28 +445,14 @@ long UBSocketManager::write_data(void *buf, int socket_fd, size_t len) {
       errno = ENOTCONN;
       return -1;
     }
-    ring_write = connection->write_data(buf, len, &need_wakeup);
+    ring_write = connection->write_data(buf, len);
     if (ring_write < 0 && errno == EINVAL) {
       detach_errno = errno;
-      detach_error = true;
-    }
-    if (ring_write > 0 && need_wakeup) {
-      UBSocketControlSendResult send_result =
-          ub_socket_send_wakeup_with_retry(socket_fd, connection,
-                                           (uint64_t)ring_write);
-      if (send_result == UB_SOCKET_CONTROL_SEND_ABORT) {
-        abort_errno = errno;
-        abort_fd = true;
-      }
+      io_error = true;
     }
   }
-  if (abort_fd) {
-    ub_socket_abort_fd_after_wakeup_failure(socket_fd);
-    errno = abort_errno;
-    return -1;
-  }
-  if (detach_error) {
-    detach_fd(socket_fd);
+  if (io_error) {
+    fail_close(socket_fd);
     errno = detach_errno;
     return -1;
   }
@@ -416,108 +525,91 @@ int64_t UBSocketManager::transfer_from_file(int src_fd, int socket_fd,
   return total_write;
 }
 
-static bool ub_socket_handle_parsed_frame(int socket_fd,
-                                          UBSocketConnection* conn,
-                                          const UBSocketWakeupFrame& frame) {
-  UB_PROFILE_COUNT(UB_PROF_WAKEUP_FRAME_COUNT, UB_SOCKET_WAKEUP_FRAME_WIRE_SIZE);
-  if (frame.kind == UB_SOCKET_WAKEUP) {
-    if (!conn->mark_rx_wakeup()) {
-      return false;
-    }
-    UB_LOG(UB_SOCKET, UB_LOG_DEBUG, "fd=%d recv WAKEUP frame\n", socket_fd);
-    return true;
+static bool ub_socket_handle_control_frame(int socket_fd,
+                                           UBSocketConnection* conn,
+                                           const UBSocketControlFrame& frame) {
+  if (!conn->accept_control_frame(frame)) {
+    errno = EBADMSG;
+    return false;
   }
-  if (frame.kind == UB_SOCKET_CLOSE) {
-    conn->mark_peer_closed();
-    UB_LOG(UB_SOCKET, UB_LOG_DEBUG, "fd=%d recv CLOSE frame\n", socket_fd);
-    return true;
-  }
-  errno = EBADMSG;
-  UB_LOG(UB_SOCKET, UB_LOG_ERROR, "fd=%d recv unsupported control frame kind=%u\n",
-         socket_fd, frame.kind);
-  conn->mark_error();
-  return false;
+  UB_LOG(UB_SOCKET, UB_LOG_DEBUG,
+         "fd=%d recv control kind=%u final_write_offset=" UINT64_FORMAT "\n",
+         socket_fd, frame.kind, frame.final_write_offset);
+  return true;
 }
 
-long UBSocketManager::parse_msg(int socket_fd, const char* ub_msg, size_t ub_msg_len) {
-  if (!UseUBSocket || !_initialized || ub_msg == NULL || ub_msg_len == 0) {
+long UBSocketManager::parse_control(int socket_fd, const char* msg,
+                                    size_t msg_len) {
+  if (!UseUBSocket || !_initialized || msg == NULL || msg_len == 0) {
     return 0;
   }
 
   size_t consumed = 0;
-  char frame_buf[UB_SOCKET_WAKEUP_FRAME_WIRE_SIZE];
+  char frame_buf[UB_SOCKET_CONTROL_FRAME_WIRE_SIZE];
   size_t residue_len = 0;
   UBSocketConnectionHandle conn(socket_fd);
   if (conn.get() == NULL) { return -1; }
-  if (!conn.get()->take_frame_residue(frame_buf, sizeof(frame_buf), &residue_len)) {
-    UB_LOG(UB_SOCKET, UB_LOG_ERROR, "fd=%d residue take failed: %s\n",
+  if (!conn.get()->take_control_residue(frame_buf, sizeof(frame_buf),
+                                        &residue_len)) {
+    UB_LOG(UB_SOCKET, UB_LOG_ERROR, "fd=%d control residue take failed: %s\n",
            socket_fd, strerror(errno));
     return -1;
   }
 
   if (residue_len > 0) {
-    size_t need = UB_SOCKET_WAKEUP_FRAME_WIRE_SIZE - residue_len;
-    if (ub_msg_len < need) {
-      memcpy(frame_buf + residue_len, ub_msg, ub_msg_len);
-      if (!conn.get()->store_frame_residue(frame_buf, residue_len + ub_msg_len)) {
+    size_t need = UB_SOCKET_CONTROL_FRAME_WIRE_SIZE - residue_len;
+    if (msg_len < need) {
+      memcpy(frame_buf + residue_len, msg, msg_len);
+      if (!conn.get()->store_control_residue(frame_buf,
+                                             residue_len + msg_len)) {
         UB_LOG(UB_SOCKET, UB_LOG_ERROR,
-               "fd=%d residue append failed len=" SIZE_FORMAT "\n",
-               socket_fd, ub_msg_len);
+               "fd=%d control residue append failed len=" SIZE_FORMAT "\n",
+               socket_fd, msg_len);
         return -1;
       }
-      UB_LOG(UB_SOCKET, UB_LOG_DEBUG,
-             "fd=%d parse_msg stored partial residue=" SIZE_FORMAT
-             " consumed=" SIZE_FORMAT "\n",
-             socket_fd, residue_len + ub_msg_len, ub_msg_len);
       return 0;
     }
-    memcpy(frame_buf + residue_len, ub_msg, need);
+    memcpy(frame_buf + residue_len, msg, need);
     consumed += need;
-    UBSocketWakeupFrame frame;
-    if (!ub_socket_wakeup_parse(frame_buf, &frame)) {
-      UB_LOG(UB_SOCKET, UB_LOG_ERROR, "fd=%d recv data frame invalid: %s\n",
+    UBSocketControlFrame frame;
+    if (!ub_socket_control_parse(frame_buf, &frame) ||
+        !ub_socket_handle_control_frame(socket_fd, conn.get(), frame)) {
+      UB_LOG(UB_SOCKET, UB_LOG_ERROR, "fd=%d recv control frame invalid: %s\n",
              socket_fd, strerror(errno));
       conn.get()->mark_error();
       return -1;
     }
-    if (!ub_socket_handle_parsed_frame(socket_fd, conn.get(), frame)) { return -1; }
   }
 
-  while (ub_msg_len - consumed >= UB_SOCKET_WAKEUP_FRAME_WIRE_SIZE) {
-    UBSocketWakeupFrame frame;
-    if (!ub_socket_wakeup_parse(ub_msg + consumed, &frame)) {
-      UB_LOG(UB_SOCKET, UB_LOG_ERROR, "fd=%d recv data frame invalid: %s\n",
+  while (msg_len - consumed >= UB_SOCKET_CONTROL_FRAME_WIRE_SIZE) {
+    UBSocketControlFrame frame;
+    if (!ub_socket_control_parse(msg + consumed, &frame) ||
+        !ub_socket_handle_control_frame(socket_fd, conn.get(), frame)) {
+      UB_LOG(UB_SOCKET, UB_LOG_ERROR, "fd=%d recv control frame invalid: %s\n",
              socket_fd, strerror(errno));
       conn.get()->mark_error();
       return -1;
     }
-    consumed += UB_SOCKET_WAKEUP_FRAME_WIRE_SIZE;
-    if (!ub_socket_handle_parsed_frame(socket_fd, conn.get(), frame)) { return -1; }
+    consumed += UB_SOCKET_CONTROL_FRAME_WIRE_SIZE;
   }
 
-  if (ub_msg_len > consumed) {
-    size_t remain = ub_msg_len - consumed;
-    if (!conn.get()->store_frame_residue(ub_msg + consumed, remain)) {
-      UB_LOG(UB_SOCKET, UB_LOG_ERROR, "fd=%d residue store failed len=" SIZE_FORMAT "\n",
+  if (msg_len > consumed) {
+    size_t remain = msg_len - consumed;
+    if (!conn.get()->store_control_residue(msg + consumed, remain)) {
+      UB_LOG(UB_SOCKET, UB_LOG_ERROR,
+             "fd=%d control residue store failed len=" SIZE_FORMAT "\n",
              socket_fd, remain);
       return -1;
     }
-    UB_LOG(UB_SOCKET, UB_LOG_DEBUG,
-           "fd=%d parse_msg stored tail residue=" SIZE_FORMAT " consumed=" SIZE_FORMAT "\n",
-           socket_fd, remain, consumed);
   }
 
-  if (consumed == 0) { return 0; }
-  UB_LOG(UB_SOCKET, UB_LOG_DEBUG,
-         "fd=%d parse_msg consumed=" SIZE_FORMAT " input=" SIZE_FORMAT "\n",
-         socket_fd, consumed, ub_msg_len);
   return (long)consumed;
 }
 
 long UBSocketManager::read_data(void *buf, int socket_fd, size_t len) {
   if (!UseUBSocket || !_initialized) return 0;
   long nread = 0;
-  bool detach_error = false;
+  bool io_error = false;
   int detach_errno = 0;
   {
     UBSocketConnectionHandle conn(socket_fd);
@@ -528,11 +620,11 @@ long UBSocketManager::read_data(void *buf, int socket_fd, size_t len) {
     nread = conn.get()->read_data(buf, len);
     if (nread < 0 && errno == EINVAL) {
       detach_errno = errno;
-      detach_error = true;
+      io_error = true;
     }
   }
-  if (detach_error) {
-    detach_fd(socket_fd);
+  if (io_error) {
+    fail_close(socket_fd);
     errno = detach_errno;
     return -1;
   }
@@ -544,13 +636,48 @@ long UBSocketManager::read_data(void *buf, int socket_fd, size_t len) {
 int32_t UBSocketManager::register_fd(int socket_fd, bool is_server) {
   if (!UseUBSocket || !_initialized) return UB_SOCKET_REGISTER_FALLBACK;
   long start_time = os::javaTimeNanos();
+  bool reloading = false;
+  UBSocketConfig* config = acquire_config(&reloading);
+  if (reloading) {
+    UB_PROFILE_COUNT(UB_PROF_UB_ATTACH_FALLBACK, 0);
+    UB_LOG(UB_SOCKET, UB_LOG_INFO,
+           "fd=%d attach skipped during configuration reload, use=tcp\n", socket_fd);
+    return UB_SOCKET_REGISTER_FALLBACK;
+  }
+  if (config == NULL) return UB_SOCKET_REGISTER_FALLBACK;
+
+  UBSocketEndpoint local_ep;
+  UBSocketEndpoint remote_ep;
+  if (!ub_socket_endpoint_get(socket_fd, &local_ep, &remote_ep)) {
+    release_config(config);
+    return UB_SOCKET_REGISTER_FALLBACK;
+  }
+  bool selected = true;
+  if (strcmp(UBSocketAttach, "limit") == 0) {
+    UBSocketEndpoint control_ep;
+    selected = is_server ? config->matches_local_service(&local_ep)
+                         : config->control_endpoint_for_data(&remote_ep, &control_ep);
+    if (!selected) {
+      UB_PROFILE_COUNT(UB_PROF_UB_ATTACH_SKIP, 0);
+      UB_LOG(UB_SOCKET, UB_LOG_INFO,
+             "fd=%d attach policy=limit mapping=unmatched use=tcp\n", socket_fd);
+      release_config(config);
+      return UB_SOCKET_REGISTER_SKIPPED;
+    }
+  }
+  if (!config->check_stack()) {
+    release_config(config);
+    return UB_SOCKET_REGISTER_FALLBACK;
+  }
 
   if (has_registered(socket_fd)) {
     UB_LOG(UB_SOCKET, UB_LOG_WARNING, "fd=%d register skipped: already registered\n", socket_fd);
+    release_config(config);
     return UB_SOCKET_REGISTER_SUCCESS;
   }
 
-  UBSocketAttach socket_attach(socket_fd, is_server, shared_memory_name, memory_size());
+  UBSocketAttachHandshake socket_attach(socket_fd, is_server, shared_memory_name,
+                                        mapping_size(), config);
   int32_t attach_result = socket_attach.do_attach();
   if (attach_result != UB_SOCKET_REGISTER_SUCCESS) {
     UB_PROFILE_COUNT(UB_PROF_UB_ATTACH_FALLBACK, 0);
@@ -561,9 +688,9 @@ int32_t UBSocketManager::register_fd(int socket_fd, bool is_server) {
            socket_fd, peer, is_server ? "server" : "client",
            attach_result == UB_SOCKET_REGISTER_ABORT ? "abort" : "fallback=tcp");
     if (has_registered(socket_fd)) { unregister_fd(socket_fd); }
+    release_config(config);
     return attach_result;
   }
-
   int buffer_size = UB_SOCKET_TCP_BUFFER_SIZE;
   (void)setsockopt(socket_fd, SOL_SOCKET, SO_SNDBUF,
                    (const char*)&buffer_size, sizeof(buffer_size));
@@ -574,6 +701,7 @@ int32_t UBSocketManager::register_fd(int socket_fd, bool is_server) {
   UB_PROFILE_COUNT(UB_PROF_UB_ATTACH_SUCCESS, 0);
   UB_LOG(UB_SOCKET, UB_LOG_INFO, "fd=%d register success role=%s cost_ns=%ld\n",
          socket_fd, is_server ? "server" : "client", cost_time);
+  release_config(config);
   return UB_SOCKET_REGISTER_SUCCESS;
 }
 
@@ -593,8 +721,12 @@ bool UBSocketManager::unregister_fd(int socket_fd, bool send_close) {
     return false;
   }
   if (send_close) {
-    (void)ub_socket_send_control_frame(socket_fd, UB_SOCKET_CLOSE, "CLOSE");
+    UBSocketControlFrame frame;
+    if (conn->prepare_control_frame(UB_SOCKET_CLOSE, &frame)) {
+      (void)ub_socket_send_control_frame(socket_fd, frame);
+    }
   }
+  UBSocketSelectorNotifiers::detach_connection(conn);
   UBSocketConnectionTable::finish_close(socket_fd, conn);
   delete conn;
   long cost_time = os::javaTimeNanos() - start_time;
@@ -610,6 +742,40 @@ bool UBSocketManager::mark_control_closed(int socket_fd) {
   return true;
 }
 
+bool UBSocketManager::shutdown_output(int socket_fd) {
+  if (!UseUBSocket || !_initialized) { return true; }
+  UBSocketControlSendResult send_result = UB_SOCKET_CONTROL_SEND_OK;
+  {
+    UBSocketConnectionHandle conn(socket_fd);
+    if (conn.get() == NULL) { return true; }
+    UBSocketControlFrame frame;
+    if (!conn.get()->prepare_control_frame(UB_SOCKET_SHUTDOWN_OUTPUT, &frame)) {
+      return false;
+    }
+    send_result = ub_socket_send_control_frame(socket_fd, frame);
+  }
+  if (send_result == UB_SOCKET_CONTROL_SEND_OK) { return true; }
+  fail_close(socket_fd);
+  return false;
+}
+
+bool UBSocketManager::peer_close_ready(int socket_fd) {
+  if (!UseUBSocket || !_initialized) { return false; }
+  UBSocketConnectionHandle conn(socket_fd);
+  return conn.get() != NULL && conn.get()->peer_close_ready();
+}
+
+bool UBSocketManager::fail_close(int socket_fd) {
+  if (!UseUBSocket || !_initialized) { return false; }
+  {
+    UBSocketConnectionHandle conn(socket_fd);
+    if (conn.get() == NULL) { return false; }
+    conn.get()->mark_error();
+  }
+  os::socket_shutdown(socket_fd, SHUT_RDWR);
+  return true;
+}
+
 bool UBSocketManager::has_registered(int socket_fd) {
   if (!UseUBSocket || !_initialized) return false;
   return UBSocketConnectionTable::contains(socket_fd);
@@ -621,8 +787,57 @@ bool UBSocketManager::has_pending_data(int socket_fd) {
   return conn.get() != NULL && conn.get()->has_pending_data();
 }
 
+bool UBSocketManager::spin_wait_data(int socket_fd) {
+  if (!spin_enabled()) { return false; }
+  UBSocketConnectionHandle conn(socket_fd);
+  return conn.get() != NULL &&
+         conn.get()->spin_rx_ready((uint64_t)UBSocketSpinNanos);
+}
+
 bool UBSocketManager::wait_fd_ready(int socket_fd) {
   if (!UseUBSocket || !_initialized) { return false; }
   UBSocketConnectionHandle conn(socket_fd);
   return conn.get() != NULL && conn.get()->ready();
+}
+
+bool UBSocketManager::register_selector_notifier(int event_fd) {
+  return polling_notify_enabled() &&
+         UBSocketSelectorNotifiers::register_fd(event_fd);
+}
+
+void UBSocketManager::unregister_selector_notifier(int event_fd) {
+  UBSocketSelectorNotifiers::unregister_fd(event_fd);
+}
+
+jlong UBSocketManager::subscribe_selector(int socket_fd, int event_fd) {
+  if (!polling_notify_enabled() || event_fd < 0) { return 0; }
+  UBSocketConnectionHandle connection(socket_fd);
+  if (connection.get() == NULL) { return 0; }
+  return UBSocketSelectorNotifiers::subscribe(connection.get(), event_fd);
+}
+
+void UBSocketManager::unsubscribe_selector(jlong subscription_id) {
+  UBSocketSelectorNotifiers::unsubscribe(subscription_id);
+}
+
+int32_t UBSocketManager::drain_selector_ready(
+    int event_fd, UBSocketSelectorReadyEvent* events, int32_t capacity,
+    jlong* profile_complete_ns) {
+  return UBSocketSelectorNotifiers::drain_ready(
+      event_fd, events, capacity, profile_complete_ns);
+}
+
+void UBSocketManager::complete_selector_notification(jlong complete_ns, bool injected) {
+  if (!UBSocketProfiler::enabled(UB_PROF_EVENTFD_TO_SELECTOR_INJECT_NS)) {
+    return;
+  }
+  uint64_t injected_ns = (uint64_t)os::javaTimeNanos();
+  if (!injected || complete_ns <= 0 ||
+      injected_ns < (uint64_t)complete_ns) {
+    UBSocketProfiler::count(UB_PROF_POLL_PROFILE_INVALID);
+    return;
+  }
+  UBSocketProfiler::record_latency(
+      UB_PROF_EVENTFD_TO_SELECTOR_INJECT_NS,
+      injected_ns - (uint64_t)complete_ns);
 }

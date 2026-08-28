@@ -560,6 +560,7 @@ class SocketChannelImpl
     private static final int UB_REGISTER_FALLBACK = 0;
     private static final int UB_REGISTER_SUCCESS = 1;
     private static final int UB_REGISTER_ABORT = 2;
+    private static final int UB_REGISTER_SKIPPED = 3;
 
     void registerUbSocketIfNeeded() throws IOException {
         boolean serverSide;
@@ -587,6 +588,12 @@ class SocketChannelImpl
         if (result == UB_REGISTER_ABORT) {
             close();
             throw new IOException("UBSocket committed attach failed");
+        }
+        if (result != UB_REGISTER_FALLBACK &&
+            result != UB_REGISTER_SUCCESS &&
+            result != UB_REGISTER_SKIPPED) {
+            close();
+            throw new IOException("Unknown UBSocket registration result: " + result);
         }
     }
 
@@ -842,6 +849,10 @@ class SocketChannelImpl
             if (!isConnected())
                 throw new NotYetConnectedException();
             if (isOutputOpen) {
+                if (!shutdownUbSocketOutput(fd)) {
+                    close();
+                    throw new IOException("UBSocket output shutdown failed");
+                }
                 Net.shutdown(fd, Net.SHUT_WR);
                 if (writerThread != 0)
                     NativeThread.signal(writerThread);
@@ -1089,6 +1100,8 @@ class SocketChannelImpl
     private static native int registerUbSocket(FileDescriptor fd,
                                                boolean serverSide)
         throws IOException;
+
+    private static native boolean shutdownUbSocketOutput(FileDescriptor fd);
 
     static {
         IOUtil.load();

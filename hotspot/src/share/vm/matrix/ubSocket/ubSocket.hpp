@@ -28,6 +28,7 @@
 #include "classfile/symbolTable.hpp"
 #include "matrix/matrixAllowList.hpp"
 #include "matrix/matrixLog.hpp"
+#include "matrix/ubSocket/ubSocketConfig.hpp"
 #include "matrix/ubSocket/ubSocketProfile.hpp"
 #include "matrix/ubSocket/ubSocketUtils.hpp"
 #include "runtime/os.hpp"
@@ -52,17 +53,25 @@ enum {
   // Attach agent poll intervals for pending early requests and idle listening.
   UB_ATTACH_IO_BUSY_POLL_MS = 10,
   UB_ATTACH_IO_IDLE_POLL_MS = 100,
-  // Fixed internal deadlines for wakeup send and attach handshake.
-  UB_WAKEUP_SEND_TIMEOUT_MS = 50,
+  // Fixed internal deadlines for control send and attach handshake.
+  UB_CONTROL_SEND_TIMEOUT_MS = 50,
   // Server accept waits past the attach agent idle poll interval before TCP fallback.
   UB_ATTACH_REQUEST_WAIT_MS = 200,
   UB_ATTACH_TIMEOUT_MS = 500,
+  // Enabled-mode progress publication while the peer Ring stays non-empty.
+  UB_POLL_NOTIFY_PROGRESS_BYTES = 256*K
 };
+
+class Monitor;
+class outputStream;
+struct UBSocketProcessHeader;
+struct UBSocketSelectorReadyEvent;
 
 enum UBSocketRegisterResult {
   UB_SOCKET_REGISTER_FALLBACK = 0,
   UB_SOCKET_REGISTER_SUCCESS = 1,
-  UB_SOCKET_REGISTER_ABORT = 2
+  UB_SOCKET_REGISTER_ABORT = 2,
+  UB_SOCKET_REGISTER_SKIPPED = 3
 };
 
 class UBSocketManager : public AllStatic {
@@ -72,6 +81,7 @@ class UBSocketManager : public AllStatic {
 
   static bool check_stack();
   static void check_options();
+  static bool reload_config(const char* path, outputStream* out);
 
   static void init();
   static void before_exit();
@@ -81,21 +91,45 @@ class UBSocketManager : public AllStatic {
   static long write_data(void* buf, int socket_fd, size_t len);
   static int64_t transfer_from_file(int src_fd, int socket_fd,
                                     int64_t offset, int64_t count);
-  static long parse_msg(int socket_fd, const char* ub_msg, size_t ub_msg_len);
+  static long parse_control(int socket_fd, const char* msg, size_t msg_len);
 
   static int32_t register_fd(int socket_fd, bool is_server);
   static bool unregister_fd(int socket_fd);
   static bool detach_fd(int socket_fd);
   static bool mark_control_closed(int socket_fd);
+  static bool shutdown_output(int socket_fd);
+  static bool peer_close_ready(int socket_fd);
+  static bool fail_close(int socket_fd);
   static bool has_registered(int socket_fd);
   static bool has_pending_data(int socket_fd);
   static bool wait_fd_ready(int socket_fd);
+  static bool polling_notify_enabled() { return UseUBSocket && _initialized; }
+  static bool spin_enabled() {
+    return UseUBSocket && _initialized && UBSocketSpinNanos > 0;
+  }
+  static bool spin_wait_data(int socket_fd);
+  static bool register_selector_notifier(int event_fd);
+  static void unregister_selector_notifier(int event_fd);
+  static jlong subscribe_selector(int socket_fd, int event_fd);
+  static void unsubscribe_selector(jlong subscription_id);
+  static int32_t drain_selector_ready(int event_fd,
+                                      UBSocketSelectorReadyEvent* events,
+                                      int32_t capacity,
+                                      jlong* profile_complete_ns);
+  static void complete_selector_notification(jlong complete_ns, bool injected);
 
  private:
-  static AllowListTable* _allow_list_table;
+  static UBSocketConfig* _config;
+  static Monitor* _config_lock;
+  static int _config_readers;
+  static bool _config_reloading;
 
   static bool _initialized;
-  static size_t memory_size();
+  static size_t ring_memory_size();
+  static size_t mapping_size();
+  static UBSocketProcessHeader* process_header();
+  static UBSocketConfig* acquire_config(bool* reloading);
+  static void release_config(UBSocketConfig* config);
   static bool unregister_fd(int socket_fd, bool send_close);
 };
 

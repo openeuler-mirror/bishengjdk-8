@@ -177,11 +177,7 @@ ssize_t UBSocketIO::send_all(int fd, const void* buf, size_t len,
     if (written < 0) {
       if (errno == EINTR) { continue; }
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
-        UB_PROFILE_COUNT(UB_PROF_WAKEUP_SEND_EAGAIN, remaining);
-        UB_PROFILE_NANOS(UB_PROF_WAKEUP_SEND_WAIT, wait_start);
-        bool ready = wait_fd(fd, POLLOUT, ddl_ns);
-        UB_PROFILE_RECORD(UB_PROF_WAKEUP_SEND_WAIT, wait_start, remaining);
-        if (!ready) { return -1; }
+        if (!wait_fd(fd, POLLOUT, ddl_ns)) { return -1; }
         continue;
       }
       return written;

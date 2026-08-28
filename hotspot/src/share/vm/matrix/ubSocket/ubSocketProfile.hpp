@@ -22,93 +22,143 @@ enum UBSocketProfileMode {
   UB_PROFILE_DETAIL = 2
 };
 
-// UBSocketProfileEvent layout. Indentation means the event is measured inside
-// the parent call path. Top-level events are independent paths or counters.
-// Upper-case names are summary events. Do not add nested counters/timings to
-// parent totals when interpreting profile output.
-//	nio_write_total: FileDispatcherImpl.write0 native wrapper total cost.
-//		RING_WRITE_TOTAL: write payload into the peer receiver-owned ring.
-//			RING_WRITE_MEMCPY: memcpy payload bytes into the peer ring.
-//		ring_write_full: count writes that find the peer ring full.
-//		ring_write_partial: count writes that only write part of the request.
-//		wakeup_request_total: count ring writes that request a TCP wakeup.
-//		wakeup_skip_nonempty: count ring writes coalesced while peer ring is non-empty.
-//		wakeup_skip_sending: count ring writes skipped while a wakeup send is in progress.
-//		wakeup_request_threshold: count threshold-driven wakeups for a non-empty peer ring.
-//		wakeup_request_retry: count wakeups retried after a previous send failure.
-//		WAKEUP_SEND_TOTAL: send TCP wakeup control frame for ring readiness.
-//			wakeup_send_syscall: actual wakeup send syscall/wrapper cost.
-//			wakeup_send_wait: wait for wakeup TCP fd writable after EAGAIN.
-//			wakeup_send_eagain: count wakeup send EAGAIN events and remaining bytes.
-//	nio_read_total: FileDispatcherImpl.read0 native wrapper total cost.
-//		ring_read_hit: count read calls that hit ring payload.
-//		ring_read_empty: count read calls that find no ring payload.
-//		RING_READ_TOTAL: read payload from the local receiver-owned ring.
-//			RING_READ_MEMCPY: memcpy payload bytes out of the local ring.
-//	wakeup_drain_total: selector drains TCP wakeup control frames.
-//		wakeup_drain_syscall: actual wakeup drain read syscall cost.
-//		wakeup_frame_count: count parsed wakeup/control frames.
-//	selector_pending_check: count selector pending-data checks.
-//		selector_pending_ready: count selector checks that find pending ring data.
-//	selector_probe_check: count selector probe checks for unresolved wakeups.
-//		selector_probe_ready: count selector probes that find ring payload.
-//		selector_probe_empty: count selector probes that still find no ring payload.
-//	selector_ready_inject: count ready fds injected from UB ring state.
-//	ring_write_max_used_bytes: max bytes occupied in peer ring after write.
-//	ring_read_max_used_bytes: max bytes available in local ring before read.
-//	UB_ATTACH_SUCCESS: count fds that successfully attach to the UB ring data path.
-//	UB_ATTACH_FALLBACK: count fds whose attach/register path falls back to TCP.
-//	ring_attach_no_slot: count attach attempts that fail because no ring slot is free.
+enum {
+  UB_PROFILE_LATENCY_BUCKET_NS = 1000,
+  UB_PROFILE_LATENCY_BUCKET_COUNT = 16384,
+  UB_PROFILE_LATENCY_MAX_NS =
+      (UB_PROFILE_LATENCY_BUCKET_COUNT - 1) * UB_PROFILE_LATENCY_BUCKET_NS
+};
+
+// UBSocketProfileEvent IDs are shared with the JDK native layer. The groups
+// below describe the logical path; counters are observations, not children
+// whose values should be subtracted from a parent timing.
+//
+//   nio_write_total: FileDispatcherImpl.write0 wrapper cost.
+//     ring_write_total: copy and publish a payload to the peer-owned ring.
+//       ring_write_memcpy: payload memcpy portion of ring_write_total.
+//     ring_write_full/partial: ring capacity outcomes.
+//     poll_notify_publish: publish the process notification generation.
+//   nio_read_total: FileDispatcherImpl.read0 wrapper cost.
+//     ring_read_total: read a payload from the local-owned ring.
+//       ring_read_memcpy: payload memcpy portion of ring_read_total.
+//     ring_read_hit/empty: read-result counters.
+//   selector_pending_check/ready: initial selector pending-data checks.
+//   selector_ready_inject: readiness synthesized from retained ring state.
+//   poll_notify_observed: process notifications observed by the poller.
+//   selector_poll_ready_inject: readiness synthesized from a poller queue.
+//   ring_*_max_used_bytes: ring high-water observations.
+//   ub_attach_* and ring_attach_no_slot: attach outcomes.
+//   publish_to_observe_ns through eventfd_complete_to_selector_inject_ns:
+//     local notification-stage latency samples.
+//   poll_notify_request_*, selector_spin_*, poll_write_offset_*:
+//     notification and spin diagnostic counters/timing.
+//   selector_ready_queued/drained and selector_eventfd_*: ready-queue flow.
+//   close_wait_final_offset/close_failure_timeout: close-drain outcomes.
 enum UBSocketProfileEvent {
   UB_PROF_NIO_WRITE_TOTAL = 0,
   UB_PROF_RING_WRITE_TOTAL,
   UB_PROF_RING_WRITE_MEMCPY,
   UB_PROF_RING_WRITE_FULL,
   UB_PROF_RING_WRITE_PARTIAL,
-  UB_PROF_WAKEUP_SEND_TOTAL,
-  UB_PROF_WAKEUP_SEND_SYSCALL,
-  UB_PROF_WAKEUP_SEND_WAIT,
-  UB_PROF_WAKEUP_SEND_EAGAIN,
-
   UB_PROF_NIO_READ_TOTAL,
   UB_PROF_RING_READ_HIT,
   UB_PROF_RING_READ_EMPTY,
   UB_PROF_RING_READ_TOTAL,
   UB_PROF_RING_READ_MEMCPY,
-  UB_PROF_WAKEUP_DRAIN_TOTAL,
-  UB_PROF_WAKEUP_DRAIN_SYSCALL,
-  UB_PROF_WAKEUP_FRAME_COUNT,
   UB_PROF_SELECTOR_PENDING_CHECK,
   UB_PROF_SELECTOR_PENDING_READY,
-
   UB_PROF_UB_ATTACH_SUCCESS,
   UB_PROF_UB_ATTACH_FALLBACK,
   UB_PROF_RING_ATTACH_NO_SLOT,
-  UB_PROF_WAKEUP_REQUEST_TOTAL,
-  UB_PROF_WAKEUP_SKIP_NONEMPTY,
-  UB_PROF_WAKEUP_SKIP_SENDING,
-  UB_PROF_WAKEUP_REQUEST_THRESHOLD,
-  UB_PROF_WAKEUP_REQUEST_RETRY,
-  UB_PROF_SELECTOR_PROBE_CHECK,
-  UB_PROF_SELECTOR_PROBE_READY,
-  UB_PROF_SELECTOR_PROBE_EMPTY,
   UB_PROF_SELECTOR_READY_INJECT,
   UB_PROF_RING_WRITE_MAX_USED_BYTES,
   UB_PROF_RING_READ_MAX_USED_BYTES,
+  UB_PROF_POLL_NOTIFY_PUBLISH,
+  UB_PROF_POLL_NOTIFY_OBSERVED,
+  UB_PROF_SELECTOR_POLL_READY_INJECT,
+  UB_PROF_PUBLISH_TO_OBSERVE_NS,
+  UB_PROF_OBSERVE_TO_EVENTFD_COMPLETE_NS,
+  UB_PROF_EVENTFD_TO_SELECTOR_INJECT_NS,
+  UB_PROF_POLL_PROFILE_INVALID,
+  UB_PROF_UB_ATTACH_SKIP,
+  UB_PROF_POLL_NOTIFY_REQUEST_EMPTY,
+  UB_PROF_POLL_NOTIFY_REQUEST_THRESHOLD,
+  UB_PROF_POLL_NOTIFY_REQUEST_RACE,
+  UB_PROF_POLL_NOTIFY_SKIP_NONEMPTY,
+  UB_PROF_SELECTOR_SPIN_ATTEMPT,
+  UB_PROF_SELECTOR_SPIN_READY,
+  UB_PROF_SELECTOR_SPIN_TIMEOUT,
+  UB_PROF_SELECTOR_SPIN_NANOS,
+  UB_PROF_POLL_WRITE_OFFSET_SCANNED,
+  UB_PROF_POLL_WRITE_OFFSET_CHANGED,
+  UB_PROF_POLL_WRITE_OFFSET_STALE,
+  UB_PROF_SELECTOR_READY_QUEUED,
+  UB_PROF_SELECTOR_READY_DRAINED,
+  UB_PROF_SELECTOR_EVENTFD_WRITE,
+  UB_PROF_SELECTOR_EVENTFD_COALESCED,
+  UB_PROF_CLOSE_WAIT_FINAL_OFFSET,
+  UB_PROF_CLOSE_FAILURE_TIMEOUT,
 
   UB_PROF_COUNT
 };
 
 class UBSocketProfiler : public AllStatic {
+ private:
+  static bool enabled_impl(UBSocketProfileEvent event);
+  static uint64_t start_impl(UBSocketProfileEvent event);
+  static uint64_t end_impl(UBSocketProfileEvent event, uint64_t start_ns,
+                           uint64_t bytes);
+  static void count_impl(UBSocketProfileEvent event, uint64_t bytes);
+  static void max_bytes_impl(UBSocketProfileEvent event, uint64_t bytes);
+  static void record_impl(UBSocketProfileEvent event, uint64_t elapsed_ns,
+                          uint64_t bytes, uint64_t count);
+  static void record_latency_impl(UBSocketProfileEvent event,
+                                  uint64_t elapsed_ns);
+
  public:
-  static bool enabled(UBSocketProfileEvent event);
-  static uint64_t start(UBSocketProfileEvent event);
+  // Keep the disabled path inline: no profiler call, clock read, or atomic.
+  static bool active() {
+    return UBSocketProfile != (uintx)UB_PROFILE_OFF;
+  }
+
+  static bool enabled(UBSocketProfileEvent event) {
+    return active() && enabled_impl(event);
+  }
+
+  static uint64_t start(UBSocketProfileEvent event) {
+    return active() ? start_impl(event) : 0;
+  }
+
   static uint64_t end(UBSocketProfileEvent event, uint64_t start_ns,
-                      uint64_t bytes = 0);
-  static void count(UBSocketProfileEvent event, uint64_t bytes = 0);
-  static void max_bytes(UBSocketProfileEvent event, uint64_t bytes);
+                      uint64_t bytes = 0) {
+    return active() ? end_impl(event, start_ns, bytes) : 0;
+  }
+
+  static void count(UBSocketProfileEvent event, uint64_t bytes = 0) {
+    if (active()) {
+      count_impl(event, bytes);
+    }
+  }
+
+  static void max_bytes(UBSocketProfileEvent event, uint64_t bytes) {
+    if (active()) {
+      max_bytes_impl(event, bytes);
+    }
+  }
+
   static void record(UBSocketProfileEvent event, uint64_t elapsed_ns,
-                     uint64_t bytes, uint64_t count);
+                     uint64_t bytes, uint64_t count) {
+    if (active()) {
+      record_impl(event, elapsed_ns, bytes, count);
+    }
+  }
+
+  static void record_latency(UBSocketProfileEvent event, uint64_t elapsed_ns) {
+    if (active()) {
+      record_latency_impl(event, elapsed_ns);
+    }
+  }
+
   static void print_summary(outputStream* force_output);
 };
 

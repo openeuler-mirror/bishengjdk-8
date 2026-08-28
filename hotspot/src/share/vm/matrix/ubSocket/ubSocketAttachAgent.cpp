@@ -221,19 +221,25 @@ void UBSocketAttachAgent::listener_entry(JavaThread* thread, TRAPS) {
 }
 
 bool UBSocketAttachAgent::start() {
+  int listen_fd = -1;
+  {
+    MonitorLockerEx locker(_agent_lock, Mutex::_no_safepoint_check_flag);
+    if (_started) { return true; }
+    bool dual_stack = false;
+    listen_fd = create_listener_socket((uint16_t)UBSocketPort, &dual_stack);
+    if (listen_fd < 0) { return false; }
+
+    _should_stop = false;
+    _exited = false;
+    _listen_fd = listen_fd;
+    _dual_stack = dual_stack;
+  }
+
+  // start_daemon invokes Java constructors and cannot run while the caller
+  // owns the agent monitor.
+  JavaThread* thread =
+      UBSocketThreadUtils::start_daemon(&listener_entry, "Attach Agent");
   MonitorLockerEx locker(_agent_lock, Mutex::_no_safepoint_check_flag);
-
-  if (_started) { return true; }
-  bool dual_stack = false;
-  int listen_fd = create_listener_socket((uint16_t)UBSocketPort, &dual_stack);
-  if (listen_fd < 0) { return false; }
-
-  _should_stop = false;
-  _exited = false;
-  _listen_fd = listen_fd;
-  _dual_stack = dual_stack;
-
-  JavaThread* thread = UBSocketThreadUtils::start_daemon(&listener_entry, "Attach Agent");
   if (thread == NULL) {
     close(listen_fd);
     _listen_fd = -1;

@@ -65,6 +65,8 @@ enum UBSocketAttachPhase {
 // attach agent thread. remove()/cleanup() mark the session closing and wait for
 // active pins to drain before deleting it, so a control thread cannot use a
 // session after the data path removes it from the cache.
+class UBSocketConfig;
+
 class UBSocketAttachSession : public CHeapObj<mtInternal> {
  private:
   Monitor* _monitor;  // wait/notify between threads during handshake
@@ -72,17 +74,17 @@ class UBSocketAttachSession : public CHeapObj<mtInternal> {
   UBSocketEndpoint _remote_endpoint;
   uint32_t _request_id;
   char _local_mem_name[UB_SOCKET_MEM_NAME_BUF_LEN];
-  char _client_mem_name[UB_SOCKET_MEM_NAME_BUF_LEN];
+  UBSocketProtocolInfo _protocol;
+  UBSocketAttachFrame _client_request;
   uint32_t _local_ring_slot;
+  uint32_t _local_connection_generation;
   uint64_t _local_ring_offset;
   uint64_t _local_ring_size;
-  uint32_t _client_ring_slot;
-  uint64_t _client_ring_offset;
-  uint64_t _client_ring_size;
   UBSocketAttachPhase _phase;
   UBSocketAttachSession* _next;
   bool _closing;
   int _active_count;
+  const UBSocketConfig* _config;
 
   bool wait_until(uint64_t ddl_ns);
 
@@ -99,7 +101,10 @@ class UBSocketAttachSession : public CHeapObj<mtInternal> {
  public:
   UBSocketAttachSession(const UBSocketEndpoint* local_ep, const UBSocketEndpoint* remote_ep,
                         const char* local_mem_name, uint32_t local_ring_slot,
-                        uint64_t local_ring_offset, uint64_t local_ring_size);
+                        uint32_t local_connection_generation,
+                        uint64_t local_ring_offset, uint64_t local_ring_size,
+                        const UBSocketProtocolInfo& protocol,
+                        const UBSocketConfig* config);
   ~UBSocketAttachSession();
 
   const UBSocketEndpoint& local_endpoint() const { return _local_endpoint; }
@@ -122,9 +127,7 @@ class UBSocketAttachSession : public CHeapObj<mtInternal> {
   bool matches(const UBSocketEndpoint* local_ep, const UBSocketEndpoint* remote_ep) const;
   bool matches_request(const UBSocketAttachFrame* request) const;
 
-  bool wait_for_request(uint64_t ddl_ns, char* client_mem_name,
-                        uint32_t* client_ring_slot, uint64_t* client_ring_offset,
-                        uint64_t* client_ring_size);
+  bool wait_for_request(uint64_t ddl_ns, UBSocketAttachFrame* client_request);
   // Control side entry: drive ATTACH_REQ/RSP/COMMIT/ACK on control_fd.
   bool drive_server_handshake(int control_fd,
                               const UBSocketAttachFrame* request,

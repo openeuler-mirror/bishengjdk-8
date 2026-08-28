@@ -27,7 +27,7 @@
 
 #include "matrix/ubSocket/ubSocket.hpp"
 
-static const uint16_t UB_SOCKET_PROTOCOL_VERSION = 800; // JDK 08 + VER 00
+static const uint16_t UB_SOCKET_PROTOCOL_VERSION = 803; // JDK 08 + generation-ready layout 03
 static const uint32_t UB_SOCKET_OK_CODE = 0;
 static const uint32_t UB_SOCKET_ERROR_CODE = 1;
 static const size_t UB_SOCKET_PEER_TEXT_BUF_LEN = 128;
@@ -39,9 +39,14 @@ enum UBSocketAttachKind {
   UB_SOCKET_ATTACH_ACK = 4
 };
 
-enum UBSocketWakeupKind {
-  UB_SOCKET_WAKEUP = 1,
+enum UBSocketControlKind {
+  UB_SOCKET_SHUTDOWN_OUTPUT = 1,
   UB_SOCKET_CLOSE = 2
+};
+
+enum UBSocketCapability {
+  UB_SOCKET_CAP_GENERATION_READY = 1,
+  UB_SOCKET_CAP_SPIN_COALESCE = 2
 };
 
 struct UBSocketEndpoint {
@@ -57,20 +62,37 @@ struct UBSocketAttachFrame {
   uint16_t kind;
   uint32_t request_id;
   uint32_t error_code;
-  UBSocketEndpoint local_endpoint;
-  UBSocketEndpoint remote_endpoint;
+  uint32_t capabilities;
+  uint32_t ring_count;
+  uint32_t connection_generation;
   uint32_t ring_slot;
+  uint64_t mapping_size;
+  uint64_t ring_memory_size;
+  uint64_t spin_nanos;
   uint64_t ring_offset;
   uint64_t ring_size;
+  UBSocketEndpoint local_endpoint;
+  UBSocketEndpoint remote_endpoint;
   char mem_name[UB_SOCKET_MEM_NAME_BUF_LEN];
 };
 
-struct UBSocketWakeupFrame {
+struct UBSocketControlFrame {
+  uint16_t version;
   uint16_t kind;
+  uint32_t connection_generation;
+  uint64_t final_write_offset;
+};
+
+struct UBSocketProtocolInfo {
+  uint32_t capabilities;
+  uint32_t ring_count;
+  uint64_t mapping_size;
+  uint64_t ring_memory_size;
+  uint64_t spin_nanos;
 };
 
 static const int UB_SOCKET_ATTACH_FRAME_WIRE_SIZE = sizeof(UBSocketAttachFrame);
-static const int UB_SOCKET_WAKEUP_FRAME_WIRE_SIZE = sizeof(UBSocketWakeupFrame);
+static const int UB_SOCKET_CONTROL_FRAME_WIRE_SIZE = sizeof(UBSocketControlFrame);
 
 UBSocketAttachFrame ub_socket_attach_frame(uint16_t kind,
                                            uint32_t request_id,
@@ -78,18 +100,30 @@ UBSocketAttachFrame ub_socket_attach_frame(uint16_t kind,
                                            const UBSocketEndpoint* local_ep,
                                            const UBSocketEndpoint* remote_ep,
                                            const char* mem_name,
+                                           const UBSocketProtocolInfo& protocol,
+                                           uint32_t connection_generation = 0,
                                            uint32_t ring_slot = 0,
                                            uint64_t ring_offset = 0,
                                            uint64_t ring_size = 0);
 
-UBSocketWakeupFrame ub_socket_wakeup_frame(uint16_t kind);
+UBSocketProtocolInfo ub_socket_protocol_info(uint64_t mapping_size,
+                                             uint64_t ring_memory_size,
+                                             uint32_t ring_count,
+                                             uint64_t spin_nanos);
+bool ub_socket_attach_compatible(const UBSocketAttachFrame& frame,
+                                 const UBSocketProtocolInfo& protocol,
+                                 bool require_ring);
+
+UBSocketControlFrame ub_socket_control_frame(uint16_t kind,
+                                             uint32_t connection_generation,
+                                             uint64_t final_write_offset);
 
 bool ub_socket_attach_send(int fd, const UBSocketAttachFrame& frame, uint64_t ddl_ns);
 bool ub_socket_attach_recv(int fd, UBSocketAttachFrame* frame,
                            uint16_t expected_kind, uint64_t ddl_ns);
-ssize_t ub_socket_wakeup_send(int fd, const UBSocketWakeupFrame& frame,
-                              size_t* bytes_sent = NULL);
-bool ub_socket_wakeup_parse(const void* raw, UBSocketWakeupFrame* frame);
+ssize_t ub_socket_control_send(int fd, const UBSocketControlFrame& frame,
+                               size_t* bytes_sent = NULL);
+bool ub_socket_control_parse(const void* raw, UBSocketControlFrame* frame);
 
 bool ub_socket_endpoint_equals(const UBSocketEndpoint* lhs,
                                const UBSocketEndpoint* rhs);

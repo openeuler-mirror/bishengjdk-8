@@ -76,30 +76,31 @@ class EPollArrayWrapper {
     private static final int FD_OFFSET        = DATA_OFFSET;
     private static final int OPEN_MAX         = IOUtil.fdLimit();
     private static final int NUM_EPOLLEVENTS  = Math.min(OPEN_MAX, 8192);
+    private static final int UB_READY_BATCH_SIZE = 32;
+    private static final int UB_READY_HEADER_SIZE = 8;
+    private static final int UB_READY_EVENT_SIZE = 8;
+    private static final int UB_READY_FD_OFFSET = 0;
+    private static final int UB_READY_GENERATION_OFFSET = 4;
 
-    // UB selector probe tuning. A zero-timeout spin is used briefly after a
-    // control wakeup, then the selector falls back to 1 ms polling to avoid
-    // burning CPU when the peer wakeup arrives before ring data is visible.
-    private static final int UB_PROBE_POLL_MS = 1;
-    private static final int UB_PROBE_SPIN_LIMIT = 8;
-
-    // Keep a control-fd close pending long enough to drain tail ring data and
-    // deliver EOF through EPOLLIN after the ring becomes empty.
+    // This detects a broken protocol-802 final-offset handoff. Normal EOF
+    // readiness is determined by the final offset, not by elapsed time.
     private static final long UB_NANOS_PER_MILLI = 1000L * 1000L;
-    private static final long UB_CLOSE_PENDING_NANOS = UB_NANOS_PER_MILLI;
+    private static final long UB_CLOSE_FAILURE_NANOS =
+        1000L * UB_NANOS_PER_MILLI;
 
-    // Native drainUbSocketWakeups return codes. Non-negative values are the
-    // number of parsed wakeup frames.
-    private static final int UB_DRAIN_ERROR = -1;
-    private static final int UB_DRAIN_EOF = -2;
+    // Native drainUbSocketControl return codes.
+    private static final int UB_CONTROL_ERROR = -1;
+    private static final int UB_CONTROL_EOF = -2;
+    private static final int UB_CONTROL_NONE = 0;
+    private static final int UB_CONTROL_CLOSE = 1;
 
     // Profile mode and event ids must stay in sync with ubSocketProfile.hpp.
     private static final int UB_PROFILE_DETAIL = 2;
-    private static final int UB_PROF_SELECTOR_PROBE_CHECK = 27;
-    private static final int UB_PROF_SELECTOR_PROBE_READY = 28;
-    private static final int UB_PROF_SELECTOR_PROBE_EMPTY = 29;
-    private static final int UB_PROF_SELECTOR_READY_INJECT = 30;
+    private static final int UB_PROF_SELECTOR_READY_INJECT = 15;
+    private static final int UB_PROF_SELECTOR_POLL_READY_INJECT = 20;
+    // Existing events through 25 retain their IDs; later events are HotSpot-owned.
     private static boolean ubProfileDetail;
+    private static boolean ubSpinEnabled;
 
     // Special value to indicate that an update should be ignored
     private static final byte  KILLED = (byte)-1;
@@ -113,6 +114,12 @@ class EPollArrayWrapper {
 
     // The fd of the epoll driver
     private final int epfd;
+
+    // Internal eventfd written by the process-level UBSocket poller.
+    private final int ubNotifyFD;
+    private boolean ubPollingNotified;
+    private final AllocatedNativeObject ubReadyArray;
+    private final long ubReadyArrayAddress;
 
      // The epoll_event array for results from epoll_wait
     private final AllocatedNativeObject pollArray;
@@ -151,12 +158,11 @@ class EPollArrayWrapper {
     // Used by release and updateRegistrations to track whether a file
     // descriptor is registered with epoll.
     private final BitSet registered = new BitSet();
+    private final BitSet ubReadInterest = new BitSet();
     private final BitSet ubReady = new BitSet();
-    private final BitSet ubProbe = new BitSet();
     private final BitSet ubClosePending = new BitSet();
-    private final byte[] ubProbeMissesLow = new byte[MAX_UPDATE_ARRAY_SIZE];
+    private final Map<Integer,Long> ubSubscriptions = new HashMap<>();
     private final long[] ubCloseDeadlineNsLow = new long[MAX_UPDATE_ARRAY_SIZE];
-    private Map<Integer,Byte> ubProbeMissesHigh;
     private Map<Integer,Long> ubCloseDeadlineNsHigh;
 
 
@@ -169,10 +175,51 @@ class EPollArrayWrapper {
         pollArray = new AllocatedNativeObject(allocationSize, true);
         pollArrayAddress = pollArray.address();
 
+        int notifyFD = -1;
+        boolean notifyRegistered = false;
+        AllocatedNativeObject readyArray = null;
+        try {
+            notifyFD = createUbNotifyFD();
+            if (notifyFD >= 0) {
+                readyArray = new AllocatedNativeObject(
+                    UB_READY_HEADER_SIZE +
+                    UB_READY_BATCH_SIZE * UB_READY_EVENT_SIZE, true);
+                epollCtl(epfd, EPOLL_CTL_ADD, notifyFD, EPOLLIN);
+                notifyRegistered = registerUbNotifyFD(notifyFD);
+                if (!notifyRegistered) {
+                    throw new IOException(
+                        "Unable to register UBSocket selector notifier");
+                }
+            }
+        } catch (IOException ioe) {
+            if (notifyRegistered) {
+                unregisterUbNotifyFD(notifyFD);
+            }
+            if (notifyFD >= 0) {
+                try {
+                    FileDispatcherImpl.closeIntFD(notifyFD);
+                } catch (IOException closeFailure) {
+                    ioe.addSuppressed(closeFailure);
+                }
+            }
+            if (readyArray != null) {
+                readyArray.free();
+            }
+            pollArray.free();
+            try {
+                FileDispatcherImpl.closeIntFD(epfd);
+            } catch (IOException closeFailure) {
+                ioe.addSuppressed(closeFailure);
+            }
+            throw ioe;
+        }
+        ubNotifyFD = notifyFD;
+        ubReadyArray = readyArray;
+        ubReadyArrayAddress = readyArray == null ? 0L : readyArray.address();
+
         // eventHigh needed when using file descriptors > 64k
         if (OPEN_MAX > MAX_UPDATE_ARRAY_SIZE) {
             eventsHigh = new HashMap<>();
-            ubProbeMissesHigh = new HashMap<>();
         }
     }
 
@@ -298,8 +345,33 @@ class EPollArrayWrapper {
      * Close epoll file descriptor and free poll array
      */
     void closeEPollFD() throws IOException {
-        FileDispatcherImpl.closeIntFD(epfd);
+        IOException failure = null;
+        if (ubNotifyFD >= 0) {
+            unregisterUbNotifyFD(ubNotifyFD);
+            ubSubscriptions.clear();
+            epollCtl(epfd, EPOLL_CTL_DEL, ubNotifyFD, 0);
+            try {
+                FileDispatcherImpl.closeIntFD(ubNotifyFD);
+            } catch (IOException ioe) {
+                failure = ioe;
+            }
+        }
+        try {
+            FileDispatcherImpl.closeIntFD(epfd);
+        } catch (IOException ioe) {
+            if (failure == null) {
+                failure = ioe;
+            } else {
+                failure.addSuppressed(ioe);
+            }
+        }
         pollArray.free();
+        if (ubReadyArray != null) {
+            ubReadyArray.free();
+        }
+        if (failure != null) {
+            throw failure;
+        }
     }
 
     int poll(long timeout) throws IOException {
@@ -308,41 +380,38 @@ class EPollArrayWrapper {
             ? System.nanoTime() + timeout * UB_NANOS_PER_MILLI
             : 0L;
         for (;;) {
-            int injected = injectUbReadyEvents();
-            if (injected == 0) {
-                injected = injectUbProbeEvents();
-            }
+            int injected = injectUbReadyEvents(0);
+            injected = injectUbCloseEvents(injected);
             if (injected > 0) {
-                updated = processUbWakeups(0, injected);
+                updated = injected;
                 break;
             }
 
-            boolean hasUbProbe = ubProbe.nextSetBit(0) >= 0;
-            long waitTimeout;
-            if (hasUbProbe) {
-                if (timeout > 0) {
-                    long remaining = remainingUserTimeout(timeout, deadlineNs);
-                    if (remaining == 0) {
-                        updated = 0;
-                        break;
-                    }
-                    waitTimeout = ubProbeWaitTimeout(timeout, remaining);
-                } else {
-                    waitTimeout = ubProbeWaitTimeout(timeout, 0L);
-                }
-            } else {
-                waitTimeout = remainingUserTimeout(timeout, deadlineNs);
-                if (timeout > 0 && waitTimeout == 0) {
-                    updated = 0;
-                    break;
-                }
+            long waitTimeout = remainingUserTimeout(timeout, deadlineNs);
+            if (timeout > 0 && waitTimeout == 0) {
+                updated = 0;
+                break;
+            }
+            if (ubClosePending.nextSetBit(0) >= 0) {
+                waitTimeout = ubCloseWaitTimeout(waitTimeout);
             }
 
             updated = epollWait(pollArrayAddress, NUM_EPOLLEVENTS, waitTimeout, epfd);
-            updated = processUbWakeups(0, updated);
-            if (updated != 0 || timeout == 0 || ubProbe.nextSetBit(0) < 0) {
+            ubPollingNotified = false;
+            updated = processUbNotifierEvents(updated);
+            updated = processUbControlEvents(0, updated);
+            if (ubPollingNotified) {
+                updated = injectUbQueuedEvents(updated);
+            }
+            if (updated != 0 || timeout == 0) {
                 break;
             }
+            // Internal eventfd notifications and close deadlines are not user
+            // timeouts. Continue with the original select timeout.
+            if (ubPollingNotified || ubClosePending.nextSetBit(0) >= 0) {
+                continue;
+            }
+            break;
         }
         for (int i=0; i<updated; i++) {
             if (getDescriptor(i) == incomingInterruptFD) {
@@ -366,22 +435,33 @@ class EPollArrayWrapper {
         return remainingMs == 0 ? 1 : remainingMs;
     }
 
-    private long ubProbeWaitTimeout(long timeout, long remainingTimeoutMs) {
-        if (timeout == 0) {
-            return 0;
+    private long ubCloseWaitTimeout(long userWaitTimeout) {
+        long now = System.nanoTime();
+        long closeWaitMs = Long.MAX_VALUE;
+        int fd = ubClosePending.nextSetBit(0);
+        while (fd >= 0) {
+            long deadline = getUbCloseDeadlineNs(fd);
+            if (deadline > 0L) {
+                long remainingNs = deadline - now;
+                if (remainingNs <= 0L) {
+                    return 0L;
+                }
+                long remainingMs = (remainingNs + UB_NANOS_PER_MILLI - 1L)
+                    / UB_NANOS_PER_MILLI;
+                if (remainingMs < closeWaitMs) {
+                    closeWaitMs = remainingMs;
+                }
+            }
+            fd = ubClosePending.nextSetBit(fd + 1);
         }
-        if (hasUbProbeSpinBudget()) {
-            return 0;
+        if (closeWaitMs == Long.MAX_VALUE) {
+            return userWaitTimeout;
         }
-        if (timeout < 0) {
-            return UB_PROBE_POLL_MS;
-        }
-        return remainingTimeoutMs < UB_PROBE_POLL_MS
-            ? remainingTimeoutMs : UB_PROBE_POLL_MS;
+        return userWaitTimeout < 0L
+            ? closeWaitMs : Math.min(userWaitTimeout, closeWaitMs);
     }
 
-    private int injectUbReadyEvents() {
-        int count = 0;
+    private int injectUbReadyEvents(int count) {
         int fd = ubReady.nextSetBit(0);
         while (fd >= 0 && count < NUM_EPOLLEVENTS) {
             int next = ubReady.nextSetBit(fd + 1);
@@ -389,85 +469,77 @@ class EPollArrayWrapper {
                 clearUbSelectorState(fd);
             } else if (!ubReadInterested(fd)) {
                 ubReady.clear(fd);
-                clearUbProbe(fd);
-            } else if (ubSocketHasPendingData(fd)) {
-                putDescriptor(count, fd);
-                putEventOps(count, EPOLLIN);
-                ubSocketProfileCountIfEnabled(UB_PROF_SELECTOR_READY_INJECT);
-                count++;
             } else {
-                ubReady.clear(fd);
-                armUbProbe(fd);
+                boolean pending = ubSocketHasPendingData(fd);
+                if (!pending && ubSpinEnabled) {
+                    pending = ubSocketSpinWait(fd);
+                }
+                if (pending) {
+                    putDescriptor(count, fd);
+                    putEventOps(count, EPOLLIN);
+                    ubSocketProfileCountIfEnabled(UB_PROF_SELECTOR_READY_INJECT);
+                    count++;
+                } else {
+                    ubReady.clear(fd);
+                }
             }
             fd = next;
         }
         return count;
     }
 
-    private int injectUbProbeEvents() {
-        int count = 0;
-        int fd = ubProbe.nextSetBit(0);
+    private int injectUbCloseEvents(int count) {
+        int fd = ubClosePending.nextSetBit(0);
         while (fd >= 0 && count < NUM_EPOLLEVENTS) {
-            int next = ubProbe.nextSetBit(fd + 1);
-            ubSocketProfileCountIfEnabled(UB_PROF_SELECTOR_PROBE_CHECK);
+            int next = ubClosePending.nextSetBit(fd + 1);
             if (!registered.get(fd) || !isUbSocketAttached(fd)) {
                 clearUbSelectorState(fd);
-            } else if (!ubReadInterested(fd)) {
-                ubReady.clear(fd);
-                clearUbProbe(fd);
-            } else if (ubSocketHasPendingData(fd)) {
-                clearUbProbe(fd);
+            } else if (ubReadInterested(fd) && ubSocketHasPendingData(fd)) {
                 ubReady.set(fd);
-                putDescriptor(count, fd);
-                putEventOps(count, EPOLLIN);
-                ubSocketProfileCountIfEnabled(UB_PROF_SELECTOR_PROBE_READY);
-                ubSocketProfileCountIfEnabled(UB_PROF_SELECTOR_READY_INJECT);
-                count++;
-            } else if (ubClosePending.get(fd) && ubCloseDeadlineReached(fd) &&
-                       getUbProbeMisses(fd) >= UB_PROBE_SPIN_LIMIT) {
-                finishUbClose(fd);
-                putDescriptor(count, fd);
-                putEventOps(count, EPOLLIN);
-                count++;
-            } else {
-                noteUbProbeEmpty(fd);
+                if (!resultContainsFd(count, fd)) {
+                    putDescriptor(count, fd);
+                    putEventOps(count, EPOLLIN);
+                    count++;
+                }
+            } else if (ubSocketPeerCloseReady(fd)) {
+                makeUbEofReady(fd);
+                if (!resultContainsFd(count, fd)) {
+                    putDescriptor(count, fd);
+                    putEventOps(count, EPOLLIN);
+                    count++;
+                }
+            } else if (ubCloseDeadlineReached(fd)) {
+                failUbSocketClose(fd);
+                clearUbSelectorState(fd);
+                if (!resultContainsFd(count, fd)) {
+                    putDescriptor(count, fd);
+                    putEventOps(count, EPOLLIN);
+                    count++;
+                }
             }
             fd = next;
         }
         return count;
-    }
-
-    private void armUbProbe(int fd) {
-        ubProbe.set(fd);
-        setUbProbeMisses(fd, 0);
-    }
-
-    private void clearUbProbe(int fd) {
-        ubProbe.clear(fd);
-        setUbProbeMisses(fd, 0);
-    }
-
-    private void noteUbProbeEmpty(int fd) {
-        ubSocketProfileCountIfEnabled(UB_PROF_SELECTOR_PROBE_EMPTY);
-        int misses = getUbProbeMisses(fd) + 1;
-        setUbProbeMisses(fd, misses);
     }
 
     private boolean ubReadInterested(int fd) {
-        short events = getUpdateEvents(fd);
-        return events != KILLED && (events & EPOLLIN) != 0;
+        return ubReadInterest.get(fd);
     }
 
     private void clearUbSelectorState(int fd) {
+        Long subscription = ubSubscriptions.remove(Integer.valueOf(fd));
+        if (subscription != null && subscription.longValue() > 0L) {
+            unsubscribeUbReadInterest(subscription.longValue());
+        }
+        ubReadInterest.clear(fd);
         ubReady.clear(fd);
         ubClosePending.clear(fd);
         setUbCloseDeadlineNs(fd, 0L);
-        clearUbProbe(fd);
     }
 
     private void markUbClosePending(int fd) {
         if (!ubClosePending.get(fd)) {
-            setUbCloseDeadlineNs(fd, System.nanoTime() + UB_CLOSE_PENDING_NANOS);
+            setUbCloseDeadlineNs(fd, System.nanoTime() + UB_CLOSE_FAILURE_NANOS);
         }
         ubClosePending.set(fd);
     }
@@ -475,51 +547,12 @@ class EPollArrayWrapper {
     private void deferUbClose(int fd) {
         ubReady.clear(fd);
         markUbClosePending(fd);
-        if (!ubProbe.get(fd)) {
-            armUbProbe(fd);
-        }
     }
 
-    private void finishUbClose(int fd) {
+    private void makeUbEofReady(int fd) {
         ubReady.clear(fd);
         ubClosePending.clear(fd);
         setUbCloseDeadlineNs(fd, 0L);
-        clearUbProbe(fd);
-        unregisterUbSocket(fd);
-    }
-
-    private boolean hasUbProbeSpinBudget() {
-        int fd = ubProbe.nextSetBit(0);
-        while (fd >= 0) {
-            if (getUbProbeMisses(fd) < UB_PROBE_SPIN_LIMIT) {
-                return true;
-            }
-            fd = ubProbe.nextSetBit(fd + 1);
-        }
-        return false;
-    }
-
-    private int getUbProbeMisses(int fd) {
-        if (fd < ubProbeMissesLow.length) {
-            return ubProbeMissesLow[fd] & 0xff;
-        }
-        Byte misses = ubProbeMissesHigh == null ? null : ubProbeMissesHigh.get(fd);
-        return misses == null ? 0 : misses.byteValue() & 0xff;
-    }
-
-    private void setUbProbeMisses(int fd, int misses) {
-        if (fd < ubProbeMissesLow.length) {
-            ubProbeMissesLow[fd] = (byte)misses;
-            return;
-        }
-        if (ubProbeMissesHigh == null) {
-            ubProbeMissesHigh = new HashMap<>();
-        }
-        if (misses == 0) {
-            ubProbeMissesHigh.remove(fd);
-        } else {
-            ubProbeMissesHigh.put(fd, (byte)misses);
-        }
     }
 
     private boolean ubCloseDeadlineReached(int fd) {
@@ -551,60 +584,122 @@ class EPollArrayWrapper {
         }
     }
 
-    private int processUbWakeups(int start, int end) {
+    private int processUbNotifierEvents(int end) throws IOException {
+        if (ubNotifyFD < 0) {
+            return end;
+        }
+        int dst = 0;
+        for (int i = 0; i < end; i++) {
+            int fd = getDescriptor(i);
+            if (fd == ubNotifyFD) {
+                drainUbNotifyFD(ubNotifyFD);
+                ubPollingNotified = true;
+                continue;
+            }
+            if (dst != i) {
+                putDescriptor(dst, fd);
+                putEventOps(dst, getEventOps(i));
+            }
+            dst++;
+        }
+        return dst;
+    }
+
+    private int injectUbQueuedEvents(int count) throws IOException {
+        boolean injected = false;
+        long profileCompleteNs = 0L;
+        while (count < NUM_EPOLLEVENTS) {
+            int capacity = Math.min(
+                UB_READY_BATCH_SIZE, NUM_EPOLLEVENTS - count);
+            int readyCount = drainUbReadyEvents(
+                ubNotifyFD, ubReadyArrayAddress, capacity);
+            long batchProfileCompleteNs = ubReadyArray.getLong(0);
+            if (batchProfileCompleteNs > 0L) {
+                profileCompleteNs = batchProfileCompleteNs;
+            }
+            for (int i = 0; i < readyCount; i++) {
+                int offset = UB_READY_HEADER_SIZE + i * UB_READY_EVENT_SIZE;
+                int fd = ubReadyArray.getInt(offset + UB_READY_FD_OFFSET);
+                int generation = ubReadyArray.getInt(
+                    offset + UB_READY_GENERATION_OFFSET);
+                Long subscription = ubSubscriptions.get(Integer.valueOf(fd));
+                if (!registered.get(fd) || !ubReadInterested(fd) ||
+                    subscription == null ||
+                    (int)(subscription.longValue() >>> 32) != generation) {
+                    continue;
+                }
+                ubReady.set(fd);
+                int existing = resultIndexForFd(count, fd);
+                if (existing >= 0) {
+                    putEventOps(existing, getEventOps(existing) | EPOLLIN);
+                    ubSocketProfileCountIfEnabled(
+                        UB_PROF_SELECTOR_POLL_READY_INJECT);
+                    injected = true;
+                } else if (count < NUM_EPOLLEVENTS) {
+                    putDescriptor(count, fd);
+                    putEventOps(count, EPOLLIN);
+                    ubSocketProfileCountIfEnabled(
+                        UB_PROF_SELECTOR_POLL_READY_INJECT);
+                    count++;
+                    injected = true;
+                }
+            }
+            if (readyCount < capacity) {
+                break;
+            }
+        }
+        if (ubProfileDetail && profileCompleteNs > 0L) {
+            ubSocketProfileSelectorInjected(
+                profileCompleteNs, injected);
+        }
+        return count;
+    }
+
+    private boolean resultContainsFd(int count, int fd) {
+        return resultIndexForFd(count, fd) >= 0;
+    }
+
+    private int resultIndexForFd(int count, int fd) {
+        for (int i = 0; i < count; i++) {
+            if (getDescriptor(i) == fd) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private int processUbControlEvents(int start, int end) {
         int dst = start;
         for (int i = start; i < end; i++) {
             int ops = getEventOps(i);
             int fd = getDescriptor(i);
-            boolean closeEvent = (ops & EPOLLCLOSE) != 0;
             boolean keep = true;
 
-            if (fd == incomingInterruptFD) {
-                keep = true;
-            } else if ((ops & EPOLLIN) == 0) {
-                if (closeEvent && isUbSocketAttached(fd)) {
+            if (fd != incomingInterruptFD && isUbSocketAttached(fd)) {
+                boolean closeEvent = (ops & EPOLLCLOSE) != 0;
+                int control = UB_CONTROL_NONE;
+                if ((ops & EPOLLIN) != 0) {
+                    control = drainUbSocketControl(fd);
+                }
+                boolean controlClosed = closeEvent ||
+                    control == UB_CONTROL_EOF || control == UB_CONTROL_CLOSE;
+                if (controlClosed) {
                     markUbSocketControlClosed(fd);
+                    deferUbClose(fd);
+                    ops &= ~(EPOLLIN | EPOLLCLOSE);
                     if (ubSocketHasPendingData(fd)) {
-                        markUbClosePending(fd);
                         ubReady.set(fd);
-                        clearUbProbe(fd);
-                        ops = EPOLLIN;
-                    } else {
-                        deferUbClose(fd);
-                        keep = false;
+                        ops |= EPOLLIN;
                     }
-                }
-            } else {
-                int drained = drainUbSocketWakeups(fd);
-                boolean ubAttached = isUbSocketAttached(fd);
-                boolean controlClosed = closeEvent || drained == UB_DRAIN_EOF;
-                if (ubAttached && controlClosed) {
-                    markUbSocketControlClosed(fd);
-                }
-                if (ubAttached && ubSocketHasPendingData(fd)) {
-                    if (controlClosed) {
-                        markUbClosePending(fd);
-                    }
-                    ubReady.set(fd);
-                    clearUbProbe(fd);
-                    if (controlClosed) {
-                        ops = EPOLLIN;
-                    }
-                } else {
-                    ubReady.clear(fd);
-                    if (ubAttached && controlClosed) {
-                        deferUbClose(fd);
-                        keep = false;
-                    } else if (drained == UB_DRAIN_ERROR) {
-                        clearUbProbe(fd);
-                        keep = true;
-                    } else if (drained > 0 && !closeEvent) {
-                        armUbProbe(fd);
-                        ops &= ~EPOLLIN;
-                        keep = ops != 0;
-                    } else if (closeEvent) {
-                        clearUbProbe(fd);
-                    }
+                    keep = ops != 0;
+                } else if (control == UB_CONTROL_ERROR) {
+                    // Preserve the kernel event so the channel observes the
+                    // underlying TCP error.
+                    keep = true;
+                } else if ((ops & EPOLLIN) != 0) {
+                    // Partial CLOSE bytes are internal control data.
+                    ops &= ~EPOLLIN;
+                    keep = ops != 0;
                 }
             }
 
@@ -622,7 +717,7 @@ class EPollArrayWrapper {
     /**
      * Update the pending registrations.
      */
-    private void updateRegistrations() {
+    private void updateRegistrations() throws IOException {
         synchronized (updateLock) {
             int j = 0;
             while (j < updateCount) {
@@ -654,21 +749,36 @@ class EPollArrayWrapper {
         }
     }
 
-    private void updateUbInterestState(int fd, short events) {
-        if (!registered.get(fd) || !isUbSocketAttached(fd)) {
+    private void updateUbInterestState(int fd, short events) throws IOException {
+        boolean readInterested = registered.get(fd)
+            && events != KILLED && (events & EPOLLIN) != 0;
+        if (!readInterested) {
             clearUbSelectorState(fd);
             return;
         }
-        if (events == KILLED || (events & EPOLLIN) == 0) {
-            ubReady.clear(fd);
-            clearUbProbe(fd);
-            return;
+
+        boolean wasReadInterested = ubReadInterest.get(fd);
+        Long existing = ubSubscriptions.get(Integer.valueOf(fd));
+        long subscription = existing == null ? 0L : existing.longValue();
+        if (subscription == 0L) {
+            subscription = subscribeUbReadInterest(fd, ubNotifyFD);
+            if (subscription < 0L) {
+                throw new IOException(
+                    "Unable to subscribe UBSocket fd to Selector notifier");
+            }
+            if (subscription == 0L) {
+                clearUbSelectorState(fd);
+                return;
+            }
+            ubSubscriptions.put(
+                Integer.valueOf(fd), Long.valueOf(subscription));
         }
-        if (ubSocketHasPendingData(fd)) {
+
+        ubReadInterest.set(fd);
+        // Register before checking the Ring. A publication before registration
+        // is found here; a later publication is routed through the subscription.
+        if (!wasReadInterested && ubSocketHasPendingData(fd)) {
             ubReady.set(fd);
-            clearUbProbe(fd);
-        } else if (ubClosePending.get(fd)) {
-            armUbProbe(fd);
         }
     }
 
@@ -695,18 +805,32 @@ class EPollArrayWrapper {
         IOUtil.load();
         init();
         ubProfileDetail = ubSocketProfileMode() >= UB_PROFILE_DETAIL;
+        ubSpinEnabled = ubSocketSpinEnabled();
     }
 
+    private static native int createUbNotifyFD() throws IOException;
+    private static native boolean registerUbNotifyFD(int fd);
+    private static native void unregisterUbNotifyFD(int fd);
+    private static native void drainUbNotifyFD(int fd) throws IOException;
+    private static native int drainUbReadyEvents(int fd, long address,
+                                                  int capacity) throws IOException;
+    private static native long subscribeUbReadInterest(int dataFD, int eventFD);
+    private static native void unsubscribeUbReadInterest(long subscriptionID);
     private native int epollCreate();
     private native void epollCtl(int epfd, int opcode, int fd, int events);
     private native int epollWait(long pollAddress, int numfds, long timeout,
                                  int epfd) throws IOException;
-    private static native int drainUbSocketWakeups(int fd);
+    private static native int drainUbSocketControl(int fd);
     private static native boolean isUbSocketAttached(int fd);
     private static native boolean ubSocketHasPendingData(int fd);
+    private static native boolean ubSocketPeerCloseReady(int fd);
+    private static native void failUbSocketClose(int fd);
+    private static native boolean ubSocketSpinEnabled();
+    private static native boolean ubSocketSpinWait(int fd);
     private static native int ubSocketProfileMode();
     private static native void ubSocketProfileCount(int event);
-    private static native void unregisterUbSocket(int fd);
+    private static native void ubSocketProfileSelectorInjected(
+        long completeNs, boolean injected);
     private static native void markUbSocketControlClosed(int fd);
     private static native int sizeofEPollEvent();
     private static native int offsetofData();
