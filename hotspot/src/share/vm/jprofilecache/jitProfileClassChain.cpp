@@ -532,6 +532,7 @@ void ProfileCacheClassChain::precompile_aggressive() {
 
 bool ProfileCacheClassChain::compile_method(ProfileCacheMethodHold* mh) {
   JavaThread* t = JavaThread::current();
+  ResourceMark rm(t);
   methodHandle m(t, mh->resolved_method());
   if (m() == NULL || m->compiled_by_jprofilecache() || m->has_compiled_code()) {
     return false;
@@ -652,6 +653,7 @@ void ProfileCacheClassChain::unload_class(BoolObjectClosure* is_alive_closure) {
 }
 
 ProfileCacheMethodHold* ProfileCacheClassChain::resolve_method_info(Method* method, ProfileCacheClassHolder* holder) {
+  ResourceMark rm;
   ProfileCacheMethodHold* mh = NULL;
   // find method
   for (int i = 0; i < holder->method_list()->length(); i++) {
