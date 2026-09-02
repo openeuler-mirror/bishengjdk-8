@@ -5398,8 +5398,6 @@ void MacroAssembler::encode_utf8_from_utf16(Register src, Register dst,
     orr(vCalcJohn, T16B, vCalcJohn, vCalcSuzie);
 
     ushr(vCalcBob, T8H, vIn, 4);     // ushr jdk8/jdk21 result unification
-    movi(vCalcSuzie, T8H, 0x0F); 
-    andr(vCalcBob, T8H, vCalcBob, vCalcSuzie);
 
     mov(chk, 0b0000111111000000);
     dup(vCalcSuzie, T8H, chk);
